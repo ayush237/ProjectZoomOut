@@ -76,6 +76,20 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Addendum: WP0 — CI now green; one further bug found — 2026-08-06
+
+Supersedes the "Not verified" section of the WP0 report below on one of its two points.
+
+**Criterion now closed: "CI is green on a pushed branch."** Repo pushed to `github.com/ayush237/ProjectZoomOut`, branch `wp0-monorepo-scaffolding`. All seven steps pass in 83s — install, lint, typecheck, test, build — with the testcontainers integration tests running against Postgres on the runner. Run: `actions/runs/31113417630`.
+
+**WP0 acceptance criteria now stand at 9 of 10 verified.** The only one still open is "Expo app boots in the iOS simulator", which needs Xcode installed on the founder's machine.
+
+**CI caught a real defect that local verification had missed.** The first run failed at lint. Type-aware ESLint resolves `@zoomout/shared` through its exports map to `dist/index.d.ts`; with no build output present, every cross-workspace type degrades to `error` and `no-unsafe-*` fires at 16 sites across the backend and mobile app. `typecheck` and `test` already built shared first, `lint` did not.
+
+The reason my own "clean `npm ci`" run did not catch it is worth recording: **`npm ci` clears `node_modules` but leaves `packages/shared/dist` in place**, so a build from earlier in the session was masking the ordering bug. My clean room was not clean. Fixed by making `build:shared` an npm `pre` hook on lint, typecheck, test and build, so no entry point can skip it, then re-verified from a genuine cold start (all `node_modules` *and* all `dist` deleted → `npm ci` → four green commands, 84 tests). Commit `9291fbd`.
+
+**Process note for Architect:** any future "verified locally" claim on this repo should mean dist-deleted, not just `npm ci`. Worth treating as the standard for completion reports going forward.
+
 ### Completed: WP0 — Monorepo scaffolding and shared domain types — 2026-08-06
 
 **Status:** 8 of 10 acceptance criteria verified by execution. 2 blocked on host tooling, detailed below. Not claiming those two.
