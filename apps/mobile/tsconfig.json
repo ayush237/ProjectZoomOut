@@ -1,0 +1,28 @@
+{
+  // Extends Expo's base rather than the repo's `tsconfig.base.json`, deliberately.
+  // Expo sets `moduleResolution: bundler` and JSX options that Metro requires, and
+  // our base sets `module/moduleResolution: NodeNext` for the Node workspaces — the
+  // two are mutually exclusive.
+  //
+  // The strictness flags are therefore restated here rather than inherited. They are
+  // the same set as `tsconfig.base.json`; if that file gains a flag, add it here too.
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true
+  },
+  // `.mts` covers vitest.config.mts — the Expo app's package.json is CommonJS (Metro
+  // and Babel require that), so the Vitest config needs the explicit ESM extension.
+  "include": ["**/*.ts", "**/*.mts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}
