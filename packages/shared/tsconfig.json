@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist"
+  },
+  // Covers everything the typecheck and the linter's project service need to see,
+  // including the Vitest config. `tsconfig.build.json` narrows this for emit.
+  "include": ["src/**/*.ts", "vitest.config.ts"]
+}

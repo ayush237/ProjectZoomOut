@@ -1,5 +1,33 @@
-.claude/settings.local.json
+# Secrets — never commit
 .env
 .env.*
 !.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test output
+coverage/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Editors and OS
 .DS_Store
+.idea/
+*.swp
+
+# Claude Code local overrides
+.claude/settings.local.json
