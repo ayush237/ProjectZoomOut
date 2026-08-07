@@ -9,6 +9,89 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-07 — WP2: Backend foundation — auth, age gate, profile
+
+### Task: WP2 — Backend foundation: auth, age gate, profile
+
+**Context:** The backend has structure but no users, so nothing can be personalised and no progress can be attributed. WP4 (learning loop), WP5 (streaks and session cap) and WP6 (mobile shell) all need an authenticated reader before they can start.
+
+WP2 depends only on WP0 and deliberately touches no content, no CMS, and none of the provisional content types — so the schema-freeze gate running in parallel cannot invalidate it. Do not import from `@zoomout/shared/cms` in this package.
+
+Relevant WP0 state: the `users` table exists with `id`, `email`, `display_name`, `date_of_birth` (a `date`, not a timestamp — a birth date must not move with the server's timezone), `timezone`, `created_at`, `updated_at`. `apps/backend/src/users/user.mapper.ts` returns `Omit<User, 'authProviders'>`, a gap left visible on purpose for this package to close.
+
+**Objective:** A reader can create an account with email/password, Sign in with Apple, or Google; is refused at signup if under a configurable age threshold; receives a short-lived access token and a revocable refresh token; and can read and update their own profile. Every route in the codebase from here on declares whether it is authenticated.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/backend/src/auth/` — routes, service, repository, token issuing and verification, provider verification
+- `apps/backend/src/users/` — profile routes, service, and the `user.mapper.ts` gap
+- `apps/backend/src/db/` — new migrations and schema
+- `packages/shared` — only if the `User` type genuinely needs a change; content types are off-limits
+- Root `.env.example`
+
+**Requirements:**
+
+*Identity and storage*
+- **`user_auth_providers` as its own table**, not a column on `users`: `user_id`, `provider` (`email` | `apple` | `google`), `provider_subject`, `created_at`, unique on (`provider`, `provider_subject`). One reader may hold several identities without a schema change.
+- Close the `Omit<User, 'authProviders'>` gap — the mapper returns a complete `User`.
+- Add `email_verified_at` (nullable) to `users` now. Email verification is **out of scope**, but reserving the column means adding it later is a feature, not a backfill.
+- Passwords hashed with **argon2id**. Never logged, never returned, never included in an error.
+
+*Tokens*
+- Short-lived **access JWT** plus a longer-lived **refresh token**. Lifetimes come from validated config, not literals.
+- The refresh token is stored **hashed** server-side in a `refresh_tokens` table so sessions are revocable. Rotate on every use; detect and reject reuse of an already-rotated token by revoking the whole family.
+- Signing secret comes through the existing config module. The service must refuse to boot on a missing or weak secret, the same way the database URL already behaves.
+
+*Social sign-in*
+- Apple and Google ID tokens are **verified server-side against the provider's JWKS** — signature, issuer, audience, and expiry. A client-supplied identity claim is never trusted, under any circumstance.
+- **Account linking, ruled:** one user per email address. If a provider returns an email that already exists, link the new provider to the existing user **only when the provider asserts the email is verified**. Otherwise reject with an actionable error. Do not silently create a second account for the same person, and do not silently merge on an unverified claim.
+
+*Age gate*
+- Date of birth is collected at signup and the threshold check runs **server-side**. A client-side check is a UX affordance, not the control.
+- The threshold is **configurable, defaulting to 13**. It is legally undecided (`LEGAL.md`, owner TBD), so the eventual answer must be an environment change, not a code change.
+- Below the threshold: no account is created, and nothing about the attempt is persisted. The message is clear and non-punitive — this is a compliance boundary, not a failure state.
+
+*Profile*
+- `GET` own profile and `PATCH` `display_name` / `timezone`. Timezone must go through the existing `timeZoneSchema`, which rejects bare UTC offsets — a frozen offset breaks local-midnight rollover for streaks and the session cap the moment DST shifts.
+- A reader can read and modify **only their own** profile. Prove it with a test that tries someone else's.
+
+*Hardening*
+- Rate-limit signup, login, and refresh. Brute-forcing a password over an unthrottled endpoint should not be possible.
+- Authentication failures must not reveal whether an email exists.
+- Extend the existing `AppError` hierarchy rather than introducing a parallel one; pino redaction must cover tokens and passwords.
+
+**Out of scope:**
+- Email verification and password reset flows — both need outbound email. Reserved for pre-launch; `email_verified_at` is the only hook added now
+- Any mobile UI — WP6 builds the screens; WP2 ships the API they call
+- Content, the CMS, `ContentRepository` — WP1 is done and WP3 is blocked on the gate
+- Learning loop, XP, streaks, session cap — WP4 and WP5
+- Roles, permissions, or admin users — Payload has its own `admins` collection
+- Deployment and hosting
+
+**Constraints:**
+- Handler → service → repository. No business logic in handlers. `process.env` is read only by the config module; the ESLint rule enforcing that stays.
+- The age threshold, token lifetimes, and signing secret are **all** config, never literals.
+- Do not add a third-party auth vendor. It was considered and rejected for now — a vendor, a per-MAU cost before monetization exists, and another DPA on the pre-launch legal list.
+- Follow the engineering standards in `CLAUDE.md` in full.
+- **"Verified locally" on this repo means `dist` deleted, not just `npm ci`.**
+
+**Acceptance criteria:**
+- [ ] `npm install`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` all pass from the root
+- [ ] Migrations apply cleanly to an empty database and create `user_auth_providers` and `refresh_tokens`; `users` gains `email_verified_at`
+- [ ] Email signup, login, and refresh work end to end against a real Postgres
+- [ ] Apple and Google ID tokens are verified against a JWKS; a token with a bad signature, wrong issuer, wrong audience, or past expiry is rejected in each case
+- [ ] A signup below the configured age threshold is refused, no user row is created, and changing the threshold by configuration alone changes the outcome
+- [ ] A refresh token is single-use: rotating it invalidates the old one, and replaying a rotated token revokes the family
+- [ ] `user.mapper.ts` returns a complete `User` including `authProviders`
+- [ ] A reader cannot read or modify another reader's profile
+- [ ] `PATCH` profile rejects a bare UTC offset as a timezone
+- [ ] Rate limiting is enforced on signup, login, and refresh
+- [ ] No password, token, or secret appears in any log line or error response
+- [ ] CI green on the pushed branch; `.env.example` lists every new variable
+
+**Testing expectations:** Unit tests for age-threshold logic (boundary cases: exactly the threshold, a day either side, leap-year birthdays), token issuing and verification, and the account-linking decision table — every combination of existing/absent email and verified/unverified provider claim. Integration tests against real Postgres via testcontainers for the full signup → login → refresh → rotate → replay cycle, and for cross-user profile access.
+
+For provider verification, generate a test key pair, sign tokens locally, and serve a fake JWKS — do not call Apple or Google from CI, and do not mock away the verification logic itself. The signature check is the security boundary and must be exercised for real.
+
 ### Handoff: 2026-08-06 — WP1: Payload 3.x CMS setup
 
 ### Task: WP1 — Payload 3.x CMS setup (`apps/admin`)
