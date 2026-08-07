@@ -15,7 +15,7 @@
   "scripts": {
     "build:shared": "npm run build --workspace=@zoomout/shared",
     "prebuild": "npm run build:shared",
-    "build": "npm run build --workspace=apps/backend && npm run build --workspace=apps/mobile",
+    "build": "npm run build --workspace=apps/backend && npm run build --workspace=apps/mobile && npm run build --workspace=apps/admin",
     "pretypecheck": "npm run build:shared",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "pretest": "npm run build:shared",
@@ -29,7 +29,9 @@
     "db:generate": "npm run db:generate --workspace=apps/backend",
     "db:migrate": "npm run db:migrate --workspace=apps/backend",
     "dev:backend": "npm run dev --workspace=apps/backend",
-    "dev:mobile": "npm run dev --workspace=apps/mobile"
+    "dev:mobile": "npm run dev --workspace=apps/mobile",
+    "dev:admin": "npm run dev --workspace=apps/admin",
+    "cms:types": "npm run generate:types --workspace=apps/admin"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

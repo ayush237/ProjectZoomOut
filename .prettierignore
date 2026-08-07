@@ -3,5 +3,7 @@ dist
 build
 coverage
 .expo
+.next
 apps/backend/drizzle/meta
+packages/shared/src/cms-generated.ts
 package-lock.json
