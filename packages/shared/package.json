@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./cms": {
+      "types": "./dist/cms-generated.d.ts",
+      "default": "./dist/cms-generated.js"
     }
   },
   "files": [

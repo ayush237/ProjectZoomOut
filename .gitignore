@@ -11,6 +11,10 @@ dist/
 build/
 *.tsbuildinfo
 
+# Next.js (apps/admin)
+.next/
+next-env.d.ts
+
 # Test output
 coverage/
 

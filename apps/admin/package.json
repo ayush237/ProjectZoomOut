@@ -1,0 +1,41 @@
+{
+  "name": "@zoomout/admin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ZoomOut content CMS — Payload 3.x admin for authoring Tracks and Leaves",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3001",
+    "start": "next start --port 3001",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "payload": "payload",
+    "generate:types": "payload generate:types",
+    "generate:importmap": "payload generate:importmap"
+  },
+  "dependencies": {
+    "@payloadcms/db-postgres": "3.87.0",
+    "@payloadcms/next": "3.87.0",
+    "@payloadcms/richtext-lexical": "3.87.0",
+    "@payloadcms/ui": "3.87.0",
+    "@zoomout/shared": "*",
+    "graphql": "^16.8.1",
+    "next": "16.3.0",
+    "payload": "3.87.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "~19.2.2",
+    "@types/react-dom": "~19.2.3",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

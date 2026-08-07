@@ -16,6 +16,12 @@ env:
   # valid connection string for the config module to accept at import time.
   DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/zoomout
   NODE_ENV: test
+  # apps/admin validates its environment when payload.config.ts is imported, which
+  # happens during `next build` as well as under test. These are non-secret CI
+  # placeholders: the integration suite overrides the URL with its own container, and
+  # nothing here ever reaches a real database.
+  PAYLOAD_SECRET: ci-placeholder-secret-at-least-32-characters
+  PAYLOAD_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/zoomout_cms
 
 jobs:
   verify:

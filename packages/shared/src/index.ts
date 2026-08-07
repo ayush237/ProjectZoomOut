@@ -9,6 +9,13 @@
  * outside — an API request body, a CMS response, a database row.
  */
 
+/**
+ * Note: the CMS-generated types are deliberately NOT re-exported here. They describe
+ * Payload's view of the content and diverge from the domain model in known ways (see
+ * the header of `cms-generated.ts`). WP3 imports them explicitly via the `./cms`
+ * subpath when mapping API responses, so nothing can pick them up by accident.
+ */
+
 export * from './primitives.js';
 export * from './content.js';
 export * from './user.js';

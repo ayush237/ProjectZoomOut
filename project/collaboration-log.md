@@ -9,6 +9,84 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-06 — WP1: Payload 3.x CMS setup
+
+### Task: WP1 — Payload 3.x CMS setup (`apps/admin`)
+
+**Context:** Phase 1 has no AI pipeline, so every Leaf is hand-authored — and there is currently nowhere to author one. This package stands up the CMS. Immediately after it comes the schema-freeze gate (plan §5): the founder authors one structurally complete Leaf through the real editor, and nothing downstream starts until the schema is signed off. So the field names and validation you build here are the content contract WP3 and WP4 depend on.
+
+WP0 is signed off. `packages/shared` is built, tested, and ready — its content types are marked `PROVISIONAL` and are the reference you model the collections from.
+
+**Objective:** A Payload 3.x admin running at `apps/admin` with Track and Leaf collections that mirror `packages/shared/src/content.ts`, publish-time hooks enforcing the product's content invariants, drafts/versions enabled so unpublishing is instant, and generated types emitted into `packages/shared` without clobbering the hand-written domain contract. The founder can log in and author a complete Leaf.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/admin/` — Payload 3.x + Next.js, `payload.config.ts`, collections, hooks, tests
+- `packages/shared/` — generated CMS types in their **own new file**; `src/content.ts` is not modified by codegen
+- Root `.env.example`, root scripts if a new entry point is needed
+- `.github/workflows/ci.yml` if the new workspace needs a step
+
+**Requirements:**
+
+*Setup and isolation*
+- Payload **3.x pinned exactly** — do not adopt 4.x. Next.js pinned to a version Payload 3 supports.
+- **Next.js must not leak into `apps/backend` or `apps/mobile`.** Confine it to `apps/admin` with its own tsconfig and dependencies.
+- Payload uses **its own database on the same Postgres instance** — not `schemaName`, which is flagged experimental upstream. The Drizzle-managed `users` table stays untouched; Payload manages its own migrations independently.
+- Any new environment variable goes through `.env.example`. No secrets committed.
+
+*Collections — field names must match `packages/shared/src/content.ts` exactly*
+- **Tracks:** `bookTitle`, `author`, `publisher`, `coverUrl`, `description`, `disclaimer`, `purchaseLinks` (array, minimum 1, each with `retailer`/`url`/`isAffiliate`), `leafCount`, `isPlaceholder` (checkbox, **defaults to true**). Publish state comes from Payload drafts, not a hand-rolled `status` field.
+- **Leaves:** `trackId` (relationship to Tracks), `orderIndex`, `title`, `isPlaceholder` (**defaults to true**), and the five slides as Payload **`group`** fields named exactly `summary`, `scenario`, `payoff`, `stickyNotes`, `takeaway`. Not a blocks/repeater array — the fixed 5-slide structure is the single most important modelling decision in the content model, same as in WP0.
+- `scenario.options` is an array with `minRows: 3` and `maxRows: 3`, each option carrying `text` and `isCorrect`.
+- **`sourceReferences` is a nested array field on the Leaf document, NOT a separate collection with a relationship.** A `beforeChange` hook cannot validate the Dinner Table Knowledge invariant across documents, and that invariant is the point. Each entry: `slideKey` (enum of the five slide keys), optional `chapter`/`page`/`quote`, required `note`.
+- Reserve the per-slide `audio` field, unused in Phase 1.
+
+*Validation — hooks, gated on publish where noted*
+- Exactly one option with `isCorrect: true`. Reject zero, two, three.
+- Dinner Table Knowledge present ⇒ a `sourceReferences` entry with `slideKey: 'takeaway'` must exist. Reject otherwise, with a message an author can act on.
+- All five slide groups populated before a Leaf can be **published**.
+- A Track cannot be **published** without a non-empty `disclaimer` and at least one `purchaseLinks` entry.
+- **Write each rule as a pure function that takes the document and returns a result, with the hook as a thin wrapper.** The rules must be unit-testable without booting Payload.
+
+*Drafts, versions, takedown*
+- Drafts and versions enabled on both collections.
+- Unpublishing must remove the record from published-status reads immediately — this is the hours-to-takedown legal requirement (`LEGAL.md`), so verify it rather than assuming it.
+
+*Type generation*
+- `payload generate:types` emits into `packages/shared` — **its own file, e.g. `src/cms-generated.ts`.** `src/content.ts` remains hand-written and authoritative; codegen must never overwrite it.
+- Note in a comment where the generated types and the hand-written domain types are expected to diverge, so the schema-freeze gate can reconcile them.
+
+**Out of scope:**
+- `ContentRepository`, the backend content API, any backend↔CMS integration — that is WP3
+- Authoring real or placeholder Leaf *content* — the gate is founder-owned, and the seed fixture is WP11
+- Deployment, Cloud Run, or any hosting configuration
+- End-user authentication — WP2. Payload's own admin login is in scope; app user auth is not
+- Any mobile work
+- Role-based permissions and approval workflow — deferred by decision; do not build it, just don't foreclose it
+
+**Constraints:**
+- **Never read Payload's Postgres tables directly, from anywhere.** Groups flatten to `summary_body`-style columns, arrays become join tables, versions live in `_leaves_v` — an undocumented internal schema, and reading it bypasses draft/publish resolution, which would silently break takedown. The backend will call the REST API in WP3.
+- The validation rules here intentionally duplicate `leafSchema`/`trackSchema` in `packages/shared`. That is a ruled decision (roadmap, 2026-08-06): two independent gates on the highest-severity risk in `LEGAL.md`. Do not "DRY them up" by removing either side.
+- Follow the engineering standards in `CLAUDE.md` in full.
+- **"Verified locally" on this repo means `dist` deleted, not just `npm ci`** — your own standard from WP0, now the project's.
+
+**Acceptance criteria:**
+- [ ] `npm install`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` all still pass from the root with `apps/admin` present
+- [ ] Payload admin boots locally and the founder can log in
+- [ ] Tracks and Leaves collections exist with field names matching `packages/shared/src/content.ts` exactly
+- [ ] The five slides are Payload `group` fields named `summary`, `scenario`, `payoff`, `stickyNotes`, `takeaway`
+- [ ] `scenario.options` accepts exactly 3 rows; a hook rejects zero, two, and three correct answers
+- [ ] Publishing a Leaf carrying Dinner Table Knowledge without a `takeaway` source reference is rejected with an actionable message
+- [ ] Publishing a Track with no disclaimer, or with zero purchase links, is rejected
+- [ ] `isPlaceholder` defaults to `true` on both collections
+- [ ] Unpublishing a Track removes it from published-status API reads — demonstrated, not assumed
+- [ ] `payload generate:types` writes to its own file in `packages/shared` and leaves `src/content.ts` byte-identical
+- [ ] Payload runs on its own database; the Drizzle `users` table and its migration are untouched
+- [ ] Next.js appears in no `apps/backend` or `apps/mobile` dependency tree
+- [ ] CI green on the pushed branch
+- [ ] No secrets committed; `.env.example` lists every new variable
+
+**Testing expectations:** Unit tests for every validation rule as a pure function — exhaustive on the correct-option count and the Dinner Table Knowledge invariant, matching the depth of the WP0 scenario tests. At least one integration test booting Payload against a testcontainers Postgres that proves publish-time rejection and that unpublishing removes a record from published reads; the takedown path is a legal requirement and must be verified by execution, not by reading the docs. If booting Payload in-process proves disproportionately heavy, say so in the completion report and explain what you verified instead — don't silently drop it.
+
 ### Handoff: 2026-08-06 — WP0: Monorepo scaffolding and shared domain types
 
 ### Task: WP0 — Monorepo scaffolding and shared domain types
@@ -75,6 +153,54 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
+
+### Completed: WP1 — Payload 3.x CMS setup — 2026-08-07
+
+**Status:** 13 of 14 acceptance criteria verified by execution. The fourteenth is half-open and needs 30 seconds of founder time, detailed below. CI green on `wp1-payload-cms` (`actions/runs/31150718278`), all steps, 138s. Full gate passes from cold — `dist` and `.next` deleted, then `npm ci` — with **145 tests**.
+
+**What changed:**
+
+`apps/admin` runs Payload **3.87.0** (pinned exactly) on Next 16.3.0, against its own Postgres database, with Tracks and Leaves modelled to match `packages/shared/src/content.ts`.
+
+- **Validation as pure functions.** Every rule is a plain function from a document to a `RuleResult`; the only Payload-aware code is one 25-line `beforeChange` wrapper. The 46 rule tests boot no CMS, no database and no Next server. The rules model documents *as Payload actually delivers them* — optional fields, `null` for empties, array rows as objects — because a rule written against the tidy domain shape passes its unit tests and then silently fails to fire against a real document.
+  - Enforced on **every save**: exactly one correct scenario option; Dinner Table Knowledge carries a `takeaway` source reference.
+  - Enforced **only on publish**: all five slides populated; a Track has a disclaimer and at least one purchase link. Draft saves stay permissive so a half-written Leaf is still editable.
+- **Collections.** Five slides as named `group` fields, not a blocks array. `sourceReferences` is a nested array on the Leaf. `scenario.options` is `minRows: 3, maxRows: 3`. `isPlaceholder` defaults to `true` on both. Per-slide `audio` reserved but hidden from the admin UI, so the founder is not shown five fields they must leave empty.
+- **Takedown.** Read access returns published-only to unauthenticated callers, so Unpublish drops a Track from every API response with no deploy. Proven by execution, and proven to stay visible to an operator afterwards.
+- **Type generation.** `payload generate:types` emits `packages/shared/src/cms-generated.ts`, reachable on the `./cms` subpath and deliberately not re-exported from the index. `content.ts` verified byte-identical by hash.
+
+**Files touched:** 38. `apps/admin/` (25 files: Payload config, 3 collections, access control, hook wrapper, 3 validation modules, 3 test files, Next.js integration boilerplate, 4 configs); `packages/shared/` (generated types, `./cms` subpath export, index note); root `.env.example`, `.gitignore`, `.prettierignore`, `eslint.config.js`, `package.json`, CI workflow. **No file under `apps/backend/` was touched** — the Drizzle `users` migration is exactly as WP0 left it.
+
+**Tests added:** 61 in `apps/admin` (145 repo-wide).
+- **46 unit** — correct-option count exhaustively (zero, two, three, null-as-false, absent); the Dinner Table Knowledge invariant across seven cases including wrong-slide and whitespace-only source notes; all five slides individually; draft-vs-publish gating; both Track legal rules including partially-complete purchase links.
+- **15 integration** against real Postgres via testcontainers — that the hooks are actually *wired* (a perfect rule no collection calls protects nothing), that publish is rejected with the author-facing message reaching the field, that `isPlaceholder` defaults true through the real ORM, and the full takedown cycle.
+
+**Assumptions made:**
+- **Payload's own auth collection is `admins`, not `users`.** `User` in `packages/shared` means an app *reader*; two things called `User` would collide the moment codegen emits into that package.
+- **`typescript.declare: false`.** Payload appends a `declare module 'payload'` augmentation that `packages/shared` cannot compile, because it does not depend on `payload` and must not — mobile consumes that package. Cost: this workspace's own `payload.*` calls are loosely typed on collection slugs, which is why the integration test uses bracket access for `_status` and `isPlaceholder`. Reversible by emitting twice, once locally with the augmentation and once into shared without it. **Please rule.**
+- **`packages/shared` exposes the generated types on a `./cms` subpath** rather than from the index, so nothing picks up the CMS shapes by accident. WP3 imports `@zoomout/shared/cms` explicitly.
+- Payload's stock template and its `.next` output are excluded from lint and Prettier; `.next/` added to `.gitignore` (it was missing, and the build output very nearly got committed).
+
+**Not verified — needs 30 seconds of founder time:**
+- **"Payload admin boots locally and the founder can log in."** Boot is verified: HTTP 200, the first-user screen renders including the custom `displayName` field, `/api/tracks` and `/api/leaves` return published-only to anonymous callers, `/api/admins` is 403. **Login is not**, because creating the account requires setting a password, which Manager will not do. The founder creates it at `http://localhost:3001/admin` — and needs it for the schema-freeze gate regardless.
+
+**Follow-ups / tech debt for Architect:**
+1. **Authoring-UX call for the schema-freeze gate.** The handoff placed "exactly one correct option" outside the publish-gated group, so it fires on every save: add three options, save before ticking one correct, and the save is rejected. Implemented as specified and the message is actionable, but the gate is the first real editing session and the moment to decide whether it should move behind publish.
+2. **Payload 4.x does not exist.** 3.87.0 is currently the latest release, so "do not adopt 4.x" is satisfied trivially. The pin still holds when 4.x lands.
+3. **Payload's `destroy()` does not close its database pool** — it only resets in-memory schema state (`@payloadcms/drizzle/dist/destroy.js`), and calling `pool.end()` hangs because Payload keeps a client checked out. Payload also attaches no `error` listener to the pool, so an idle-client error becomes an uncaught exception. Both are worked around in the integration test; **anything else that boots Payload outside a request lifecycle inherits the same gap** — relevant to WP3 and to any future seed script.
+4. **Payload's stock template tracks their unreleased `main` branch** and disagreed with 3.87.0 in three places: a `generatePayloadViewport` export that does not exist, an `importMap` referencing absent components, and `turbopack.root` pinned to the app directory (which breaks under workspace hoisting). All fixed and commented at the site. A future Payload upgrade should re-run `payload generate:importmap` and re-check `(payload)/layout.tsx`.
+5. **`stickyNotes.notes` still has no upper bound** — already in the debt register from WP0, and the gate is the moment to set it.
+6. **The CMS↔domain divergences are documented in `payload.config.ts`** and should be reconciled at the schema freeze: `trackId` is `string | Track` not `string`; `stickyNotes.notes` is `{ note }[]` not `string[]`; `scenario.options` is a plain array not a 3-tuple; Payload adds `_status`, timestamps and row ids.
+
+### Addendum: WP0 — final criterion closed, 10/10 — 2026-08-06
+
+**"Expo app boots in the iOS simulator" is now verified.** Xcode 16.4 installed (Xcode 26.x requires macOS 26.2; the host is on 15.7.8), iOS 18.6 runtime, iPhone 16 Pro simulator. The boot screen renders `Placeholder Book Title` / `Placeholder Author · 20 Leaves`, the `isPlaceholder` warning banner, and the non-endorsement disclaimer — all sourced from a `Track` parsed at runtime by `trackSchema` from `packages/shared`, so the schema is exercised and not merely the type.
+
+**All ten WP0 acceptance criteria are now verified by execution.** No code changed to achieve this; it was purely a host-tooling gap.
+
+**New follow-up for Architect — CocoaPods is absent and cannot currently be installed.** The verification ran through **Expo Go**, which loads the JS bundle and needs no native build. A native build (`expo run:ios`) fails: it requires CocoaPods, and this host has no Homebrew and a system Ruby that rejects `gem install`. That is fine for now, but it becomes blocking the moment the app needs a **development build** rather than Expo Go — i.e. any native module outside the Expo Go runtime. **WP8 is the likely trigger** (SFX, and haptics if those get specified). Worth resolving before WP8 rather than during it: install Homebrew, then CocoaPods, or move to EAS Build.
+
+Also note `expo run:ios` runs `prebuild` as a side effect — it generated an `apps/mobile/ios/` directory and rewrote the `android`/`ios` scripts in `apps/mobile/package.json`. Both were reverted; the app remains a managed Expo project, which is what CI builds.
 
 ### Addendum: WP0 — CI now green; one further bug found — 2026-08-06
 

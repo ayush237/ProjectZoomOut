@@ -23,6 +23,6 @@
   },
   // `.mts` covers vitest.config.mts — the Expo app's package.json is CommonJS (Metro
   // and Babel require that), so the Vitest config needs the explicit ESM extension.
-  "include": ["**/*.ts", "**/*.mts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "include": ["**/*.ts", "**/*.mts", "**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }
