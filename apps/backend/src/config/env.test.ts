@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { ConfigurationError, loadConfig } from './env.js';
 
 const VALID_DATABASE_URL = 'postgres://user:secretpassword@localhost:5432/zoomout';
+const VALID_JWT_SECRET = 'x'.repeat(48);
 
 const validEnvironment = (): NodeJS.ProcessEnv => ({
   NODE_ENV: 'test',
   DATABASE_URL: VALID_DATABASE_URL,
+  AUTH_JWT_SECRET: VALID_JWT_SECRET,
 });
 
 describe('loadConfig', () => {
@@ -24,6 +26,30 @@ describe('loadConfig', () => {
     expect(config.HOST).toBe('127.0.0.1');
     expect(config.LOG_LEVEL).toBe('info');
     expect(config.DATABASE_CONNECTION_TIMEOUT_SECONDS).toBe(5);
+    expect(config.AUTH_ACCESS_TOKEN_TTL_SECONDS).toBe(900);
+    expect(config.AUTH_REFRESH_TOKEN_TTL_SECONDS).toBe(2_592_000);
+    expect(config.AUTH_MINIMUM_AGE_YEARS).toBe(13);
+    expect(config.AUTH_RATE_LIMIT_MAX).toBe(10);
+    expect(config.AUTH_RATE_LIMIT_WINDOW_SECONDS).toBe(60);
+  });
+
+  it('leaves the social client ids unset when no app is registered yet', () => {
+    const config = loadConfig(validEnvironment());
+
+    expect(config.AUTH_APPLE_CLIENT_ID).toBeUndefined();
+    expect(config.AUTH_GOOGLE_CLIENT_ID).toBeUndefined();
+  });
+
+  it('fails fast when AUTH_JWT_SECRET is missing', () => {
+    expect(() => loadConfig({ NODE_ENV: 'test', DATABASE_URL: VALID_DATABASE_URL })).toThrow(
+      ConfigurationError,
+    );
+  });
+
+  it('makes the age threshold a configuration change, not a code change', () => {
+    const config = loadConfig({ ...validEnvironment(), AUTH_MINIMUM_AGE_YEARS: '16' });
+
+    expect(config.AUTH_MINIMUM_AGE_YEARS).toBe(16);
   });
 
   it('coerces numeric variables from their string form', () => {

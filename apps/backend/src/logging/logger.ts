@@ -17,14 +17,24 @@ export type AppLogger = Logger;
  * Redaction is configured centrally rather than trusted to call sites: the whole
  * point is to survive somebody logging a whole config or request object by mistake.
  */
-const REDACTED_PATHS = [
+export const REDACTED_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'res.headers["set-cookie"]',
+  'req.body.password',
+  'req.body.refreshToken',
+  'req.body.idToken',
   '*.password',
+  '*.passwordHash',
   '*.token',
+  '*.accessToken',
+  '*.refreshToken',
+  '*.idToken',
+  '*.tokenHash',
   '*.DATABASE_URL',
+  '*.AUTH_JWT_SECRET',
   'DATABASE_URL',
+  'AUTH_JWT_SECRET',
 ];
 
 export function createLogger(config: AppConfig): AppLogger {

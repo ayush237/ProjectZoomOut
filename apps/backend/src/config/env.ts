@@ -14,6 +14,15 @@ import { z } from 'zod';
 const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const;
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
+/** 256 bits of entropy, expressed as characters. Below this, HS256 is brute-forceable. */
+const MINIMUM_SECRET_LENGTH = 32;
+
+/**
+ * The value shipped in `.env.example`. Rejected explicitly so a copied-and-forgotten
+ * example file cannot become a production signing key that is public on GitHub.
+ */
+const EXAMPLE_SECRET_PLACEHOLDER = 'replace-me-with-at-least-32-random-characters';
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(NODE_ENVIRONMENTS).default('development'),
 
@@ -28,6 +37,51 @@ const environmentSchema = z.object({
     .refine(isPostgresConnectionString, 'Must be a postgres:// or postgresql:// connection string'),
 
   DATABASE_CONNECTION_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(5),
+
+  /* ---------------------------------------------------------------------- */
+  /* Authentication                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Signs access tokens. No default — the service must refuse to boot rather than
+   * fall back to something guessable, because a predictable signing key means anyone
+   * can mint a token for any user.
+   */
+  AUTH_JWT_SECRET: z
+    .string()
+    .min(MINIMUM_SECRET_LENGTH, `Must be at least ${String(MINIMUM_SECRET_LENGTH)} characters`)
+    .refine((value) => value !== EXAMPLE_SECRET_PLACEHOLDER, {
+      message: 'Still set to the .env.example placeholder — generate a real secret',
+    }),
+
+  /** Short by design: an access token cannot be revoked, so its lifetime bounds the damage. */
+  AUTH_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+
+  /** Long-lived but revocable and single-use; rotation is what keeps this safe. */
+  AUTH_REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
+
+  /**
+   * Age gate threshold, in years.
+   *
+   * Configurable because the legal answer is undecided with no owner assigned
+   * (`LEGAL.md`). When it lands, this is an environment change and a restart.
+   */
+  AUTH_MINIMUM_AGE_YEARS: z.coerce.number().int().min(0).max(120).default(13),
+
+  /**
+   * Client identifiers at Apple and Google, checked as the `aud` claim on incoming
+   * ID tokens.
+   *
+   * Optional: neither app is registered yet, and requiring them would block local
+   * development on WP2. A social sign-in attempt against an unconfigured provider
+   * fails loudly at the request rather than silently skipping the audience check.
+   */
+  AUTH_APPLE_CLIENT_ID: z.string().min(1).optional(),
+  AUTH_GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+
+  /** Requests permitted per IP per window on signup, login and refresh. */
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 function isPostgresConnectionString(value: string): boolean {
