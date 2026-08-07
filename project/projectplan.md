@@ -3,14 +3,53 @@
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
 ## Feature
-**WP2 — Backend foundation: auth, age gate, profile**
+**WP2.1 — Schema-freeze alignment and backend gaps**
+
+Fourth package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
+
+Previous: WP0 ✅ (10/10), WP1 ✅ (14/14), WP2 ✅ (11/11), **schema-freeze gate ✅ closed 2026-08-08**.
+
+## Status
+`Approved — awaiting handoff` → **`Handed off`** (2026-08-08)
+
+## Problem
+The gate did its job: authoring one real Leaf surfaced four schema defects that no amount of reading the spec would have found. All four are ruled (roadmap decisions log, 2026-08-08) but none are applied. Until they are, `packages/shared` and the CMS disagree about what valid content is — the CMS is weaker, and can emit a Track that `trackSchema` would reject at serve time.
+
+Three small backend gaps from WP2 — no logout endpoint, an overloaded provider error, unbounded refresh-token growth — are folded in because they are small, unblocked, and two of them are hard prerequisites for WP6.
+
+## Why this runs before WP3
+WP3 maps CMS documents into the domain types and validates them against `leafSchema` / `trackSchema`. Two rulings change those schemas. Building WP3 first means building against a contract mid-change — the exact churn the gate existed to prevent. WP2.1 is small; the delay to WP3 is short and the alternative is rework.
+
+## Proposed approach
+Apply the four rulings in both gates so `packages/shared` and the CMS agree: trim text on save, require a locator alongside every source reference `note`, bound sticky notes at 2–6, and require `publisher` and `coverUrl` to publish. Then drop the PROVISIONAL header from the content types — the schema is frozen.
+
+Backend: expose logout over the existing revocation machinery, split `ProviderEmailMissingError` into two codes, and reap expired refresh tokens.
+
+## Architectural impact
+Freezes the content contract. After this, a change to `content.ts` is an Architect ruling rather than an expected revision — which is what lets WP3, WP4 and WP7 build against it with confidence.
+
+## Risks
+Low. The one real question is whether the Track and Leaf authored at the gate still validate under the tightened rules; if not, the completion report must state the migration needed. That is an acceptance criterion rather than a risk left to chance.
+
+## Open questions
+One, and it does not block: **whether the exactly-one-correct rule should move from save-time to publish-time.** Deferred from WP1 to be decided with real authoring evidence, and the founder has now authored but not yet reported how it felt. Explicitly out of scope for this package; Architect will amend if the ruling lands in time.
+
+## Next after this
+**WP3 — Content API.** Written and waiting in `collaboration-log.md`, held on this package, with its amendments already listed.
+
+## Handoff prompt
+See `project/collaboration-log.md` — Handoffs, 2026-08-08 (WP2.1).
+
+---
+
+## Previous: WP2 — Backend foundation: auth, age gate, profile — ✅ signed off 2026-08-07 (11/11)
 
 Third work package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
 
 Previous packages: **WP0 signed off 2026-08-06** (10/10). **WP1 signed off 2026-08-07** (14/14).
 
 ## Status
-`Approved — awaiting handoff` → **`Handed off`** (2026-08-07)
+`Handed off` → **`Signed off`** (2026-08-07). Next: WP3, held on the gate.
 
 ## Problem
 The backend has structure but no users. Nothing can be personalised, no progress can be attributed, and the age gate — a pre-launch legal requirement — has nowhere to live. WP4 (learning loop), WP5 (streaks, session cap) and WP6 (mobile shell) all need an authenticated user before they can start.

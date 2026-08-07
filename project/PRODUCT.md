@@ -18,7 +18,7 @@ ZoomOut converts non-fiction books into short, gamified, interactive lessons —
 1. **Summary** — short textual summary of the concept (fast/easy processing)
 2. **Scenario** — a relatable real-life scenario with 3 answer options (fast/easy processing)
 3. **Payoff** — unlocks only after a correct answer on slide 2; explains the concept in more depth (slow/effortful processing). **Wrong answers retry without limit** (decided 2026-08-06) — with only 3 options nobody is permanently blocked, so the stakes live in XP rather than access
-4. **Sticky notes** — key points recap, styled as sticky notes on a board
+4. **Sticky notes** — key points recap, styled as sticky notes on a board. **2–6 notes** (ruled at the schema-freeze gate, 2026-08-08); revisit when the visual design direction lands
 5. **Takeaway** — key takeaway plus an optional Dinner Table Knowledge fact
 
 Slides 2 and 3 include a voiceover button. **Confirmed 2026-08-06:** "human voice over" in the original brief means AI-generated audio in a natural human-sounding voice (ElevenLabs), not literally human-recorded narration.
@@ -47,7 +47,7 @@ Decided 2026-08-06:
 
 ## Content integrity & legal constraints (engineering-relevant)
 These are hard requirements, not suggestions — they're the operational layer behind ZoomOut's fair-use legal position (full legal reasoning: `project/LEGAL.md`).
-- Every generated fact or quote — especially Dinner Table Knowledge — needs a **stored source reference** for traceability and audit.
+- Every generated fact or quote — especially Dinner Table Knowledge — needs a **stored source reference** for traceability and audit. A reference carries a required `note` **plus at least one locator** (chapter, page, or quote) — a note alone describes where a claim came from without letting anyone check it (ruled 2026-08-08).
 - Leaf/Track content must **never reproduce a book's own chapter structure or named framework 1:1**. This constrains the admin tool's data model now and any future AI pipeline output later.
 - Every Track needs a **non-endorsement disclaimer** and a **purchase-forward link** to the source book (affiliate where available) on completion.
 - Every Leaf needs a **"report an error" action**, routed to a fix queue with a defined SLA.

@@ -46,6 +46,21 @@ Always use this exact structure — Manager expects it:
 **Testing expectations:** <unit / integration / e2e coverage expected>
 ```
 
+## Reporting shape
+The shared rule is in `CLAUDE.md` — summary block first, depth below, conclusion before reasoning. These are the Architect-specific shapes on top of it.
+
+**Reviewing a completed package:**
+```
+**Bottom line:** Signed off / rejected, N of M criteria, any condition attached.
+**Needs you:** the rulings or actions waiting on the founder — or "nothing".
+**Blocked:** what the next package waits on — or "nothing".
+```
+Then, in order: anything that changes what gets built next; rulings with their reasoning; what was recorded and where. Praise for good work is worth including, but it goes in the detail, never in the summary block — it is not something the founder has to act on.
+
+**Presenting a plan:** lead with the shape of the thing and the decisions that need approval. Alternatives considered, risks, and architectural reasoning go underneath. The founder should be able to approve or push back without reading to the bottom.
+
+**Handoff prompts are exempt.** They are written for Manager, not the founder, and their existing template stays exactly as it is.
+
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
 - `researcher` — library/API/best-practice investigation, read-only
