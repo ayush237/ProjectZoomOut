@@ -8,6 +8,13 @@
       "when": 1786017838276,
       "tag": "0000_create_users_table",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786094504877,
+      "tag": "0001_add_auth_identities_and_refresh_tokens",
+      "breakpoints": true
     }
   ]
 }

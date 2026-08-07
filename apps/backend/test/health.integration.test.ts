@@ -1,13 +1,10 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildApp, type ZoomOutApp } from '../src/app.js';
-import { loadConfig } from '../src/config/env.js';
-import { createDatabaseClient, type DatabaseClient } from '../src/db/client.js';
+import type { ZoomOutApp } from '../src/app.js';
+import type { DatabaseClient } from '../src/db/client.js';
 import { runMigrations } from '../src/db/migrate.js';
-import { PostgresHealthRepository } from '../src/health/health.repository.js';
-import { HealthService } from '../src/health/health.service.js';
-import { createLogger } from '../src/logging/logger.js';
+import { buildTestApp, type TestApp } from './helpers/buildTestApp.js';
 
 /**
  * Integration coverage for `GET /health` against a real Postgres instance.
@@ -26,40 +23,26 @@ const POSTGRES_IMAGE = 'postgres:16-alpine';
 const CLOSED_PORT = 59999;
 
 let container: StartedPostgreSqlContainer;
+let harness: TestApp;
 let database: DatabaseClient;
 let app: ZoomOutApp;
 
-function buildAppForDatabaseUrl(databaseUrl: string): {
-  app: ZoomOutApp;
-  database: DatabaseClient;
-} {
-  const config = loadConfig({
-    NODE_ENV: 'test',
-    LOG_LEVEL: 'silent',
-    DATABASE_URL: databaseUrl,
-    DATABASE_CONNECTION_TIMEOUT_SECONDS: '2',
-  });
-  const logger = createLogger(config);
-  const client = createDatabaseClient(config, logger);
-  const healthService = new HealthService(new PostgresHealthRepository(client), logger);
-
-  return { app: buildApp({ config, logger, healthService }), database: client };
-}
+const buildAppForDatabaseUrl = async (databaseUrl: string): Promise<TestApp> =>
+  buildTestApp({ databaseUrl, env: { DATABASE_CONNECTION_TIMEOUT_SECONDS: '2' } });
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
 
-  const built = buildAppForDatabaseUrl(container.getConnectionUri());
-  app = built.app;
-  database = built.database;
+  harness = await buildAppForDatabaseUrl(container.getConnectionUri());
+  app = harness.app;
+  database = harness.database;
 
   await runMigrations(database);
   await app.ready();
 });
 
 afterAll(async () => {
-  await app?.close();
-  await database?.close();
+  await harness?.close();
   await container?.stop();
 });
 
@@ -86,6 +69,8 @@ describe('the initial migration', () => {
       'date_of_birth',
       'display_name',
       'email',
+      // Reserved by WP2 for a verification flow that does not exist yet.
+      'email_verified_at',
       'id',
       'timezone',
       'updated_at',
@@ -130,7 +115,7 @@ describe('GET /health', () => {
   });
 
   it('returns 503 when the database is unreachable', async () => {
-    const unreachable = buildAppForDatabaseUrl(
+    const unreachable = await buildAppForDatabaseUrl(
       `postgres://postgres:postgres@127.0.0.1:${String(CLOSED_PORT)}/zoomout`,
     );
 
@@ -140,14 +125,13 @@ describe('GET /health', () => {
       expect(response.statusCode).toBe(503);
       expect(response.json()).toEqual({ status: 'unhealthy', checks: { database: 'down' } });
     } finally {
-      await unreachable.app.close();
-      await unreachable.database.close();
+      await unreachable.close();
     }
   });
 
   it('returns 503 once a previously healthy database goes away', async () => {
     const stopped = await new PostgreSqlContainer(POSTGRES_IMAGE).start();
-    const built = buildAppForDatabaseUrl(stopped.getConnectionUri());
+    const built = await buildAppForDatabaseUrl(stopped.getConnectionUri());
 
     try {
       const healthy = await built.app.inject({ method: 'GET', url: '/health' });
@@ -158,8 +142,7 @@ describe('GET /health', () => {
       const unhealthy = await built.app.inject({ method: 'GET', url: '/health' });
       expect(unhealthy.statusCode).toBe(503);
     } finally {
-      await built.app.close();
-      await built.database.close();
+      await built.close();
     }
   });
 });

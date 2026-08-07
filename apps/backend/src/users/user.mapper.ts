@@ -1,4 +1,4 @@
-import { localDateSchema, timeZoneSchema, type User } from '@zoomout/shared';
+import { authProviderSchema, localDateSchema, timeZoneSchema, type User } from '@zoomout/shared';
 import { z } from 'zod';
 
 import type { UserRow } from '../db/schema.js';
@@ -15,17 +15,15 @@ import type { UserRow } from '../db/schema.js';
  * - `date_of_birth` stays a `YYYY-MM-DD` string end to end and is re-validated here,
  *   because a birth date that has been through a `Date` is a birth date that may
  *   have moved by a day.
- *
- * `authProviders` is absent from the result: WP0 creates the `users` table only, and
- * the providers table arrives with auth in WP2. Expressing that as `Omit` rather than
- * defaulting to `[]` keeps the gap visible in the type system instead of inventing
- * data that was never stored.
+ * - `authProviders` lives in its own table, so it arrives alongside the row rather
+ *   than on it. WP0 left this as an `Omit` because the table did not exist yet; WP2
+ *   creates it, and the mapper now returns a complete `User`.
  */
-export type PersistedUser = Omit<User, 'authProviders'>;
 
-const persistedUserSchema = z.object({
+const userSchema = z.object({
   id: z.uuid(),
   email: z.email(),
+  authProviders: z.array(authProviderSchema).min(1),
   displayName: z.string().min(1),
   dateOfBirth: localDateSchema,
   timezone: timeZoneSchema,
@@ -34,13 +32,17 @@ const persistedUserSchema = z.object({
 });
 
 /**
- * @throws {z.ZodError} if a row violates the domain contract — a corrupt or
- * hand-edited row should fail loudly at the boundary rather than propagate.
+ * @param row The persisted user.
+ * @param authProviders Identities from `user_auth_providers`. At least one always
+ *   exists — `createUserWithIdentity` writes the user and their first identity in a
+ *   single transaction, so a user with none is a corrupt row and should fail loudly.
+ * @throws {z.ZodError} if the row violates the domain contract.
  */
-export function toDomainUser(row: UserRow): PersistedUser {
-  return persistedUserSchema.parse({
+export function toDomainUser(row: UserRow, authProviders: readonly User['authProviders'][number][]): User {
+  return userSchema.parse({
     id: row.id,
     email: row.email,
+    authProviders,
     displayName: row.displayName,
     dateOfBirth: row.dateOfBirth,
     timezone: row.timezone,
