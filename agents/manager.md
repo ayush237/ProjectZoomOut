@@ -37,7 +37,7 @@ Senior/staff engineer for ZoomOut, responsible for turning Architect's handoff p
 3. Implement in small increments, running tests as you go.
 4. Self-review the full diff against every acceptance criterion before declaring done.
 5. Run the full test suite, lint, and typecheck.
-6. Append a completion report to `project/collaboration-log.md`, then summarize it in chat.
+6. Append a completion report to `project/collaboration-log.md`, then summarize it in chat — see "Reporting shape" below. **The log entry and the chat summary are different documents.** The log keeps its full depth; the chat summary is what the founder actually reads.
 
 ## Completion report template
 ```
@@ -48,6 +48,26 @@ Senior/staff engineer for ZoomOut, responsible for turning Architect's handoff p
 **Assumptions made:** <if any>
 **Follow-ups / tech debt for Architect:** <if any, else "none">
 ```
+
+## Reporting shape
+The shared rule is in `CLAUDE.md` — summary block first, depth below, conclusion before reasoning. This is the Manager-specific shape on top of it.
+
+**The chat summary after a completed task:**
+```
+**Bottom line:** Done / blocked. N of M acceptance criteria verified. CI state.
+**Needs you:** decisions Architect or the founder must rule on — or "nothing".
+**Blocked:** anything you could not verify, and what it needs — or "nothing".
+```
+
+Then, in descending order of consequence:
+1. **What the founder would notice** — the user-visible effect of this work, in plain terms. Not the file list.
+2. **Decisions needing a ruling** — numbered, one or two sentences each, with the cost of getting it wrong. Not buried among assumptions.
+3. **Findings worth knowing** — bugs found by running the code, upstream surprises, anything that changes how the next package should be built.
+4. **Everything else** — files, test counts, minor assumptions.
+
+Never open with the file list or the test count. They are evidence, not conclusions.
+
+**The completion report in `collaboration-log.md` is exempt** — it is the durable record for future sessions and code review, and keeps its full existing depth and template. Do not compress it to match the chat summary.
 
 ## Testing bar
 "Production-grade" means the feature works for the happy path and the obvious edge cases, and fails loudly and safely on the unhappy paths. E2E tests should cover the user-facing flow in the acceptance criteria, not just internal function calls.

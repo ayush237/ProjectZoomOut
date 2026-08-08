@@ -12,6 +12,7 @@ import {
   InvalidRefreshTokenError,
   ProviderEmailMissingError,
   RefreshTokenReuseError,
+  SignupDetailsRequiredError,
   UnverifiedEmailCollisionError,
 } from './auth.errors.js';
 import type { AuthRepository } from './auth.repository.js';
@@ -198,6 +199,32 @@ export class AuthService {
     return session;
   }
 
+  /**
+   * Signs the caller out by revoking the presented refresh token's family.
+   *
+   * **Family, not the single token** — the decision WP6 needs. A family is one
+   * device's login chain: every token rotated from the same original sign-in shares
+   * it. Revoking the family therefore means "sign out this device", which is what a
+   * sign-out button promises, and leaves other devices untouched because each has its
+   * own family. Revoking only the presented token would usually behave the same, but
+   * would leave any straggler in that chain alive after a rotation race.
+   *
+   * An unknown or already-revoked token is a **success**. Signing out twice, or with
+   * a token the server has already forgotten, is not a failure — the caller's intent
+   * is satisfied either way, and returning an error would only teach clients to
+   * ignore the response.
+   */
+  public async logout(refreshToken: string): Promise<void> {
+    const stored = await this.repository.findRefreshTokenByHash(hashRefreshToken(refreshToken));
+
+    if (stored === null) {
+      return;
+    }
+
+    await this.repository.revokeRefreshTokenFamily(stored.familyId);
+    this.logger.info({ userId: stored.userId, familyId: stored.familyId }, 'Session signed out');
+  }
+
   private async createFromProvider(
     input: SignInWithProvider,
     subject: string,
@@ -208,14 +235,19 @@ export class AuthService {
       throw new ProviderEmailMissingError();
     }
 
-    // Signup details the provider cannot supply. Apple in particular returns a name
-    // only on the very first authorisation, so the client must send these alongside
-    // the token for a first-time sign-in.
+    // Signup details no provider supplies. Apple and Google return an identity and an
+    // email; neither returns a date of birth or a timezone, and the age gate cannot be
+    // skipped — so the client must send these alongside the token on a first sign-in.
     const dateOfBirth = input.dateOfBirth;
     const timezone = input.timezone;
 
+    const missingFields = [
+      dateOfBirth === undefined ? 'your date of birth' : null,
+      timezone === undefined ? 'your timezone' : null,
+    ].filter((field): field is string => field !== null);
+
     if (dateOfBirth === undefined || timezone === undefined) {
-      throw new ProviderEmailMissingError();
+      throw new SignupDetailsRequiredError(missingFields);
     }
 
     this.assertOldEnough(dateOfBirth, timezone);

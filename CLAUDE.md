@@ -20,6 +20,31 @@ Note: `agents/` here holds our own persona documents, loaded via `--append-syste
 
 If you're a fresh session and don't know which role you are, stop and ask before doing anything else.
 
+## Reporting to the founder
+Applies to both sessions. The founder is a developer — jargon is not the problem. Density and ordering are.
+
+**Every report in chat opens with a summary block, before any detail:**
+
+```
+**Bottom line:** <one sentence — what state is this in>
+**Needs you:** <decisions or actions required, or "nothing">
+**Blocked:** <what's waiting, on what, or "nothing">
+```
+
+That block must be readable in about fifteen seconds. Detail follows underneath, ordered by consequence — most important first, not chronologically.
+
+**Depth is not the problem and must not be cut.** The rationale behind a ruling, the reason a bug matters, the tradeoff that was taken — all of it stays. It just stops being the first thing, and stops competing with the one line the founder actually needs to act on.
+
+Rules of thumb:
+- **Conclusion before reasoning, always.** Never make the founder read an argument to find the verdict.
+- One idea per paragraph. If a paragraph carries three, split it.
+- Bold the load-bearing phrase in a long bullet so it survives skimming.
+- Write "nothing" explicitly rather than dropping a heading — an absent line is ambiguous.
+- Don't restate in prose what a table already says.
+- Findings, decisions, and status are three different things. Don't interleave them.
+
+**This governs chat only.** Files under `project/` — the collaboration log, roadmap, and debt register — are the durable record and keep their full depth and current structure. Do not compress them to match a chat summary.
+
 ## Repository map
 ```
 .

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  checkCoverUrlPresent,
   checkDisclaimerPresent,
+  checkPublisherPresent,
   checkPurchaseLinkPresent,
   validateTrack,
 } from './trackRules';
@@ -10,6 +12,8 @@ import type { TrackDocumentInput } from './types';
 function completeTrack(overrides: Partial<TrackDocumentInput> = {}): TrackDocumentInput {
   return {
     bookTitle: 'Placeholder Book',
+    publisher: 'Placeholder Publisher',
+    coverUrl: 'https://example.test/cover.png',
     disclaimer: 'ZoomOut is not affiliated with or endorsed by the author or publisher.',
     purchaseLinks: [{ retailer: 'Example Books', url: 'https://example.test/book' }],
     ...overrides,
@@ -80,6 +84,41 @@ describe('checkPurchaseLinkPresent', () => {
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* publisher and coverUrl required to publish (frozen 2026-08-08)              */
+/* -------------------------------------------------------------------------- */
+
+describe('checkPublisherPresent', () => {
+  it('passes when a publisher is set', () => {
+    expect(checkPublisherPresent(completeTrack()).ok).toBe(true);
+  });
+
+  it.each([null, '', '   '])('fails when the publisher is %p', (publisher) => {
+    // The gate published a Track with this null, which trackSchema would then have
+    // rejected at serve time — the CMS was the weaker of the two gates.
+    expect(checkPublisherPresent(completeTrack({ publisher })).ok).toBe(false);
+  });
+
+  it('tells a self-publishing author what to put instead', () => {
+    const result = checkPublisherPresent(completeTrack({ publisher: null }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.violations[0]?.message).toMatch(/Independently published/u);
+    }
+  });
+});
+
+describe('checkCoverUrlPresent', () => {
+  it('passes when a cover URL is set', () => {
+    expect(checkCoverUrlPresent(completeTrack()).ok).toBe(true);
+  });
+
+  it.each([null, '', '   '])('fails when the cover URL is %p', (coverUrl) => {
+    expect(checkCoverUrlPresent(completeTrack({ coverUrl })).ok).toBe(false);
+  });
+});
+
 describe('validateTrack', () => {
   it('allows a draft Track with neither disclaimer nor purchase link', () => {
     // Both rules are publish-gated: an author starting a Track has neither yet, and
@@ -91,12 +130,17 @@ describe('validateTrack', () => {
     expect(validateTrack({ bookTitle: 'Just started' }, true).ok).toBe(false);
   });
 
-  it('reports both legal requirements at once', () => {
+  it('reports every publish requirement at once rather than one per attempt', () => {
     const result = validateTrack({ bookTitle: 'Just started' }, true);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.violations.map((v) => v.path).sort()).toEqual(['disclaimer', 'purchaseLinks']);
+      expect(result.violations.map((v) => v.path).sort()).toEqual([
+        'coverUrl',
+        'disclaimer',
+        'publisher',
+        'purchaseLinks',
+      ]);
     }
   });
 

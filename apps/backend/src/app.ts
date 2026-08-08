@@ -153,7 +153,7 @@ export async function buildApp(deps: AppDependencies): Promise<ZoomOutApp> {
   });
 
   registerHealthRoutes(app, deps.healthService);
-  registerAuthRoutes(app, deps.authService, deps.config);
+  registerAuthRoutes(app, deps.authService, deps.config, deps.authenticate);
   registerProfileRoutes(app, deps.profileService, deps.authenticate);
 
   return app;

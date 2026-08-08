@@ -9,6 +9,178 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-08 — WP2.1: Schema-freeze alignment and backend gaps
+
+### Task: WP2.1 — Schema-freeze alignment and backend gaps
+
+**Context:** The schema-freeze gate closed on 2026-08-08. Authoring one real Leaf surfaced four schema defects, all now ruled (roadmap decisions log, 2026-08-08). This package applies those rulings and, while in the area, closes three small backend gaps left open by WP2.
+
+**This runs before WP3 deliberately.** WP3 maps CMS documents into the domain types and validates them against `leafSchema` / `trackSchema`. Two of the rulings below change those schemas, so building WP3 first would mean building against a contract we are mid-way through changing — exactly the churn the gate existed to prevent.
+
+**Objective:** The content schema is frozen and enforced consistently in both gates — `packages/shared` and the CMS agree, and neither is weaker than the other. Logout exists, the overloaded provider error is split, and expired refresh tokens are reaped.
+
+**Scope:** (verify, don't trust blindly)
+- `packages/shared/src/content.ts` — schema refinements, PROVISIONAL header removal
+- `packages/shared/src/cms-generated.ts` — regenerated
+- `apps/admin/src/` — trim hook, validation rules, collection field config
+- `apps/backend/src/auth/` — logout, error split, token reaping
+- Root `.env.example` if reaping needs configuration
+
+---
+
+**Part A — schema-freeze alignment**
+
+*A1. Trim all CMS text input on save*
+- A `beforeChange` hook trimming every text and textarea field across both content collections.
+- **Leading and trailing whitespace only. Never collapse internal whitespace** — payoff bodies are multi-line and that formatting is authored deliberately.
+- Applies to nested group and array fields too. The gate found `" ; \n"` on `takeaway.dinnerTableKnowledge` and `"concept 1 "` as a Leaf title, so nesting is exactly where it bites.
+
+*A2. Source references need a locator*
+- A `SourceReference` requires its existing `note` **plus at least one of** `chapter`, `page`, `quote`.
+- Enforce in **both** gates: a refinement in `packages/shared`, and a publish-gated rule in the CMS.
+- **Publish-gated, not save-gated** — deliberately asymmetric with the existing Dinner Table Knowledge rule. The *existence* of a source is the same edit as writing the fact, so that stays on save. The *completeness* of the citation is a publish concern.
+- Author-facing message must name which locators are acceptable, not just say the reference is incomplete.
+
+*A3. Sticky notes bounded*
+- `min 2, max 6`, in `packages/shared` and as `minRows`/`maxRows` in the CMS.
+- Note the shape divergence already recorded in `payload.config.ts`: Payload stores `{ note }[]`, the domain type is `string[]`. Both need the bound.
+
+*A4. `publisher` and `coverUrl` required to publish a Track*
+- Publish-gated rule in the CMS. `trackSchema` already declares both non-optional, so this is the CMS catching up to the domain model rather than a new constraint.
+- The gate published a Track with both null, which means today the CMS can emit a document that `trackSchema` would reject at serve time.
+
+*A5. Freeze the content types*
+- Remove the `PROVISIONAL` header from `packages/shared/src/content.ts` and replace it with a short note that the schema was frozen on 2026-08-08 after the gate, and that changes now require an Architect ruling rather than being expected.
+- Regenerate `cms-generated.ts` and confirm the divergence list in `payload.config.ts` is still accurate.
+
+---
+
+**Part B — backend gaps from WP2**
+
+*B1. Logout*
+- An authenticated endpoint revoking the caller's refresh token. The revocation machinery exists; nothing exposes it.
+- Revoking an already-revoked or unknown token is a success, not an error — a client signing out twice is not a failure case.
+- Decide and state whether logout revokes the single token or the whole family; either is defensible, but WP6 needs to know which.
+
+*B2. Split `ProviderEmailMissingError`*
+- It currently covers two unrelated failures: the provider returned no usable email, and a first-time social signup arrived without `dateOfBirth` / `timezone`.
+- Two distinct error codes. They need opposite client recoveries — one is "your Apple account has no email we can use", the other is "we need your date of birth" — and WP6 will show the wrong screen for one of them until they are separable.
+
+*B3. Reap expired refresh tokens*
+- A periodic cleanup of expired and revoked rows. The table currently grows unbounded.
+- Keep it simple: a scheduled query is sufficient. Do not add a job-queue dependency for this.
+
+---
+
+**Out of scope:**
+- The content API, `ContentRepository`, Explore, Library — WP3, released immediately after this
+- Moving the exactly-one-correct rule from save-time to publish-time — **the founder's ruling is pending.** If it lands before you reach A2, Architect will amend this handoff. Do not change it on your own judgement
+- Authoring any content — the placeholder Track and Leaf from the gate stay as they are
+- Any mobile work
+- Password reset, email verification
+
+**Constraints:**
+- The two-gate duplication between `packages/shared` and the CMS is deliberate and ruled. Do not collapse it.
+- `process.env` only in the config module. Handler → service → repository in the backend.
+- Follow the engineering standards in `CLAUDE.md` in full.
+- **"Verified locally" means `dist` deleted, not just `npm ci`.**
+
+**Acceptance criteria:**
+- [ ] `npm install`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass from the root
+- [ ] Saving a field with leading or trailing whitespace stores it trimmed; a multi-line body keeps its internal formatting intact
+- [ ] Publishing a Leaf whose source reference has only a `note` is rejected, with a message naming the acceptable locators
+- [ ] The same constraint rejects the same document in `packages/shared` — both gates agree
+- [ ] Sticky notes reject 1 and reject 7, in both gates
+- [ ] Publishing a Track without `publisher` or without `coverUrl` is rejected
+- [ ] The Track and Leaf authored at the gate either still validate, or the migration needed to make them valid is stated in the completion report
+- [ ] `content.ts` no longer claims to be provisional
+- [ ] Logout revokes the caller's refresh token; a second logout succeeds
+- [ ] The two provider failures return distinct, documented error codes
+- [ ] Expired refresh tokens are removed by the reaping path
+- [ ] CI green; `.env.example` current
+
+**Testing expectations:** Unit tests for the trim hook against nested group and array fields, including a multi-line body proving internal whitespace survives. Unit tests for the locator rule covering each locator alone, all absent, and whitespace-only values — the last one is why trimming and this rule belong in the same package. Sticky-note bounds tested at 1, 2, 6 and 7 in both gates. Integration tests for logout including the double-logout case, and for reaping. Existing WP1 and WP2 suites must stay green; report any test that needed changing and why.
+
+### Handoff: 2026-08-07 — WP3: Content API (⏸ HELD — released after WP2.1)
+
+> **Status: written, not yet released.** WP3 was originally held on the schema-freeze gate, which closed 2026-08-08. It is now held on **WP2.1**, because the gate's rulings change `leafSchema` and `trackSchema` — the exact schemas WP3 maps into and validates against.
+>
+> **Amendments on release** (already ruled, fold into the mapping and its tests): source references require a locator alongside `note`; sticky notes are bounded 2–6; `publisher` and `coverUrl` are required on a publishable Track. `packages/shared` will no longer be marked provisional.
+>
+> **Architect will confirm in chat when this is live.** If you are reading this without that confirmation, check `projectplan.md`.
+
+### Task: WP3 — Content API: ContentRepository, Explore, Library, Leaf delivery
+
+**Context:** WP1 put content in Payload; WP2 put readers behind auth. Nothing connects them — the mobile app has no way to see a Track or a Leaf. This package is that bridge, and it is where the placeholder guard and the answer-key strip stop being intentions and start being enforced.
+
+WP4 (learning loop) and WP7 (mobile surfaces) both build directly on the endpoints defined here.
+
+**Objective:** An authenticated reader can browse published Tracks, add and remove them from a personal library, list that library, fetch a Track's ordered Leaf list, and fetch a single Leaf — with the answer key stripped server-side and placeholder content blocked in production.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/backend/src/content/` — `ContentRepository`, mapping, service, routes
+- `apps/backend/src/library/` — library service, repository, routes
+- `apps/backend/src/db/` — a migration for the library table
+- `apps/backend/src/config/env.ts` — Payload connection settings
+- Root `.env.example`
+
+**Requirements:**
+
+*ContentRepository — the CMS boundary*
+- Calls **Payload's REST API over HTTP**. **Never read Payload's Postgres tables from anywhere**, for any reason. Groups flatten to `summary_body`-style columns, arrays become join tables, versions live in `_leaves_v` — an undocumented internal schema — and reading it bypasses draft/publish resolution, which silently breaks takedown.
+- Payload's read access already returns published-only to unauthenticated callers, so the backend calls anonymously and receives published content by construction. Do not add an admin token to widen that.
+- HTTP client has an explicit timeout. Payload being unreachable produces a typed error and a clean 503 — never a hang, never a 500 with a leaked stack.
+- Import generated CMS types from `@zoomout/shared/cms` explicitly. Do not re-export them from the shared index.
+
+*Mapping — CMS shape to domain shape*
+- Map Payload documents into the `packages/shared` domain types, handling the divergences documented in `payload.config.ts`: `trackId` is `string | Track`, `stickyNotes.notes` is `{ note }[]` not `string[]`, `scenario.options` is a plain array not a 3-tuple, and Payload adds `_status`, timestamps and row ids.
+- **Validate the mapped result with `leafSchema` / `trackSchema` before serving it.** This is the point of having two independent gates: content that violates our invariants must not reach a reader even if the CMS accepted it. A validation failure is a logged server error, not a silent pass-through.
+
+*The two guards that must actually fire*
+- **`isProductionPublishable` must be enforced on the read path.** It exists in `packages/shared` and nothing calls it — today the placeholder guard is decorative. Placeholder content is legitimately visible in development and staging and must be **invisible in production**, so the check is environment-aware, driven by validated config.
+- **`toPublicLeaf` is the only way a Leaf reaches a client.** `isCorrect` must never appear in a response body. Add a test asserting the serialised payload contains no answer key, at the route level, not just the mapper.
+- **Never parse untrusted input with `publicLeafSchema`** — it derives from the Leaf shape *before* the Dinner Table Knowledge refinement, so it would accept an unsourced fact.
+
+*Endpoints — all require authentication (there is no guest mode in Phase 1)*
+- `GET /content/tracks` — Explore. Published, non-placeholder in production, paginated.
+- `GET /content/tracks/:id` — detail, including the non-endorsement disclaimer and purchase links. Both are legally required on every Track; a Track missing either must not be servable.
+- `GET /content/tracks/:id/leaves` — ordered Leaf list. Metadata only (id, order, title, completion-relevant fields) — not full slide bodies.
+- `GET /content/leaves/:id` — one full Leaf as `PublicLeaf`.
+- `POST` / `DELETE /library/tracks/:id` — add and remove. Adding twice is idempotent, not an error.
+- `GET /library` — the reader's Tracks. Progress fields are WP4's; return library membership only.
+
+*Caching and takedown latency*
+- Content changes rarely and Payload should not be hit per request. A short in-memory TTL cache is fine — but **the TTL is the takedown latency**, so it must be bounded, driven by config, and documented at the call site. `LEGAL.md` requires hours; keep it to minutes and the requirement is met with room to spare.
+
+**Out of scope:**
+- Answer submission, unlock logic, XP — WP4
+- Progress and completion state — WP4/WP5
+- Seed or placeholder content — WP11
+- Report-an-error — WP10
+- Any mobile UI — WP7
+- Draft preview for authors — Payload's admin is the preview
+
+**Constraints:**
+- Handler → service → repository. No business logic in handlers. `process.env` only in the config module.
+- **If integration tests need seeded content, prefer seeding through Payload's REST API with an admin token over booting Payload in-process.** Booting it inherits two upstream gaps found in WP1: `payload.destroy()` does not close its database pool (and `pool.end()` hangs, because Payload keeps a client checked out), and Payload attaches no `error` listener to its pool, so an idle-client error becomes an uncaught exception. If you must boot it, put the workaround in one shared test harness rather than per suite.
+- Follow the engineering standards in `CLAUDE.md` in full.
+- **"Verified locally" means `dist` deleted, not just `npm ci`.**
+
+**Acceptance criteria:**
+- [ ] `npm install`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass from the root
+- [ ] Every content endpoint requires authentication; an unauthenticated request is rejected
+- [ ] `isCorrect` appears nowhere in any serialised response — asserted at the route level
+- [ ] Placeholder content is served in development and **blocked in production**, with the outcome changing by configuration alone
+- [ ] A Track lacking a disclaimer or purchase links is not servable
+- [ ] Unpublishing a Track in Payload removes it from the API within the configured cache TTL — demonstrated by execution
+- [ ] Payload unreachable produces a clean 503, not a hang or a leaked stack
+- [ ] A reader sees only their own library; adding the same Track twice is idempotent
+- [ ] Mapped content is validated against `leafSchema` / `trackSchema` before being served, and a violation is logged rather than passed through
+- [ ] Migration applies cleanly to an empty database
+- [ ] CI green; `.env.example` lists every new variable
+
+**Testing expectations:** Unit tests for the CMS→domain mapping against realistic Payload payloads — including every divergence listed above, and a Leaf whose mapped form violates `leafSchema`. Unit tests for `isProductionPublishable` enforcement across environments. Integration tests against real Postgres for the library endpoints and cross-user isolation, and an end-to-end test proving the full takedown cycle: published Track visible → unpublished in Payload → gone from the API. The takedown path is a legal requirement and must be verified by execution, not by reading Payload's documentation.
+
 ### Handoff: 2026-08-07 — WP2: Backend foundation — auth, age gate, profile
 
 ### Task: WP2 — Backend foundation: auth, age gate, profile
@@ -236,6 +408,55 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
+
+### Completed: WP2.1 — Schema-freeze alignment and backend gaps — 2026-08-08
+
+**Status:** All 12 acceptance criteria verified by execution. Cold gate passes with `dist` and `.next` deleted — **345 tests** (64 shared, 108 admin, 167 backend, 6 mobile).
+
+**What changed:**
+
+*Part A — schema-freeze alignment*
+
+- **A1 — trimming.** A `beforeChange` hook trims every string in both content collections, recursing through group and array fields, which is where both of the gate's bad values actually lived. Leading and trailing only; internal whitespace is untouched, because a payoff body's blank lines are authored. The hook is ordered **before** validation, so a whitespace-only value reads as absent to the rules rather than being stored blank — that ordering is what makes A2's whitespace case work at all.
+- **A2 — source locators.** `note` plus at least one of `chapter` / `page` / `quote`. Publish-gated in the CMS, unconditional in `packages/shared` (which only ever sees content on its way to being served). The CMS rule is implemented **independently** of `hasSourceLocator` in shared rather than importing it — a shared predicate would mean one bug defeats both gates, which is the one thing the two-gate design exists to prevent.
+- **A3 — sticky notes bounded 2–6** in `stickyNotesSlideSchema` and as `minRows`/`maxRows`.
+- **A4 — `publisher` and `coverUrl` required to publish a Track.** As the handoff predicted, this was the CMS catching up to a constraint `trackSchema` already declared.
+- **A5 — frozen.** The `PROVISIONAL` header is replaced with a frozen-2026-08-08 note recording the four corrections and stating that further change needs an Architect ruling plus a migration plan. `cms-generated.ts` regenerated; `content.ts` verified byte-identical by hash afterwards.
+
+*Part B — backend gaps*
+
+- **B1 — logout.** `POST /auth/logout`, authenticated, 204. **Revokes the whole token family, not the single presented token** — a family is one device's login chain, so this is what a sign-out button promises, and other devices are unaffected because each has its own family. Unknown or already-revoked tokens succeed.
+- **B2 — provider error split.** `PROVIDER_EMAIL_MISSING` (unrecoverable in-app) and `SIGNUP_DETAILS_REQUIRED` (entirely recoverable). The latter carries a `missingFields` list so WP6 can jump to the right input instead of showing a generic form.
+- **B3 — reaping.** Hourly `setInterval`, interval configurable, unref'd so it never holds SIGTERM. Deletes on **expiry, not revocation** — a revoked-but-unexpired row is exactly what lets a replayed token be recognised as reuse rather than as an unknown token, so reaping those would silently downgrade theft detection.
+
+**Files touched:** 26. `packages/shared/` (content.ts, content.test.ts, cms-generated.ts); `apps/admin/src/` (new `hooks/trimText.ts` + test, both collections, both rule modules + tests, validation types, payload.config.ts, cms integration test); `apps/backend/src/` (new `auth/refreshTokenReaper.ts`, auth errors/service/repository/routes, config, app.ts, index.ts, auth integration test); root `.env.example`.
+
+**Tests added/updated:** 345 total, up from 269.
+- **Trim hook (14)** — nested group, array, group-inside-array-inside-group; a multi-line body proving internal newlines and indentation survive; null/undefined/number/Date passthrough; non-mutation of the input; whitespace-only reducing to empty.
+- **Locator rule (16 across both gates)** — each locator alone, all absent, whitespace-only, null, several offenders reported by position, and the draft-saves-but-publish-rejects asymmetry.
+- **Sticky bounds (12 across both gates)** — 0, 1, 2, 6, 7, 12.
+- **publisher/coverUrl (11)** — null, empty, whitespace, and the four-violations-at-once case.
+- **Logout (6)** — revokes, double logout, unknown token, unauthenticated rejected, family-wide revocation, another session unaffected.
+- **Reaping (4)** — expired removed, live untouched, **revoked-but-unexpired retained and still detected as reuse**, zero when nothing to reap.
+
+**Pre-existing tests that needed changing, and why** (the handoff asked for this explicitly):
+- `packages/shared/src/content.test.ts` — the WP0 fixture used 1 sticky note and a note-only source reference. Both are now invalid. 9 tests failed; the fixture was corrected to 2 notes and a `chapter` locator. **Correct failures — the fixture encoded the old contract.**
+- `apps/admin/src/validation/leafRules.test.ts` — one fixture had a note-only reference.
+- `apps/admin/src/validation/trackRules.test.ts` and `test/cms.integration.test.ts` — Track fixtures lacked `publisher`/`coverUrl`, and the "reports both legal requirements" assertion now sees four rather than two.
+- No test was weakened or deleted to make it pass.
+
+**Assumptions made:**
+- **Logout revokes the family.** The handoff asked me to decide and state it; the reasoning is above, and WP6 should treat logout as per-device.
+- **Logout is not rate limited.** It is idempotent and only ends the caller's own session; throttling the way out of an account is a worse failure than allowing retries.
+- **Reaping deletes on expiry only.** An alternative — a retention window after revocation — was considered and rejected as extra configuration for no additional safety, since an expired token cannot authenticate regardless.
+- **`SOURCE_LOCATOR_REQUIRED_MESSAGE` and `hasSourceLocator` are exported from shared** for WP3's mapper to reuse when it reports why a document was rejected. The CMS deliberately does not import them.
+
+**Follow-ups / tech debt for Architect:**
+
+1. **The content authored at the gate can no longer be republished, and WP3 would reject it.** Both records are still published and serving, because the new rules are publish-gated. But the Track has `publisher: null` and `coverUrl: null`, and the Leaf's single source reference has no locator — so `trackSchema` and `leafSourceReferenceSchema` would both throw when WP3 maps them. **This is a prerequisite for WP3, not cosmetic.** The fix is about two minutes of founder time in the admin UI: add a publisher and cover URL to the Track, add a chapter/page/quote to the Leaf's source reference, and re-save both (which also clears the trailing whitespace still on `"concept 1 "`). No migration script — the content is placeholder and there is one of each.
+2. **Content ids are numbers, not strings.** Confirmed against the regenerated types: Payload's Postgres adapter uses serial integer keys, so it emits `id: number` and `trackId: number | Track`, while `cmsIdSchema` is `z.string().min(1)`. The divergence comment in `payload.config.ts` previously said `string | Track` and has been corrected. **WP3's mapper must stringify ids**, and handle a relationship arriving either populated or as a bare id depending on `depth`.
+3. **Testcontainers is flaky when suites run back to back.** One full `npm test` run had all 61 backend and 29 admin integration tests skipped, with testcontainers failing in `inspectContainerUntilPortsExposed`; an immediate re-run passed all 345. No stale containers were present. CI runs the same sequence, so an occasional red build that is green on re-run is expected rather than a real regression. Worth a retry step in the workflow if it recurs.
+4. **Payload marks nearly every generated field optional and nullable**, including fields the collection requires, because a draft may legitimately be incomplete. The domain model is therefore strictly stronger, and WP3's mapper is the only place a published document is proven to satisfy it.
 
 ### Completed: WP2 — Backend foundation: auth, age gate, profile — 2026-08-07
 

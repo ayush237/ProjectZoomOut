@@ -84,6 +84,8 @@ export interface PurchaseLinkInput {
 
 export interface TrackDocumentInput {
   readonly bookTitle?: string | null;
+  readonly publisher?: string | null;
+  readonly coverUrl?: string | null;
   readonly disclaimer?: string | null;
   readonly purchaseLinks?: readonly PurchaseLinkInput[] | null;
 }

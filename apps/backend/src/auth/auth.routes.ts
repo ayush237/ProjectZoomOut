@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { ZoomOutApp } from '../app.js';
 import type { AppConfig } from '../config/env.js';
+import type { Authenticator } from './authenticate.js';
 import type { AuthService, IssuedSession } from './auth.service.js';
 
 /**
@@ -14,6 +15,7 @@ import type { AuthService, IssuedSession } from './auth.service.js';
  */
 
 const HTTP_CREATED = 201;
+const HTTP_NO_CONTENT = 204;
 
 /**
  * Minimum password length only.
@@ -66,6 +68,7 @@ export function registerAuthRoutes(
   app: ZoomOutApp,
   service: AuthService,
   config: AppConfig,
+  authenticate: Authenticator,
 ): void {
   /**
    * Rate limiting applies to all four routes below.
@@ -109,5 +112,18 @@ export function registerAuthRoutes(
     const session = await service.refreshSession(body.refreshToken);
 
     return reply.send(sessionResponse(session));
+  });
+
+  /**
+   * Authenticated, so a stolen refresh token alone cannot be used to sign someone
+   * out. Not rate limited: it is idempotent, it destroys only the caller's own
+   * session, and throttling the way out of an account is a worse failure than
+   * allowing a client to retry it.
+   */
+  app.post('/auth/logout', { preHandler: authenticate }, async (request, reply) => {
+    const body = refreshBodySchema.parse(request.body);
+    await service.logout(body.refreshToken);
+
+    return reply.status(HTTP_NO_CONTENT).send();
   });
 }

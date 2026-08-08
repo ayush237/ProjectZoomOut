@@ -82,6 +82,15 @@ const environmentSchema = z.object({
   /** Requests permitted per IP per window on signup, login and refresh. */
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+  /**
+   * How often expired refresh tokens are swept.
+   *
+   * Only expired rows are removed — revoked-but-unexpired ones are what make reuse
+   * detection work. Hourly is ample: this bounds table growth, it is not latency
+   * sensitive.
+   */
+  AUTH_TOKEN_REAP_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
 });
 
 function isPostgresConnectionString(value: string): boolean {

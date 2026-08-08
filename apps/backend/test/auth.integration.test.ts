@@ -5,7 +5,12 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PostgresAuthRepository } from '../src/auth/auth.repository.js';
+import { RefreshTokenReaper } from '../src/auth/refreshTokenReaper.js';
+import { hashRefreshToken } from '../src/auth/tokens.js';
 import { runMigrations } from '../src/db/migrate.js';
+import { createLogger } from '../src/logging/logger.js';
+import { loadConfig } from '../src/config/env.js';
 import { buildTestApp, type TestApp } from './helpers/buildTestApp.js';
 
 /**
@@ -61,6 +66,21 @@ const signUpBody = (overrides: Record<string, unknown> = {}): Record<string, unk
   timezone: 'Europe/London',
   ...overrides,
 });
+
+/** A reaper wired to the same database the app under test is using. */
+const buildReaper = (): RefreshTokenReaper =>
+  new RefreshTokenReaper(
+    new PostgresAuthRepository(harness.database),
+    createLogger(
+      loadConfig({
+        NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
+        DATABASE_URL: container.getConnectionUri(),
+        AUTH_JWT_SECRET: 'integration-test-signing-secret-at-least-32-chars',
+      }),
+    ),
+    60_000,
+  );
 
 const providerToken = async (claims: Record<string, unknown>): Promise<string> =>
   new SignJWT(claims)
@@ -676,6 +696,184 @@ describe('profile', () => {
 
     expect(response.body).not.toContain('argon2');
     expect(response.body).not.toContain('passwordHash');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Logout                                                                      */
+/* -------------------------------------------------------------------------- */
+
+describe('POST /auth/logout', () => {
+  const startSession = async (): Promise<SessionBody> => {
+    const response = await app().inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: signUpBody(),
+    });
+    return bodyOf<SessionBody>(response);
+  };
+
+  const logout = async (session: SessionBody, refreshToken = session.refreshToken) =>
+    app().inject({
+      method: 'POST',
+      url: '/auth/logout',
+      headers: { authorization: `Bearer ${session.accessToken}` },
+      payload: { refreshToken },
+    });
+
+  it('revokes the caller’s session', async () => {
+    const session = await startSession();
+
+    expect((await logout(session)).statusCode).toBe(204);
+
+    const afterLogout = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: session.refreshToken },
+    });
+    expect(afterLogout.statusCode).toBe(401);
+  });
+
+  it('succeeds when called twice', async () => {
+    const session = await startSession();
+
+    expect((await logout(session)).statusCode).toBe(204);
+    expect((await logout(session)).statusCode).toBe(204);
+  });
+
+  it('succeeds for a refresh token the server has never seen', async () => {
+    const session = await startSession();
+
+    expect((await logout(session, 'never-issued-token')).statusCode).toBe(204);
+  });
+
+  it('requires authentication, so a stolen refresh token alone cannot sign someone out', async () => {
+    const session = await startSession();
+
+    const response = await app().inject({
+      method: 'POST',
+      url: '/auth/logout',
+      payload: { refreshToken: session.refreshToken },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('revokes the whole family, so a rotated token from the same login also dies', async () => {
+    const session = await startSession();
+
+    const rotated = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: session.refreshToken },
+    });
+    const current = bodyOf<SessionBody>(rotated).refreshToken;
+
+    await logout(session, current);
+
+    const afterLogout = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: current },
+    });
+    expect(afterLogout.statusCode).toBe(401);
+  });
+
+  it('leaves another device’s session alive', async () => {
+    // Two sign-ins for different readers means two families; signing one out must
+    // not touch the other.
+    const phone = await startSession();
+    const tablet = await startSession();
+
+    await logout(phone);
+
+    const tabletStillWorks = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: tablet.refreshToken },
+    });
+    expect(tabletStillWorks.statusCode).toBe(200);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Reaping expired refresh tokens                                              */
+/* -------------------------------------------------------------------------- */
+
+describe('RefreshTokenReaper', () => {
+  const countTokens = async (): Promise<number> => {
+    const result = await harness.database.pool.query<{ count: string }>(
+      'select count(*)::text as count from refresh_tokens',
+    );
+    return Number(result.rows[0]?.count ?? '0');
+  };
+
+  it('removes tokens whose expiry has passed', async () => {
+    const session = await app().inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: signUpBody(),
+    });
+    const { refreshToken } = bodyOf<SessionBody>(session);
+
+    // Age the row past its expiry rather than waiting for one.
+    await harness.database.pool.query(
+      `update refresh_tokens set expires_at = now() - interval '1 day'
+       where token_hash = $1`,
+      [hashRefreshToken(refreshToken)],
+    );
+
+    const before = await countTokens();
+    const reaped = await buildReaper().reapOnce();
+
+    expect(reaped).toBeGreaterThanOrEqual(1);
+    expect(await countTokens()).toBe(before - reaped);
+  });
+
+  it('leaves live tokens alone', async () => {
+    const session = await app().inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: signUpBody(),
+    });
+    const { refreshToken } = bodyOf<SessionBody>(session);
+
+    await buildReaper().reapOnce();
+
+    const stillUsable = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken },
+    });
+    expect(stillUsable.statusCode).toBe(200);
+  });
+
+  it('keeps revoked-but-unexpired tokens, because reuse detection depends on them', async () => {
+    const session = await app().inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: signUpBody(),
+    });
+    const { refreshToken } = bodyOf<SessionBody>(session);
+
+    // Rotate, which revokes the original but leaves it unexpired.
+    await app().inject({ method: 'POST', url: '/auth/refresh', payload: { refreshToken } });
+    await buildReaper().reapOnce();
+
+    // Replaying the rotated token must still be recognised as reuse, not as an
+    // unknown token — that is the whole point of retaining the row.
+    const replay = await app().inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken },
+    });
+    expect(replay.json()).toMatchObject({ error: { code: 'REFRESH_TOKEN_REUSE' } });
+  });
+
+  it('reports zero when there is nothing to reap', async () => {
+    await buildReaper().reapOnce();
+
+    expect(await buildReaper().reapOnce()).toBe(0);
   });
 });
 

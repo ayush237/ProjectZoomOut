@@ -2,6 +2,7 @@ import { SLIDE_KEYS } from '@zoomout/shared';
 import type { CollectionConfig, Field } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
+import { trimTextFields } from '../hooks/trimText';
 import { validateBeforeChange } from '../hooks/validateBeforeChange';
 import { validateLeaf } from '../validation/leafRules';
 import type { LeafDocumentInput } from '../validation/types';
@@ -56,7 +57,10 @@ export const Leaves: CollectionConfig = {
   },
 
   hooks: {
-    beforeChange: [validateBeforeChange<LeafDocumentInput>('leaves', validateLeaf)],
+    // Order matters: trim first, then validate. Otherwise a whitespace-only field
+    // reads as present to the rules and is stored blank — which is precisely how
+    // `" ; \n"` and a note-only source reference got through the schema-freeze gate.
+    beforeChange: [trimTextFields, validateBeforeChange<LeafDocumentInput>('leaves', validateLeaf)],
   },
 
   fields: [
@@ -149,10 +153,12 @@ export const Leaves: CollectionConfig = {
         {
           name: 'notes',
           type: 'array',
-          minRows: 1,
-          // Upper bound intentionally unset — how many notes fit the board is a design
-          // question, and the schema-freeze gate is the moment to answer it from one
-          // real authored Leaf rather than a guess. Tracked in the debt register.
+          // Bounded 2–6, ruled at the schema-freeze gate (2026-08-08). One note is
+          // not a recap; more than six stops fitting the board in WP8. Mirrors the
+          // same bound in `stickyNotesSlideSchema`.
+          minRows: 2,
+          maxRows: 6,
+          admin: { description: 'Between 2 and 6 notes.' },
           fields: [{ name: 'note', type: 'text' }],
         },
         audioField,

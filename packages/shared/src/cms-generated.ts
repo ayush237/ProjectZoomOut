@@ -266,6 +266,9 @@ export interface Leaf {
    * Key points, shown as notes on a board.
    */
   stickyNotes?: {
+    /**
+     * Between 2 and 6 notes.
+     */
     notes?:
       | {
           note?: string | null;
