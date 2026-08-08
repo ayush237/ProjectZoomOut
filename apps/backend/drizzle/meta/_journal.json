@@ -15,6 +15,13 @@
       "when": 1786094504877,
       "tag": "0001_add_auth_identities_and_refresh_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786169731118,
+      "tag": "0002_add_user_tracks_library",
+      "breakpoints": true
     }
   ]
 }

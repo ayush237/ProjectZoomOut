@@ -83,6 +83,37 @@ const environmentSchema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
   AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 
+  /* ---------------------------------------------------------------------- */
+  /* Content (the CMS boundary)                                              */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Base URL of Payload's REST API.
+   *
+   * The backend calls it **anonymously and over private networking**, which is what
+   * makes published-only the default: Payload's read access control returns drafts
+   * only to authenticated operators. Adding a token here would widen that and quietly
+   * break takedown, so there is deliberately no token setting.
+   */
+  CONTENT_API_URL: z
+    .string()
+    .min(1)
+    .refine(isHttpUrl, 'Must be an http:// or https:// URL')
+    .default('http://127.0.0.1:3001/api'),
+
+  /** Per-request timeout. Payload being slow must not become the backend hanging. */
+  CONTENT_API_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+
+  /**
+   * How long a content response may be reused from memory.
+   *
+   * **This value is the takedown latency.** `LEGAL.md` commits to pulling a Track
+   * within hours of a verified complaint; a cache measured in minutes meets that with
+   * room to spare, and the upper bound below stops anyone quietly turning it into a
+   * number that would not.
+   */
+  CONTENT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(600).default(60),
+
   /**
    * How often expired refresh tokens are swept.
    *
@@ -92,6 +123,15 @@ const environmentSchema = z.object({
    */
   AUTH_TOKEN_REAP_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
 });
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 function isPostgresConnectionString(value: string): boolean {
   try {

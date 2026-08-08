@@ -8,7 +8,12 @@ import {
 } from '../../src/auth/providers/providerVerifier.js';
 import { TokenService } from '../../src/auth/tokens.js';
 import { loadConfig } from '../../src/config/env.js';
+import { PayloadContentRepository } from '../../src/content/content.repository.js';
+import { ContentService } from '../../src/content/content.service.js';
+import { PayloadClient } from '../../src/content/payloadClient.js';
 import { createDatabaseClient, type DatabaseClient } from '../../src/db/client.js';
+import { PostgresLibraryRepository } from '../../src/library/library.repository.js';
+import { LibraryService } from '../../src/library/library.service.js';
 import { PostgresHealthRepository } from '../../src/health/health.repository.js';
 import { HealthService } from '../../src/health/health.service.js';
 import { createLogger } from '../../src/logging/logger.js';
@@ -56,6 +61,12 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     jwksUri: UNREACHABLE_JWKS,
   };
 
+  const contentService = new ContentService(
+    new PayloadContentRepository(new PayloadClient(config, logger), logger, config),
+    config,
+    logger,
+  );
+
   const authRepository = new PostgresAuthRepository(database);
   const tokenService = new TokenService(config);
 
@@ -71,6 +82,12 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
       logger,
     ),
     profileService: new ProfileService(database, authRepository),
+    contentService,
+    libraryService: new LibraryService(
+      new PostgresLibraryRepository(database),
+      contentService,
+      logger,
+    ),
     authenticate: createAuthenticator(tokenService),
   });
 
