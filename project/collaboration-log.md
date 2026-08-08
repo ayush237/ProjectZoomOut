@@ -414,6 +414,43 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP3 — Content API: ContentRepository, Explore, Library, Leaf delivery — 2026-08-08
+
+**Status:** All 11 acceptance criteria verified by execution. CI green on `wp3-content-api` (`actions/runs/31262711431`, sha `8f1fcb2`). Cold gate passes with `dist` and `.next` deleted — **418 tests** (240 backend, 108 admin, 64 shared, 6 mobile), of which 73 are new here.
+
+**Additionally verified end to end against the real CMS**, not only against fixtures: the backend was run against the live Payload instance holding the schema-freeze content, and served `The mountain is you` and its Leaf through the whole pipeline — HTTP → mapper → domain validation → `toPublicLeaf`. Details below, because it produced a finding.
+
+**What changed:**
+
+- **`apps/backend/src/content/`** — `PayloadClient` (HTTP, explicit timeout, anonymous), `content.mapper` (CMS → domain, with validation), `PayloadContentRepository` (+ TTL cache), `ContentService` (visibility and answer-key policy), routes, typed errors.
+- **`apps/backend/src/library/`** — repository, service, routes, plus migration `0002_add_user_tracks_library`.
+- **`packages/shared`** — unchanged. The frozen schema needed nothing.
+
+**Files touched:** 23. 15 new source files across `content/` and `library/`, migration `0002` and its snapshot, `app.ts`, `index.ts`, `config/env.ts`, `db/schema.ts`, the test harness, and `.env.example`.
+
+**Tests added:** 73.
+- **Mapper (31)** — every documented divergence (numeric ids, relationship as bare id *and* as a populated object, `{ note }[]` → `string[]`, plain array → 3-tuple, `_status`/timestamps/row ids), plus a document violating each tightened constraint: locator-less source reference, sticky notes at 1 and 7, Track missing `publisher` / `coverUrl` / `disclaimer` / purchase links, two correct options, and an incomplete draft that Payload's own types consider valid.
+- **Service (13)** — the placeholder guard across `development`, `test` and `production`, including that the outcome moves with `NODE_ENV` alone; drafts invisible everywhere; contents of a hidden Track not listable by going straight to that endpoint.
+- **Integration (29)** — all seven endpoints rejected unauthenticated; answer key absent from the serialised route response; a Track failing domain validation withheld as a 502 with no field detail leaked; CMS unreachable → clean 503 with no stack, no upstream message, no internal host; the full takedown cycle including a Track disappearing from a reader's *library*; cache honouring its TTL and then expiring; library idempotency and cross-user isolation both directions.
+
+**Decisions taken, with reasoning:**
+
+1. **`depth=0` on every Payload request.** The domain `Leaf` needs `trackId` only as a string, so populating the Track would ship a payload we discard and add a second shape to defend against per request. The mapper still *accepts* a populated relationship so a future depth change cannot silently yield `"[object Object]"`.
+2. **A scenario option with no row id is rejected, not given an index-derived one.** WP4 has the client submit an option id; an index-derived id changes meaning the moment an author reorders the options, turning a correct answer into a wrong one with no error anywhere. **Confirmed against the real CMS**: Payload issues hex row ids (`6a7629ee570031ac25de62bf`), so this rejects only genuinely broken documents.
+3. **Listing drops an invalid document and logs it; a direct fetch throws.** One malformed Track should degrade Explore, not empty it — but a reader who asked for *that* Track must not get a success response for something we refused to serve.
+4. **Integration tests run against a controllable stand-in for Payload, not the real CMS.** The behaviour under test is ours — cache TTL, placeholder filter, mapper, 503 path — and each needs content to change mid-test. Booting Payload would also inherit the two upstream defects from WP1 (`destroy()` leaves the pool open; no pool `error` listener). Payload's own half of takedown was proven against the real thing in WP1, and the fake reproduces that contract. The manual end-to-end run above covers the remaining gap.
+5. **`ContentInvalidError` is a 502, not a 500.** The backend is working correctly and refusing content an upstream system produced. Reasons go to the log; the client gets a generic message.
+6. **404 rather than 403 for hidden content.** Whether an unpublished or placeholder Track exists is not something a reader is entitled to learn.
+
+**Finding from the real-CMS run:** the pipeline worked first time, and the trim hook from WP2.1 is visibly doing its job — `dinnerTableKnowledge` came through as `"A fact about the book ;"` with the trailing `" \n"` already gone, and the Leaf title as `"concept 1"` rather than `"concept 1 "`. Sticky notes flattened correctly from Payload's `{ note }[]` rows.
+
+**Follow-ups / tech debt for Architect:**
+1. **`listTracks` returns Payload's totals, not the post-filter count.** In production a page of placeholder Tracks yields fewer rows than `totalTracks` claims. Recomputing would be wrong differently — the total would only hold for that page. Real pagination over filtered content is a WP7 concern once real content exists; flagging it so WP7 does not inherit it as a surprise.
+2. **`listLeavesForTrack` caps at 100 Leaves** with no paging. A Track is specified at 15–30, so this is comfortable, but it is a silent ceiling rather than an error.
+3. **The cache is per-process and unbounded in entry count.** Fine for one book on one instance; with several instances the TTL becomes the *worst-case* takedown latency across them, and it needs revisiting before horizontal scaling.
+4. **No `If-None-Match`/ETag on content responses.** Mobile will refetch full Track lists on every Explore visit. Worth considering in WP7 once the payload size is real.
+5. **`user_tracks.status` exists and is always `active`.** WP4/WP5 own the transitions; nothing sets it yet.
+
 ### Completed: WP2.1 — Schema-freeze alignment and backend gaps — 2026-08-08
 
 **Status:** All 12 acceptance criteria verified by execution. Cold gate passes with `dist` and `.next` deleted — **345 tests** (64 shared, 108 admin, 167 backend, 6 mobile).
