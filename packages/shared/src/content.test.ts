@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
 import {
+  hasSourceLocator,
   isProductionPublishable,
   leafSchema,
+  leafSourceReferenceSchema,
   scenarioOptionsSchema,
+  SOURCE_LOCATOR_REQUIRED_MESSAGE,
   toPublicLeaf,
   trackSchema,
 } from './content.js';
@@ -32,7 +35,7 @@ function buildLeafInput(): z.input<typeof leafSchema> {
       options: [option('a', true), option('b', false), option('c', false)],
     },
     payoff: { body: 'Placeholder payoff copy.' },
-    stickyNotes: { notes: ['Placeholder note one.'] },
+    stickyNotes: { notes: ['Placeholder note one.', 'Placeholder note two.'] },
     takeaway: { body: 'Placeholder takeaway copy.' },
     createdAt: '2026-08-06T12:00:00.000Z',
     updatedAt: '2026-08-06T12:00:00.000Z',
@@ -198,7 +201,9 @@ describe('leafSchema', () => {
     const result = leafSchema.safeParse({
       ...input,
       takeaway: { ...input.takeaway, dinnerTableKnowledge: 'A deep-cut placeholder fact.' },
-      sourceReferences: [{ slideKey: 'takeaway', note: 'Placeholder source note.' }],
+      sourceReferences: [
+        { slideKey: 'takeaway', chapter: 'Chapter 4', note: 'Placeholder source note.' },
+      ],
     });
 
     expect(result.success).toBe(true);
@@ -209,7 +214,113 @@ describe('leafSchema', () => {
     const result = leafSchema.safeParse({
       ...input,
       takeaway: { ...input.takeaway, dinnerTableKnowledge: 'A deep-cut placeholder fact.' },
-      sourceReferences: [{ slideKey: 'summary', note: 'Placeholder source note.' }],
+      sourceReferences: [
+        { slideKey: 'summary', chapter: 'Chapter 2', note: 'Placeholder source note.' },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Source references — note plus a locator (frozen 2026-08-08)                 */
+/* -------------------------------------------------------------------------- */
+
+describe('leafSourceReferenceSchema', () => {
+  const reference = (overrides: Record<string, unknown> = {}): unknown => ({
+    slideKey: 'takeaway',
+    note: 'Placeholder source note.',
+    ...overrides,
+  });
+
+  it.each(['chapter', 'page', 'quote'])('accepts %s as the sole locator', (locator) => {
+    expect(leafSourceReferenceSchema.safeParse(reference({ [locator]: 'Something' })).success).toBe(
+      true,
+    );
+  });
+
+  it('accepts several locators together', () => {
+    const result = leafSourceReferenceSchema.safeParse(
+      reference({ chapter: 'Chapter 4', page: '87', quote: 'A short quotation.' }),
+    );
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a note with no locator at all', () => {
+    // The gate produced exactly this: `note: "reference"` and nothing else.
+    const result = leafSourceReferenceSchema.safeParse(reference());
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe(SOURCE_LOCATOR_REQUIRED_MESSAGE);
+    }
+  });
+
+  it('names the acceptable locators in the message, not just that it is incomplete', () => {
+    for (const locator of ['chapter', 'page', 'quote']) {
+      expect(SOURCE_LOCATOR_REQUIRED_MESSAGE).toContain(locator);
+    }
+  });
+
+  it('rejects a locator that is only whitespace', () => {
+    // Trimming turns "  " into "", so a blank locator must read as absent rather
+    // than satisfying the rule on a technicality.
+    expect(leafSourceReferenceSchema.safeParse(reference({ chapter: '   ' })).success).toBe(false);
+  });
+
+  it('still requires the note alongside the locator', () => {
+    const result = leafSourceReferenceSchema.safeParse({
+      slideKey: 'takeaway',
+      chapter: 'Chapter 4',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('hasSourceLocator', () => {
+  it('is false when every locator is absent', () => {
+    expect(hasSourceLocator({})).toBe(false);
+  });
+
+  it('is false when every locator is blank', () => {
+    expect(hasSourceLocator({ chapter: '', page: '  ', quote: '\n' })).toBe(false);
+  });
+
+  it('is true when one locator carries content', () => {
+    expect(hasSourceLocator({ page: '87' })).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sticky notes — bounded 2–6 (frozen 2026-08-08)                              */
+/* -------------------------------------------------------------------------- */
+
+describe('stickyNotesSlideSchema bounds', () => {
+  const notes = (count: number): string[] =>
+    Array.from({ length: count }, (_unused, index) => `Note ${String(index + 1)}`);
+
+  it.each([2, 3, 6])('accepts %i notes', (count) => {
+    const input = buildLeafInput();
+    const result = leafSchema.safeParse({ ...input, stickyNotes: { notes: notes(count) } });
+
+    expect(result.success).toBe(true);
+  });
+
+  it.each([0, 1, 7, 12])('rejects %i notes', (count) => {
+    const input = buildLeafInput();
+    const result = leafSchema.safeParse({ ...input, stickyNotes: { notes: notes(count) } });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('still rejects an empty note within an otherwise valid count', () => {
+    const input = buildLeafInput();
+    const result = leafSchema.safeParse({
+      ...input,
+      stickyNotes: { notes: ['Note one.', ''] },
     });
 
     expect(result.success).toBe(false);

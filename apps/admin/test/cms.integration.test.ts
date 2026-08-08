@@ -294,7 +294,12 @@ describe('Track validation is enforced by the CMS', () => {
     );
 
     // Both legal requirements are reported together rather than one per attempt.
-    expect(errors.map((e) => e.path).sort()).toEqual(['disclaimer', 'purchaseLinks']);
+    expect(errors.map((e) => e.path).sort()).toEqual([
+      'coverUrl',
+      'disclaimer',
+      'publisher',
+      'purchaseLinks',
+    ]);
     expect(messagesFrom(errors)).toMatch(/non-endorsement disclaimer/u);
     expect(messagesFrom(errors)).toMatch(/at least one purchase link/u);
   });
@@ -305,6 +310,8 @@ describe('Track validation is enforced by the CMS', () => {
       data: {
         bookTitle: 'Publishable',
         author: 'A',
+        publisher: 'Example Press',
+        coverUrl: 'https://example.test/cover.png',
         disclaimer: 'Not affiliated with or endorsed by the author or publisher.',
         purchaseLinks: [{ retailer: 'Example Books', url: 'https://example.test/book' }],
       },
@@ -313,6 +320,242 @@ describe('Track validation is enforced by the CMS', () => {
     const published = await payload.update({
       collection: 'tracks',
       id: track.id,
+      data: { _status: 'published' },
+    });
+
+    expect(published['_status']).toBe('published');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Schema-freeze rulings, end to end (2026-08-08)                              */
+/* -------------------------------------------------------------------------- */
+
+describe('text is trimmed on save', () => {
+  let trackId: number | string;
+
+  beforeAll(async () => {
+    const track = await payload.create({
+      collection: 'tracks',
+      data: { bookTitle: 'Trim Host', author: 'A' },
+    });
+    trackId = track.id;
+  });
+
+  it('trims a top-level field', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: { trackId, orderIndex: 20, title: '  concept 1  ' },
+    });
+
+    expect(leaf['title']).toBe('concept 1');
+  });
+
+  it('trims a field nested in a group', async () => {
+    // The exact value the schema-freeze gate produced.
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: {
+        trackId,
+        orderIndex: 21,
+        title: 'Nested trim',
+        takeaway: { body: 't', dinnerTableKnowledge: 'A fact about the book ; \n' },
+        sourceReferences: [{ slideKey: 'takeaway', chapter: 'Chapter 1', note: 'A note.' }],
+      },
+    });
+
+    expect((leaf['takeaway'] as { dinnerTableKnowledge: string }).dinnerTableKnowledge).toBe(
+      'A fact about the book ;',
+    );
+  });
+
+  it('preserves internal formatting in a multi-line body', async () => {
+    const body = 'First paragraph.\n\n  Indented second.\n\nThird.';
+
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: { trackId, orderIndex: 22, title: 'Multi-line', payoff: { body: `\n${body}\n  ` } },
+    });
+
+    expect((leaf['payoff'] as { body: string }).body).toBe(body);
+  });
+});
+
+describe('sticky notes are bounded 2–6', () => {
+  let trackId: number | string;
+
+  const notes = (count: number): { note: string }[] =>
+    Array.from({ length: count }, (_unused, index) => ({ note: `Note ${String(index + 1)}` }));
+
+  beforeAll(async () => {
+    const track = await payload.create({
+      collection: 'tracks',
+      data: { bookTitle: 'Sticky Host', author: 'A' },
+    });
+    trackId = track.id;
+  });
+
+  it.each([2, 6])('accepts %i notes', async (count) => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: {
+        trackId,
+        orderIndex: 30 + count,
+        title: `Sticky ${String(count)}`,
+        stickyNotes: { notes: notes(count) },
+      },
+    });
+
+    expect(leaf.id).toBeDefined();
+  });
+
+  it.each([1, 7])('rejects %i notes', async (count) => {
+    await expect(
+      payload.create({
+        collection: 'leaves',
+        data: {
+          trackId,
+          orderIndex: 40 + count,
+          title: `Sticky reject ${String(count)}`,
+          stickyNotes: { notes: notes(count) },
+        },
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('source references need a locator to publish', () => {
+  let trackId: number | string;
+
+  const completeLeafData = (
+    orderIndex: number,
+    sourceReferences: Record<string, unknown>[],
+  ): Record<string, unknown> => ({
+    trackId,
+    orderIndex,
+    title: 'Locator subject',
+    summary: { body: 'Placeholder summary.' },
+    scenario: {
+      prompt: 'Placeholder prompt?',
+      options: [
+        { text: 'A', isCorrect: true },
+        { text: 'B', isCorrect: false },
+        { text: 'C', isCorrect: false },
+      ],
+    },
+    payoff: { body: 'Placeholder payoff.' },
+    stickyNotes: { notes: [{ note: 'Note one.' }, { note: 'Note two.' }] },
+    takeaway: { body: 'Placeholder takeaway.' },
+    sourceReferences,
+  });
+
+  beforeAll(async () => {
+    const track = await payload.create({
+      collection: 'tracks',
+      data: { bookTitle: 'Locator Host', author: 'A' },
+    });
+    trackId = track.id;
+  });
+
+  it('saves a note-only reference as a draft', async () => {
+    // Publish-gated, not save-gated: refining a citation is iterative work.
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: completeLeafData(50, [{ slideKey: 'summary', note: 'reference' }]),
+    });
+
+    expect(leaf.id).toBeDefined();
+  });
+
+  it('refuses to publish a note-only reference, naming the acceptable locators', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: completeLeafData(51, [{ slideKey: 'summary', note: 'reference' }]),
+    });
+
+    const errors = await captureFieldErrors(() =>
+      payload.update({ collection: 'leaves', id: leaf.id, data: { _status: 'published' } }),
+    );
+
+    const message = messagesFrom(errors);
+    expect(message).toMatch(/chapter/u);
+    expect(message).toMatch(/page/u);
+    expect(message).toMatch(/quote/u);
+  });
+
+  it('publishes once a locator is supplied', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: completeLeafData(52, [
+        { slideKey: 'summary', chapter: 'Chapter 2', note: 'reference' },
+      ]),
+    });
+
+    const published = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: { _status: 'published' },
+    });
+
+    expect(published['_status']).toBe('published');
+  });
+
+  it('treats a whitespace-only locator as absent, because trimming empties it first', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: completeLeafData(53, [{ slideKey: 'summary', chapter: '   ', note: 'reference' }]),
+    });
+
+    await expect(
+      payload.update({ collection: 'leaves', id: leaf.id, data: { _status: 'published' } }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('publisher and coverUrl are required to publish a Track', () => {
+  const draftTrack = async (data: Record<string, unknown>): Promise<number | string> => {
+    const track = await payload.create({
+      collection: 'tracks',
+      data: {
+        bookTitle: 'Publish requirements',
+        author: 'A',
+        disclaimer: 'Not affiliated.',
+        purchaseLinks: [{ retailer: 'R', url: 'https://example.test' }],
+        ...data,
+      },
+    });
+    return track.id;
+  };
+
+  it('rejects publishing without a publisher', async () => {
+    const id = await draftTrack({ coverUrl: 'https://example.test/cover.png' });
+
+    const errors = await captureFieldErrors(() =>
+      payload.update({ collection: 'tracks', id, data: { _status: 'published' } }),
+    );
+
+    expect(errors.map((e) => e.path)).toContain('publisher');
+  });
+
+  it('rejects publishing without a cover URL', async () => {
+    const id = await draftTrack({ publisher: 'Example Press' });
+
+    const errors = await captureFieldErrors(() =>
+      payload.update({ collection: 'tracks', id, data: { _status: 'published' } }),
+    );
+
+    expect(errors.map((e) => e.path)).toContain('coverUrl');
+  });
+
+  it('publishes when both are present', async () => {
+    const id = await draftTrack({
+      publisher: 'Example Press',
+      coverUrl: 'https://example.test/cover.png',
+    });
+
+    const published = await payload.update({
+      collection: 'tracks',
+      id,
       data: { _status: 'published' },
     });
 
@@ -342,6 +585,8 @@ describe('takedown', () => {
       data: {
         bookTitle: 'Takedown Subject',
         author: 'A',
+        publisher: 'Example Press',
+        coverUrl: 'https://example.test/cover.png',
         disclaimer: 'Not affiliated with or endorsed by the author or publisher.',
         purchaseLinks: [{ retailer: 'Example Books', url: 'https://example.test/book' }],
       },
@@ -373,6 +618,8 @@ describe('takedown', () => {
       data: {
         bookTitle: 'Recoverable',
         author: 'A',
+        publisher: 'Example Press',
+        coverUrl: 'https://example.test/cover.png',
         disclaimer: 'Not affiliated.',
         purchaseLinks: [{ retailer: 'R', url: 'https://example.test' }],
       },

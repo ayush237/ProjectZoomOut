@@ -4,9 +4,10 @@ import {
   checkAllSlidesPopulated,
   checkDinnerTableKnowledgeIsSourced,
   checkExactlyOneCorrectOption,
+  checkSourceReferencesHaveLocators,
   validateLeaf,
 } from './leafRules';
-import type { LeafDocumentInput, ScenarioOptionInput } from './types';
+import type { LeafDocumentInput, ScenarioOptionInput, SourceReferenceInput } from './types';
 
 const option = (text: string, isCorrect: boolean): ScenarioOptionInput => ({ text, isCorrect });
 
@@ -256,6 +257,94 @@ describe('checkAllSlidesPopulated', () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Source references need a locator (frozen 2026-08-08)                        */
+/* -------------------------------------------------------------------------- */
+
+describe('checkSourceReferencesHaveLocators', () => {
+  const withRefs = (refs: readonly SourceReferenceInput[]): LeafDocumentInput =>
+    completeLeaf({ sourceReferences: refs });
+
+  it('passes when there are no source references at all', () => {
+    expect(checkSourceReferencesHaveLocators(withRefs([])).ok).toBe(true);
+  });
+
+  it.each(['chapter', 'page', 'quote'] as const)('accepts %s as the sole locator', (locator) => {
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([{ slideKey: 'takeaway', note: 'A note.', [locator]: 'Something' }]),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects a reference with a note and nothing else', () => {
+    // Exactly what the schema-freeze gate produced: note "reference", no locator.
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([{ slideKey: 'takeaway', note: 'reference' }]),
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('names all three acceptable locators in the message', () => {
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([{ slideKey: 'takeaway', note: 'reference' }]),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const { message } = result.violations[0] ?? { message: '' };
+      expect(message).toMatch(/chapter/u);
+      expect(message).toMatch(/page/u);
+      expect(message).toMatch(/quote/u);
+    }
+  });
+
+  it('treats a whitespace-only locator as absent', () => {
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([{ slideKey: 'takeaway', note: 'A note.', chapter: '   ' }]),
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('treats a null locator as absent, which is how Payload stores a cleared field', () => {
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([{ slideKey: 'takeaway', note: 'A note.', chapter: null, page: null, quote: null }]),
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('reports every offending reference, identified by position', () => {
+    const result = checkSourceReferencesHaveLocators(
+      withRefs([
+        { slideKey: 'summary', note: 'Sourced.', chapter: 'Chapter 1' },
+        { slideKey: 'payoff', note: 'Unsourced.' },
+        { slideKey: 'takeaway', note: 'Also unsourced.' },
+      ]),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.violations).toHaveLength(2);
+      expect(result.violations.map((v) => v.path)).toEqual([
+        'sourceReferences.1',
+        'sourceReferences.2',
+      ]);
+    }
+  });
+
+  it('is publish-gated, so an incomplete citation can still be saved as a draft', () => {
+    // Deliberately asymmetric with the Dinner Table Knowledge rule: the existence of
+    // a source is the same edit as writing the fact, but refining the citation is not.
+    const leaf = withRefs([{ slideKey: 'takeaway', note: 'reference' }]);
+
+    expect(validateLeaf(leaf, false).ok).toBe(true);
+    expect(validateLeaf(leaf, true).ok).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* Composition                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -307,7 +396,8 @@ describe('validateLeaf', () => {
   it('passes a complete, correctly sourced Leaf on publish', () => {
     const leaf = completeLeaf({
       takeaway: { body: 't', dinnerTableKnowledge: 'A striking fact.' },
-      sourceReferences: [{ slideKey: 'takeaway', note: 'Chapter 4.' }],
+      // Carries a locator as well as a note, per the 2026-08-08 ruling.
+      sourceReferences: [{ slideKey: 'takeaway', chapter: 'Chapter 4', note: 'Placeholder note.' }],
     });
 
     expect(validateLeaf(leaf, true).ok).toBe(true);

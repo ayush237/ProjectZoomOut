@@ -5,17 +5,19 @@ import type { PublishStatus } from './primitives.js';
 
 /**
  * ============================================================================
- * PROVISIONAL — content model
+ * FROZEN — content model, 2026-08-08
  * ============================================================================
- * `Track`, `Leaf`, the five slide schemas and `SourceReference` are the reference
- * WP1 models the Payload collections from. They are expected to change at the
- * schema-freeze gate (plan §5), once one structurally complete Leaf has been
- * authored through the real editor and revealed which fields the spec missed and
- * which it specified but nobody needs.
+ * `Track`, `Leaf`, the five slide schemas and `SourceReference` were frozen after
+ * the schema-freeze gate (plan §5), where one structurally complete Leaf was
+ * authored through the real editor. That exercise produced four corrections, all
+ * ruled and applied here: text is trimmed on save, source references require a
+ * locator alongside the note, sticky notes are bounded 2–6, and `publisher` and
+ * `coverUrl` are required to publish a Track.
  *
- * Downstream code may depend on these, but treat a change here as likely rather
- * than exceptional until the gate closes. Everything outside this file is not
- * provisional.
+ * Downstream code may now depend on these shapes. A change here is no longer
+ * expected — it requires an Architect ruling and a migration plan for content that
+ * already exists, because the CMS enforces the same constraints independently and
+ * the two must not drift apart.
  * ============================================================================
  */
 
@@ -89,9 +91,17 @@ export const payoffSlideSchema = z.object({
 });
 
 export const stickyNotesSlideSchema = z.object({
-  // Upper bound left open deliberately: how many notes fit the board is a design and
-  // CMS-authoring question, settled at WP1 rather than guessed at here.
-  notes: z.array(z.string().min(1)).min(1),
+  /**
+   * Bounded 2–6 (ruled 2026-08-08 at the schema-freeze gate).
+   *
+   * Chosen by failure direction rather than by the single authored data point: too
+   * tight blocks an author immediately, which is cheap and visible; too loose ships
+   * content that breaks the board layout in WP8, which is expensive and late.
+   * Loosening later is safe, tightening invalidates content that already exists.
+   *
+   * A single note is not a recap, which is why the floor is 2 rather than 1.
+   */
+  notes: z.array(z.string().min(1)).min(2).max(6),
   audio: audioRefSchema.optional(),
 });
 
@@ -112,24 +122,56 @@ export const takeawaySlideSchema = z.object({
 /**
  * Traceability record for a factual claim on one slide.
  *
- * Every generated fact or quote carries one. This is the audit trail the fair-use
- * position and the zero-fabrication policy both rest on (LEGAL.md), so `note` is
- * required even when chapter, page and quote are all absent — an unsourced claim
- * should be impossible to represent, not merely discouraged.
+ * This is the audit trail the fair-use position and the zero-fabrication policy both
+ * rest on (LEGAL.md). It requires two things, not one:
+ *
+ *  - `note` — what in the book supports the claim, in the author's words.
+ *  - **at least one locator** — `chapter`, `page` or `quote`.
+ *
+ * The locator requirement was added at the schema-freeze gate (ruled 2026-08-08). A
+ * note on its own is a description of where a claim came from, not a citation anyone
+ * else can check, which is weaker than the audit trail LEGAL.md intends. Requiring
+ * `chapter` specifically would produce junk for a Leaf synthesising across a whole
+ * book, and `page` is edition-dependent false precision — so the author picks whichever
+ * locator is honest for that claim.
  */
-export const leafSourceReferenceSchema = z.object({
+const sourceReferenceShape = {
   slideKey: slideKeySchema,
   chapter: z.string().min(1).optional(),
   page: z.string().min(1).optional(),
   quote: z.string().min(1).optional(),
   note: z.string().min(1),
-});
+} as const;
+
+/** The locators, in the order the author-facing message names them. */
+export const SOURCE_LOCATOR_FIELDS = ['chapter', 'page', 'quote'] as const;
+
+export const SOURCE_LOCATOR_REQUIRED_MESSAGE =
+  'A source reference needs a locator as well as a note. Add a chapter, a page, or a quote.';
+
+/**
+ * Whether a reference carries at least one usable locator.
+ *
+ * Whitespace-only counts as absent. That matters because CMS input is trimmed on
+ * save, so `"  "` becomes `""` — and a blank locator should read as "not provided"
+ * rather than satisfying the requirement on a technicality.
+ */
+export function hasSourceLocator(reference: {
+  chapter?: string | undefined;
+  page?: string | undefined;
+  quote?: string | undefined;
+}): boolean {
+  return SOURCE_LOCATOR_FIELDS.some((field) => (reference[field] ?? '').trim().length > 0);
+}
+
+export const leafSourceReferenceSchema = z
+  .object(sourceReferenceShape)
+  .refine(hasSourceLocator, SOURCE_LOCATOR_REQUIRED_MESSAGE);
 
 /** The same record as a standalone, persisted entity. */
-export const sourceReferenceSchema = leafSourceReferenceSchema.extend({
-  id: cmsIdSchema,
-  leafId: cmsIdSchema,
-});
+export const sourceReferenceSchema = z
+  .object({ ...sourceReferenceShape, id: cmsIdSchema, leafId: cmsIdSchema })
+  .refine(hasSourceLocator, SOURCE_LOCATOR_REQUIRED_MESSAGE);
 
 /* -------------------------------------------------------------------------- */
 /* Leaf                                                                        */

@@ -1,6 +1,7 @@
 import type { CollectionConfig } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
+import { trimTextFields } from '../hooks/trimText';
 import { validateBeforeChange } from '../hooks/validateBeforeChange';
 import { validateTrack } from '../validation/trackRules';
 import type { TrackDocumentInput } from '../validation/types';
@@ -34,7 +35,8 @@ export const Tracks: CollectionConfig = {
   },
 
   hooks: {
-    beforeChange: [validateBeforeChange<TrackDocumentInput>('tracks', validateTrack)],
+    // Trim before validate — see the note on the Leaves collection.
+    beforeChange: [trimTextFields, validateBeforeChange<TrackDocumentInput>('tracks', validateTrack)],
   },
 
   fields: [

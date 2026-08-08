@@ -58,8 +58,52 @@ export function checkPurchaseLinkPresent(track: TrackDocumentInput): RuleResult 
   );
 }
 
+/**
+ * A published Track must name its publisher.
+ *
+ * A compliance field, not a display one. `LEGAL.md`'s curation policy excludes
+ * publishers in active AI litigation, and that check cannot be performed on a Track
+ * that does not record who published the book.
+ */
+export function checkPublisherPresent(track: TrackDocumentInput): RuleResult {
+  if (hasText(track.publisher)) {
+    return PASSED;
+  }
+
+  return failed(
+    'publisher',
+    'A Track cannot be published without a publisher. Use "Independently published" ' +
+      'for a self-published title.',
+  );
+}
+
+/**
+ * A published Track must have a cover image.
+ *
+ * Load-bearing for Explore in WP7 — a Track with no cover is a blank card in a
+ * browsing surface whose whole job is to make books look worth opening.
+ *
+ * Both this and `checkPublisherPresent` were added at the schema-freeze gate
+ * (2026-08-08), after a Track published with both fields null. `trackSchema` in
+ * `packages/shared` already declared them non-optional, so the CMS was the weaker of
+ * the two gates and could emit a document the domain model would reject at serve
+ * time. This is the CMS catching up, not a new constraint.
+ */
+export function checkCoverUrlPresent(track: TrackDocumentInput): RuleResult {
+  if (hasText(track.coverUrl)) {
+    return PASSED;
+  }
+
+  return failed('coverUrl', 'A Track cannot be published without a cover image URL.');
+}
+
 /** Rules enforced only when a Track is being published. */
-export const TRACK_PUBLISH_RULES = [checkDisclaimerPresent, checkPurchaseLinkPresent] as const;
+export const TRACK_PUBLISH_RULES = [
+  checkDisclaimerPresent,
+  checkPurchaseLinkPresent,
+  checkPublisherPresent,
+  checkCoverUrlPresent,
+] as const;
 
 export function validateTrack(track: TrackDocumentInput, isPublishing: boolean): RuleResult {
   if (!isPublishing) {

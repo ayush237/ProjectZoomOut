@@ -24,13 +24,21 @@ const config = loadConfig();
  * The generated file is the CMS's view of the same content, useful to WP3 when mapping
  * API responses, and it must never overwrite the hand-written one.
  *
- * Expected divergences, to reconcile at the schema-freeze gate:
- *  - `trackId` is `string` in the domain model; Payload emits `string | Track`
- *    because it is a relationship that can arrive populated or as an id.
+ * Divergences confirmed against the generated output on 2026-08-08, after the schema
+ * freeze. **WP3's mapper has to close every one of these** — they are not cosmetic.
+ *
+ *  - **Ids are numbers, not strings.** Payload's Postgres adapter uses serial integer
+ *    primary keys, so it emits `id: number` and `trackId: number | Track`. The domain
+ *    model's `cmsIdSchema` is `z.string().min(1)`. The mapper must stringify, and a
+ *    relationship may arrive either populated or as a bare id depending on `depth`.
  *  - `stickyNotes.notes` is `string[]` in the domain model; Payload array rows are
- *    always objects, so it emits `{ note: string; id?: string }[]`.
+ *    always objects, so it emits `{ note?: string | null; id?: string | null }[]`.
  *  - `scenario.options` is a 3-tuple in the domain model; Payload emits a plain array,
  *    with the count enforced by minRows/maxRows at runtime instead.
+ *  - Payload marks almost every field optional and nullable regardless of whether the
+ *    collection requires it, because a draft may legitimately be incomplete. The
+ *    domain model's requiredness is therefore stricter, and the mapper is where a
+ *    published document is proven to satisfy it.
  *  - Payload adds `_status`, `createdAt`, `updatedAt` and row `id`s throughout.
  */
 const GENERATED_TYPES_PATH = path.resolve(

@@ -1,5 +1,5 @@
 import type { AuthProvider } from '@zoomout/shared';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, lt } from 'drizzle-orm';
 
 import type { DatabaseClient } from '../db/client.js';
 import {
@@ -53,6 +53,9 @@ export interface AuthRepository {
   findRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRow | null>;
   markRefreshTokenRotated(tokenId: string, replacedByTokenId: string): Promise<void>;
   revokeRefreshTokenFamily(familyId: string): Promise<void>;
+
+  /** Deletes rows whose expiry has passed. Returns how many were removed. */
+  deleteExpiredRefreshTokens(now?: Date): Promise<number>;
 }
 
 export class PostgresAuthRepository implements AuthRepository {
@@ -204,5 +207,26 @@ export class PostgresAuthRepository implements AuthRepository {
       .update(refreshTokens)
       .set({ revokedAt: new Date() })
       .where(and(eq(refreshTokens.familyId, familyId), isNull(refreshTokens.revokedAt)));
+  }
+
+  /**
+   * Removes refresh tokens whose expiry has passed.
+   *
+   * Keyed on expiry, **not** on `revoked_at`, and that distinction is load-bearing. A
+   * revoked-but-unexpired row is what makes reuse detection work: replaying a rotated
+   * token has to find that row in order to recognise the replay and revoke the family.
+   * Deleting revoked rows eagerly would turn a detectable theft into an ordinary
+   * "unknown token" 401 and leave the attacker's other tokens alive.
+   *
+   * Once a row is past its expiry it can no longer authenticate anything, so the
+   * audit value is gone and the row is just growth.
+   */
+  public async deleteExpiredRefreshTokens(now: Date = new Date()): Promise<number> {
+    const deleted = await this.client.db
+      .delete(refreshTokens)
+      .where(lt(refreshTokens.expiresAt, now))
+      .returning({ id: refreshTokens.id });
+
+    return deleted.length;
   }
 }

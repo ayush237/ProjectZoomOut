@@ -113,13 +113,46 @@ export class InvalidProviderTokenError extends AppError {
   }
 }
 
-/** The provider verified the identity but returned no email address. */
+/**
+ * The provider verified the identity but returned no usable email address.
+ *
+ * Unrecoverable in the app: the reader has to change something at Apple or Google, or
+ * sign up with a password instead. Kept distinct from `SignupDetailsRequiredError`
+ * below because the two need opposite client responses, and WP2 conflated them.
+ */
 export class ProviderEmailMissingError extends AppError {
   public readonly statusCode = 400;
   public readonly code = 'PROVIDER_EMAIL_MISSING';
 
   constructor() {
-    super('Your provider did not share an email address, which ZoomOut needs to create an account.');
+    super(
+      'Your provider did not share an email address, which ZoomOut needs to create an ' +
+        'account. Try signing up with an email address and password instead.',
+    );
+  }
+}
+
+/**
+ * A first-time social signup arrived without the details only the reader can supply.
+ *
+ * Apple and Google return an identity and an email; neither returns a date of birth
+ * or a timezone, and the age gate cannot be skipped. Entirely recoverable — the
+ * client collects the missing fields and retries with the same ID token.
+ *
+ * `missingFields` is part of the contract, so WP6 can jump straight to the right
+ * input rather than showing a generic form.
+ */
+export class SignupDetailsRequiredError extends AppError {
+  public readonly statusCode = 400;
+  public readonly code = 'SIGNUP_DETAILS_REQUIRED';
+
+  public readonly missingFields: readonly string[];
+
+  constructor(missingFields: readonly string[]) {
+    super(
+      `ZoomOut needs a little more to finish creating your account: ${missingFields.join(' and ')}.`,
+    );
+    this.missingFields = missingFields;
   }
 }
 
