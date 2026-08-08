@@ -101,13 +101,18 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 **Testing expectations:** Unit tests for the trim hook against nested group and array fields, including a multi-line body proving internal whitespace survives. Unit tests for the locator rule covering each locator alone, all absent, and whitespace-only values — the last one is why trimming and this rule belong in the same package. Sticky-note bounds tested at 1, 2, 6 and 7 in both gates. Integration tests for logout including the double-logout case, and for reaping. Existing WP1 and WP2 suites must stay green; report any test that needed changing and why.
 
-### Handoff: 2026-08-07 — WP3: Content API (⏸ HELD — released after WP2.1)
+### Handoff: 2026-08-07 — WP3: Content API (▶ RELEASED 2026-08-08, with amendments)
 
-> **Status: written, not yet released.** WP3 was originally held on the schema-freeze gate, which closed 2026-08-08. It is now held on **WP2.1**, because the gate's rulings change `leafSchema` and `trackSchema` — the exact schemas WP3 maps into and validates against.
+> **Status: live.** Released after WP2.1 was signed off on 2026-08-08. The schema is frozen; `packages/shared` is no longer provisional.
 >
-> **Amendments on release** (already ruled, fold into the mapping and its tests): source references require a locator alongside `note`; sticky notes are bounded 2–6; `publisher` and `coverUrl` are required on a publishable Track. `packages/shared` will no longer be marked provisional.
+> **Amendments from WP2.1 — read these before starting, they change the mapper:**
 >
-> **Architect will confirm in chat when this is live.** If you are reading this without that confirmation, check `projectplan.md`.
+> 1. **Content ids are numbers, not strings.** Payload's Postgres adapter uses serial integer keys, so it emits `id: number` and `trackId: number | Track`, while `cmsIdSchema` is `z.string().min(1)`. **The mapper must stringify ids**, and must handle a relationship arriving either populated as an object or as a bare id, depending on the `depth` used on the request. Pick a `depth` deliberately and state it.
+> 2. **Payload marks nearly every generated field optional and nullable**, including fields the collection requires, because a draft may legitimately be incomplete. The domain model is strictly stronger. **The mapper is the only place a published document is proven to satisfy it** — treat that as the point of the layer, not as friction.
+> 3. **`hasSourceLocator` and `SOURCE_LOCATOR_REQUIRED_MESSAGE` are exported from `packages/shared`** for the mapper to reuse when reporting *why* a document was rejected. Note the CMS deliberately does not import them — the two gates stay independent — but the mapper is on the shared side of that line and should reuse them.
+> 4. **Schema constraints tightened**: source references need a locator alongside `note`, sticky notes are bounded 2–6, and `publisher` / `coverUrl` are required on a publishable Track. Mapping tests must cover documents that violate each.
+>
+> **Testcontainers is intermittently flaky when suites run back to back** (WP2.1 finding): one full run had all integration tests skipped in `inspectContainerUntilPortsExposed`, and an immediate re-run passed. If CI goes red once and green on re-run, that is this, not a regression. Adding a retry step to the workflow is in scope if it recurs.
 
 ### Task: WP3 — Content API: ContentRepository, Explore, Library, Leaf delivery
 
