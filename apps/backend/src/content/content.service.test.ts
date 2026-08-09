@@ -6,6 +6,7 @@ import type { AppLogger } from '../logging/logger.js';
 import { ContentNotFoundError } from './content.errors.js';
 import type { ContentRepository } from './content.repository.js';
 import { ContentService } from './content.service.js';
+import type { PayoffAccessPolicy } from './payoffAccess.js';
 
 /**
  * The placeholder guard, tested across environments.
@@ -87,8 +88,25 @@ function repositoryReturning(tracks: Track[], leaves: Leaf[] = []): ContentRepos
   };
 }
 
-const serviceIn = (nodeEnv: string, tracks: Track[], leaves: Leaf[] = []): ContentService =>
-  new ContentService(repositoryReturning(tracks, leaves), configFor(nodeEnv), stubLogger());
+/** A payoff policy with a fixed answer, so delivery can be tested on either side of it. */
+const policyReturning = (unlocked: boolean): PayoffAccessPolicy => ({
+  isPayoffUnlocked: vi.fn().mockResolvedValue(unlocked),
+});
+
+const serviceIn = (
+  nodeEnv: string,
+  tracks: Track[],
+  leaves: Leaf[] = [],
+  payoffUnlocked = true,
+): ContentService =>
+  new ContentService(
+    repositoryReturning(tracks, leaves),
+    configFor(nodeEnv),
+    stubLogger(),
+    policyReturning(payoffUnlocked),
+  );
+
+const READER = '11111111-1111-4111-8111-111111111111';
 
 /* -------------------------------------------------------------------------- */
 /* Placeholder visibility                                                      */
@@ -140,7 +158,7 @@ describe('placeholder content', () => {
   it('404s a placeholder Leaf fetched directly in production', async () => {
     const service = serviceIn('production', [track({ isPlaceholder: false })], [leaf()]);
 
-    await expect(service.getLeaf('l1')).rejects.toBeInstanceOf(ContentNotFoundError);
+    await expect(service.getLeaf('l1', READER)).rejects.toBeInstanceOf(ContentNotFoundError);
   });
 });
 
@@ -168,7 +186,7 @@ describe('getLeaf', () => {
   it('returns the Leaf with the answer key stripped', async () => {
     const service = serviceIn('development', [track()], [leaf()]);
 
-    const result = await service.getLeaf('l1');
+    const result = await service.getLeaf('l1', READER);
 
     expect(JSON.stringify(result)).not.toContain('isCorrect');
   });
@@ -176,9 +194,53 @@ describe('getLeaf', () => {
   it('keeps option ids and order so an answer can be submitted', async () => {
     const service = serviceIn('development', [track()], [leaf()]);
 
-    const result = await service.getLeaf('l1');
+    const result = await service.getLeaf('l1', READER);
 
     expect(result.scenario.options.map((o) => o.id)).toEqual(['o1', 'o2', 'o3']);
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* The payoff gate                                                           */
+  /* ------------------------------------------------------------------------ */
+
+  it('withholds the payoff from a reader who has not earned it', async () => {
+    const service = serviceIn('development', [track()], [leaf()], false);
+
+    const result = await service.getLeaf('l1', READER);
+
+    expect(result.payoffUnlocked).toBe(false);
+    expect(result.payoff).toBeNull();
+  });
+
+  it('leaves no trace of the payoff prose in a locked response', async () => {
+    // The body must be absent from the serialised object, not merely flagged — a
+    // client that ignores `payoffUnlocked` must still have nothing to render.
+    const service = serviceIn('development', [track()], [leaf()], false);
+
+    const result = await service.getLeaf('l1', READER);
+
+    expect(JSON.stringify(result)).not.toContain('Payoff.');
+  });
+
+  it('returns the payoff once it is unlocked', async () => {
+    const service = serviceIn('development', [track()], [leaf()], true);
+
+    const result = await service.getLeaf('l1', READER);
+
+    expect(result.payoffUnlocked).toBe(true);
+    expect(result.payoff?.body).toBe('Payoff.');
+  });
+
+  it('still returns every other slide while the payoff is locked', async () => {
+    // Locking the payoff must not cost the reader the summary and scenario they need
+    // in order to answer and unlock it.
+    const service = serviceIn('development', [track()], [leaf()], false);
+
+    const result = await service.getLeaf('l1', READER);
+
+    expect(result.summary.body).toBe('Summary.');
+    expect(result.scenario.prompt).toBe('Prompt?');
+    expect(result.stickyNotes.notes).toHaveLength(2);
   });
 });
 

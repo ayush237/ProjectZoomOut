@@ -17,6 +17,8 @@ import { LibraryService } from '../../src/library/library.service.js';
 import { PostgresHealthRepository } from '../../src/health/health.repository.js';
 import { HealthService } from '../../src/health/health.service.js';
 import { createLogger } from '../../src/logging/logger.js';
+import { PostgresProgressRepository } from '../../src/progress/progress.repository.js';
+import { ProgressService } from '../../src/progress/progress.service.js';
 import { ProfileService } from '../../src/users/profile.service.js';
 
 /**
@@ -61,11 +63,20 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     jwksUri: UNREACHABLE_JWKS,
   };
 
-  const contentService = new ContentService(
-    new PayloadContentRepository(new PayloadClient(config, logger), logger, config),
+  // Wired exactly as `src/index.ts` does it, including the direction of the
+  // content/progress dependency — see the comment there.
+  const contentRepository = new PayloadContentRepository(
+    new PayloadClient(config, logger),
+    logger,
+    config,
+  );
+  const progressService = new ProgressService(
+    new PostgresProgressRepository(database),
+    contentRepository,
     config,
     logger,
   );
+  const contentService = new ContentService(contentRepository, config, logger, progressService);
 
   const authRepository = new PostgresAuthRepository(database);
   const tokenService = new TokenService(config);
@@ -88,6 +99,7 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
       contentService,
       logger,
     ),
+    progressService,
     authenticate: createAuthenticator(tokenService),
   });
 

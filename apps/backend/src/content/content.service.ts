@@ -1,15 +1,11 @@
-import {
-  isProductionPublishable,
-  toPublicLeaf,
-  type Leaf,
-  type PublicLeaf,
-  type Track,
-} from '@zoomout/shared';
+import { toPublicLeaf, type Leaf, type PayoffSlide, type PublicLeaf, type Track } from '@zoomout/shared';
 
 import type { AppConfig } from '../config/env.js';
 import type { AppLogger } from '../logging/logger.js';
 import { ContentNotFoundError } from './content.errors.js';
 import type { ContentRepository, TrackPage } from './content.repository.js';
+import { isVisibleIn } from './contentVisibility.js';
+import type { PayoffAccessPolicy } from './payoffAccess.js';
 
 /** Leaf metadata for a Track's contents list — no slide bodies. */
 export interface LeafSummary {
@@ -21,37 +17,42 @@ export interface LeafSummary {
 }
 
 /**
+ * A Leaf as one specific reader is allowed to receive it.
+ *
+ * `PublicLeaf` with the payoff made conditional. The answer key is already gone by
+ * construction; this narrows it further by who is asking, which `PublicLeaf` cannot
+ * express because it has no reader.
+ */
+export interface DeliveredLeaf extends Omit<PublicLeaf, 'payoff'> {
+  /** Null until earned. The prose is absent from the object, not blanked. */
+  readonly payoff: PayoffSlide | null;
+  /** The contract the client renders against; `payoff === null` is its enforcement. */
+  readonly payoffUnlocked: boolean;
+}
+
+/**
  * Content delivery decisions.
  *
- * Two product guarantees are enforced here and nowhere else:
+ * Three product guarantees are enforced here and nowhere else:
  *
  *  1. **Placeholder content is invisible in production.** `isProductionPublishable`
  *     has existed in `packages/shared` since WP0 with nothing calling it, which made
  *     the guard decorative. This is where it starts doing work.
  *  2. **The answer key never leaves the server.** Every Leaf goes out through
  *     `toPublicLeaf`; there is no path in this class that returns a raw `Leaf`.
+ *  3. **The payoff is withheld until it is earned** (WP4). Stripping the answer key is
+ *     only half the gate: a client that can read the payoff without answering has no
+ *     reason to answer, and the active-recall mechanic the product rests on becomes a
+ *     screen you swipe past. Delivery consults `PayoffAccessPolicy`, so the decision is
+ *     the server's on every request rather than the client's once.
  */
 export class ContentService {
-  private readonly hidesPlaceholders: boolean;
-
   constructor(
     private readonly repository: ContentRepository,
     private readonly config: AppConfig,
     private readonly logger: AppLogger,
-  ) {
-    /**
-     * Environment-aware by design (plan §3.4).
-     *
-     * Placeholder content is the whole point of Phase 1 development — every surface is
-     * built against it — so it must be visible in development and staging. It must be
-     * invisible in production, where mock prose sitting under a real author's name is
-     * the exact failure that damaged Bookey.
-     *
-     * Derived once from validated config, so the behaviour changes by environment
-     * variable rather than by code.
-     */
-    this.hidesPlaceholders = config.NODE_ENV === 'production';
-  }
+    private readonly payoffAccess: PayoffAccessPolicy,
+  ) {}
 
   public async listTracks(page: number, perPage: number): Promise<TrackPage> {
     const result = await this.repository.listTracks(page, perPage);
@@ -95,32 +96,46 @@ export class ContentService {
   }
 
   /**
-   * One full Leaf, as the client is allowed to see it.
+   * One full Leaf, as this reader is allowed to see it.
    *
-   * The return type is `PublicLeaf`, which makes the answer-key strip a compile-time
-   * property of this method rather than something a future edit could forget.
+   * Takes a reader id because the payoff is per-reader: the same Leaf is a different
+   * response to someone who has answered its scenario and someone who has not. The
+   * return type is `DeliveredLeaf` rather than `PublicLeaf`, so the payoff being
+   * conditional is a compile-time property of this method rather than a convention.
    */
-  public async getLeaf(leafId: string): Promise<PublicLeaf> {
+  public async getLeaf(leafId: string, userId: string): Promise<DeliveredLeaf> {
     const leaf = await this.repository.findLeaf(leafId);
 
     if (!this.isVisible(leaf)) {
       throw new ContentNotFoundError('Leaf');
     }
 
-    return toPublicLeaf(leaf);
+    const unlocked = await this.payoffAccess.isPayoffUnlocked(userId, leafId);
+
+    return toDeliveredLeaf(toPublicLeaf(leaf), unlocked);
   }
 
-  /**
-   * Whether a reader may see this content in the current environment.
-   *
-   * Outside production the published check still applies — a draft is never servable
-   * anywhere. Only the placeholder half of `isProductionPublishable` is relaxed.
-   */
+  /** Delegates to the shared predicate so grading cannot drift from delivery. */
   private isVisible(content: { status: 'draft' | 'published'; isPlaceholder: boolean }): boolean {
-    return this.hidesPlaceholders
-      ? isProductionPublishable(content)
-      : content.status === 'published';
+    return isVisibleIn(this.config.NODE_ENV, content);
   }
+}
+
+/**
+ * Applies the payoff gate.
+ *
+ * Destructures the payoff out rather than overwriting it, so a locked response cannot
+ * carry the prose by some spread ordering nobody re-checks. When locked, the body was
+ * never on the object that gets serialised.
+ */
+function toDeliveredLeaf(leaf: PublicLeaf, unlocked: boolean): DeliveredLeaf {
+  const { payoff, ...rest } = leaf;
+
+  return {
+    ...rest,
+    payoff: unlocked ? payoff : null,
+    payoffUnlocked: unlocked,
+  };
 }
 
 function toLeafSummary(leaf: Leaf): LeafSummary {

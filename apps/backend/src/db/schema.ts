@@ -1,6 +1,8 @@
 import {
+  boolean,
   date,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -13,8 +15,8 @@ import {
  * Tables owned by the backend.
  *
  * Content tables belong to the CMS (plan §3.2 — the backend reads content over
- * Payload's REST API and never owns those tables). Progress and gamification arrive
- * with WP4/WP5.
+ * Payload's REST API and never owns those tables). Gamification — `daily_sessions`,
+ * `streaks`, achievements — arrives with WP5.
  */
 
 export const users = pgTable(
@@ -196,8 +198,84 @@ export const userTracks = pgTable(
   ],
 );
 
+/**
+ * A reader's progress through one Leaf — the learning loop's only state.
+ *
+ * The first table here whose rows record achievement rather than identity, which is
+ * why almost every column is written by a conditional `UPDATE` rather than by
+ * read-then-write: XP that can be awarded twice by replaying a request is the obvious
+ * exploit, and the guard against it belongs in the storage layer where a race cannot
+ * get between the check and the write.
+ *
+ * `leaf_id` is text and not a foreign key, for the same reason as `user_tracks.track_id`
+ * — Leaves live in the CMS's database, which this one must not read.
+ */
+export const leafProgress = pgTable(
+  'leaf_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    /** The CMS's id for the Leaf, stringified — Payload uses serial integers. */
+    leafId: text('leaf_id').notNull(),
+
+    /** Every submitted answer, right or wrong. Unbounded: retries are unlimited. */
+    attemptCount: integer('attempt_count').notNull().default(0),
+
+    /**
+     * Whether the *first* attempt was correct. Frozen after that first answer — this is
+     * what the XP bonus is paid on, so a later correct answer must not be able to
+     * upgrade it.
+     */
+    firstTryCorrect: boolean('first_try_correct').notNull().default(false),
+
+    /**
+     * When the reader first answered correctly. **Null means the payoff stays locked.**
+     *
+     * Set once and never cleared, so re-answering wrongly after unlocking cannot take
+     * the payoff back — that would punish a reader for exploring, and the stakes are
+     * XP, not access (PRODUCT.md).
+     */
+    correctAt: timestamp('correct_at', { withTimezone: true }),
+
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+
+    /**
+     * The completion date in the **reader's own timezone**, not UTC.
+     *
+     * WP5's streaks and daily cap group activity by local day (plan §3.5). Storing only
+     * `completed_at` would leave WP5 reinterpreting a UTC instant against whatever
+     * timezone the reader has *by then* — so a reader who completes a Leaf at 11pm in
+     * Auckland and later moves to London would silently change which day it counted for.
+     * Computed once, at completion, with `localDateIn(user.timezone)`.
+     */
+    completedLocalDate: date('completed_local_date', { mode: 'string' }),
+
+    /** Awarded once, at completion. Zero until then. */
+    xpAwarded: integer('xp_awarded').notNull().default(0),
+
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One row per reader per Leaf. This is what makes `onConflictDoNothing` a safe
+    // idempotent start, and what stops two concurrent first answers creating two rows
+    // that each think they were the first try.
+    uniqueIndex('leaf_progress_user_leaf_unique').on(table.userId, table.leafId),
+    index('leaf_progress_user_id_idx').on(table.userId),
+    // WP5 reads "what did this reader complete on this local day" on every session.
+    index('leaf_progress_user_completed_date_idx').on(table.userId, table.completedLocalDate),
+  ],
+);
+
 export type UserTrackRow = typeof userTracks.$inferSelect;
 export type NewUserTrackRow = typeof userTracks.$inferInsert;
+
+export type LeafProgressRow = typeof leafProgress.$inferSelect;
+export type NewLeafProgressRow = typeof leafProgress.$inferInsert;
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
