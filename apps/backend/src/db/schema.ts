@@ -153,6 +153,52 @@ export const refreshTokens = pgTable(
   ],
 );
 
+export const userTrackStatusEnum = pgEnum('user_track_status', [
+  'active',
+  'completed',
+  'archived',
+]);
+
+/**
+ * A reader's library — the Tracks they have added.
+ *
+ * `track_id` is text, not a foreign key, and deliberately so: Tracks live in the CMS's
+ * own database, which this one has no reference to and must not read (plan §3.2).
+ * Referential integrity across that boundary is the `ContentRepository`'s job — a
+ * library row pointing at a Track that has since been unpublished simply resolves to
+ * nothing when the content API is asked for it.
+ *
+ * Progress, XP and completion are **not** here. They arrive with WP4 and belong to
+ * `LeafProgress`; this table records membership only.
+ */
+export const userTracks = pgTable(
+  'user_tracks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    /** The CMS's id for the Track, stringified — Payload uses serial integers. */
+    trackId: text('track_id').notNull(),
+
+    status: userTrackStatusEnum('status').notNull().default('active'),
+
+    addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Adding a Track twice is idempotent rather than an error, and this is what makes
+    // that true at the storage layer rather than depending on a check-then-insert
+    // race in the service.
+    uniqueIndex('user_tracks_user_track_unique').on(table.userId, table.trackId),
+    index('user_tracks_user_id_idx').on(table.userId),
+  ],
+);
+
+export type UserTrackRow = typeof userTracks.$inferSelect;
+export type NewUserTrackRow = typeof userTracks.$inferInsert;
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type UserAuthProviderRow = typeof userAuthProviders.$inferSelect;

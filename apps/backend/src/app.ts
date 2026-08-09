@@ -8,7 +8,11 @@ import type { Authenticator } from './auth/authenticate.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
 import type { AuthService } from './auth/auth.service.js';
 import type { AppConfig } from './config/env.js';
+import { registerContentRoutes } from './content/content.routes.js';
+import type { ContentService } from './content/content.service.js';
 import { AppError, toError } from './errors.js';
+import { registerLibraryRoutes } from './library/library.routes.js';
+import type { LibraryService } from './library/library.service.js';
 import { registerHealthRoutes } from './health/health.routes.js';
 import type { HealthService } from './health/health.service.js';
 import type { AppLogger } from './logging/logger.js';
@@ -28,6 +32,8 @@ export interface AppDependencies {
   readonly healthService: HealthService;
   readonly authService: AuthService;
   readonly profileService: ProfileService;
+  readonly contentService: ContentService;
+  readonly libraryService: LibraryService;
   readonly authenticate: Authenticator;
 }
 
@@ -153,6 +159,8 @@ export async function buildApp(deps: AppDependencies): Promise<ZoomOutApp> {
   });
 
   registerHealthRoutes(app, deps.healthService);
+  registerContentRoutes(app, deps.contentService, deps.authenticate);
+  registerLibraryRoutes(app, deps.libraryService, deps.authenticate);
   registerAuthRoutes(app, deps.authService, deps.config, deps.authenticate);
   registerProfileRoutes(app, deps.profileService, deps.authenticate);
 
