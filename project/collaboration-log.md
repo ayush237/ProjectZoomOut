@@ -451,6 +451,127 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 4. **No `If-None-Match`/ETag on content responses.** Mobile will refetch full Track lists on every Explore visit. Worth considering in WP7 once the payload size is real.
 5. **`user_tracks.status` exists and is always `active`.** WP4/WP5 own the transitions; nothing sets it yet.
 
+---
+
+## Handover to WP4 — read this before starting the learning loop
+
+*Written deliberately for a session with no memory of building WP3. Everything below is
+verifiable in the repo; where it is a judgement call rather than a fact, it says so.*
+
+### Where things stand
+
+`main` contains WP0 → WP2.1. WP3 is on branch `wp3-content-api` (`c859282`), CI green,
+PR not yet opened at time of writing. WP4 depends on WP2 and WP3, both complete.
+
+Run the gate with `npm run lint && npm run typecheck && npm test && npm run build` from
+the repo root. **Delete `packages/shared/dist`, `apps/*/dist` and `apps/admin/.next`
+first** — `npm ci` alone leaves stale build output and has masked a real bug before
+(WP0 addendum). Integration tests need Docker running. Payload lives at
+`http://127.0.0.1:3001` (`npm run dev:admin`), Postgres in the `zoomout-postgres`
+container.
+
+### What WP4 can build on
+
+**Content, all authenticated, all in `apps/backend/src/content/`:**
+
+| Endpoint | Returns |
+|---|---|
+| `GET /content/tracks?page&perPage` | `{ tracks, page, totalPages, totalTracks }` |
+| `GET /content/tracks/:trackId` | a full domain `Track` |
+| `GET /content/tracks/:trackId/leaves` | `{ leaves: LeafSummary[] }` — id, trackId, orderIndex, title, isPlaceholder |
+| `GET /content/leaves/:leafId` | a `PublicLeaf` — **no `isCorrect`** |
+| `GET /library` · `POST`/`DELETE /library/tracks/:trackId` | membership only; 204 on write, idempotent |
+
+**Auth**, from WP2: attach `authenticate` as a `preHandler` and call
+`requireUserId(request)` (`src/auth/authenticate.ts`). Both throw rather than returning
+undefined, so a route wired up wrong fails at the first request instead of treating the
+caller as anonymous.
+
+### The four things WP4 must not undo
+
+1. **The answer key never leaves the server.** `ContentService.getLeaf` returns
+   `PublicLeaf`, and `toPublicLeaf` is the only construction path. WP4 needs
+   `isCorrect` to grade an answer, so it must fetch the **full** `Leaf` through
+   `ContentRepository.findLeaf` — *not* by widening what the content endpoints return.
+   Grading happens server-side; the client submits an option id and is told the result.
+2. **Never parse untrusted input with `publicLeafSchema`.** It derives from the Leaf
+   shape *before* the Dinner Table Knowledge refinement, so it would accept an
+   unsourced fact.
+3. **Never read Payload's Postgres tables.** Groups flatten to `summary_body`-style
+   columns, arrays become join tables, versions live in `_leaves_v`, and querying any
+   of it bypasses draft resolution — which silently breaks takedown. `PayloadClient` is
+   the only door, and it calls anonymously so published-only is Payload's own access
+   control rather than a filter we have to remember.
+4. **`isProductionPublishable` is enforced in `ContentService`, keyed on `NODE_ENV`.**
+   Placeholder content is visible in development and invisible in production. Any new
+   content-reading path in WP4 must go through `ContentService`, not around it via
+   `ContentRepository`, or the guard is bypassed.
+
+### Facts about the data WP4 will meet
+
+- **CMS ids are numeric in Payload and strings in the domain model.** The mapper
+  stringifies. `Track.id` and `Leaf.id` are strings like `"1"`, `"10"`.
+- **Scenario option ids are Payload row ids** — hex strings such as
+  `6a7629ee570031ac25de62bf`, verified against the live CMS. They are stable across
+  edits, which is why the mapper *rejects* a Leaf whose option lacks one rather than
+  deriving an id from the array index: an index changes meaning when an author reorders
+  options, silently turning a correct answer wrong. **WP4's answer submission should
+  key on these ids.**
+- **Exactly three options, exactly one correct** — enforced as a `z.tuple` of 3 plus a
+  refinement, in `packages/shared`, and independently by a CMS hook.
+- **Wrong answers retry without limit** (PRODUCT.md). The payoff slide stays locked
+  until correct; the stakes are XP, not access.
+- The schema was **frozen 2026-08-08**. `packages/shared/src/content.ts` is no longer
+  provisional; changing it now needs an Architect ruling and a migration plan, because
+  the CMS enforces the same invariants independently and the two must not drift.
+
+### Tables that already exist
+
+`users`, `user_auth_providers`, `refresh_tokens` (WP2), `user_tracks` (WP3, membership
+only — `status` is always `active`; WP4/WP5 own the transitions). Migrations live in
+`apps/backend/drizzle/`, generated with `npm run db:generate --workspace=apps/backend`.
+
+**WP4 will need `LeafProgress`, and `DailySession`/`Streak` are WP5's.** Their shapes
+are already defined in `packages/shared/src/progress.ts`. Note `DailySession` and
+`Streak` are keyed on the reader's **local** date via `localDateSchema`, not a UTC
+instant — plan §3.5 calls this the single most common source of streak and cap bugs, and
+`localDateIn(timezone)` in `src/auth/ageGate.ts` is the existing helper for it.
+
+### Testing conventions this repo holds to
+
+- Unit tests colocated as `src/**/*.test.ts`; integration in `test/*.integration.test.ts`.
+- Integration tests use **real Postgres via testcontainers**, never a mock database.
+- `test/helpers/buildTestApp.ts` builds the real app against a caller-supplied database
+  and accepts `env` overrides — add new services there when WP4 introduces them, or
+  every integration suite breaks at once.
+- `test/helpers/fakePayload.ts` is a controllable Payload stand-in with `seedTrack`,
+  `seedLeaf`, `setPublished` and a `failing` flag. Use it rather than booting Payload:
+  `payload.destroy()` does not close its pool, `pool.end()` hangs because Payload keeps
+  a client checked out, and no `error` listener is attached to the pool.
+- **Testcontainers is intermittently flaky when suites run back to back.** One CI run
+  had all integration tests skipped in `inspectContainerUntilPortsExposed` and an
+  immediate re-run passed. Red once, green on re-run is this, not a regression.
+
+### Two traps worth knowing
+
+- **`eslint --fix` has made things worse here.** It stripped type assertions on
+  Fastify's `inject().json()` (typed `any`), which were the only thing keeping those
+  tests type-checked. `test/*.integration.test.ts` uses a `bodyOf<T>` helper routing
+  through `unknown` instead. Check `--fix` output on test files before trusting it.
+- **The error handler in `src/app.ts` has four branches in order**: `ZodError` → 400
+  with issue details, `AppError` → its own status and code, any error carrying a 4xx
+  `statusCode` → passed through (this is what makes rate limiting return 429 rather
+  than 500), everything else → 500 with no detail. New WP4 errors should extend
+  `AppError` in the relevant module's `*.errors.ts`, not introduce a parallel hierarchy.
+
+### Still blocked, and on whom
+
+WP4 is **not** blocked. WP6 → WP7 → WP8 are all blocked on the **visual design
+direction**, which is founder input; `project/proposals/design-direction.md` exists in
+the tree. WP5 additionally needs the **achievement list**. WP11's placeholder seed is
+now the only content the app will have through WP3–WP9, since real authoring moved
+behind the Phase 2 AI pipeline — so it carries more weight than when it was written.
+
 ### Completed: WP2.1 — Schema-freeze alignment and backend gaps — 2026-08-08
 
 **Status:** All 12 acceptance criteria verified by execution. Cold gate passes with `dist` and `.next` deleted — **345 tests** (64 shared, 108 admin, 167 backend, 6 mobile).
