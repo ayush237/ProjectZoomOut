@@ -543,6 +543,82 @@ describe('POST /auth/provider', () => {
     expect(response.json()).toMatchObject({ error: { code: 'INVALID_PROVIDER_TOKEN' } });
   });
 
+  it('names the missing fields in the response body, not just in the message', async () => {
+    // A first-time social signup with no date of birth or timezone. The client cannot
+    // recover from a bare code here — it has to know *which* inputs to ask for — and
+    // until WP6 this list was set on the error object and then dropped by the
+    // serialiser, so it never left the process.
+    const idToken = await providerToken({
+      sub: `google-${String(Math.random()).slice(2)}`,
+      email: `details-${String(Math.random()).slice(2)}@example.test`,
+      email_verified: true,
+    });
+
+    const response = await app().inject({
+      method: 'POST',
+      url: '/auth/provider',
+      payload: { provider: 'google', idToken },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'SIGNUP_DETAILS_REQUIRED',
+        // Field names the client can route on, not prose it would have to parse.
+        missingFields: ['dateOfBirth', 'timezone'],
+      },
+    });
+  });
+
+  it('names only the field that is actually missing', async () => {
+    const idToken = await providerToken({
+      sub: `google-${String(Math.random()).slice(2)}`,
+      email: `partial-${String(Math.random()).slice(2)}@example.test`,
+      email_verified: true,
+    });
+
+    const response = await app().inject({
+      method: 'POST',
+      url: '/auth/provider',
+      payload: { provider: 'google', idToken, timezone: 'Europe/London' },
+    });
+
+    expect(response.json()).toMatchObject({
+      error: { missingFields: ['dateOfBirth'] },
+    });
+  });
+
+  it('exposes nothing beyond code and message for an error that has not opted in', async () => {
+    // `responseFields` is opt-in precisely so errors carrying internal detail —
+    // `ContentInvalidError.reasons` names CMS fields — cannot be serialised by default.
+    // The age gate is an ordinary AppError, so its body must stay at two keys.
+    const under = new Date();
+    under.setFullYear(under.getFullYear() - 10);
+
+    const idToken = await providerToken({
+      sub: `google-${String(Math.random()).slice(2)}`,
+      email: `quiet-${String(Math.random()).slice(2)}@example.test`,
+      email_verified: true,
+    });
+
+    const response = await app().inject({
+      method: 'POST',
+      url: '/auth/provider',
+      payload: {
+        provider: 'google',
+        idToken,
+        dateOfBirth: under.toISOString().slice(0, 10),
+        timezone: 'UTC',
+      },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(Object.keys(response.json<{ error: object }>().error).sort()).toEqual([
+      'code',
+      'message',
+    ]);
+  });
+
   it('applies the age gate to social signups too', async () => {
     const under = new Date();
     under.setFullYear(under.getFullYear() - 10);

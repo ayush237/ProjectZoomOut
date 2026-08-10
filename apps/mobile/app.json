@@ -5,7 +5,8 @@
     "version": "0.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "//userInterfaceStyle": "Must be 'automatic'. Anything else pins the OS appearance the app is told about, so useColorScheme() never reports dark and the whole light/dark system silently resolves to one theme — which is what it did until WP6 caught it in the simulator.",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.zoomout.app"
@@ -22,6 +23,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser"
+    ]
   }
 }

@@ -146,14 +146,35 @@ export class SignupDetailsRequiredError extends AppError {
   public readonly statusCode = 400;
   public readonly code = 'SIGNUP_DETAILS_REQUIRED';
 
+  /**
+   * **Machine-readable field names**, not prose — `dateOfBirth`, not "your date of
+   * birth". The client routes on these to focus the right input, and prose would force
+   * it to string-match the very copy we are free to reword. The human phrasing is
+   * derived from them for the message, so the two cannot drift.
+   */
   public readonly missingFields: readonly string[];
 
   constructor(missingFields: readonly string[]) {
     super(
-      `ZoomOut needs a little more to finish creating your account: ${missingFields.join(' and ')}.`,
+      'ZoomOut needs a little more to finish creating your account: ' +
+        `${missingFields.map(describeField).join(' and ')}.`,
     );
     this.missingFields = missingFields;
   }
+
+  /** Surfaced to the client — this error is unrecoverable without it. */
+  public override get responseFields(): Record<string, unknown> {
+    return { missingFields: this.missingFields };
+  }
+}
+
+const FIELD_LABELS: Readonly<Record<string, string>> = {
+  dateOfBirth: 'your date of birth',
+  timezone: 'your timezone',
+};
+
+function describeField(field: string): string {
+  return FIELD_LABELS[field] ?? field;
 }
 
 /** The caller is authenticated but is not allowed to touch this resource. */

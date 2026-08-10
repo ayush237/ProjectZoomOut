@@ -17,6 +17,20 @@ export abstract class AppError extends Error {
   /** Stable machine-readable code. Safe to expose and to branch on in clients. */
   public abstract readonly code: string;
 
+  /**
+   * Extra fields to include in the error response, beside `code` and `message`.
+   *
+   * Empty by default, because the safe direction is for an error to reveal nothing it
+   * was not deliberately designed to reveal — `ContentInvalidError.reasons` names CMS
+   * fields, and a blanket "serialise everything public" rule would have leaked them.
+   *
+   * An error opts in by overriding this, and whatever it returns is **client-visible**.
+   * Nothing internal belongs here.
+   */
+  public get responseFields(): Record<string, unknown> {
+    return {};
+  }
+
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
     this.name = new.target.name;
