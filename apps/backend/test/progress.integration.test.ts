@@ -307,6 +307,35 @@ describe('the full learning loop', () => {
     expect(completed.progress.completedAt).not.toBeNull();
   });
 
+  it('awards the first-try bonus when the reader starts the Leaf first', async () => {
+    // The path every real client takes, and the one the other first-try tests skip.
+    //
+    // Answering without `start` inserts the progress row, so `first_try_correct` comes
+    // from the INSERT values. Answering *after* `start` updates an existing row, so the
+    // flag is decided by the `case when attempt_count = 0 and $correct` expression in
+    // the ON CONFLICT branch instead — a different piece of SQL, and the one that runs
+    // in production. Without this test that branch is never exercised with a correct
+    // first answer, and a reader who opens a Leaf before answering it would silently
+    // lose the bonus.
+    const reader = await createReader();
+
+    await app().inject({
+      method: 'POST',
+      url: '/progress/leaves/10/start',
+      headers: auth(reader.token),
+    });
+
+    const answered = bodyOf<AnswerBody>(await answer(reader, CORRECT_OPTION));
+    expect(answered.progress.attemptCount).toBe(1);
+    expect(answered.progress.firstTryCorrect).toBe(true);
+
+    const completed = bodyOf<CompletionBody>(await complete(reader));
+    expect(completed.progress.firstTryCorrect).toBe(true);
+    expect(completed.progress.attemptCount).toBe(1);
+    expect(completed.xpAwarded).toBe(XP_FIRST_TRY);
+    expect(completed.progress.xpAwarded).toBe(XP_FIRST_TRY);
+  });
+
   it('does not award the first-try bonus after a wrong answer', async () => {
     const reader = await createReader();
 

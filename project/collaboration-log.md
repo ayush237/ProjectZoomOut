@@ -484,15 +484,17 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ### Completed: WP4 — Learning loop API: answer, unlock, complete, award XP — 2026-08-09
 
-**Status:** 11 of 12 acceptance criteria verified by execution. The twelfth — `.env.example`
-current — is **not done**: `.claude/settings.json` denies `Read(**/.env.*)`, which catches
-`.env.example`, and the Edit tool requires a prior read. The two lines to add are at the
-bottom of this entry. Everything else passes.
+**Status:** All 12 acceptance criteria verified by execution.
+
+`.env.example` was the last one open. Manager could not edit it — `.claude/settings.json`
+denies `Read(**/.env.*)`, which catches the example file, and Edit requires a prior read —
+so the founder added `XP_LEAF_COMPLETION=80` and `XP_FIRST_TRY_BONUS=20` directly. Committed
+in `e220510`. **Manager has not read the file's contents**, only its diffstat (+4 lines,
+matching the snippet supplied); worth a glance at review.
 
 Cold gate green with `packages/shared/dist`, `apps/*/dist` and `apps/admin/.next` deleted
-first: lint, typecheck, test, build. **495 tests** (317 backend, 108 admin, 64 shared,
-6 mobile), of which **77 are new here**. CI not yet run at time of writing — this is a
-local gate on a working tree, not a pushed branch.
+first: lint, typecheck, test, build. **496 tests** (318 backend, 108 admin, 64 shared,
+6 mobile), of which **78 are new here**. CI runs on the `wp4-learning-loop` PR.
 
 **What changed:**
 
@@ -513,7 +515,7 @@ journal entry, and edits to `app.ts`, `index.ts`, `config/env.ts`, `db/schema.ts
 `content.service.ts`, `content.routes.ts`, `content.service.test.ts`, `buildTestApp.ts`,
 `packages/shared/src/progress.ts`.
 
-**Tests added:** 77.
+**Tests added:** 78.
 - **Grading (7)** — correct, both wrong options, an id that exists nowhere, an id belonging
   to a *different* Leaf's scenario, an empty id, and reordered options still grading by id.
 - **XP (6)** — base, first-try bonus, the first-try-beats-later relationship stated
@@ -526,11 +528,20 @@ journal entry, and edits to `app.ts`, `index.ts`, `config/env.ts`, `db/schema.ts
   answering without touching content.
 - **Content service (4 new)** — the payoff gate on both sides, the locked response carrying
   no payoff prose at all, and every other slide still present while locked.
-- **Progress integration (39)** — real Postgres. The full loop, unlimited retries (12 wrong
+- **Progress integration (40)** — real Postgres. The full loop, unlimited retries (12 wrong
   then correct), resumability, the payoff unobtainable across six endpoints at once,
   `isCorrect` absent from six serialised responses, replayed *and concurrent* completion
   awarding once, cross-reader isolation in both directions, XP moving with config through a
   second app instance, and takedown reaching the loop.
+  - **`start` → correct → complete is tested separately from answering without `start`**,
+    and the distinction is not cosmetic. Answering with no prior row takes the upsert's
+    INSERT branch, where `first_try_correct` comes from the inserted values; answering after
+    `start` takes ON CONFLICT, where the flag is decided by
+    `case when attempt_count = 0 and $correct`. Different SQL, and the second one is what
+    every real client hits. Verified by mutation: flipping that `then true` to `then false`
+    fails **only** the start-first test — the other first-try tests stay green, because they
+    never create the row first. Added on founder review; the original suite had the branch
+    uncovered.
 
 **Decisions taken, with reasoning:**
 
@@ -615,22 +626,18 @@ journal entry, and edits to `app.ts`, `index.ts`, `config/env.ts`, `db/schema.ts
 
 **Follow-ups / tech debt for Architect:**
 
-1. **`.env.example` still needs two lines** (see Status). Add under a "Progress and XP"
-   heading: `XP_LEAF_COMPLETION=80` and `XP_FIRST_TRY_BONUS=20`. Either the founder pastes
-   them, or the deny rule in `.claude/settings.json` is narrowed from `Read(**/.env.*)` to
-   the real secret files so `.env.example` is readable.
-2. **Nothing computes a reader's total XP.** `leaf_progress.xp_awarded` sums to it, but no
+1. **Nothing computes a reader's total XP.** `leaf_progress.xp_awarded` sums to it, but no
    endpoint exposes it and there is no `users.total_xp`. WP5 owns the gamification surface
    and should decide whether the total is derived on read or maintained on write before WP7
    needs it for a profile screen.
-3. **No rate limit on answer submission.** With three options and unlimited retries,
+2. **No rate limit on answer submission.** With three options and unlimited retries,
    brute-forcing a single scenario is trivial *by design* — but it is also an unbounded write
    path, and every attempt is a row update plus a cached CMS read. Worth a limit before
    launch, on write-volume grounds rather than answer-secrecy grounds.
-4. **`user_tracks.status` is still always `active`.** WP3 flagged this as WP4/WP5's; WP4 did
+3. **`user_tracks.status` is still always `active`.** WP3 flagged this as WP4/WP5's; WP4 did
    not touch it, because "this Track is completed" needs a Leaf count to compare against and
    that is a Track-level rollup nothing owns yet.
-5. **The answer response tells the reader which option was right, indirectly.** Three
+4. **The answer response tells the reader which option was right, indirectly.** Three
    options and unlimited retries means two wrong answers identify the third by elimination.
    Inherent to the product rules as written, not a defect — recording it so nobody
    rediscovers it in WP8 and treats it as a bug.
