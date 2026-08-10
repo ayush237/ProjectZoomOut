@@ -39,6 +39,20 @@ If Manager is mid-change, don't have Architect read half-finished code and draw 
 We deliberately don't `@import` the persona files into `CLAUDE.md`. `CLAUDE.md` loads identically for every session, so importing both personas there would put both in both sessions and defeat the point of the split.
 
 ## Context hygiene
+
+**Clear Manager after every work package. This is not optional housekeeping — it is how the workflow is designed to run.** Five packages in one context window will fill it, and a session running near its limit degrades exactly when the work gets hard.
+
+The sequence that loses nothing:
+
+1. Manager writes its completion report into `collaboration-log.md` **while it still remembers the reasoning** — not after a compact has eaten it. The report is the context transfer.
+2. `/clear` — same window is fine, a new one is identical.
+3. Re-send the persona message and wait for the confirmation.
+4. Point it at the record: *"Read `project/projectplan.md` for current state, then `project/collaboration-log.md` — the newest handoff and the newest completion report. Continue from there."*
+
+**Do not try to carry the conversation across.** You can't, and you don't want to. The log is a curated record of decisions and outcomes; a transcript is the same information buried in dead ends and superseded reasoning. A fresh session reading the log is better informed than a tired one carrying the transcript.
+
+If Manager is mid-package when context runs short, `/compact` to get to the completion report, then clear. Never clear mid-package — the report is what makes clearing safe.
+
 - One feature per session where possible. `/clear` before starting the next one.
 - Before `/clear`, make sure `collaboration-log.md` has the entry that lets a fresh session pick up context in seconds instead of replaying the conversation.
 - If a single feature runs long, `/compact` proactively rather than waiting for an automatic compact at a worse moment. Root-level `CLAUDE.md` reloads automatically after `/compact`; **the persona file does not** — re-send the persona message if a session starts behaving out of role. Another reason the log file matters.

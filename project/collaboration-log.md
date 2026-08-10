@@ -9,6 +9,74 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-08 — WP4: Learning loop API
+
+### Task: WP4 — Learning loop API: answer, unlock, complete, award XP
+
+**Context:** This is the product. Everything so far has been scaffolding around one mechanic — a reader answers a scenario, and the payoff unlocks only when they get it right. WP4 makes that mechanic real on the server.
+
+WP3's completion report carries a **"Handover to WP4"** section written for a session with no memory of building it. Read that first; it lists the endpoints, the auth helpers, and the four invariants you must not undo.
+
+**Objective:** An authenticated reader can start a Leaf, submit an answer and be told whether it was correct, unlock the payoff only after a correct answer, complete a Leaf, and earn XP — all decided server-side, all persisted, all resumable.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/backend/src/progress/` — repository, service, routes, grading
+- `apps/backend/src/db/` — a migration for `leaf_progress`
+- `packages/shared` — only if `LeafProgress` in `src/progress.ts` genuinely needs changing. **`src/content.ts` is frozen and off-limits**
+
+**Requirements:**
+
+*Grading — the core*
+- The client submits a **scenario option id**. It never submits, and is never told, which option is correct.
+- **Grading needs `isCorrect`, so fetch the full `Leaf` via `ContentRepository.findLeaf`.** Do **not** widen what the content endpoints return — `ContentService.getLeaf` returns `PublicLeaf` and that is the only shape a client ever sees. This is the single most important constraint in the package.
+- Option ids are Payload row ids (hex strings, e.g. `6a7629ee570031ac25de62bf`), stable across edits. Key on them, never on array position.
+- An option id that does not belong to this Leaf is a client error, not a wrong answer. They are different outcomes and must not be conflated.
+
+*Progress state*
+- `LeafProgress` per (reader, Leaf): attempt count, whether the first attempt was correct, completion timestamp, XP awarded.
+- **Wrong answers retry without limit** (PRODUCT.md). The payoff stays locked until correct; the stakes are XP, not access.
+- The payoff unlock is **server-authoritative**: a reader who has not answered correctly cannot obtain payoff content by any route.
+- Progress is resumable — a reader returning to a partially-completed Leaf gets their existing state, not a reset.
+- Completing a Leaf is **idempotent**. Replaying the completion call must not award XP twice; this is the obvious exploit and needs an explicit test.
+
+*XP*
+- Flat award per Leaf plus a **first-try-correct bonus** (decided 2026-08-06). Calibrate so the 500 XP daily cap lands near **5 Leaves**, matching the ~3-minute Leaf.
+- XP values come from validated config, not literals — they will be tuned once the loop is playable.
+- XP is computed and awarded **server-side only**. The client is told the result.
+
+*Boundaries*
+- **Any new content-reading path must go through `ContentService`, not around it via `ContentRepository`** — except the single deliberate grading fetch above, which must be commented as such at the call site. `isProductionPublishable` lives in `ContentService`; bypassing it bypasses the placeholder guard.
+- **Never parse untrusted input with `publicLeafSchema`** — it derives from the Leaf shape before the Dinner Table Knowledge refinement and would accept an unsourced fact.
+- **Never read Payload's Postgres tables.** `PayloadClient` is the only door.
+
+**Out of scope:**
+- **`DailySession`, `Streak`, the 15-min/500 XP session cap, achievements — all WP5.** Do not start them. Award XP without enforcing the cap; WP5 adds enforcement.
+- Any mobile UI — WP6 onward
+- Report-an-error — WP10
+- Changing `packages/shared/src/content.ts`
+
+**Constraints:**
+- **`DailySession` and `Streak` (WP5) key on the reader's LOCAL date, not a UTC instant.** Plan §3.5 names this the most common source of streak and cap bugs, and `localDateIn()` in `src/auth/ageGate.ts` already exists for it. WP4 does not build them — but if you persist any date on `LeafProgress` that WP5 will later group by day, use the same local-date approach rather than leaving WP5 a UTC timestamp to reinterpret.
+- Handler → service → repository. `process.env` only in the config module.
+- Follow the engineering standards in `CLAUDE.md` in full.
+- **"Verified locally" means `dist` and `.next` deleted, not just `npm ci`.**
+
+**Acceptance criteria:**
+- [ ] `npm install`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass from the root
+- [ ] Migration applies cleanly to an empty database and creates `leaf_progress`
+- [ ] Submitting the correct option id returns correct; a wrong one returns incorrect and does not unlock the payoff
+- [ ] The payoff is unobtainable by any route before a correct answer — tested, not assumed
+- [ ] `isCorrect` appears in no response body anywhere, asserted at the route level
+- [ ] Unlimited retries: repeated wrong answers never lock a reader out
+- [ ] First-try-correct earns more XP than a later correct answer
+- [ ] Replaying the completion call does not award XP twice
+- [ ] An option id from a different Leaf is a client error, distinct from a wrong answer
+- [ ] Progress is per-reader: one reader's answers never affect another's state
+- [ ] XP values move with configuration alone
+- [ ] CI green; `.env.example` current
+
+**Testing expectations:** Unit tests for grading — correct, wrong, unknown option id, an option id belonging to another Leaf — and for XP calculation including the first-try bonus. Integration tests against real Postgres for the full loop: start → wrong → wrong → correct → payoff unlocked → complete → XP awarded → replay completion → XP unchanged. Cross-reader isolation in both directions. The idempotency test is not optional; double-awarding XP is the obvious exploit and the one a client can trigger by retrying a failed request.
+
 ### Handoff: 2026-08-08 — WP2.1: Schema-freeze alignment and backend gaps
 
 ### Task: WP2.1 — Schema-freeze alignment and backend gaps
@@ -413,6 +481,178 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
+
+### Completed: WP4 — Learning loop API: answer, unlock, complete, award XP — 2026-08-09
+
+**Status:** All 12 acceptance criteria verified by execution.
+
+`.env.example` was the last one open. Manager could not edit it — `.claude/settings.json`
+denies `Read(**/.env.*)`, which catches the example file, and Edit requires a prior read —
+so the founder added `XP_LEAF_COMPLETION=80` and `XP_FIRST_TRY_BONUS=20` directly. Committed
+in `e220510`. **Manager has not read the file's contents**, only its diffstat (+4 lines,
+matching the snippet supplied); worth a glance at review.
+
+Cold gate green with `packages/shared/dist`, `apps/*/dist` and `apps/admin/.next` deleted
+first: lint, typecheck, test, build. **496 tests** (318 backend, 108 admin, 64 shared,
+6 mobile), of which **78 are new here**. CI runs on the `wp4-learning-loop` PR.
+
+**What changed:**
+
+- **`apps/backend/src/progress/`** — `grading.ts` (pure, the only place `isCorrect` is read
+  on a request path), `xp.ts` (pure), `progress.repository.ts` (atomic upsert + conditional
+  completion), `progress.service.ts` (orchestration, implements `PayoffAccessPolicy`),
+  `progress.mapper.ts`, `progress.errors.ts`, `progress.routes.ts`.
+- **`apps/backend/src/content/`** — two new files, `payoffAccess.ts` (the port) and
+  `contentVisibility.ts` (the visibility predicate, extracted). `ContentService.getLeaf` now
+  takes a reader id and returns `DeliveredLeaf`. **This is outside the handoff's stated
+  scope and was unavoidable — see "The scope call" below.**
+- **`packages/shared/src/progress.ts`** — one field added to `leafProgressSchema`:
+  `correctAt`. `content.ts` untouched.
+- **`apps/backend/drizzle/0003_add_leaf_progress.sql`** — new table.
+
+**Files touched:** 24. 14 new source and test files, migration `0003` plus its snapshot and
+journal entry, and edits to `app.ts`, `index.ts`, `config/env.ts`, `db/schema.ts`,
+`content.service.ts`, `content.routes.ts`, `content.service.test.ts`, `buildTestApp.ts`,
+`packages/shared/src/progress.ts`.
+
+**Tests added:** 78.
+- **Grading (7)** — correct, both wrong options, an id that exists nowhere, an id belonging
+  to a *different* Leaf's scenario, an empty id, and reordered options still grading by id.
+- **XP (6)** — base, first-try bonus, the first-try-beats-later relationship stated
+  independently of the numbers, a zero bonus not zeroing the award, the shipped defaults
+  landing five perfect Leaves on exactly 500, and the values moving with config alone.
+- **Progress service (22)** — what the service *refuses* to do: no attempt recorded for an
+  unrecognised option, no write when completion is refused, no second award on replay, the
+  concurrent-completion loser reporting the winner's outcome, no timezone guessed for a
+  vanished reader, the placeholder guard applying to grading, and `isPayoffUnlocked`
+  answering without touching content.
+- **Content service (4 new)** — the payoff gate on both sides, the locked response carrying
+  no payoff prose at all, and every other slide still present while locked.
+- **Progress integration (40)** — real Postgres. The full loop, unlimited retries (12 wrong
+  then correct), resumability, the payoff unobtainable across six endpoints at once,
+  `isCorrect` absent from six serialised responses, replayed *and concurrent* completion
+  awarding once, cross-reader isolation in both directions, XP moving with config through a
+  second app instance, and takedown reaching the loop.
+  - **`start` → correct → complete is tested separately from answering without `start`**,
+    and the distinction is not cosmetic. Answering with no prior row takes the upsert's
+    INSERT branch, where `first_try_correct` comes from the inserted values; answering after
+    `start` takes ON CONFLICT, where the flag is decided by
+    `case when attempt_count = 0 and $correct`. Different SQL, and the second one is what
+    every real client hits. Verified by mutation: flipping that `then true` to `then false`
+    fails **only** the start-first test — the other first-try tests stay green, because they
+    never create the row first. Added on founder review; the original suite had the branch
+    uncovered.
+
+**Decisions taken, with reasoning:**
+
+1. **`ContentService.getLeaf` now takes a reader id and gates the payoff — the scope call.**
+   `GET /content/leaves/:leafId` shipped in WP3 returning `PublicLeaf`, which includes the
+   full payoff body to anybody authenticated. The acceptance criterion "the payoff is
+   unobtainable by any route before a correct answer" cannot be met without changing that
+   endpoint, and `toPublicLeaf` lives in frozen `content.ts`, so the strip had to happen in
+   the backend. I took the handoff's "verify, don't trust blindly" as licence to touch
+   `content/` and kept the change as small as it could be. **The alternative — serving the
+   payoff only from progress endpoints — was rejected** because a reader returning to a
+   finished Leaf would then need two calls to render one screen, and the Leaf's shape would
+   be split across two modules for WP7 to reassemble.
+2. **The dependency points content → progress through an interface, not the reverse.**
+   `PayoffAccessPolicy` is declared in the content module and implemented by
+   `ProgressService`. Content asks whether the payoff is unlocked without knowing what
+   unlocking involves; progress reads the full Leaf from the *repository*. Neither service
+   imports the other's concrete class, and the composition root is the only place both
+   names appear.
+3. **`correctAt` added to the shared `LeafProgress`.** The frozen shape could not express
+   the unlock state at all: `firstTryCorrect` is false both for a reader who has never
+   answered and for one who was right on the third attempt, and those two must not get the
+   same access. A nullable timestamp rather than a boolean because WP5 will want to know
+   *when*. This is the one shared change and the handoff explicitly permitted it.
+4. **`completedLocalDate` is a column but deliberately **not** in the shared type.** WP5
+   groups streaks and the cap by local day, so it is computed once at completion with
+   `localDateIn(user.timezone)` and stored as a `date`. It is not projected to clients —
+   shipping it would invite the mobile app to derive "today" from it and reintroduce exactly
+   the drift plan §3.5 warns about. The domain shape stays as small as the handoff wanted.
+5. **Idempotency lives in SQL, not in the service.** Completion is a single conditional
+   `UPDATE ... WHERE completed_at IS NULL AND correct_at IS NOT NULL RETURNING *`; a second
+   call matches nothing and returns null. A check-then-write in the service cannot close the
+   window — two requests interleave between the check and the write — and the integration
+   suite fires three completions concurrently to prove it. Attempts use one upsert for the
+   same reason, with `first_try_correct` only settable while `attempt_count` is still 0.
+6. **`correct_at` is `COALESCE`d and never cleared.** A reader who unlocks the payoff and
+   then goes back and taps a wrong option keeps it. Confiscating it would punish exploring,
+   and PRODUCT.md is explicit that the stakes are XP, not access.
+7. **An unrecognised option id is a 400, and records no attempt.** Option ids are globally
+   unique CMS row ids, so the realistic failure is a client sending a real id to the wrong
+   scenario. Grading that as "wrong" would spend a reader's first-try bonus on a mobile
+   navigation bug, and make the two indistinguishable afterwards.
+8. **Completing without a correct answer is a 409, not a 403.** The request is well-formed
+   and the reader is entitled to complete the Leaf — just not yet, and the blocking state is
+   one they can change. A 403 would read as an access problem no retry fixes.
+9. **The grading fetch reapplies the placeholder guard.** The handoff sanctions going around
+   `ContentService` via `ContentRepository.findLeaf` for the answer key; doing so also goes
+   around `isProductionPublishable`. Rather than duplicate the rule, I extracted it to
+   `contentVisibility.ts` and both callers use it. Without this, production would hide a
+   placeholder Leaf from Explore and still grade it and pay XP for it.
+10. **The answer body is `.strict()`.** A body carrying `isCorrect` alongside the option id
+    is a confused client or a probe; it is rejected rather than silently ignored, so the
+    misunderstanding surfaces now instead of in WP8.
+
+**Findings:**
+
+1. **`apps/backend/src/index.ts` contained two NUL bytes, from WP2, and git was treating the
+   file as binary.** They sat inside the unconfigured-provider fallbacks —
+   `?? '\0unconfigured'` — where a space was clearly intended. Functionally harmless (no
+   audience matches either string), but it made every diff of the composition root
+   unreviewable, including this package's. Replaced with spaces; intent and behaviour
+   unchanged. Worth knowing that it survived two code reviews because the file *renders*
+   normally — the byte only shows up in `git diff --stat` as `Bin`.
+2. **The pre-WP4 Leaf endpoint was serving payoff prose to anyone with a token.** Not a
+   regression — nothing had built the gate yet — but it means every WP3 demo of
+   `/content/leaves/:leafId` was showing content the product intends to withhold. Now
+   gated, and covered by a test that walks six endpoints looking for the prose.
+
+**Assumptions made:**
+
+- **XP defaults 80 + 20**, chosen so five first-try Leaves hit the 500 cap exactly and a
+  reader needing a second attempt each time takes six or seven. The handoff said "calibrate
+  so the cap lands near 5 Leaves" without fixing the split; a quarter of the base felt like
+  the largest bonus that does not make a wrong answer feel like a wasted session. Both are
+  environment variables, so this is a starting point rather than a ruling.
+- **Endpoint shapes** were not specified: `GET /progress/leaves/:leafId`,
+  `POST .../start`, `POST .../answer`, `POST .../complete`. Start returns 200 and is
+  idempotent; answer returns 200 for a wrong answer, because a wrong answer is the mechanic
+  working.
+- **`GET /progress/leaves/:leafId` returns a zero-valued progress for a Leaf never opened**,
+  rather than 404. A Leaf that does not exist still 404s, so this is not an id oracle.
+
+**Follow-ups / tech debt for Architect:**
+
+1. **Nothing computes a reader's total XP.** `leaf_progress.xp_awarded` sums to it, but no
+   endpoint exposes it and there is no `users.total_xp`. WP5 owns the gamification surface
+   and should decide whether the total is derived on read or maintained on write before WP7
+   needs it for a profile screen.
+2. **No rate limit on answer submission.** With three options and unlimited retries,
+   brute-forcing a single scenario is trivial *by design* — but it is also an unbounded write
+   path, and every attempt is a row update plus a cached CMS read. Worth a limit before
+   launch, on write-volume grounds rather than answer-secrecy grounds.
+3. **`user_tracks.status` is still always `active`.** WP3 flagged this as WP4/WP5's; WP4 did
+   not touch it, because "this Track is completed" needs a Leaf count to compare against and
+   that is a Track-level rollup nothing owns yet.
+4. **The answer response tells the reader which option was right, indirectly.** Three
+   options and unlimited retries means two wrong answers identify the third by elimination.
+   Inherent to the product rules as written, not a defect — recording it so nobody
+   rediscovers it in WP8 and treats it as a bug.
+
+**What WP5 inherits:**
+
+- `leaf_progress` exists with `completed_local_date` already populated in the reader's own
+  timezone, indexed on `(user_id, completed_local_date)`. Streaks and the daily cap can group
+  on it directly without reinterpreting a UTC instant.
+- `calculateLeafXp` returns the **earned** amount and knows nothing about the cap. Capping is
+  WP5's, and keeping the two separate is deliberate: a reader who hits the cap should be able
+  to be told what they earned *and* what was withheld.
+- `XP_LEAF_COMPLETION` and `XP_FIRST_TRY_BONUS` are validated config with a 0 floor.
+- `ProgressService.completeLeaf` is the single place a Leaf completion happens, which is the
+  natural hook for incrementing a `DailySession` and touching a `Streak`.
 
 ### Completed: WP3 — Content API: ContentRepository, Explore, Library, Leaf delivery — 2026-08-08
 

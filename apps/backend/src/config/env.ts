@@ -114,6 +114,32 @@ const environmentSchema = z.object({
    */
   CONTENT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(600).default(60),
 
+  /* ---------------------------------------------------------------------- */
+  /* Progress and XP (the learning loop)                                     */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * XP for completing a Leaf, and the bonus for having answered its scenario
+   * correctly on the first attempt.
+   *
+   * Configuration rather than literals because these are **placeholder economics**.
+   * The loop is not playable until WP6–WP8, and the founder has said the numbers get
+   * tuned once it is — so tuning must be an environment change and a restart, not a
+   * code change, a review and a deploy.
+   *
+   * Calibrated against WP5's 500 XP daily cap, which the plan wants to land near five
+   * Leaves: 80 + 20 means five first-try Leaves hit exactly 500, and a reader who
+   * needs a second attempt every time reaches it in six or seven. The bonus is a
+   * quarter of the base — enough that first-try correctness is visibly worth
+   * something, not so much that a wrong answer feels like a wasted session, which
+   * would push readers to guess-and-retry rather than think.
+   *
+   * The floor is 0 rather than 1: setting either to zero is a legitimate way to turn
+   * an award off while the numbers are still being argued about.
+   */
+  XP_LEAF_COMPLETION: z.coerce.number().int().min(0).default(80),
+  XP_FIRST_TRY_BONUS: z.coerce.number().int().min(0).default(20),
+
   /**
    * How often expired refresh tokens are swept.
    *

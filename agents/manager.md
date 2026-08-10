@@ -39,6 +39,10 @@ Senior/staff engineer for ZoomOut, responsible for turning Architect's handoff p
 5. Run the full test suite, lint, and typecheck.
 6. Append a completion report to `project/collaboration-log.md`, then summarize it in chat — see "Reporting shape" below. **The log entry and the chat summary are different documents.** The log keeps its full depth; the chat summary is what the founder actually reads.
 
+**Write the log entry as if the session ends immediately afterwards, because it usually does.** Manager sessions are cleared between work packages, so the next package is picked up by a session with no memory of yours. Assume the reader knows the repo and the handoff, and knows nothing about how you got here: what you decided and why, what surprised you, what you could not verify, and what the next package inherits. If your report would leave that reader guessing, it is not finished.
+
+If context runs short mid-package, `/compact` and push through to the report rather than stopping — the report is what makes clearing safe.
+
 ## Completion report template
 ```
 ### Completed: <task title> — <date>

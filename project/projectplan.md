@@ -3,41 +3,39 @@
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
 ## Feature
-**WP3 — Content API: ContentRepository, Explore, Library, Leaf delivery**
+**WP4 — Learning loop API: answer, unlock, complete, award XP**
 
-Fifth package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
+Sixth package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
 
-Previous: WP0 ✅ (10/10) · WP1 ✅ (14/14) · WP2 ✅ (11/11) · **schema-freeze gate ✅** · WP2.1 ✅ (12/12).
+Previous: WP0 ✅ · WP1 ✅ · WP2 ✅ · schema-freeze gate ✅ · WP2.1 ✅ · WP3 ✅ (11/11, signed off 2026-08-08).
 
 ## Status
-**`Released`** (2026-08-08) — handoff live in `collaboration-log.md` with four amendments from WP2.1.
+**`Handed off`** (2026-08-08)
 
 ## Problem
-WP1 put content in Payload and WP2 put readers behind auth, but nothing connects them — the mobile app has no way to see a Track or a Leaf. WP3 is that bridge, and it is where two guarantees stop being intentions and start being enforced: the answer key never reaching a client, and placeholder content never reaching production.
+Everything built so far is scaffolding around one mechanic: a reader answers a scenario, and the payoff unlocks only when they get it right. That mechanic does not exist yet. WP4 is where the product's thesis — active recall beats passive summary — becomes something the server actually enforces.
 
 ## Proposed approach
-`ContentRepository` calls Payload's REST API over HTTP — never its Postgres tables. Payload's read access already returns published-only to anonymous callers, so the backend receives published content by construction. Mapped documents are validated against `leafSchema` / `trackSchema` before being served, which is the second gate finally doing work at runtime.
+Grading is server-side. The client submits a scenario option id and is told the result; it never receives or submits the answer key. Grading needs `isCorrect`, so it fetches the full `Leaf` through `ContentRepository.findLeaf` — the single deliberate exception to routing content reads through `ContentService`, commented as such at the call site.
 
-`isProductionPublishable` gets wired to the read path, and `toPublicLeaf` becomes the only route by which a Leaf reaches a client.
+`LeafProgress` per (reader, Leaf) tracks attempts, first-try correctness, completion and XP. Wrong answers retry without limit; the payoff stays locked until correct. Completion is idempotent, because replaying it is the obvious way to farm XP.
 
-## Prerequisite — founder, ~2 minutes
-**The Track and Leaf authored at the gate no longer satisfy the frozen schema.** They are still published and serving, because the new CMS rules are publish-gated — but the Track has `publisher: null` and `coverUrl: null`, and the Leaf's source reference has no locator. `trackSchema` and `leafSourceReferenceSchema` both reject them, so WP3's mapper hits this on its first real document.
-
-Fix in the admin UI: add a publisher and cover URL to the Track, add a chapter/page/quote to the Leaf's source reference, and re-save both. Re-saving also clears the trailing whitespace still sitting on `"concept 1 "`. No migration — it is placeholder content and there is one of each.
+## Alternatives considered
+Grading on the client with server verification afterwards — lower latency and simpler offline story, but it means shipping the answer key, which makes the unlock gate decorative and the product thesis with it. Never seriously on the table; recorded because it is the obvious shortcut someone will suggest later.
 
 ## Architectural impact
-Establishes the CMS boundary and the caching/takedown-latency relationship. Adds the library table. Every content-reading feature after this — WP4, WP7, WP8 — consumes these endpoints.
+Adds the progress domain and the first table whose rows represent user achievement rather than user identity. Establishes how XP is calculated and awarded, which WP5's session cap and streaks then constrain.
 
 ## Risks
-- **Mapper drift** — Payload marks nearly every field optional and nullable, so the domain model is strictly stronger. The mapper is the only place a published document is proven to satisfy it; a weak mapper silently moves that guarantee nowhere.
-- **Cache TTL is takedown latency.** Bounded, config-driven, documented at the call site.
-- **Testcontainers flakiness** (WP2.1 finding) may produce a red CI run that is green on re-run.
+- **XP double-award on replay** — the exploit a client triggers by retrying a failed request. Covered by an explicit acceptance criterion.
+- **Payoff leaking before a correct answer**, via some route other than the obvious one. Tested rather than assumed.
+- **Local-date drift** — WP4 does not build `DailySession` or `Streak`, but any date it persists that WP5 will group by day must use `localDateIn()` rather than leaving WP5 a UTC timestamp to reinterpret.
 
 ## Open questions
 None.
 
 ## Next after this
-**WP4 — learning loop API.** Then WP6 (mobile shell), now unblocked: design direction approved 2026-08-08, Xcode installed.
+**WP6 — mobile shell.** Unblocked: design direction approved 2026-08-08, Xcode installed, simulator check closed in WP2.1. WP5 needs the achievement list first, which is still outstanding from the founder.
 
 ## Handoff prompt
-See `project/collaboration-log.md` — Handoffs, 2026-08-07 (WP3), released 2026-08-08 with amendments.
+See `project/collaboration-log.md` — Handoffs, 2026-08-08 (WP4).

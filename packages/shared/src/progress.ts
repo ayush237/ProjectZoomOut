@@ -13,6 +13,17 @@ export const leafProgressSchema = z.object({
   leafId: cmsIdSchema,
   attemptCount: z.number().int().nonnegative(),
   firstTryCorrect: z.boolean(),
+  /**
+   * When the reader first answered the scenario correctly. **Null means the payoff is
+   * locked**, and that is the whole unlock gate: the server consults this before it
+   * will put payoff prose in any response.
+   *
+   * Added in WP4. `firstTryCorrect` cannot stand in for it — it is false both for a
+   * reader who has never answered and for one who got it right on the third attempt,
+   * and those two must not be given the same access. A timestamp rather than a boolean
+   * because WP5 groups activity by day and will want to know *when*, not just whether.
+   */
+  correctAt: isoTimestampSchema.nullable(),
   /** Null until the Leaf is finished; a started-but-unfinished Leaf still has a row. */
   completedAt: isoTimestampSchema.nullable(),
   xpAwarded: z.number().int().nonnegative(),

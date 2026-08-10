@@ -1,0 +1,181 @@
+import { and, eq, isNull, sql } from 'drizzle-orm';
+
+import type { DatabaseClient } from '../db/client.js';
+import { leafProgress, users, type LeafProgressRow } from '../db/schema.js';
+
+/**
+ * Persistence for the learning loop.
+ *
+ * Two rules shape every method here.
+ *
+ * **Scoped by `userId` in the query itself**, never filtered afterwards — the same rule
+ * the library repository follows, and for the same reason: a repository that *can*
+ * return another reader's row is one forgotten `where` clause from leaking it.
+ *
+ * **State transitions are single statements, not read-then-write.** Incrementing an
+ * attempt and awarding XP are both things a client can fire twice by retrying a request
+ * that already succeeded, and a check in the service cannot close that window — the two
+ * requests interleave between the check and the write. Expressed as one conditional
+ * statement, Postgres's row lock does the work and the race stops existing.
+ */
+
+export interface RecordAttemptInput {
+  readonly userId: string;
+  readonly leafId: string;
+  readonly correct: boolean;
+  readonly at: Date;
+}
+
+export interface CompleteLeafInput {
+  readonly userId: string;
+  readonly leafId: string;
+  readonly xpAwarded: number;
+  readonly at: Date;
+  /** The reader's local calendar date, `YYYY-MM-DD`. Never derived from `at`. */
+  readonly localDate: string;
+}
+
+export interface ProgressRepository {
+  find(userId: string, leafId: string): Promise<LeafProgressRow | null>;
+  start(userId: string, leafId: string): Promise<LeafProgressRow>;
+  recordAttempt(input: RecordAttemptInput): Promise<LeafProgressRow>;
+  /** @returns the completed row, or null if it was already complete. */
+  completeIfUnfinished(input: CompleteLeafInput): Promise<LeafProgressRow | null>;
+  /** The reader's IANA timezone, for the local completion date. Null if no such user. */
+  findReaderTimezone(userId: string): Promise<string | null>;
+}
+
+export class PostgresProgressRepository implements ProgressRepository {
+  constructor(private readonly client: DatabaseClient) {}
+
+  public async find(userId: string, leafId: string): Promise<LeafProgressRow | null> {
+    const [row] = await this.client.db
+      .select()
+      .from(leafProgress)
+      .where(and(eq(leafProgress.userId, userId), eq(leafProgress.leafId, leafId)))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * Opens a Leaf, or returns the existing progress untouched.
+   *
+   * Idempotent and non-destructive: this is what makes progress resumable. A reader
+   * coming back to a Leaf they half-finished must get their attempts and their unlock
+   * back, and "start" is exactly the call a client makes on re-entry — so if it reset
+   * anything, returning to a Leaf would silently cost the reader their progress.
+   */
+  public async start(userId: string, leafId: string): Promise<LeafProgressRow> {
+    const [inserted] = await this.client.db
+      .insert(leafProgress)
+      .values({ userId, leafId })
+      .onConflictDoNothing({ target: [leafProgress.userId, leafProgress.leafId] })
+      .returning();
+
+    if (inserted !== undefined) {
+      return inserted;
+    }
+
+    const existing = await this.find(userId, leafId);
+
+    if (existing === null) {
+      throw new Error('Progress row vanished between insert and read-back');
+    }
+
+    return existing;
+  }
+
+  /**
+   * Records one graded attempt.
+   *
+   * A single upsert, so a reader's very first answer does not need a separate insert
+   * that a concurrent request could duplicate. Three things are decided in SQL rather
+   * than in JavaScript, all for the same reason — they depend on the row's *current*
+   * value, which is only trustworthy under the row lock:
+   *
+   *  - `attempt_count` increments from whatever is stored, so two answers submitted at
+   *    once count as two.
+   *  - `first_try_correct` can only be set while `attempt_count` is still 0. Once a
+   *    reader has answered, no later correct answer can upgrade it and claim the bonus.
+   *  - `correct_at` is `COALESCE`d, so it keeps its original value. The unlock is
+   *    permanent: a reader who answers correctly and then goes back and taps a wrong
+   *    option does not lose the payoff they already earned.
+   */
+  public async recordAttempt(input: RecordAttemptInput): Promise<LeafProgressRow> {
+    const correctAt = input.correct ? input.at : null;
+
+    const [row] = await this.client.db
+      .insert(leafProgress)
+      .values({
+        userId: input.userId,
+        leafId: input.leafId,
+        attemptCount: 1,
+        firstTryCorrect: input.correct,
+        correctAt,
+        startedAt: input.at,
+        updatedAt: input.at,
+      })
+      .onConflictDoUpdate({
+        target: [leafProgress.userId, leafProgress.leafId],
+        set: {
+          attemptCount: sql`${leafProgress.attemptCount} + 1`,
+          firstTryCorrect: sql`case when ${leafProgress.attemptCount} = 0 and ${input.correct} then true else ${leafProgress.firstTryCorrect} end`,
+          correctAt: sql`coalesce(${leafProgress.correctAt}, ${correctAt})`,
+          updatedAt: input.at,
+        },
+      })
+      .returning();
+
+    if (row === undefined) {
+      throw new Error('Attempt upsert returned no row');
+    }
+
+    return row;
+  }
+
+  /**
+   * Awards completion exactly once.
+   *
+   * `completed_at is null` in the `where` is the whole idempotency guarantee, and it is
+   * here rather than in the service on purpose: replaying a completion is the obvious
+   * way to farm XP, and a client can trigger it by accident just by retrying a request
+   * whose response it never saw. A second call matches no rows and returns null, so the
+   * XP is awarded by whichever call won and by nothing else.
+   *
+   * `correct_at is not null` is defence in depth. The service refuses an unearned
+   * completion with a clear error before it gets here; this makes XP-without-a-correct-
+   * answer unrepresentable in storage even if some future caller forgets to ask.
+   */
+  public async completeIfUnfinished(input: CompleteLeafInput): Promise<LeafProgressRow | null> {
+    const [row] = await this.client.db
+      .update(leafProgress)
+      .set({
+        completedAt: input.at,
+        completedLocalDate: input.localDate,
+        xpAwarded: input.xpAwarded,
+        updatedAt: input.at,
+      })
+      .where(
+        and(
+          eq(leafProgress.userId, input.userId),
+          eq(leafProgress.leafId, input.leafId),
+          isNull(leafProgress.completedAt),
+          sql`${leafProgress.correctAt} is not null`,
+        ),
+      )
+      .returning();
+
+    return row ?? null;
+  }
+
+  public async findReaderTimezone(userId: string): Promise<string | null> {
+    const [row] = await this.client.db
+      .select({ timezone: users.timezone })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    return row?.timezone ?? null;
+  }
+}

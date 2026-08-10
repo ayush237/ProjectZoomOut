@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ZoomOutApp } from '../app.js';
-import type { Authenticator } from '../auth/authenticate.js';
+import { requireUserId, type Authenticator } from '../auth/authenticate.js';
 import type { ContentService } from './content.service.js';
 
 /**
@@ -57,6 +57,10 @@ export function registerContentRoutes(
   app.get('/content/leaves/:leafId', { preHandler: authenticate }, async (request, reply) => {
     const { leafId } = leafIdParams.parse(request.params);
 
-    return reply.send(await service.getLeaf(leafId));
+    // The reader id is what makes the payoff gate work: this endpoint returns the
+    // payoff to someone who has answered correctly and null to everyone else. Handing
+    // the id straight from `requireUserId` — never from a parameter — is what keeps
+    // "unlock somebody else's payoff" unexpressible rather than merely unchecked.
+    return reply.send(await service.getLeaf(leafId, requireUserId(request)));
   });
 }

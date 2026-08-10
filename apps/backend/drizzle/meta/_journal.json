@@ -22,6 +22,13 @@
       "when": 1786169731118,
       "tag": "0002_add_user_tracks_library",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786254474243,
+      "tag": "0003_add_leaf_progress",
+      "breakpoints": true
     }
   ]
 }
