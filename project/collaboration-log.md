@@ -9,6 +9,76 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-11 — WP7: Mobile surfaces — Explore, Library, Journey
+
+### Task: WP7 — Mobile surfaces: Explore, Library, Journey
+
+**Context:** WP6 shipped the shell with three empty tabs. This fills them. After WP7 the app is navigable and real — the only thing missing before the founder can judge the product is the Leaf player (WP8).
+
+WP3's content and library endpoints and WP4's progress endpoints are live and merged. WP6's design system, API client and `AuthContext` (including `refreshProfile()`) are the foundation — read `project/proposals/design-direction.md` before styling anything.
+
+**Objective:** Explore lists published Tracks and adds them to a Library; Library shows added books with per-book progress; Journey shows active Tracks with a resume affordance. All three work in both themes, at extra-large text, and degrade gracefully when the CMS is unreachable.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/mobile/src/screens/` — Explore, Library, Journey, and their components
+- `apps/mobile/src/api/` — content and progress client methods
+- `apps/backend/src/` — **a per-Track progress rollup; see below. This backend work is in scope.**
+- `apps/mobile/src/components/` — icon set, cards, loading and error states
+
+**Requirements:**
+
+*Backend — the gap this package must close*
+- **No endpoint returns per-Track progress.** `GET /library` returns membership only ("progress fields are WP4's"), and WP4 exposes progress per *Leaf*. Library and Journey both need "7 of 20 Leaves complete", and computing it client-side means fetching every Leaf and every progress row per Track.
+- Add a **per-Track progress summary** to the library response or a dedicated endpoint: completed Leaf count, total Leaf count, and the next incomplete Leaf's id for the resume affordance.
+- **This also closes `user_tracks.status`**, which has been `active` since WP3 because nothing owned the Leaf-count rollup needed to mark a Track complete. It does now.
+- Apply the ruled fix for `listTracks` totals: **filter placeholder content in the Payload query with a `where` clause in production**, so pagination totals are accurate at source. **Keep `ContentService`'s `isProductionPublishable` guard as the authoritative control** — the query filter is an optimisation, never the control.
+
+*Explore*
+- List published Tracks with cover, title, author. Paginated.
+- Add and remove from Library. Adding is idempotent — adding twice is not an error.
+- Placeholder content is visible in development and invisible in production; that is `ContentService`'s existing behaviour and must not be re-implemented client-side.
+
+*Library and Journey*
+- Library: added books with per-book progress from the new rollup.
+- Journey: active Tracks with resume — deep-link to the next incomplete Leaf. **The Leaf player does not exist until WP8**, so resume navigates to a placeholder destination; wire the route and the target Leaf id, not the screen.
+- Empty states for both, composed around the reserved mascot slot (`design-direction.md` §9).
+
+*Cross-cutting*
+- **Pick an icon set** and replace WP6's text glyphs. WP6 used `↗` and `☺` with a U+FE0E variation selector because two glyphs took emoji presentation and ignored the tint colour — that fix is a workaround, not an icon strategy.
+- Loading and error states on every screen. **A CMS-unreachable 503 must render as a readable message with a retry, never a blank screen or a raw error.**
+- Pull-to-refresh where a list can go stale.
+
+**Out of scope:**
+- The Leaf player — WP8
+- Streaks, XP display, session cap, achievements UI — WP5 owns the server side
+- Share and achievement screens — WP9
+- Report-an-error — WP10
+- Social sign-in — deferred post-Phase-1
+
+**Constraints:**
+- `packages/shared/src/content.ts` is frozen. `progress.ts` may change only with a stated reason.
+- **Never read Payload's Postgres tables**; `PayloadClient` is the only door.
+- **Never parse untrusted input with `publicLeafSchema`** — it predates the Dinner Table Knowledge refinement.
+- **React Native Testing Library v14 made `render`, `renderHook`, `fireEvent` and `unmount` async.** Un-awaited they fail as `undefined.current`, pointing nowhere near the cause. WP6 lost cycles to this.
+- Follow `CLAUDE.md` in full. **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `npm install`, `lint`, `typecheck`, `test`, `build` all pass
+- [ ] Explore lists Tracks from the real backend; adding to Library persists and is idempotent
+- [ ] Library shows per-Track progress from the **new backend rollup**, not client-side aggregation over per-Leaf calls
+- [ ] Journey's resume affordance targets the correct next incomplete Leaf id — asserted on the id, not on navigation succeeding
+- [ ] `user_tracks.status` transitions to complete when every Leaf in a Track is complete
+- [ ] `listTracks` totals match the number of rows actually returned in production mode, **and** `ContentService`'s guard still independently blocks placeholder content — test both, since the query filter must not become the only control
+- [ ] **Every new screen verified at `accessibilityExtraExtraExtraLarge` on a device, in both themes** — by switching the setting and looking, not by reading a stylesheet. This falsified a WP6 criterion; do not generalise from one screen to the others
+- [ ] A CMS-unreachable 503 renders a readable message with a retry on every screen that fetches
+- [ ] Empty states render for an empty Library and an empty Journey
+- [ ] Icon set replaces every text glyph, and active-tab tint applies to all of them
+- [ ] CI green; `.env.example` current
+
+**Testing expectations:** Unit tests for the progress-rollup calculation, including a Track with zero, partial and complete progress, and the next-incomplete-Leaf selection when Leaves are out of order. Backend integration tests for the rollup and the `status` transition against real Postgres. Component tests for each screen in both themes covering loading, empty, error and populated states — WP6 left `ProfileScreen`, `TabShell`, `RootNavigator` and the three shells with no render test, so add those while you are here.
+
+**Any test written to close a review finding must be mutation-checked**: break the behaviour and confirm that test — and only that test — goes red. WP6's first pass shipped a failed-refresh test that passed with the handler deleted entirely.
+
 ### Handoff: 2026-08-09 — WP6: Mobile shell, auth screens, design system
 
 ### Task: WP6 — Mobile shell: design system, navigation, auth, age gate
@@ -565,6 +635,137 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
+
+### Completed: WP7 — Mobile surfaces: Explore, Library, Journey — 2026-08-11
+
+**Status:** All 11 acceptance criteria verified by execution. Cold gate green with
+`packages/shared/dist`, `apps/*/dist` and `apps/admin/.next` deleted first: install, lint,
+typecheck, test, build. **714 tests** (346 backend, 196 mobile, 108 admin, 64 shared), of
+which **63 are new** — 50 mobile, 13 backend. CI runs on the branch.
+
+Verified against the **real backend and the real CMS**, not only fixtures: Explore lists
+"The mountain is you" from Payload, adding persists, and Library reads back
+`0 of 1 complete` from the new rollup.
+
+**What changed:**
+
+- **`apps/backend/src/progress/trackProgress.ts`** — the rollup, as a pure function.
+  Plus `listCompletedLeafIds` on the repository and `summariseTrack` on the service.
+- **`apps/backend/src/library/`** — `LibraryService` now composes content and progress, so
+  every library entry carries its own `TrackProgressSummary`. `setStatus` added to the
+  repository.
+- **`apps/backend/src/content/content.repository.ts`** — the placeholder filter pushed into
+  the Payload query in production, for accurate pagination totals.
+- **`packages/shared/src/progress.ts`** — `trackProgressSummarySchema`. Reason stated
+  below; `content.ts` untouched.
+- **`apps/mobile/src/screens/`** — Explore, Library, Journey, `useAsyncResource`,
+  `useRefreshOnFocus`. The three WP6 shells are gone.
+- **`apps/mobile/src/components/`** — `Icon` (the icon set), `TrackCard`, `ProgressBar`,
+  `ErrorState`.
+- **`apps/mobile/src/api/client.ts`** — content and library methods on the existing client.
+
+**Files touched:** 31. 14 new, the rest edits.
+
+**Tests added:** 63.
+- **Rollup (12)** — zero, partial and complete; the resume target skipping to the
+  *earliest* gap rather than the furthest reached; out-of-order and non-contiguous
+  `orderIndex`; and an empty Track, where `completed === total` is true at 0 and must not
+  read as finished.
+- **Backend integration (13)** — the rollup through `GET /library`, per reader; the
+  denominator following a takedown; `user_tracks.status` reaching `completed` and being
+  written to the database; a Track finished by a reader who never added it; and the two
+  pagination tests below.
+- **Mobile (38)** — each surface in both themes across loading, empty, error and
+  populated; the 503 path on all three with a retry that actually re-requests; Explore's
+  add and its failure; Journey's resume target; and the render tests WP6 skipped for
+  `ProfileScreen`, `RootNavigator` and `TabShell`.
+
+**Decisions taken, with reasoning:**
+
+1. **The rollup is derived per request, never stored.** A counter on `user_tracks` would
+   be a second source of truth, and it would drift the first moment a Leaf is added to a
+   Track or taken down. The cost is one extra query per library entry; the alternative is
+   a number that is wrong and looks authoritative.
+2. **`LibraryService` composes it, not `ProgressService`.** Progress knows what a reader
+   finished; content knows which Leaves they may see. Library sits above both. Putting the
+   rollup in progress would have meant it fetching content — and doing that through
+   `ContentRepository` would have skipped the placeholder guard, so a production reader
+   would see "3 of 20" for a book currently offering three.
+3. **`user_tracks.status` flips at completion time, not on read.** Deciding it while
+   rendering the library is a write on a read path, and it would leave the status wrong
+   for any reader who never opens their Library. Failures are logged and swallowed: the
+   reader has finished the Leaf and been paid, and a bookkeeping problem must not undo
+   that. The next completion re-evaluates it.
+4. **The Payload query filter is an optimisation; the service guard is the control.**
+   Both are tested, and the second test is the important one — it makes the CMS ignore the
+   filter entirely and asserts no placeholder reaches the reader. **Mutation-checked:**
+   removing the query filter fails the totals test and leaves the guard test green.
+5. **Ionicons, via `@expo/vector-icons`.** A font, so `color` and `size` behave like text
+   properties and every icon takes the tint — which is exactly what WP6's text glyphs
+   failed at. Maintained against the SDK, so no `react-native-svg` peer to break on
+   upgrade. Names go through a closed map in `Icon.tsx`, so swapping sets is one file.
+6. **Journey filters on `nextLeafId !== null`, not `!isComplete`.** They differ for a Track
+   with no visible Leaves — not complete, but nothing to resume either — and filtering on
+   the resume target means the list can never show a card whose button has nowhere to go.
+7. **`resumeAt(leafId)` is a named function, not an inline no-op.** The Leaf id is the part
+   with an acceptance criterion on it. WP8 replaces the body rather than hunting through
+   JSX. **Mutation-checked:** pointing resume at the Track id instead fails that test and
+   only that test.
+
+**Findings — three defects the tests could not have caught, all found in the simulator:**
+
+1. **Switching tabs never refetched.** React Navigation keeps tab screens mounted, so each
+   screen fetched once and then never again: add a book in Explore, open Library, and the
+   shelf still shows what it read before the book existed. Every component test mounts one
+   screen in isolation, where this cannot happen. Fixed with `useRefreshOnFocus`.
+2. **My own icon sizing shrank icons as text grew.** I divided `size` by the OS font scale
+   to cancel a multiplication that `@expo/vector-icons` never applies — icons rendered at
+   about 9pt at `accessibilityExtraExtraExtraLarge`. Nothing asserts on rendered point
+   size, so only looking at it caught this.
+3. **A `display` heading pinned above the list ate half the viewport at XXXL.** The titles
+   now scroll with their lists.
+
+**Environment caveat worth recording:** changing the OS text size while the app is running
+leaves Expo Go rendering text with the *old* line height — glyphs clip to thin slices and
+it looks like a serious layout bug. It is not: a cold restart with the size already set
+renders correctly. I lost time treating it as real, and re-verified everything after a
+restart. **Verify accessibility sizes from a cold start, not by toggling live.**
+
+**Assumptions made:**
+
+- **The rollup rides on `GET /library` rather than a dedicated endpoint.** The handoff
+  allowed either. Library and Journey both need Track *and* progress together, and a
+  separate endpoint would mean two requests to render one list.
+- **Journey shows unfinished Tracks only.** A finished book belongs on the shelf; leaving
+  it in Journey makes a second Library that only grows.
+- **Explore paginates but the UI does not page yet.** `listTracks(page, perPage)` takes
+  both and the response carries `totalPages`; with one Track in the CMS there is nothing to
+  page through, and infinite scroll against a one-item list would be untested code.
+
+**Follow-ups / tech debt for Architect:**
+
+1. **The rollup is N+1 against the CMS.** Each library entry costs a Track fetch and a Leaf
+   list. Cached and concurrent, and fine for a shelf of a few books — but a reader with
+   thirty is thirty Leaf-list requests per open. Worth a batch read or a longer cache
+   before real content lands.
+2. **No pagination UI in Explore.** See the assumption above.
+3. **Cover images are unvalidated URLs.** The seeded Track's `coverUrl` points at an Amazon
+   *page*, not an image, so every card shows the fallback. `trackSchema` requires a URL,
+   not an image — worth a CMS-side rule before WP11 seeds real content.
+4. **`GET /library` is unbounded.** No page parameter; a large library returns in one
+   response.
+5. **Still no reader total XP** — carried from WP4, and WP5 now owns it.
+
+**What WP8 inherits:**
+
+- `progress.nextLeafId` is the resume target, already correct and asserted on the id.
+  `resumeAt()` in `JourneyScreen.tsx` is the single call site to replace with navigation.
+- `useAsyncResource` gives any new screen loading, error-with-retry and pull-to-refresh in
+  four lines, with reader-safe error text already separated from internal messages.
+- `Icon` is the only place icons come from; add a name to its map rather than importing
+  Ionicons.
+- `TrackCard` takes an `action` and `children`, so the Leaf player's entry point is a prop
+  rather than a fourth variant of the card.
 
 ### Completed: WP6 — Mobile shell: design system, navigation, auth, age gate — 2026-08-11
 

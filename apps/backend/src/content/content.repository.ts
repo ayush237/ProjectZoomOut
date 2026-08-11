@@ -36,19 +36,42 @@ export class PayloadContentRepository implements ContentRepository {
   constructor(
     private readonly client: PayloadClient,
     private readonly logger: AppLogger,
-    config: AppConfig,
+    private readonly config: AppConfig,
   ) {
     this.cache = new TtlCache(config.CONTENT_CACHE_TTL_SECONDS * 1000);
   }
 
+  /**
+   * A page of Tracks.
+   *
+   * **In production the placeholder filter is pushed into the Payload query** (ruled
+   * 2026-08-11). WP3 filtered after fetching, which left `totalTracks` counting rows
+   * the reader never saw — a page of placeholders returned zero Tracks and claimed
+   * there were twenty, and paging through them showed empty pages.
+   *
+   * This is an **optimisation, not the control.** `ContentService` still applies
+   * `isProductionPublishable` to everything this returns, and must keep doing so: a
+   * query filter is one typo in a parameter name away from silently matching nothing,
+   * and the failure mode of *that* is placeholder content reaching production readers.
+   * `content.service.test.ts` asserts the guard independently for exactly this reason.
+   */
   public async listTracks(page: number, perPage: number): Promise<TrackPage> {
-    const response = await this.cached(`tracks:${String(page)}:${String(perPage)}`, () =>
-      this.client.get<PayloadListResponse<CmsTrack>>('/tracks', {
-        page,
-        limit: perPage,
-        depth: CONTENT_QUERY_DEPTH,
-        sort: 'bookTitle',
-      }),
+    const hidePlaceholders = this.config.NODE_ENV === 'production';
+
+    const query: Record<string, string | number> = {
+      page,
+      limit: perPage,
+      depth: CONTENT_QUERY_DEPTH,
+      sort: 'bookTitle',
+      ...(hidePlaceholders ? { 'where[isPlaceholder][not_equals]': 'true' } : {}),
+    };
+
+    const response = await this.cached(
+      // The environment is part of the key. Without it a cache warmed in one mode would
+      // serve the other's results — invisible in a single-process deployment and
+      // extremely confusing the first time it is not.
+      `tracks:${String(page)}:${String(perPage)}:${hidePlaceholders ? 'published' : 'all'}`,
+      () => this.client.get<PayloadListResponse<CmsTrack>>('/tracks', query),
     );
 
     return {

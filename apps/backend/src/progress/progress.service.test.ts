@@ -57,11 +57,17 @@ interface Harness {
   readonly repository: {
     [K in keyof ProgressRepository]: ReturnType<typeof vi.fn>;
   };
-  readonly content: { findLeaf: ReturnType<typeof vi.fn> };
+  readonly content: { findLeaf: ReturnType<typeof vi.fn>; listLeavesForTrack: ReturnType<typeof vi.fn> };
+  readonly trackStatus: { setStatus: ReturnType<typeof vi.fn> };
 }
 
 function harness(
-  options: { row?: LeafProgressRow | null; leaf?: ReturnType<typeof buildLeaf>; nodeEnv?: string } = {},
+  options: {
+    row?: LeafProgressRow | null;
+    leaf?: ReturnType<typeof buildLeaf>;
+    nodeEnv?: string;
+    trackLeaves?: readonly ReturnType<typeof buildLeaf>[];
+  } = {},
 ): Harness {
   const row = options.row ?? null;
 
@@ -71,23 +77,30 @@ function harness(
     recordAttempt: vi.fn().mockResolvedValue(row ?? rowOf({ attemptCount: 1 })),
     completeIfUnfinished: vi.fn().mockResolvedValue(rowOf({ completedAt: new Date() })),
     findReaderTimezone: vi.fn().mockResolvedValue('Europe/London'),
+    listCompletedLeafIds: vi.fn().mockResolvedValue([]),
   };
 
   const content = {
     findLeaf: vi.fn().mockResolvedValue(options.leaf ?? buildLeaf()),
+    // Read when a completion asks whether the Track is now finished.
+    listLeavesForTrack: vi.fn().mockResolvedValue(options.trackLeaves ?? [options.leaf ?? buildLeaf()]),
   };
+
+  const trackStatus = { setStatus: vi.fn().mockResolvedValue(true) };
 
   return {
     service: new ProgressService(
       repository,
-      // Only `findLeaf` is reachable from the service, so the double implements only
-      // that. The cast is the price of not stubbing three methods nothing calls.
+      // Only `findLeaf` and `listLeavesForTrack` are reachable from the service, so the
+      // double implements those two. The cast is the price of not stubbing the rest.
       content as unknown as ContentRepository,
       configFor(options.nodeEnv),
       stubLogger(),
+      trackStatus,
     ),
     repository,
     content,
+    trackStatus,
   };
 }
 

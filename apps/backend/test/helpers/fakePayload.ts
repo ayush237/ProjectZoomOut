@@ -29,6 +29,15 @@ export class FakePayload {
   /** When true, every request fails — used for the unreachable-CMS path. */
   public failing = false;
 
+  /**
+   * When true, `where` filters are ignored and every published document is returned.
+   *
+   * Models a query filter that has quietly stopped working. WP7 pushed the placeholder
+   * filter into the Payload query for accurate pagination totals; this is how a test
+   * proves that filter is an optimisation and not the control.
+   */
+  public ignoreWhereFilters = false;
+
   private constructor() {
     this.server = createServer((request, response) => {
       this.handle(request.url ?? '', response);
@@ -93,10 +102,24 @@ export class FakePayload {
     const idFilter = url.searchParams.get('where[id][equals]');
     const trackFilter = url.searchParams.get('where[trackId][equals]');
 
+    /**
+     * The placeholder filter WP7 pushed into the query, honoured unless a test asks it
+     * not to be. `ignoreWhereFilters` simulates the filter silently failing — a typo in
+     * a parameter name, or a Payload version that stops recognising it — which is the
+     * scenario that proves `ContentService`'s guard is still the real control.
+     */
+    const placeholderFilter = this.ignoreWhereFilters
+      ? null
+      : url.searchParams.get('where[isPlaceholder][not_equals]');
+
     const docs: readonly (CmsTrack | CmsLeaf)[] = url.pathname.endsWith('/tracks')
       ? this.tracks
           .filter((track) => this.published.has(`track:${String(track.id)}`))
           .filter((track) => idFilter === null || String(track.id) === idFilter)
+          .filter(
+            (track) =>
+              placeholderFilter !== 'true' || (track.isPlaceholder ?? true) === false,
+          )
       : this.leaves
           .filter((leaf) => this.published.has(`leaf:${String(leaf.id)}`))
           .filter((leaf) => idFilter === null || String(leaf.id) === idFilter)

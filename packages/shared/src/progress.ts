@@ -58,6 +58,43 @@ export const streakSchema = z.object({
   lastActiveLocalDate: localDateSchema.nullable(),
 });
 
+/**
+ * A reader's progress through one Track, rolled up.
+ *
+ * Added in WP7, and the reason is worth recording: `GET /library` returned membership
+ * only, and progress existed only per Leaf. Library and Journey both need "7 of 20
+ * complete" and a resume target, and computing that on the client means fetching every
+ * Leaf and every progress row for every Track in the library — a list of twenty books
+ * becomes hundreds of requests. This is the shape that makes it one.
+ *
+ * Deliberately **derived, never stored**. Nothing persists these counts: they are
+ * computed from the Track's visible Leaves and the reader's completions on each read.
+ * A stored counter would be a second source of truth that drifts the first time a Leaf
+ * is added to a Track or taken down.
+ */
+export const trackProgressSummarySchema = z.object({
+  trackId: cmsIdSchema,
+  /** Visible Leaves only — a draft or a production-hidden placeholder is not countable. */
+  totalLeaves: z.number().int().nonnegative(),
+  completedLeaves: z.number().int().nonnegative(),
+  /**
+   * Where "resume" goes: the first incomplete Leaf in `orderIndex` order.
+   *
+   * Null when the Track is finished, and also when it has no visible Leaves at all —
+   * both mean "there is nothing to resume", and the client renders the same thing.
+   */
+  nextLeafId: cmsIdSchema.nullable(),
+  /**
+   * True only when there is at least one Leaf and all of them are complete.
+   *
+   * An empty Track is **not** complete. Treating it as complete would mark a reader
+   * finished with a book that has not been written yet, which is the wrong answer to
+   * every question this flag is asked.
+   */
+  isComplete: z.boolean(),
+});
+
 export type LeafProgress = z.infer<typeof leafProgressSchema>;
 export type DailySession = z.infer<typeof dailySessionSchema>;
 export type Streak = z.infer<typeof streakSchema>;
+export type TrackProgressSummary = z.infer<typeof trackProgressSummarySchema>;

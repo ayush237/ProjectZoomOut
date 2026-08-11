@@ -500,3 +500,108 @@ describe('library', () => {
     expect(bodyOf<{ entries: unknown[] }>(alicesLibrary).entries).toHaveLength(1);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Pagination totals in production                                             */
+/* -------------------------------------------------------------------------- */
+
+describe('listing Tracks in production', () => {
+  /** A production app against the same fake CMS. */
+  async function productionApp(): Promise<TestApp> {
+    return buildTestApp({
+      databaseUrl: container.getConnectionUri(),
+      env: {
+        NODE_ENV: 'production',
+        CONTENT_API_URL: payload.apiUrl,
+        CONTENT_CACHE_TTL_SECONDS: '0',
+        AUTH_RATE_LIMIT_MAX: '1000',
+      },
+    });
+  }
+
+  async function tokenFor(instance: TestApp): Promise<string> {
+    const signup = await instance.app.inject({
+      method: 'POST',
+      url: '/auth/signup',
+      payload: {
+        email: `prod-${String(Math.random()).slice(2)}@example.test`,
+        password: 'a-sufficiently-long-password',
+        displayName: 'Prod Reader',
+        dateOfBirth: '1994-03-17',
+        timezone: 'Europe/London',
+      },
+    });
+
+    return bodyOf<{ accessToken: string }>(signup).accessToken;
+  }
+
+  it('reports a total that matches the rows actually returned', async () => {
+    // WP3 filtered placeholders *after* fetching, so a page of them returned no Tracks
+    // and still claimed there were several — and paging through gave empty pages. The
+    // filter now goes into the Payload query, so the total is right at source.
+    payload.seedTrack({ ...TRACK, id: 1, isPlaceholder: true }, { published: true });
+    payload.seedTrack({ ...TRACK, id: 2, isPlaceholder: false }, { published: true });
+
+    const production = await productionApp();
+
+    try {
+      const response = await production.app.inject({
+        method: 'GET',
+        url: '/content/tracks',
+        headers: auth(await tokenFor(production)),
+      });
+
+      const body = bodyOf<{ tracks: unknown[]; totalTracks: number }>(response);
+      expect(body.tracks).toHaveLength(1);
+      expect(body.totalTracks).toBe(body.tracks.length);
+    } finally {
+      await production.close();
+    }
+  });
+
+  it('still hides placeholder content when the query filter does nothing', async () => {
+    /**
+     * The load-bearing test of the pair.
+     *
+     * The query filter is an optimisation for pagination totals; `ContentService`'s
+     * `isProductionPublishable` guard is the control. Here the CMS ignores the filter
+     * entirely — a typo in the parameter name would look exactly like this — and no
+     * placeholder may reach the reader regardless. If this ever goes red, the filter
+     * has quietly become the only thing hiding mock prose from production.
+     */
+    payload.seedTrack({ ...TRACK, id: 1, isPlaceholder: true }, { published: true });
+    payload.seedTrack({ ...TRACK, id: 2, isPlaceholder: false }, { published: true });
+    payload.ignoreWhereFilters = true;
+
+    const production = await productionApp();
+
+    try {
+      const response = await production.app.inject({
+        method: 'GET',
+        url: '/content/tracks',
+        headers: auth(await tokenFor(production)),
+      });
+
+      expect(bodyOf<{ tracks: { id: string }[] }>(response).tracks.map((t) => t.id)).toEqual([
+        '2',
+      ]);
+    } finally {
+      payload.ignoreWhereFilters = false;
+      await production.close();
+    }
+  });
+
+  it('leaves placeholder content visible outside production', async () => {
+    // Phase 1 is built entirely on placeholders; the filter must not apply in dev.
+    payload.seedTrack({ ...TRACK, id: 1, isPlaceholder: true }, { published: true });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/tracks',
+      headers: auth(token),
+    });
+
+    expect(bodyOf<{ tracks: unknown[] }>(response).tracks.length).toBeGreaterThan(0);
+  });
+});

@@ -1,7 +1,7 @@
-import { PixelRatio, StyleSheet, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { useTheme } from '../design';
-import { asTextGlyph } from './glyphs';
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
 /**
@@ -22,8 +22,8 @@ import { Text } from './Text';
  */
 
 export interface EmptyStateProps {
-  /** Oversized glyph standing in for the mascot. Swap for an illustration later. */
-  readonly placeholderGlyph: string;
+  /** Oversized icon standing in for the mascot. Swap for an illustration later. */
+  readonly icon: IconName;
   readonly title: string;
   readonly body: string;
   readonly testID?: string;
@@ -44,29 +44,27 @@ const GLYPH_BASE_SIZE = 56;
 const MAX_DECORATIVE_SCALE = 1.5;
 
 export function EmptyState({
-  placeholderGlyph,
+  icon,
   title,
   body,
   testID,
 }: EmptyStateProps): React.JSX.Element {
   const theme = useTheme();
 
-  const fontScale = PixelRatio.getFontScale();
+  // Reactive, so the slot resizes when the reader changes their text setting.
+  const { fontScale } = useWindowDimensions();
   const decorativeScale = Math.min(fontScale, MAX_DECORATIVE_SCALE);
   const slotSize = MASCOT_SLOT_BASE * decorativeScale;
 
   /**
-   * Pre-divided by the OS scale, because React Native multiplies it straight back.
+   * Sized against the slot, not the text.
    *
-   * Capping the slot alone is not enough: the glyph inside it is text, so it keeps
-   * scaling past the cap and bursts out of the box — visible at
-   * `accessibilityExtraExtraExtraLarge`, where a 56pt glyph renders at about 130pt in a
-   * 198pt slot and collides with its own border. Dividing here lands the glyph at
-   * exactly `GLYPH_BASE_SIZE * decorativeScale` after RN re-applies the scale, which
-   * keeps the ornament proportional to the slot at every text size — without reaching
-   * for `allowFontScaling={false}`, which `Text` rightly does not offer.
+   * `Icon` already cancels the OS font scale internally, so this is a plain point size:
+   * the icon stays proportional to the slot at every text size. Capping the slot alone
+   * was not enough in WP6 — the old text glyph kept scaling past the cap and burst out
+   * of the box at `accessibilityExtraExtraExtraLarge`.
    */
-  const glyphSize = (GLYPH_BASE_SIZE * decorativeScale) / fontScale;
+  const glyphSize = GLYPH_BASE_SIZE * decorativeScale;
 
   return (
     <View testID={testID} style={[styles.container, { gap: theme.spacing.lg }]}>
@@ -87,13 +85,7 @@ export function EmptyState({
           },
         ]}
       >
-        <Text
-          variant="display"
-          tone="primary"
-          style={{ fontSize: glyphSize, lineHeight: glyphSize * 1.15 }}
-        >
-          {asTextGlyph(placeholderGlyph)}
-        </Text>
+        <Icon name={icon} tone="primary" size={glyphSize} />
       </View>
 
       <Text variant="h2" align="center">

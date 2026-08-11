@@ -801,3 +801,165 @@ describe('withdrawn content', () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The per-Track rollup, and what it closes                                    */
+/* -------------------------------------------------------------------------- */
+
+interface LibraryBody {
+  entries: {
+    track: { id: string };
+    status: string;
+    progress: {
+      trackId: string;
+      totalLeaves: number;
+      completedLeaves: number;
+      nextLeafId: string | null;
+      isComplete: boolean;
+    };
+  }[];
+}
+
+const library = (reader: Reader) =>
+  app().inject({ method: 'GET', url: '/library', headers: auth(reader.token) });
+
+/** Answers correctly and completes one Leaf. */
+async function finishLeaf(reader: Reader, leafId: number, optionId: string): Promise<void> {
+  await answer(reader, optionId, leafId);
+  await complete(reader, leafId);
+}
+
+describe('per-Track progress in the library', () => {
+  it('reports zero of two for a Track the reader has not started', async () => {
+    // Track 1 has two visible Leaves in this fixture, 10 and 11.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    expect(entry?.progress).toMatchObject({
+      trackId: '1',
+      totalLeaves: 2,
+      completedLeaves: 0,
+      isComplete: false,
+    });
+  });
+
+  it('points resume at the first Leaf before anything is done', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    // Asserted on the id, not on "some Leaf was chosen" — the criterion is that resume
+    // lands on the right one.
+    expect(entry?.progress.nextLeafId).toBe('10');
+  });
+
+  it('advances resume past a finished Leaf', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    expect(entry?.progress).toMatchObject({
+      completedLeaves: 1,
+      nextLeafId: '11',
+      isComplete: false,
+    });
+  });
+
+  it('is computed per reader', async () => {
+    const alice = await createReader();
+    const bob = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(alice.token) });
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(bob.token) });
+
+    await finishLeaf(alice, 10, CORRECT_OPTION);
+
+    const [bobs] = bodyOf<LibraryBody>(await library(bob)).entries;
+    expect(bobs?.progress.completedLeaves).toBe(0);
+    expect(bobs?.progress.nextLeafId).toBe('10');
+  });
+
+  it('stops counting a Leaf that has been taken down', async () => {
+    // The denominator has to follow takedown, or a reader is stuck at "1 of 2" on a
+    // Track that now has one Leaf and is actually finished.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    payload.setPublished('leaf', 11, false);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.progress).toMatchObject({
+      totalLeaves: 1,
+      completedLeaves: 1,
+      isComplete: true,
+      nextLeafId: null,
+    });
+  });
+});
+
+describe('user_tracks.status', () => {
+  it('starts active', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('active');
+  });
+
+  it('stays active while any Leaf is unfinished', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('active');
+  });
+
+  it('transitions to completed when every Leaf is complete', async () => {
+    // The column has read `active` for every row since WP3, because nothing owned the
+    // Leaf-count rollup needed to decide otherwise. This is that closing.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('completed');
+    expect(entry?.progress.isComplete).toBe(true);
+  });
+
+  it('writes the transition to the database, not just the response', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const stored = await harness.database.pool.query<{ status: string }>(
+      `select status from user_tracks where user_id = $1 and track_id = '1'`,
+      [reader.userId],
+    );
+
+    expect(stored.rows[0]?.status).toBe('completed');
+  });
+
+  it('completes a Track the reader never added, without erroring', async () => {
+    // Adding to the library is optional; finishing a Track is not conditional on it.
+    // There is simply no row to update, which must not fail the completion.
+    const reader = await createReader();
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    const response = await complete(reader, 11);
+
+    expect([200, 409]).toContain(response.statusCode);
+    await expect(
+      harness.database.pool.query(`select 1 from user_tracks where user_id = $1`, [reader.userId]),
+    ).resolves.toMatchObject({ rowCount: 0 });
+  });
+});
