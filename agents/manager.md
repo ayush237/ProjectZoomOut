@@ -24,7 +24,7 @@ Senior/staff engineer for ZoomOut, responsible for turning Architect's handoff p
 - Small, single-purpose functions; guard clauses over deep nesting
 - Apply design patterns where they earn their keep (Strategy, Factory, Repository, Dependency Injection, etc.) — not for their own sake
 - Structured logging at service boundaries and error paths
-- New logic ships with tests, colocated per the project's convention
+- New logic ships with tests at the depth the tiered Testing bar below specifies — colocated per the project's convention
 
 ## Project-specific notes
 - TypeScript strict mode across `apps/mobile`, `apps/backend`, and `packages/shared`.
@@ -74,7 +74,28 @@ Never open with the file list or the test count. They are evidence, not conclusi
 **The completion report in `collaboration-log.md` is exempt** — it is the durable record for future sessions and code review, and keeps its full existing depth and template. Do not compress it to match the chat summary.
 
 ## Testing bar
-"Production-grade" means the feature works for the happy path and the obvious edge cases, and fails loudly and safely on the unhappy paths. E2E tests should cover the user-facing flow in the acceptance criteria, not just internal function calls.
+
+**Changed 2026-08-11. Development velocity is the priority until the app is functional end to end.** Test depth is tiered rather than uniform, and a dedicated hardening pass (WP14) is scheduled before launch. This is a deliberate, temporary trade — not permission to skip verification.
+
+**Tier A — always, no exceptions.** These are either enforced or the product has a defect that harms users or creates legal exposure, and they are the expensive ones to retrofit because doing so means reconstructing the intent from code months later:
+- The payoff gate, and `isCorrect` never reaching a client
+- Takedown, and the placeholder-content guard
+- Idempotency on anything award-shaped — replay *and* concurrency
+- The age gate
+- Local-date and timezone logic
+- Migrations applying cleanly to an empty database
+
+Anything that would let a reader obtain content they have not earned, keep content that has been withdrawn, or accumulate progress they did not earn, is Tier A whether or not this list names it.
+
+**Tier B — one happy path and one failure path.** Endpoint wiring, mappers, service orchestration. No permutation matrices.
+
+**Tier C — defer to WP14.** Component render tests, theme permutations, loading/empty/error combinations, and exhaustive boundary enumeration where one representative case already exists.
+
+**In exchange, manual verification is mandatory, not optional.** Run the app once per package in both themes and at `accessibilityExtraExtraExtraLarge`, and exercise the flows the acceptance criteria describe. In this project that has caught more real defects than any test suite — the timezone offset bug, the app pinned to light mode, the emoji glyphs ignoring tint, and the font-scaling clip that failed a WP6 criterion. Ten minutes of looking beats an hour of matrices.
+
+**Two rules survive the change:**
+- Any test written to close a review finding must be **mutation-checked** — break the behaviour and confirm that test, and only that test, goes red.
+- **Report what you did not test.** A deferred Tier C area belongs in the completion report so WP14 has a worklist rather than an archaeology project.
 
 ## Tone
 Direct and technical. If the handoff prompt has a gap, name it precisely instead of guessing quietly. Report what you actually did, not what you intended to do.

@@ -9,6 +9,68 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-11 — WP11: Seed fixture, a full-length placeholder Track
+
+### Task: WP11 — Seed fixture: a full-length placeholder Track
+
+**Context:** Every surface built so far renders against one hand-authored Leaf. WP8 builds the Leaf player, and judging whether the product works needs a Track of realistic length — a Journey with one Leaf tells you nothing about pacing, progress or whether the roadmap reads as a journey at all.
+
+This is generated content, not authored content. Real writing happens later, after the AI pipeline. **Everything here is placeholder and must be unmistakably so.**
+
+**Objective:** A repeatable seed producing one Track of ~20 structurally complete Leaves in the CMS, flagged as placeholder, plus the fixtures the test suite has been missing. Explore, Library, Journey and the progress rollup all exercised against realistic volume.
+
+**Scope:** (verify, don't trust blindly)
+- A seed script — location and invocation your call, but it must be **idempotent and re-runnable**
+- `apps/admin/` — a CMS-side rule for cover images (see below)
+- Test fixtures, if the seed shares code with them
+
+**Requirements:**
+
+*The content itself*
+- One Track, **~20 Leaves**, every Leaf structurally complete: all five slides, exactly three scenario options with exactly one correct, 2–6 sticky notes, and every source reference carrying a `note` plus at least one locator.
+- **`isPlaceholder: true` on the Track and every Leaf.** Non-negotiable.
+- **Prose must be unmistakably placeholder.** Never plausible-sounding invented advice, quotes or claims attributed to Brianna Wiest or any real author. This is the §3.4 hazard and the Bookey failure in miniature — the realistic bad outcome is not a public launch, it is a demo build shown to five people carrying fabricated advice under a real author's name.
+- Enough variation across Leaves that the surfaces are meaningfully exercised — varying title lengths, sticky-note counts, and at least one Leaf with Dinner Table Knowledge and one without.
+
+*Fixtures the test suite is missing* (both are WP14 items this package unblocks)
+- **A draft Track and a draft Leaf.** The draft filter is definitive at config — `read: publishedOrAuthenticated`, and `PayloadClient` calls anonymously — but the corpus has never contained a draft, so nothing has ever proven a draft cannot leak. Seed one so WP14 can.
+- **Enough Tracks to cross a pagination boundary.** `fakePayload` ignores `page` and `limit`, so `listTracks` totals are verified for a single page only. A few extra placeholder Tracks (they need not be full-length) make real paging exercisable.
+
+*Cover images — the debt item assigned here*
+- The existing Track's `coverUrl` points at an Amazon **product page**, not an image, so every Explore card silently renders the fallback. `trackSchema` requires a URL, not an image.
+- **Add a CMS-side rule** so a `coverUrl` that is not an image cannot be published. Validate what you can cheaply and honestly — extension or content-type — and make the author-facing message say what is wrong.
+- Seeded Tracks must carry cover URLs that actually render.
+
+**Out of scope:**
+- The Leaf player — WP8
+- Real authored content — post-pipeline
+- Any change to `packages/shared/src/content.ts`, which is frozen
+- Deployment
+
+**Constraints:**
+- **If the seed uses Payload's Local API it inherits two upstream defects** found in WP1: `payload.destroy()` does not close its database pool (and `pool.end()` hangs, because Payload keeps a client checked out), and Payload attaches no `error` listener to its pool, so an idle-client error becomes an uncaught exception. Seeding over the REST API with an admin token avoids both — prefer it. If you must boot Payload, put the workaround in one place.
+- **Placeholder content must never be publishable to production.** The guard exists in `ContentService`; do not add a second path around it.
+- Follow `CLAUDE.md` in full. **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `npm install`, `lint`, `typecheck`, `test`, `build` all pass
+- [ ] The seed runs against an empty CMS and produces one Track with ~20 complete Leaves
+- [ ] **The seed is idempotent** — running it twice does not duplicate content or fail
+- [ ] Every seeded record has `isPlaceholder: true`
+- [ ] Every seeded Leaf publishes cleanly through the CMS's own validation — no rule is bypassed to make the seed work
+- [ ] A draft Track and a draft Leaf exist, and are **absent** from every backend content response
+- [ ] Enough Tracks exist to cross a pagination boundary
+- [ ] Publishing a Track whose `coverUrl` is not an image is rejected, with an actionable message
+- [ ] Seeded cover images render in Explore rather than falling back
+- [ ] **Verified on device:** Explore, Library and Journey against the seeded Track, including the progress rollup at partial completion, in both themes
+- [ ] CI green
+
+**Testing expectations — tiered bar** (`agents/manager.md`):
+- **Tier A:** placeholder content is not servable in production; the draft records are absent from every content response. Both matter more here than usual, because this package is the first time the corpus contains content that *must not* escape.
+- **Tier B:** seed idempotency, and the cover-image rule accepting a valid image and rejecting a page URL.
+- **Tier C, defer:** exhaustive validation permutations on the cover rule.
+- **Manual verification is the real test here.** Twenty Leaves is the first time Journey, the rollup and Explore see realistic volume — look at them, in both themes, and report what the surfaces actually look like. If the Journey screen reads badly at twenty Leaves, that is a WP8 input and worth more than any assertion.
+
 ### Handoff: 2026-08-11 — WP7: Mobile surfaces — Explore, Library, Journey
 
 ### Task: WP7 — Mobile surfaces: Explore, Library, Journey
@@ -75,7 +137,12 @@ WP3's content and library endpoints and WP4's progress endpoints are live and me
 - [ ] Icon set replaces every text glyph, and active-tab tint applies to all of them
 - [ ] CI green; `.env.example` current
 
-**Testing expectations:** Unit tests for the progress-rollup calculation, including a Track with zero, partial and complete progress, and the next-incomplete-Leaf selection when Leaves are out of order. Backend integration tests for the rollup and the `status` transition against real Postgres. Component tests for each screen in both themes covering loading, empty, error and populated states — WP6 left `ProfileScreen`, `TabShell`, `RootNavigator` and the three shells with no render test, so add those while you are here.
+**Testing expectations — revised 2026-08-11 under the tiered bar** (`agents/manager.md`; development velocity is the priority until the app is functional end to end):
+
+- **Tier A, required:** the `listTracks` query filter must not become the only control — test that `ContentService`'s `isProductionPublishable` guard independently blocks placeholder content. Migration for any schema change applies to an empty database.
+- **Tier B, one happy path and one failure path:** the progress-rollup calculation (a partially complete Track, and next-incomplete-Leaf selection when Leaves are out of order) and the `user_tracks.status` transition, against real Postgres.
+- **Tier C, defer to WP14:** component render tests across both themes and every loading/empty/error permutation, and the WP6 coverage gaps (`ProfileScreen`, `TabShell`, `RootNavigator`, the three shells). **List what you defer in the completion report** so WP14 has a worklist.
+- **Manual verification is mandatory, not a substitute for the above:** run all three screens on a device in both themes and at `accessibilityExtraExtraExtraLarge`, and exercise browse → add → progress → resume against the real backend. This is where WP6's real defects were found.
 
 **Any test written to close a review finding must be mutation-checked**: break the behaviour and confirm that test — and only that test — goes red. WP6's first pass shipped a failed-refresh test that passed with the handler deleted entirely.
 
