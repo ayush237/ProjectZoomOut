@@ -767,6 +767,78 @@ restart. **Verify accessibility sizes from a cold start, not by toggling live.**
 - `TrackCard` takes an `action` and `children`, so the Leaf player's entry point is a prop
   rather than a fourth variant of the card.
 
+---
+
+## Addendum: WP7 — the app did not launch, and the new testing bar — 2026-08-11
+
+Two things after WP7 was committed at `44ab716`.
+
+**1. A blocking defect the whole gate missed: the app failed to launch.**
+
+`Unhandled JS Exception: [runtime not ready]: Error: Cannot find native module 'ExpoAsset'`,
+then `expo-asset could not be found within the project`. Adding `@expo/vector-icons`
+pulled `expo-asset` in **transitively**, at a version the SDK did not expect and as
+nobody's declared dependency. Fixed by installing it properly (`expo install expo-asset`,
+which also registered its config plugin) and reinstalling the workspace so the root copy
+matched.
+
+**The important part is what did not catch it.** Lint, typecheck, 714 tests and the build
+were all green against an app that could not start. Nothing in the automated gate boots
+the bundle — component tests mount React trees under Jest, where native module resolution
+never happens. Only opening it on the simulator found this, which is the argument for the
+new bar's trade in one paragraph.
+
+A second, self-inflicted lesson: **two Metro processes were bound to port 8081** and the
+stale one kept serving a broken bundle through three restarts and a `--clear`. It also
+produced a convincing fake defect — a stretched, broken-looking Track card in light mode
+that I nearly chased as a layout bug. It was the dead bundle. `lsof -ti:8081` before
+trusting any simulator observation.
+
+**2. The testing bar changed mid-package** (founder, 2026-08-11): development velocity is
+the priority until the app works end to end. Tier A invariants stay mandatory, Tier B is
+one happy path plus one failure path, Tier C defers to WP14, and **manual device
+verification in both themes and at `accessibilityExtraExtraExtraLarge` is now mandatory in
+exchange**.
+
+Applied from here. WP7's own tests were written under the old bar and are staying — they
+are already written, they pass, and deleting them would spend effort to reduce coverage.
+
+**Manual verification actually performed for WP7**, against the real backend and CMS:
+
+| Surface | dark / default | dark / XXXL | light / default | light / XXXL |
+|---|---|---|---|---|
+| Explore | ✅ | ✅ | ✅ | ✅ |
+| Library | ✅ | ✅ | ✅ | ✅ |
+| Journey | ✅ | ✅ | ✅ | ✅ |
+
+Every XXXL check was done from a **cold start with the size already set** — changing it
+while the app runs leaves Expo Go rendering stale line heights, which looks like a severe
+layout bug and is not one.
+
+**Deferred to WP14 — the worklist starts here:**
+
+1. **A launch smoke test.** The gap above: nothing proves the bundle boots. A Detox or
+   Maestro check that launches the app and asserts one screen rendered would have caught
+   the `ExpoAsset` failure, and will catch the next native-module regression. **Highest
+   value item on this list** — it is the only one covering a failure that reached a
+   committed state.
+2. **`expo install --check` in CI.** It currently reports `expo@57.0.11 → 57.0.12` and
+   `jest-expo@57.0.3 → 57.0.4`. Version drift is what produced the defect above; a check
+   that fails the build is cheap.
+3. **`useAsyncResource` has no direct unit tests.** Covered indirectly through the three
+   screens — the generation guard against a slow first response landing on top of a fast
+   retry is the part worth testing on its own.
+4. **`useRefreshOnFocus` is untested.** It degrades outside a navigator by design, and the
+   navigator path is exercised only manually. Tier B would want one test that a focus
+   event triggers a refetch.
+5. **`ProgressBar` and `TrackCard` have no dedicated tests** — only assertions through the
+   screens that use them. The zero-of-zero guard against `NaN%` is the case worth pinning
+   directly.
+6. **No test for the Explore add/remove optimistic override** beyond the happy path and
+   one failure. The remove-then-refresh interaction is manual-only.
+7. **Backend `listCompletedLeafIds` with an empty id list** is guarded in code and covered
+   only through the rollup. Worth one direct test.
+
 ### Completed: WP6 — Mobile shell: design system, navigation, auth, age gate — 2026-08-11
 
 > **Second pass, 2026-08-11 — see the addendum at the end of this entry.** Founder review
