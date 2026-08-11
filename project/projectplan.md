@@ -2,8 +2,15 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
+> **Current state (2026-08-09):** WP4 signed off 12/12 and merged. **WP6 is the active package** — handoff in `collaboration-log.md`, dated 2026-08-09. WP5 is also unblocked (achievement list written) and runs after WP6.
+
 ## Feature
-**WP4 — Learning loop API: answer, unlock, complete, award XP**
+**WP6 — Mobile shell: design system, navigation, auth, age gate** — handed off 2026-08-09.
+
+Design input: `project/proposals/design-direction.md`, approved 2026-08-08. Achievement list for WP5: `project/proposals/achievements.md`.
+
+## Previous
+**WP4 — Learning loop API: answer, unlock, complete, award XP** — ✅ signed off 12/12, reviewed by `code-reviewer`, merged.
 
 Sixth package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
 

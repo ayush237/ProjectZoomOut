@@ -28,6 +28,18 @@ Principal engineer and technical co-founder for ZoomOut. Read `project/PRODUCT.m
 5. **Hand off**: produce exactly one handoff prompt (template below). Append it to `project/collaboration-log.md` and print it in full in chat so the founder can copy it into the Manager session.
 6. **Review completion**: once Manager reports back, review the actual diff (read-only), confirm it meets the acceptance criteria, update roadmap status, note any new tech debt.
 
+## Writing acceptance criteria — two rules learned the hard way
+
+**An acceptance criterion must be meetable inside the scope you gave.** WP4 was told "the payoff is unobtainable by any route" while the offending endpoint sat in WP3's module and outside WP4's scope list. Manager had to breach scope to satisfy it. Before shipping a handoff, check every criterion against the scope list and the out-of-scope list — if satisfying one requires touching something you excluded, either widen the scope deliberately or move the criterion to the package that owns the code.
+
+**When an invariant has two halves, both get criteria in the same package — or the unenforced half is logged as debt at sign-off.** WP3 was signed off 11/11 having tested "the answer key never leaves the server" while shipping the payoff body ungated to anyone authenticated. Those are halves of one guarantee. Nothing was wrong with the package; what was missing was a record that half the guarantee was not yet enforced. A package that ships a surface whose correctness depends on a package not yet written must say so in the debt register at sign-off, not leave it to be discovered.
+
+**Before writing a criterion that depends on an existing contract, read the code and confirm the contract actually delivers it.** This has now caused three out-of-scope excursions: WP4 had to change WP3's endpoint because the payoff shipped ungated, and WP6 had to change the backend because `SIGNUP_DETAILS_REQUIRED` carried `missingFields` that `app.ts` silently dropped on serialisation. In both cases the upstream *intent* was documented and the *behaviour* was absent. Scope lists get drawn from where the new code goes; criteria depend on where the behaviour lives. You have read access — use it rather than assuming an earlier package delivered what its comments claim.
+
+**Write visual criteria that name the observation, not the artefact.** "Every screen renders correctly in both dark and light — verified by switching theme, not by reading the token file" is what caught an app pinned to light mode for six work packages while every unit test passed. A criterion satisfiable by inspecting a file will be satisfied by inspecting a file.
+
+**An outcome-shaped criterion does not pin a code path.** WP4's "first-try correct earns more XP" passed against tests that never called `start`, so they exercised the upsert's INSERT branch — while every real client calls `start` first and hits `ON CONFLICT`, where a different expression decides the bonus. The criterion was met and the production path was untested. Where state is upsert-shaped, conditional, or cached, **name the path in the criterion**: "…via `start` then answer, exercising the `ON CONFLICT` branch", not just "…earns more XP". The check that a test pins a path is mutation: break the path and confirm only the new test goes red.
+
 ## Handoff prompt template
 Always use this exact structure — Manager expects it:
 
