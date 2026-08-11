@@ -241,9 +241,11 @@ export class AuthService {
     const dateOfBirth = input.dateOfBirth;
     const timezone = input.timezone;
 
+    // Field names, not prose: the client routes on these to focus the right input.
+    // The error derives its human message from them.
     const missingFields = [
-      dateOfBirth === undefined ? 'your date of birth' : null,
-      timezone === undefined ? 'your timezone' : null,
+      dateOfBirth === undefined ? 'dateOfBirth' : null,
+      timezone === undefined ? 'timezone' : null,
     ].filter((field): field is string => field !== null);
 
     if (dateOfBirth === undefined || timezone === undefined) {

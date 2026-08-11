@@ -31,7 +31,7 @@ So the system substitutes:
 
 ## 3. Colour
 
-Starting values. Exact hexes get tuned once rendered on a device — screens lie in a way swatches don't — but the *structure* below is the part that matters and should not drift.
+**Corrected 2026-08-11 after WP6 measured them.** Two values in the original draft failed WCAG AA at the deepest surface — including `text/muted`, which this very section's own rule ("verify per surface level, not once against `surface/0`") was written to catch. The values below are the measured, shipping ones and match `apps/mobile/src/design/palette.ts`. If the two ever disagree, the code is right and this document is stale.
 
 **Dark surfaces** (elevation by lightness):
 ```
@@ -62,7 +62,7 @@ on-reward     #0B0F12
 correct       #4ADE80
 incorrect     #FF6B6B   softened — pure red glares on dark
 text/primary  #F2F5F7
-text/muted    #9AAAB5
+text/muted    #A7B6C0   corrected 2026-08-11 — #9AAAB5 measured 4.06:1 by surface/3
 ```
 
 **Two constraints that are not negotiable:**
@@ -70,7 +70,9 @@ text/muted    #9AAAB5
 1. **Never signal by colour alone.** Correct and incorrect answers carry an icon and a motion cue as well as a colour. This is an accessibility requirement, and it also protects the one place it matters most — `correct` green and `primary` teal are adjacent in hue, and a user must never have to distinguish them to know whether they got the answer right.
 2. **WCAG AA on dark.** Body text ≥ 4.5:1, large text ≥ 3:1, against the surface it actually sits on. Verify per surface level, not once against `surface/0`.
 
-**Light theme** is built from the same token names with its own values, from day one. Retrofitting a second theme means auditing every screen; defining both up front costs a fraction of that even though dark is the default.
+Both themes ship from day one under the same token names. Retrofitting a second theme means auditing every screen; defining both up front costs a fraction of that even though dark is the default.
+
+**`app.json` must set `userInterfaceStyle: "automatic"`.** Left at `"light"` it tells iOS the app has no dark support, `useColorScheme()` returns light on a dark device, and the entire dark theme is dead code while every unit test passes. This happened — see the debt register.
 
 ## 4. Typography
 

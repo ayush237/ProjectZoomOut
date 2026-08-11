@@ -34,8 +34,10 @@ Slides 2 and 3 include a voiceover button. **Confirmed 2026-08-06:** "human voic
 ## Gamification
 Streaks, XP per Leaf, unlockable achievements/badges, and SFX on key actions (correct/incorrect answers, Leaf completion, achievements, session wrap-up).
 
+**Achievements:** 19 defined across six categories — see `project/proposals/achievements.md` (2026-08-09). XP: **80 base + 20 first-try bonus**, so five first-try Leaves hit the 500 cap exactly.
+
 Decided 2026-08-06:
-- **Streak** — maintained by completing ≥1 Leaf in a day, evaluated in the user's local timezone. No streak freezes/repairs in Phase 1.
+- **Streak** — maintained by completing ≥1 Leaf in a day, evaluated in the user's local timezone. No streak freezes/repairs in Phase 1. **Note:** a streak needs one Leaf per day, so library size caps how long a streak can run — see the debt register.
 - **XP** — flat award per Leaf plus a first-try-correct bonus. Calibrate so the 500 XP cap lands at roughly 5 Leaves/day, making a 20-Leaf Track about a 4-day journey.
 - **Leaf pacing** — a Leaf is **~3 minutes to consume**, so a capped session is about 5 Leaves. This sets the length budget for slide copy, and is what keeps the 500 XP cap a real second constraint instead of dead weight behind the 15-minute limit.
 
@@ -68,7 +70,7 @@ Phase 1 deliberately does not require the AI pipeline or social features to be *
 
 **Phase 1 launch library — 3 books** (decided 2026-08-06). Kept small because every Leaf is hand-authored by a solo founder with no AI pipeline. See Open items for the curation status of individual titles.
 
-**Phase 1 platform & account decisions** (2026-08-06): iOS first with Android close behind (Expo makes both cheap; polish effort concentrates on iOS). Auth via email, Sign in with Apple, and Google — Apple is mandatory once Google is offered. No guest mode. **Online-only** — offline sync is deferred as too large an architecture cost for the MVP.
+**Phase 1 platform & account decisions** (2026-08-06): iOS first with Android close behind (Expo makes both cheap; polish effort concentrates on iOS). Auth via **email and password only** (decided 2026-08-11 — Apple and Google deferred past Phase 1; offering no third-party social login means Apple's Sign in with Apple requirement does not apply). No guest mode. **Password reset is therefore the only account-recovery path and is a pre-launch blocker.** **Online-only** — offline sync is deferred as too large an architecture cost for the MVP.
 
 ## Tech stack (decided)
 - **Mobile:** React Native + Expo, TypeScript

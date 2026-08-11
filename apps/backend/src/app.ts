@@ -125,8 +125,12 @@ export async function buildApp(deps: AppDependencies): Promise<ZoomOutApp> {
     if (error instanceof AppError) {
       request.log.warn({ err: error, code: error.code }, 'Request failed');
 
+      // `responseFields` is opt-in per error and empty by default. It exists because a
+      // code and a message are not always enough for a client to *recover*:
+      // `SIGNUP_DETAILS_REQUIRED` has to say which fields are missing, or the app can
+      // only show a generic form and hope.
       return reply.status(error.statusCode).send({
-        error: { code: error.code, message: error.message },
+        error: { code: error.code, message: error.message, ...error.responseFields },
       });
     }
 

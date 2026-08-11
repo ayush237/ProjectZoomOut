@@ -19,7 +19,15 @@
     "noUnusedParameters": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+
+    // Jest's globals are not picked up automatically here: the package is hoisted to
+    // the repo root and this tsconfig extends Expo's base rather than the repo base,
+    // so the automatic `@types` sweep does not reach it. Naming the roots explicitly
+    // keeps `describe`/`it`/`expect` typed in the test files without turning off
+    // automatic inclusion for everything else.
+    "typeRoots": ["../../node_modules/@types", "./node_modules/@types"],
+    "types": ["jest"]
   },
   // `.mts` covers vitest.config.mts — the Expo app's package.json is CommonJS (Metro
   // and Babel require that), so the Vitest config needs the explicit ESM extension.
