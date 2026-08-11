@@ -81,6 +81,16 @@ export interface AuthContextValue {
    *   flow, not a second thing to handle.
    */
   readonly refreshProfile: () => Promise<void>;
+  /**
+   * The one API client.
+   *
+   * Exposed so screens can read content without constructing their own — a second
+   * client would mean a second access token, a second refresh, and two of them racing
+   * to rotate the same refresh token, which the backend correctly reads as replay.
+   * There is exactly one, it lives here because this is what owns the session, and
+   * every screen borrows it.
+   */
+  readonly api: ApiClient;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -314,6 +324,7 @@ export function AuthProvider({
       cancelSocialSignup,
       signOut,
       refreshProfile,
+      api: client,
     }),
     [
       status,
@@ -326,10 +337,21 @@ export function AuthProvider({
       cancelSocialSignup,
       signOut,
       refreshProfile,
+      client,
     ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/**
+ * The API client, for screens that fetch.
+ *
+ * A named accessor rather than `useAuth().api` at every call site, so a screen reads as
+ * depending on the API rather than on the session.
+ */
+export function useApi(): ApiClient {
+  return useAuth().api;
 }
 
 /** @throws {Error} when used outside an `AuthProvider`. */

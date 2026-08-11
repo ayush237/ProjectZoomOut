@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildLeaf } from '../../test/helpers/leafFixture.js';
+import { buildLeaf, buildTrack } from '../../test/helpers/leafFixture.js';
 import { NotFoundError } from '../auth/auth.errors.js';
 import { loadConfig, type AppConfig } from '../config/env.js';
 import { ContentNotFoundError } from '../content/content.errors.js';
@@ -57,11 +57,22 @@ interface Harness {
   readonly repository: {
     [K in keyof ProgressRepository]: ReturnType<typeof vi.fn>;
   };
-  readonly content: { findLeaf: ReturnType<typeof vi.fn> };
+  readonly content: {
+    findLeaf: ReturnType<typeof vi.fn>;
+    findTrack: ReturnType<typeof vi.fn>;
+    listLeavesForTrack: ReturnType<typeof vi.fn>;
+  };
+  readonly trackStatus: { setStatus: ReturnType<typeof vi.fn> };
 }
 
 function harness(
-  options: { row?: LeafProgressRow | null; leaf?: ReturnType<typeof buildLeaf>; nodeEnv?: string } = {},
+  options: {
+    row?: LeafProgressRow | null;
+    leaf?: ReturnType<typeof buildLeaf>;
+    nodeEnv?: string;
+    track?: ReturnType<typeof buildTrack>;
+    trackLeaves?: readonly ReturnType<typeof buildLeaf>[];
+  } = {},
 ): Harness {
   const row = options.row ?? null;
 
@@ -71,23 +82,36 @@ function harness(
     recordAttempt: vi.fn().mockResolvedValue(row ?? rowOf({ attemptCount: 1 })),
     completeIfUnfinished: vi.fn().mockResolvedValue(rowOf({ completedAt: new Date() })),
     findReaderTimezone: vi.fn().mockResolvedValue('Europe/London'),
+    listCompletedLeafIds: vi.fn().mockResolvedValue([]),
   };
 
   const content = {
     findLeaf: vi.fn().mockResolvedValue(options.leaf ?? buildLeaf()),
+    /**
+     * The parent Track, resolved on every Leaf read since the takedown cascade.
+     * Published and non-placeholder by default, so a test opts *into* a hidden Track
+     * rather than every existing test having to opt out.
+     */
+    findTrack: vi.fn().mockResolvedValue(options.track ?? buildTrack()),
+    // Read when a completion asks whether the Track is now finished.
+    listLeavesForTrack: vi.fn().mockResolvedValue(options.trackLeaves ?? [options.leaf ?? buildLeaf()]),
   };
+
+  const trackStatus = { setStatus: vi.fn().mockResolvedValue(true) };
 
   return {
     service: new ProgressService(
       repository,
-      // Only `findLeaf` is reachable from the service, so the double implements only
-      // that. The cast is the price of not stubbing three methods nothing calls.
+      // Only the reads the service actually makes are implemented. The cast is the
+      // price of not stubbing the rest of the repository.
       content as unknown as ContentRepository,
       configFor(options.nodeEnv),
       stubLogger(),
+      trackStatus,
     ),
     repository,
     content,
+    trackStatus,
   };
 }
 
@@ -331,5 +355,82 @@ describe('getProgress', () => {
     content.findLeaf.mockRejectedValue(new ContentNotFoundError('Leaf'));
 
     await expect(service.getProgress(READER, 'l1')).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Takedown cascades from the Track to its Leaves                              */
+/* -------------------------------------------------------------------------- */
+
+describe('when the parent Track has been taken down', () => {
+  /**
+   * The Leaf itself is untouched and perfectly valid — published, not a placeholder.
+   * Only its Track has been pulled, which is exactly how a legal takedown is performed:
+   * unpublish the book, not each of its twenty Leaves.
+   *
+   * Before this cascade, every one of these paths carried on working.
+   */
+  const withUnpublishedTrack = (): ReturnType<typeof harness> =>
+    harness({ track: buildTrack({ status: 'draft' }) });
+
+  it('refuses to start the Leaf', async () => {
+    await expect(
+      withUnpublishedTrack().service.startLeaf(READER, 'l1'),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+
+  it('refuses to grade an answer', async () => {
+    // The one that pays out: grading a Leaf from a pulled book also awards XP for it.
+    await expect(
+      withUnpublishedTrack().service.submitAnswer(READER, 'l1', 'o1'),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+
+  it('records no attempt when it refuses', async () => {
+    const { service, repository } = withUnpublishedTrack();
+
+    await expect(service.submitAnswer(READER, 'l1', 'o1')).rejects.toThrow();
+
+    expect(repository.recordAttempt).not.toHaveBeenCalled();
+  });
+
+  it('refuses to complete the Leaf', async () => {
+    const { service } = harness({
+      track: buildTrack({ status: 'draft' }),
+      row: rowOf({ correctAt: new Date() }),
+    });
+
+    await expect(service.completeLeaf(READER, 'l1')).rejects.toBeInstanceOf(
+      ContentNotFoundError,
+    );
+  });
+
+  it('refuses to report progress', async () => {
+    await expect(
+      withUnpublishedTrack().service.getProgress(READER, 'l1'),
+    ).rejects.toBeInstanceOf(ContentNotFoundError);
+  });
+
+  it('hides a placeholder Track in production even when the Leaf is real', async () => {
+    const { service } = harness({
+      nodeEnv: 'production',
+      leaf: buildLeaf({ isPlaceholder: false }),
+      track: buildTrack({ isPlaceholder: true }),
+    });
+
+    await expect(service.submitAnswer(READER, 'l1', 'o1')).rejects.toBeInstanceOf(
+      ContentNotFoundError,
+    );
+  });
+
+  it('refuses when the Track has been deleted outright', async () => {
+    // Not merely unpublished — gone. As unservable as unpublished, and for the same
+    // reason, so it must not surface as an unhandled error.
+    const { service, content } = harness();
+    content.findTrack.mockRejectedValue(new ContentNotFoundError('Track'));
+
+    await expect(service.startLeaf(READER, 'l1')).rejects.toBeInstanceOf(
+      ContentNotFoundError,
+    );
   });
 });

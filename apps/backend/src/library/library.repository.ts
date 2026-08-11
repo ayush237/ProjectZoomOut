@@ -15,7 +15,23 @@ export interface LibraryRepository {
   removeTrack(userId: string, trackId: string): Promise<boolean>;
   listTrackIds(userId: string): Promise<readonly UserTrackRow[]>;
   hasTrack(userId: string, trackId: string): Promise<boolean>;
+  /**
+   * Moves a Track between `active` and `completed`.
+   *
+   * @returns whether a row actually changed. False covers both "already in that state"
+   *   and "this Track is not in the reader's library" — a reader can finish a Track they
+   *   never added, and that is not an error, just nothing to record.
+   */
+  setStatus(userId: string, trackId: string, status: UserTrackStatus): Promise<boolean>;
 }
+
+/** The subset of the library a writer needs, so progress can update status without
+ * depending on the whole repository. */
+export interface TrackStatusWriter {
+  setStatus(userId: string, trackId: string, status: UserTrackStatus): Promise<boolean>;
+}
+
+export type UserTrackStatus = UserTrackRow['status'];
 
 export class PostgresLibraryRepository implements LibraryRepository {
   constructor(private readonly client: DatabaseClient) {}
@@ -68,6 +84,38 @@ export class PostgresLibraryRepository implements LibraryRepository {
       .from(userTracks)
       .where(eq(userTracks.userId, userId))
       .orderBy(desc(userTracks.addedAt));
+  }
+
+  public async setStatus(
+    userId: string,
+    trackId: string,
+    status: UserTrackStatus,
+  ): Promise<boolean> {
+    const updated = await this.client.db
+      .update(userTracks)
+      .set({ status })
+      .where(
+        and(
+          eq(userTracks.userId, userId),
+          eq(userTracks.trackId, trackId),
+          /**
+           * Only promotes an **active** Track.
+           *
+           * `ne(status, target)` was wrong in a way that would not have shown up until a
+           * reader archived something: it matched every status except the target, so
+           * finishing a Leaf in an `archived` Track would quietly resurrect it as
+           * `completed`. Archiving is a decision the reader made, and completion is not
+           * entitled to overrule it.
+           *
+           * Still idempotent — a replayed completion matches nothing and writes nothing,
+           * which is what makes calling this on every completion safe.
+           */
+          eq(userTracks.status, 'active'),
+        ),
+      )
+      .returning({ id: userTracks.id });
+
+    return updated.length > 0;
   }
 
   public async hasTrack(userId: string, trackId: string): Promise<boolean> {

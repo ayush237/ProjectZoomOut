@@ -1,14 +1,21 @@
-import type { Leaf, LeafProgress, PayoffSlide } from '@zoomout/shared';
+import type {
+  Leaf,
+  LeafProgress,
+  PayoffSlide,
+  TrackProgressSummary,
+} from '@zoomout/shared';
 
 import { NotFoundError } from '../auth/auth.errors.js';
 import { localDateIn } from '../auth/ageGate.js';
 import type { AppConfig } from '../config/env.js';
-import { ContentNotFoundError } from '../content/content.errors.js';
+import { toError } from '../errors.js';
 import type { ContentRepository } from '../content/content.repository.js';
-import { isVisibleIn } from '../content/contentVisibility.js';
+import { isVisibleIn, resolveVisibleLeaf } from '../content/contentVisibility.js';
 import type { PayoffAccessPolicy } from '../content/payoffAccess.js';
+import type { TrackStatusWriter } from '../library/library.repository.js';
 import type { AppLogger } from '../logging/logger.js';
 import { gradeAnswer } from './grading.js';
+import { summariseTrackProgress, type CountableLeaf } from './trackProgress.js';
 import { toDomainProgress, untouchedProgress } from './progress.mapper.js';
 import { LeafNotUnlockedError } from './progress.errors.js';
 import type { ProgressRepository } from './progress.repository.js';
@@ -27,7 +34,21 @@ import { calculateLeafXp, type XpRules } from './xp.js';
  * without knowing anything about progress. See `content/payoffAccess.ts` for why the
  * dependency points that way.
  */
-export class ProgressService implements PayoffAccessPolicy {
+/**
+ * The rollup, as its consumers see it.
+ *
+ * Declared as a port so `LibraryService` depends on the question rather than on the
+ * whole learning loop — it has no business being able to grade an answer.
+ */
+export interface TrackProgressReader {
+  summariseTrack(
+    userId: string,
+    trackId: string,
+    leaves: readonly CountableLeaf[],
+  ): Promise<TrackProgressSummary>;
+}
+
+export class ProgressService implements PayoffAccessPolicy, TrackProgressReader {
   private readonly xpRules: XpRules;
 
   constructor(
@@ -35,6 +56,12 @@ export class ProgressService implements PayoffAccessPolicy {
     private readonly content: ContentRepository,
     private readonly config: AppConfig,
     private readonly logger: AppLogger,
+    /**
+     * Writes `user_tracks.status`. A narrow port, not the library repository, because
+     * completing a Leaf should be able to finish a Track without being able to add or
+     * remove one.
+     */
+    private readonly trackStatus: TrackStatusWriter,
   ) {
     this.xpRules = {
       completion: config.XP_LEAF_COMPLETION,
@@ -130,7 +157,9 @@ export class ProgressService implements PayoffAccessPolicy {
    * @throws {LeafNotUnlockedError} if the scenario has not been answered correctly.
    */
   public async completeLeaf(userId: string, leafId: string): Promise<CompletionOutcome> {
-    await this.requireVisibleLeaf(leafId);
+    // Kept, not discarded: the Track this Leaf belongs to decides whether finishing it
+    // also finishes the book.
+    const leaf = await this.requireVisibleLeaf(leafId);
 
     const existing = await this.repository.find(userId, leafId);
 
@@ -139,6 +168,18 @@ export class ProgressService implements PayoffAccessPolicy {
     }
 
     if (existing.completedAt !== null) {
+      /**
+       * Re-evaluated on a replay, before returning.
+       *
+       * Below the early return, the rollup only ever ran on the call that *awarded* the
+       * XP — so `user_tracks.status` could stick at `active` forever in two live cases:
+       * a reader who finishes every Leaf and only then adds the Track, and a
+       * `setStatus` failure on the final Leaf, which is swallowed by design. Running it
+       * here makes a replayed completion self-healing, and it is already idempotent via
+       * the `eq(status, 'active')` guard in the repository.
+       */
+      await this.finishTrackIfDone(userId, leaf.trackId);
+
       return { progress: toDomainProgress(existing), xpAwarded: 0, alreadyCompleted: true };
     }
 
@@ -174,7 +215,69 @@ export class ProgressService implements PayoffAccessPolicy {
       'Leaf completed and XP awarded',
     );
 
+    await this.finishTrackIfDone(userId, leaf.trackId);
+
     return { progress: toDomainProgress(completed), xpAwarded: xp, alreadyCompleted: false };
+  }
+
+  /**
+   * Marks the Track complete once its last Leaf is done.
+   *
+   * This is what finally closes `user_tracks.status`, which has been `active` since WP3
+   * because nothing owned the Leaf-count rollup it needed. Completion time is the right
+   * trigger: the alternative — deciding it while rendering the library — is a write on
+   * a read path, and it would leave the status wrong for any reader who never opens
+   * their library.
+   *
+   * Failures here are logged and swallowed. The reader has finished the Leaf and been
+   * paid for it; turning a bookkeeping problem into a failed completion would be the
+   * worse outcome, and the next completion re-evaluates it anyway.
+   */
+  private async finishTrackIfDone(userId: string, trackId: string): Promise<void> {
+    try {
+      // The sanctioned repository read again — see `requireVisibleLeaf`. Filtered
+      // through the same predicate, so a placeholder Leaf hidden in production is not
+      // counted and cannot hold a Track open that a reader has actually finished.
+      const leaves = (await this.content.listLeavesForTrack(trackId)).filter((leaf) =>
+        isVisibleIn(this.config.NODE_ENV, leaf),
+      );
+
+      const summary = await this.summariseTrack(userId, trackId, leaves);
+
+      if (!summary.isComplete) {
+        return;
+      }
+
+      if (await this.trackStatus.setStatus(userId, trackId, 'completed')) {
+        this.logger.info({ userId, trackId, leaves: summary.totalLeaves }, 'Track completed');
+      }
+    } catch (error) {
+      this.logger.error(
+        { err: toError(error), userId, trackId },
+        'Could not update Track status after completing a Leaf',
+      );
+    }
+  }
+
+  /**
+   * @see TrackProgressReader
+   *
+   * Takes the Leaves rather than fetching them, so the caller decides what "visible"
+   * means. `LibraryService` passes the output of `ContentService.listLeaves`, which is
+   * the only thing that applies the placeholder guard — fetching them here would route
+   * around it.
+   */
+  public async summariseTrack(
+    userId: string,
+    trackId: string,
+    leaves: readonly CountableLeaf[],
+  ): Promise<TrackProgressSummary> {
+    const completed = await this.repository.listCompletedLeafIds(
+      userId,
+      leaves.map((leaf) => leaf.id),
+    );
+
+    return summariseTrackProgress(trackId, leaves, new Set(completed));
   }
 
   /** @see PayoffAccessPolicy — deliberately reads progress only, never content. */
@@ -192,21 +295,16 @@ export class ProgressService implements PayoffAccessPolicy {
    * returns `PublicLeaf` — by design, since widening it would put the answer key on the
    * wire and make the unlock gate decorative.
    *
-   * Going around `ContentService` means going around its placeholder guard, so the
-   * guard is reapplied here from the same shared predicate rather than reimplemented.
-   * Without this the loop would happily grade — and pay XP for — a Leaf that production
-   * is meant to be hiding.
+   * Going around `ContentService` means going around its guards, so they are reapplied
+   * here from the same shared helper rather than reimplemented. Without this the loop
+   * would happily grade — and pay XP for — a Leaf that production is meant to be hiding,
+   * or one whose Track has been taken down.
    *
-   * @throws {ContentNotFoundError} if absent, unpublished, or placeholder in production.
+   * @throws {ContentNotFoundError} if the Leaf or **its Track** is absent, unpublished,
+   *   or placeholder in production.
    */
   private async requireVisibleLeaf(leafId: string): Promise<Leaf> {
-    const leaf = await this.content.findLeaf(leafId);
-
-    if (!isVisibleIn(this.config.NODE_ENV, leaf)) {
-      throw new ContentNotFoundError('Leaf');
-    }
-
-    return leaf;
+    return resolveVisibleLeaf(this.content, this.config.NODE_ENV, leafId);
   }
 
   /**

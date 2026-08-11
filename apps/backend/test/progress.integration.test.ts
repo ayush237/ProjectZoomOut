@@ -801,3 +801,310 @@ describe('withdrawn content', () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* The per-Track rollup, and what it closes                                    */
+/* -------------------------------------------------------------------------- */
+
+interface LibraryBody {
+  entries: {
+    track: { id: string };
+    status: string;
+    progress: {
+      trackId: string;
+      totalLeaves: number;
+      completedLeaves: number;
+      nextLeafId: string | null;
+      isComplete: boolean;
+    };
+  }[];
+}
+
+const library = (reader: Reader) =>
+  app().inject({ method: 'GET', url: '/library', headers: auth(reader.token) });
+
+/** Answers correctly and completes one Leaf. */
+async function finishLeaf(reader: Reader, leafId: number, optionId: string): Promise<void> {
+  await answer(reader, optionId, leafId);
+  await complete(reader, leafId);
+}
+
+describe('per-Track progress in the library', () => {
+  it('reports zero of two for a Track the reader has not started', async () => {
+    // Track 1 has two visible Leaves in this fixture, 10 and 11.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    expect(entry?.progress).toMatchObject({
+      trackId: '1',
+      totalLeaves: 2,
+      completedLeaves: 0,
+      isComplete: false,
+    });
+  });
+
+  it('points resume at the first Leaf before anything is done', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    // Asserted on the id, not on "some Leaf was chosen" — the criterion is that resume
+    // lands on the right one.
+    expect(entry?.progress.nextLeafId).toBe('10');
+  });
+
+  it('advances resume past a finished Leaf', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+
+    expect(entry?.progress).toMatchObject({
+      completedLeaves: 1,
+      nextLeafId: '11',
+      isComplete: false,
+    });
+  });
+
+  it('is computed per reader', async () => {
+    const alice = await createReader();
+    const bob = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(alice.token) });
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(bob.token) });
+
+    await finishLeaf(alice, 10, CORRECT_OPTION);
+
+    const [bobs] = bodyOf<LibraryBody>(await library(bob)).entries;
+    expect(bobs?.progress.completedLeaves).toBe(0);
+    expect(bobs?.progress.nextLeafId).toBe('10');
+  });
+
+  it('stops counting a Leaf that has been taken down', async () => {
+    // The denominator has to follow takedown, or a reader is stuck at "1 of 2" on a
+    // Track that now has one Leaf and is actually finished.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    payload.setPublished('leaf', 11, false);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.progress).toMatchObject({
+      totalLeaves: 1,
+      completedLeaves: 1,
+      isComplete: true,
+      nextLeafId: null,
+    });
+  });
+});
+
+describe('user_tracks.status', () => {
+  it('starts active', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('active');
+  });
+
+  it('stays active while any Leaf is unfinished', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('active');
+  });
+
+  it('transitions to completed when every Leaf is complete', async () => {
+    // The column has read `active` for every row since WP3, because nothing owned the
+    // Leaf-count rollup needed to decide otherwise. This is that closing.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const [entry] = bodyOf<LibraryBody>(await library(reader)).entries;
+    expect(entry?.status).toBe('completed');
+    expect(entry?.progress.isComplete).toBe(true);
+  });
+
+  it('writes the transition to the database, not just the response', async () => {
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const stored = await harness.database.pool.query<{ status: string }>(
+      `select status from user_tracks where user_id = $1 and track_id = '1'`,
+      [reader.userId],
+    );
+
+    expect(stored.rows[0]?.status).toBe('completed');
+  });
+
+  it('completes a Track the reader never added, without erroring', async () => {
+    /**
+     * Adding to the library is optional; finishing a Track is not conditional on it.
+     * There is simply no row to update, which must not fail the completion.
+     *
+     * The first version of this never answered Leaf 11, so `complete()` hit
+     * `LeafNotUnlockedError` and `expect([200, 409]).toContain(...)` accepted the 409 —
+     * the scenario in the title was never exercised. An assertion that accepts two
+     * outcomes asserts nothing.
+     */
+    const reader = await createReader();
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await answer(reader, OTHER_LEAF_OPTION, 11);
+    const response = await complete(reader, 11);
+
+    expect(response.statusCode).toBe(200);
+    expect(bodyOf<CompletionBody>(response).progress.completedAt).not.toBeNull();
+
+    // Every Leaf of Track 1 is now done, and there is still no library row to promote.
+    await expect(
+      harness.database.pool.query(`select 1 from user_tracks where user_id = $1`, [reader.userId]),
+    ).resolves.toMatchObject({ rowCount: 0 });
+  });
+
+  it('promotes a Track added only after every Leaf was finished', async () => {
+    /**
+     * The first of the two paths that left `status` stuck at `active`.
+     *
+     * A reader can finish a book and add it afterwards. The rollup used to run only on
+     * the call that awarded the XP, so by the time the row existed nothing ever
+     * re-evaluated it. A replayed completion now re-checks, which makes it self-healing.
+     */
+    const reader = await createReader();
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    // Added late — after the last Leaf was already complete.
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+    expect(bodyOf<LibraryBody>(await library(reader)).entries[0]?.status).toBe('active');
+
+    // Replaying the final completion is what heals it.
+    const replay = await complete(reader, 11);
+    expect(replay.statusCode).toBe(200);
+
+    expect(bodyOf<LibraryBody>(await library(reader)).entries[0]?.status).toBe('completed');
+  });
+
+  it('leaves an archived Track archived', async () => {
+    // `ne(status, 'completed')` matched everything except the target, so finishing a
+    // Leaf would have resurrected an archived Track. Archiving is the reader's decision.
+    const reader = await createReader();
+    await app().inject({ method: 'POST', url: '/library/tracks/1', headers: auth(reader.token) });
+
+    await harness.database.pool.query(
+      `update user_tracks set status = 'archived' where user_id = $1`,
+      [reader.userId],
+    );
+
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const stored = await harness.database.pool.query<{ status: string }>(
+      `select status from user_tracks where user_id = $1`,
+      [reader.userId],
+    );
+    expect(stored.rows[0]?.status).toBe('archived');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Takedown cascades to every endpoint that serves a Leaf                      */
+/* -------------------------------------------------------------------------- */
+
+describe('when a Track is taken down', () => {
+  /**
+   * The scenario is a legal complaint answered the way it actually would be: unpublish
+   * the **Track**. The Leaves are left exactly as they were, published and valid.
+   *
+   * Before the cascade this cleared Explore, the library and resume, while
+   * `GET /content/leaves/:id` went on serving the full Leaf and the progress endpoints
+   * went on grading it and paying XP for it.
+   */
+  const takeDownTrack = (): void => {
+    payload.setPublished('track', 1, false);
+  };
+
+  it('stops the Leaf endpoint serving its content', async () => {
+    const reader = await createReader();
+    expect((await readLeaf(reader)).statusCode).toBe(200);
+
+    takeDownTrack();
+
+    const response = await readLeaf(reader);
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain(PAYOFF_PROSE);
+  });
+
+  it('stops the Leaf endpoint even for a reader who already unlocked the payoff', async () => {
+    // Having earned it is not a licence to keep reading content that has been pulled.
+    const reader = await createReader();
+    await answer(reader, CORRECT_OPTION);
+    expect((await readLeaf(reader)).body).toContain(PAYOFF_PROSE);
+
+    takeDownTrack();
+
+    const response = await readLeaf(reader);
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain(PAYOFF_PROSE);
+  });
+
+  it('stops grading answers', async () => {
+    const reader = await createReader();
+    takeDownTrack();
+
+    expect((await answer(reader, CORRECT_OPTION)).statusCode).toBe(404);
+  });
+
+  it('pays no XP for a Leaf in a taken-down Track', async () => {
+    // The money path: grading it also completes it and awards XP.
+    const reader = await createReader();
+    await answer(reader, CORRECT_OPTION);
+    takeDownTrack();
+
+    expect((await complete(reader)).statusCode).toBe(404);
+
+    const stored = await harness.database.pool.query<{ xp_awarded: number }>(
+      `select xp_awarded from leaf_progress where user_id = $1`,
+      [reader.userId],
+    );
+    expect(stored.rows[0]?.xp_awarded).toBe(0);
+  });
+
+  it('stops starting and reporting progress', async () => {
+    const reader = await createReader();
+    takeDownTrack();
+
+    expect(
+      (
+        await app().inject({
+          method: 'POST',
+          url: '/progress/leaves/10/start',
+          headers: auth(reader.token),
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect((await readProgress(reader)).statusCode).toBe(404);
+  });
+
+  it('does not reveal that the Track is the reason', async () => {
+    // A reader who asked for a Leaf is not entitled to learn about its parent.
+    const reader = await createReader();
+    takeDownTrack();
+
+    const response = await readLeaf(reader);
+    expect(response.body).not.toContain('Track');
+  });
+});

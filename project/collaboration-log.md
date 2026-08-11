@@ -834,6 +834,185 @@ restart. **Verify accessibility sizes from a cold start, not by toggling live.**
 - `TrackCard` takes an `action` and `children`, so the Leaf player's entry point is a prop
   rather than a fourth variant of the card.
 
+---
+
+## Addendum: WP7 second pass — takedown cascade and four others — 2026-08-11
+
+Five required fixes and two cheap ones from founder review. All seven done. Cold gate
+green: **734 tests** (361 backend, 201 mobile, 108 admin, 64 shared), 39 new here.
+
+**1. Takedown cascade — Tier A, and it was the real one.**
+
+`ContentService.getLeaf` and `ProgressService.requireVisibleLeaf` checked only the Leaf's
+own `status` and `isPlaceholder`. Unpublishing a **Track** — which is how a legal
+complaint is actually answered, one click on the book rather than twenty on its Leaves —
+cleared Explore, the library and resume, while `GET /content/leaves/:id` carried on
+serving the full Leaf and the progress endpoints carried on grading it and **paying XP
+for it**.
+
+Both call sites now go through `resolveVisibleLeaf`, which resolves the parent and
+applies the same predicate. Written once, in `contentVisibility.ts`, because two copies
+of a takedown rule is how one of them gets missed — which is precisely what happened
+here. Details worth keeping:
+
+- **The 404 names the Leaf, never the Track.** A reader who asked for a Leaf is not
+  entitled to learn that its parent is the reason it is gone.
+- **A deleted Track is handled as well as an unpublished one.** `findTrack` throwing
+  `ContentNotFoundError` is caught and re-thrown as a missing Leaf, so it cannot surface
+  as a 500.
+- **Cost is one extra CMS read per Leaf**, served by the existing TTL cache. Correct
+  trade against serving content somebody has demanded be removed.
+- Enforced in the backend, not by a CMS hook cascading the flag onto children: a hook is
+  a migration that can half-run, and it would leave the backend trusting a denormalised
+  copy of the answer.
+
+**Mutation-checked.** Removing the parent check fails six unit tests. Interestingly it
+fails *no* integration tests — the fake CMS makes an unpublished Track vanish entirely,
+so those exercise the deleted-Track branch while the unit tests exercise the
+draft/placeholder branch. Both branches are real and both are now covered; worth knowing
+that neither layer alone would have caught this.
+
+**2. `user_tracks.status` could stick at `active` forever.** `finishTrackIfDone` sat
+below the early return for a replayed completion, so the rollup only ever ran on the call
+that awarded XP. Two live paths reached the stuck state: a reader who finishes every Leaf
+and *then* adds the Track, and a `setStatus` failure on the final Leaf (swallowed by
+design). Moved above the return, which makes a replay self-healing. Two integration tests
+cover the add-late path and the archived-Track path.
+
+**3. The tautological completion test is gone.** It never answered Leaf 11, so `complete()`
+hit `LeafNotUnlockedError` and `expect([200, 409]).toContain(...)` accepted the 409 — the
+scenario in the title was never exercised. Now answers first and asserts 200.
+
+**4. A failed pull-to-refresh is no longer silent.** `useAsyncResource` forced `status`
+back to `ready` when stale data existed, and no screen read `error` unless
+`status === 'error'`, so during an outage the spinner simply retracted. Added a separate
+`refreshError` field — separate precisely so a screen cannot render one and forget the
+other, which is what sharing `error` caused — and all three screens show it above the
+retained list. Mutation-checked; verified on device by killing the backend mid-session.
+
+**5. Explore no longer claims a membership it could not check.** When the library fetch
+failed, `inLibrary()` fell through to `false` and every card read "Add to library",
+including books already on the shelf. The screen now says the shelf could not be checked
+and stops asserting either way. Adding stays available, because it is idempotent
+server-side.
+
+**Cheap fixes:**
+
+- `setStatus` guarded with `ne(status, 'completed')`, which matched *every* other status —
+  finishing a Leaf would have resurrected an `archived` Track. Now `eq(status, 'active')`.
+- **The `EmptyState` comment was wrong, and so was the code it described.** It claimed
+  `Icon` "cancels the OS font scale internally". `Icon` cancelled nothing — the vendored
+  `create-icon-set.js` already defaults `allowFontScaling: false`, so React Native never
+  multiplied the size, and my division by `fontScale` was **shrinking every icon as the
+  reader's text grew** — to roughly 40% at XXXL. Visible in the earlier XXXL screenshots,
+  where I attributed the small tab icons to a stale render. The division is gone; `size`
+  is now a literal point size. The review caught the wrong explanation; the explanation
+  was wrong because the code was.
+
+**Confirmed rather than fixed blind:**
+
+**Drafts cannot reach the backend, and no `_status` filter should be added.** Both
+`Tracks` and `Leaves` set `read: publishedOrAuthenticated` (`apps/admin/src/access/`),
+which returns a `_status: { equals: 'published' }` constraint for any request without
+`req.user` — and `PayloadClient` calls anonymously. Verified at the config, which is
+definitive. The empirical check against the running CMS is *consistent* but not
+discriminating: the corpus has exactly one Track and one Leaf, both published, so there
+is no draft to be excluded. A redundant query filter would add a second thing to keep
+correct for no gain.
+
+**Manual device verification** (mandatory under the new bar), all from cold starts:
+
+| | dark / default | dark / XXXL | light / default | light / XXXL |
+|---|---|---|---|---|
+| Explore, Library, Journey | ✅ | ✅ | ✅ | ✅ |
+| Refresh-error banner + retained list | — | ✅ | — | — |
+
+Icon sizing re-verified at XXXL after the scaling fix; the earlier pass had run with the
+shrinking bug in place.
+
+**Added to WP14's worklist** (on top of the seven already listed):
+
+8. **`fakePayload` ignores `page` and `limit`** and always answers page 1 of 1, so nothing
+   covers real pagination — including the `listTracks` totals fix, which is verified only
+   for the placeholder filter on a single page.
+9. **No draft-visibility test against the real CMS.** The access rule is confirmed by
+   reading the config; proving it empirically needs a draft document in the corpus, which
+   WP11's seed should create.
+10. **The takedown cascade costs an extra CMS read per Leaf.** Fine behind the TTL cache
+    today; worth measuring once WP8 puts the Leaf player on that path.
+
+---
+
+## Addendum: WP7 — the app did not launch, and the new testing bar — 2026-08-11
+
+Two things after WP7 was committed at `44ab716`.
+
+**1. A blocking defect the whole gate missed: the app failed to launch.**
+
+`Unhandled JS Exception: [runtime not ready]: Error: Cannot find native module 'ExpoAsset'`,
+then `expo-asset could not be found within the project`. Adding `@expo/vector-icons`
+pulled `expo-asset` in **transitively**, at a version the SDK did not expect and as
+nobody's declared dependency. Fixed by installing it properly (`expo install expo-asset`,
+which also registered its config plugin) and reinstalling the workspace so the root copy
+matched.
+
+**The important part is what did not catch it.** Lint, typecheck, 714 tests and the build
+were all green against an app that could not start. Nothing in the automated gate boots
+the bundle — component tests mount React trees under Jest, where native module resolution
+never happens. Only opening it on the simulator found this, which is the argument for the
+new bar's trade in one paragraph.
+
+A second, self-inflicted lesson: **two Metro processes were bound to port 8081** and the
+stale one kept serving a broken bundle through three restarts and a `--clear`. It also
+produced a convincing fake defect — a stretched, broken-looking Track card in light mode
+that I nearly chased as a layout bug. It was the dead bundle. `lsof -ti:8081` before
+trusting any simulator observation.
+
+**2. The testing bar changed mid-package** (founder, 2026-08-11): development velocity is
+the priority until the app works end to end. Tier A invariants stay mandatory, Tier B is
+one happy path plus one failure path, Tier C defers to WP14, and **manual device
+verification in both themes and at `accessibilityExtraExtraExtraLarge` is now mandatory in
+exchange**.
+
+Applied from here. WP7's own tests were written under the old bar and are staying — they
+are already written, they pass, and deleting them would spend effort to reduce coverage.
+
+**Manual verification actually performed for WP7**, against the real backend and CMS:
+
+| Surface | dark / default | dark / XXXL | light / default | light / XXXL |
+|---|---|---|---|---|
+| Explore | ✅ | ✅ | ✅ | ✅ |
+| Library | ✅ | ✅ | ✅ | ✅ |
+| Journey | ✅ | ✅ | ✅ | ✅ |
+
+Every XXXL check was done from a **cold start with the size already set** — changing it
+while the app runs leaves Expo Go rendering stale line heights, which looks like a severe
+layout bug and is not one.
+
+**Deferred to WP14 — the worklist starts here:**
+
+1. **A launch smoke test.** The gap above: nothing proves the bundle boots. A Detox or
+   Maestro check that launches the app and asserts one screen rendered would have caught
+   the `ExpoAsset` failure, and will catch the next native-module regression. **Highest
+   value item on this list** — it is the only one covering a failure that reached a
+   committed state.
+2. **`expo install --check` in CI.** It currently reports `expo@57.0.11 → 57.0.12` and
+   `jest-expo@57.0.3 → 57.0.4`. Version drift is what produced the defect above; a check
+   that fails the build is cheap.
+3. **`useAsyncResource` has no direct unit tests.** Covered indirectly through the three
+   screens — the generation guard against a slow first response landing on top of a fast
+   retry is the part worth testing on its own.
+4. **`useRefreshOnFocus` is untested.** It degrades outside a navigator by design, and the
+   navigator path is exercised only manually. Tier B would want one test that a focus
+   event triggers a refetch.
+5. **`ProgressBar` and `TrackCard` have no dedicated tests** — only assertions through the
+   screens that use them. The zero-of-zero guard against `NaN%` is the case worth pinning
+   directly.
+6. **No test for the Explore add/remove optimistic override** beyond the happy path and
+   one failure. The remove-then-refresh interaction is manual-only.
+7. **Backend `listCompletedLeafIds` with an empty id list** is guarded in code and covered
+   only through the rollup. Worth one direct test.
+
 ### Completed: WP6 — Mobile shell: design system, navigation, auth, age gate — 2026-08-11
 
 > **Second pass, 2026-08-11 — see the addendum at the end of this entry.** Founder review

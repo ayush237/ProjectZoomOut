@@ -1,6 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { useTheme } from '../design';
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
 /**
@@ -11,17 +12,14 @@ import { Text } from './Text';
  * and the fact that `correct` green and `primary` teal are adjacent in hue — a reader
  * must never have to distinguish them to know whether something went right.
  *
- * The glyphs are text rather than an icon font. Adding an icon dependency for three
- * shapes would cost startup time for no gain, and a text glyph scales with the OS font
- * setting for free.
  */
 
 export type StatusTone = 'error' | 'success' | 'info';
 
-const GLYPHS: Record<StatusTone, string> = {
-  error: '!',
-  success: '✓',
-  info: 'i',
+const ICONS: Record<StatusTone, IconName> = {
+  error: 'error',
+  success: 'success',
+  info: 'info',
 };
 
 export interface StatusMessageProps {
@@ -60,16 +58,9 @@ export function StatusMessage({ tone, message, testID }: StatusMessageProps): Re
         },
       ]}
     >
-      <View
-        style={[
-          styles.glyph,
-          { borderColor: colour, borderRadius: theme.radius.full, borderWidth: theme.borderWidth.focus },
-        ]}
-      >
-        <Text variant="caption" style={{ color: colour }}>
-          {GLYPHS[tone]}
-        </Text>
-      </View>
+      {/* The non-colour half of the signal. Hidden from screen readers because the row
+          itself already announces the tone and the message together. */}
+      <Icon name={ICONS[tone]} color={colour} size={20} />
 
       <Text variant="small" style={[styles.message, { color: colour }]}>
         {message}

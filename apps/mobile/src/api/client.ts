@@ -1,4 +1,4 @@
-import type { User } from '@zoomout/shared';
+import type { Track, TrackProgressSummary, User } from '@zoomout/shared';
 
 import { ApiError, NetworkError, SessionExpiredError } from './errors';
 import type { TokenStore } from './tokenStore';
@@ -50,6 +50,36 @@ export interface ProviderSignInInput {
 export interface ProfileUpdate {
   readonly displayName?: string | undefined;
   readonly timezone?: string | undefined;
+}
+
+/** One page of Explore. Mirrors the backend's `TrackPage`. */
+export interface TrackPage {
+  readonly tracks: readonly Track[];
+  readonly page: number;
+  readonly totalPages: number;
+  readonly totalTracks: number;
+}
+
+/** Leaf metadata for a Track's contents — no slide bodies, and no answer key. */
+export interface LeafSummary {
+  readonly id: string;
+  readonly trackId: string;
+  readonly orderIndex: number;
+  readonly title: string;
+  readonly isPlaceholder: boolean;
+}
+
+/**
+ * A book on the reader's shelf, with how far through it they are.
+ *
+ * `progress` is derived server-side per request — see `trackProgressSummarySchema`.
+ * The client displays it and never recomputes it.
+ */
+export interface LibraryEntry {
+  readonly track: Track;
+  readonly addedAt: string;
+  readonly status: 'active' | 'completed' | 'archived';
+  readonly progress: TrackProgressSummary;
 }
 
 export interface ApiClientOptions {
@@ -162,6 +192,75 @@ export class ApiClient {
 
   public async updateProfile(update: ProfileUpdate): Promise<User> {
     return this.send<User>('PATCH', '/users/me', update, true);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Content                                                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * A page of Tracks for Explore.
+   *
+   * Placeholder visibility is **not** a client concern: `ContentService` decides what
+   * this reader may see, and the app renders whatever comes back. Re-implementing that
+   * rule here would give production a second, divergent opinion about which content is
+   * real.
+   */
+  public async listTracks(page = 1, perPage = 20): Promise<TrackPage> {
+    return this.send<TrackPage>(
+      'GET',
+      `/content/tracks?page=${String(page)}&perPage=${String(perPage)}`,
+      undefined,
+      true,
+    );
+  }
+
+  public async getTrack(trackId: string): Promise<Track> {
+    return this.send<Track>('GET', `/content/tracks/${encodeURIComponent(trackId)}`, undefined, true);
+  }
+
+  public async listLeaves(trackId: string): Promise<readonly LeafSummary[]> {
+    const body = await this.send<{ leaves: readonly LeafSummary[] }>(
+      'GET',
+      `/content/tracks/${encodeURIComponent(trackId)}/leaves`,
+      undefined,
+      true,
+    );
+
+    return body.leaves;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Library                                                             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The reader's library, each entry carrying its own progress rollup.
+   *
+   * One request for the whole shelf. The alternative the backend was built to avoid —
+   * a Leaf list and a progress row per Track — turns a twenty-book library into
+   * hundreds of calls, which is why `progress` is on the entry rather than fetched
+   * alongside it.
+   */
+  public async listLibrary(): Promise<readonly LibraryEntry[]> {
+    const body = await this.send<{ entries: readonly LibraryEntry[] }>(
+      'GET',
+      '/library',
+      undefined,
+      true,
+    );
+
+    return body.entries;
+  }
+
+  /** Idempotent: adding a Track already in the library succeeds and changes nothing. */
+  public async addToLibrary(trackId: string): Promise<void> {
+    await this.send('POST', `/library/tracks/${encodeURIComponent(trackId)}`, undefined, true);
+  }
+
+  /** Also idempotent — removing something absent is the intent already satisfied. */
+  public async removeFromLibrary(trackId: string): Promise<void> {
+    await this.send('DELETE', `/library/tracks/${encodeURIComponent(trackId)}`, undefined, true);
   }
 
   /* ------------------------------------------------------------------ */

@@ -81,16 +81,19 @@ async function main(): Promise<void> {
     logger,
     config,
   );
+  const libraryRepository = new PostgresLibraryRepository(database);
   const progressService = new ProgressService(
     new PostgresProgressRepository(database),
     contentRepository,
     config,
     logger,
+    libraryRepository,
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
   const libraryService = new LibraryService(
-    new PostgresLibraryRepository(database),
+    libraryRepository,
     contentService,
+    progressService,
     logger,
   );
 

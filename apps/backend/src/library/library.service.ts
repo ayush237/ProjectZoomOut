@@ -1,28 +1,38 @@
-import type { Track } from '@zoomout/shared';
+import type { Track, TrackProgressSummary } from '@zoomout/shared';
 
 import type { AppLogger } from '../logging/logger.js';
 import { toError } from '../errors.js';
 import { ContentNotFoundError } from '../content/content.errors.js';
 import type { ContentService } from '../content/content.service.js';
+import type { TrackProgressReader } from '../progress/progress.service.js';
 import type { LibraryRepository } from './library.repository.js';
 
 export interface LibraryEntry {
   readonly track: Track;
   readonly addedAt: string;
   readonly status: 'active' | 'completed' | 'archived';
+  /**
+   * Derived per request, never stored. See `trackProgressSummarySchema`.
+   *
+   * This is what WP6's library could not answer and what Library and Journey are built
+   * on: "7 of 20", and where resume goes.
+   */
+  readonly progress: TrackProgressSummary;
 }
 
 /**
  * A reader's library.
  *
- * Membership only. Progress, XP and completion belong to WP4 and are deliberately
- * absent — returning a half-built progress shape now would give WP7 something to build
- * against that is going to change.
+ * Sits above both content and progress and composes them — which is why the rollup
+ * lives here rather than in either. `ContentService` knows which Leaves a reader may
+ * see; `ProgressService` knows which they have finished; neither should have to know
+ * about the other to answer "how far through this book am I".
  */
 export class LibraryService {
   constructor(
     private readonly repository: LibraryRepository,
     private readonly content: ContentService,
+    private readonly progress: TrackProgressReader,
     private readonly logger: AppLogger,
   ) {}
 
@@ -71,10 +81,18 @@ export class LibraryService {
     const entries = await Promise.all(
       rows.map(async (row): Promise<LibraryEntry | null> => {
         try {
+          // Resolved together rather than in sequence: a library of twenty books would
+          // otherwise be forty round trips end to end, most of them waiting on the CMS.
+          const [track, progress] = await Promise.all([
+            this.content.getTrack(row.trackId),
+            this.summarise(userId, row.trackId),
+          ]);
+
           return {
-            track: await this.content.getTrack(row.trackId),
+            track,
             addedAt: row.addedAt.toISOString(),
             status: row.status,
+            progress,
           };
         } catch (error) {
           if (error instanceof ContentNotFoundError) {
@@ -98,5 +116,21 @@ export class LibraryService {
     );
 
     return entries.filter((entry): entry is LibraryEntry => entry !== null);
+  }
+
+  /**
+   * How far this reader is through one Track.
+   *
+   * Public because Journey and a future Track-detail screen want it for a Track that
+   * may not be in the library yet, without paying for the whole list.
+   *
+   * Counts **visible** Leaves only, because it goes through `ContentService.listLeaves`
+   * — so a placeholder Leaf hidden in production is not in the denominator, and a
+   * reader is not shown "3 of 20" for a book that currently offers three.
+   */
+  public async summarise(userId: string, trackId: string): Promise<TrackProgressSummary> {
+    const leaves = await this.content.listLeaves(trackId);
+
+    return this.progress.summariseTrack(userId, trackId, leaves);
   }
 }

@@ -4,7 +4,7 @@ import type { AppConfig } from '../config/env.js';
 import type { AppLogger } from '../logging/logger.js';
 import { ContentNotFoundError } from './content.errors.js';
 import type { ContentRepository, TrackPage } from './content.repository.js';
-import { isVisibleIn } from './contentVisibility.js';
+import { isVisibleIn, resolveVisibleLeaf } from './contentVisibility.js';
 import type { PayoffAccessPolicy } from './payoffAccess.js';
 
 /** Leaf metadata for a Track's contents list — no slide bodies. */
@@ -104,11 +104,9 @@ export class ContentService {
    * conditional is a compile-time property of this method rather than a convention.
    */
   public async getLeaf(leafId: string, userId: string): Promise<DeliveredLeaf> {
-    const leaf = await this.repository.findLeaf(leafId);
-
-    if (!this.isVisible(leaf)) {
-      throw new ContentNotFoundError('Leaf');
-    }
+    // Resolves the parent Track too: a Leaf whose Track has been taken down is gone,
+    // whatever the Leaf's own status says. See `resolveVisibleLeaf`.
+    const leaf = await resolveVisibleLeaf(this.repository, this.config.NODE_ENV, leafId);
 
     const unlocked = await this.payoffAccess.isPayoffUnlocked(userId, leafId);
 

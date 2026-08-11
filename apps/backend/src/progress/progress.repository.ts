@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import type { DatabaseClient } from '../db/client.js';
 import { leafProgress, users, type LeafProgressRow } from '../db/schema.js';
@@ -43,6 +43,14 @@ export interface ProgressRepository {
   completeIfUnfinished(input: CompleteLeafInput): Promise<LeafProgressRow | null>;
   /** The reader's IANA timezone, for the local completion date. Null if no such user. */
   findReaderTimezone(userId: string): Promise<string | null>;
+  /**
+   * Which of these Leaves this reader has completed.
+   *
+   * Takes the candidate ids rather than returning every completion the reader has: a
+   * library of twenty books would otherwise pull the reader's entire history to answer
+   * a question about one Track.
+   */
+  listCompletedLeafIds(userId: string, leafIds: readonly string[]): Promise<readonly string[]>;
 }
 
 export class PostgresProgressRepository implements ProgressRepository {
@@ -167,6 +175,31 @@ export class PostgresProgressRepository implements ProgressRepository {
       .returning();
 
     return row ?? null;
+  }
+
+  public async listCompletedLeafIds(
+    userId: string,
+    leafIds: readonly string[],
+  ): Promise<readonly string[]> {
+    if (leafIds.length === 0) {
+      // `inArray` with an empty list is a SQL error in some dialects and a full scan in
+      // others. A Track with no visible Leaves is ordinary in Phase 1, so it is handled
+      // here rather than left to every caller.
+      return [];
+    }
+
+    const rows = await this.client.db
+      .select({ leafId: leafProgress.leafId })
+      .from(leafProgress)
+      .where(
+        and(
+          eq(leafProgress.userId, userId),
+          inArray(leafProgress.leafId, [...leafIds]),
+          isNotNull(leafProgress.completedAt),
+        ),
+      );
+
+    return rows.map((row) => row.leafId);
   }
 
   public async findReaderTimezone(userId: string): Promise<string | null> {

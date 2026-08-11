@@ -1,4 +1,4 @@
-import type { Leaf } from '@zoomout/shared';
+import type { Leaf, Track } from '@zoomout/shared';
 
 /**
  * A valid domain `Leaf`, for unit tests that need one without a CMS.
@@ -31,6 +31,31 @@ export function buildLeaf(overrides: Partial<Leaf> = {}): Leaf {
     stickyNotes: { notes: ['One', 'Two'] },
     takeaway: { body: 'Takeaway.' },
     sourceReferences: [],
+    createdAt: '2026-08-08T12:00:00.000Z',
+    updatedAt: '2026-08-08T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/**
+ * A valid domain `Track`, published and not a placeholder.
+ *
+ * Needed since the takedown cascade: every Leaf read resolves its parent, so a test
+ * double that only answers `findLeaf` no longer satisfies the service.
+ */
+export function buildTrack(overrides: Partial<Track> = {}): Track {
+  return {
+    id: 't1',
+    bookTitle: 'A Book',
+    author: 'An Author',
+    publisher: 'A Publisher',
+    coverUrl: 'https://example.test/cover.png',
+    description: 'A description.',
+    disclaimer: 'ZoomOut is not affiliated with the author or publisher.',
+    purchaseLinks: [{ retailer: 'Example', url: 'https://example.test/b', isAffiliate: false }],
+    status: 'published',
+    leafCount: 1,
+    isPlaceholder: false,
     createdAt: '2026-08-08T12:00:00.000Z',
     updatedAt: '2026-08-08T12:00:00.000Z',
     ...overrides,
