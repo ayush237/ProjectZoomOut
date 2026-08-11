@@ -5,27 +5,23 @@
  * navigators, which would make every screen a cycle back to the tree that renders it.
  */
 
-export interface EmailSignUpDraft {
-  readonly email: string;
-  readonly password: string;
-  readonly displayName: string;
-}
-
 export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
   /**
-   * The age gate, shared by both paths.
+   * The age gate, shared by both signup paths.
    *
-   * A draft means an email signup carrying the fields collected so far. **Undefined
-   * means a social signup** the backend paused for missing details — the provider token
-   * is already held in `AuthProvider`, so the screen needs nothing but the date.
+   * **Carries which path it is on, and nothing else.** It used to take the whole email
+   * signup draft, which put a plaintext password into React Navigation's serialisable
+   * navigation state — inert until state persistence or crash reporting is switched on,
+   * and a credential leak the moment either is. The draft now lives in
+   * `SignUpDraftProvider`; only this discriminator travels, and it is safe to persist.
    *
-   * One screen rather than two because the age gate is not an email-signup step; it is
+   * One screen rather than two because the age gate is not an email-signup step: it is
    * a compliance boundary every new account crosses, and Apple and Google supply
    * neither a date of birth nor a timezone.
    */
-  AgeGate: EmailSignUpDraft | undefined;
+  AgeGate: { readonly mode: 'email' | 'social' };
   AgeRefused: undefined;
   ProviderEmailMissing: undefined;
 };

@@ -11,11 +11,17 @@ import { EmptyState, Screen } from '../components';
  * because that is what it will mean from WP7 onward — a Library with nothing in it
  * reads the same whether the feature is unbuilt or unused, and only one of those needs
  * rewriting later.
+ *
+ * **These screens scroll.** They originally did not — an empty state has nothing to
+ * scroll, so it looked like a free simplification — but at
+ * `accessibilityExtraExtraExtraLarge` the content is taller than the viewport and a
+ * non-scrolling container simply clips it, top and bottom, with no way to reach the
+ * words. Scrolling costs nothing when everything fits.
  */
 
 export function ExploreScreen(): React.JSX.Element {
   return (
-    <Screen testID="explore-screen" scrollable={false}>
+    <Screen testID="explore-screen">
       <EmptyState
         testID="explore-empty"
         placeholderGlyph="◎"
@@ -28,7 +34,7 @@ export function ExploreScreen(): React.JSX.Element {
 
 export function LibraryScreen(): React.JSX.Element {
   return (
-    <Screen testID="library-screen" scrollable={false}>
+    <Screen testID="library-screen">
       <EmptyState
         testID="library-empty"
         placeholderGlyph="❑"
@@ -41,7 +47,7 @@ export function LibraryScreen(): React.JSX.Element {
 
 export function JourneyScreen(): React.JSX.Element {
   return (
-    <Screen testID="journey-screen" scrollable={false}>
+    <Screen testID="journey-screen">
       <EmptyState
         testID="journey-empty"
         placeholderGlyph="↗"

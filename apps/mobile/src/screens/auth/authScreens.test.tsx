@@ -1,9 +1,10 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
-import type { ReactElement, ReactNode } from 'react';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import { MemoryTokenStore } from '../../api/tokenStore';
 import { AuthProvider } from '../../auth/AuthProvider';
+import { SignUpDraftProvider, useSignUpDraft, type SignUpDraft } from '../../auth/SignUpDraft';
 import { ThemeProvider } from '../../design';
 import type { ThemeMode } from '../../design';
 import { AgeGateScreen } from './AgeGateScreen';
@@ -54,6 +55,26 @@ function stubNavigation(): Harness {
 }
 
 /**
+ * Puts an email signup draft into context, the way the details screen would.
+ *
+ * The draft no longer travels as a route param — it holds a password, and navigation
+ * state is serialisable — so a test that exercises the email path has to seed it here
+ * rather than pass it in.
+ */
+function SeedDraft({ draft }: { draft: SignUpDraft }): null {
+  const { setDraft } = useSignUpDraft();
+
+  // An effect, not a render-time write: writing would update the provider while a
+  // child is rendering, which React rejects. In time either way — the age gate reads
+  // the draft on submit, which is a tap long after mount.
+  useEffect(() => {
+    setDraft(draft);
+  }, [setDraft, draft]);
+
+  return null;
+}
+
+/**
  * Renders one screen inside the real providers.
  *
  * Returns the queries rather than relying on the module-level `screen`: with several
@@ -63,7 +84,7 @@ function stubNavigation(): Harness {
  */
 async function renderScreen(
   element: ReactElement,
-  options: { fetchFn?: typeof fetch; mode?: ThemeMode } = {},
+  options: { fetchFn?: typeof fetch; mode?: ThemeMode; draft?: SignUpDraft } = {},
 ): Promise<ReturnType<typeof render> extends Promise<infer R> ? R : never> {
   const wrapper = ({ children }: { children: ReactNode }): React.JSX.Element => (
     <SafeAreaProvider initialMetrics={METRICS}>
@@ -73,7 +94,10 @@ async function renderScreen(
           baseUrl="https://api.test"
           {...(options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn })}
         >
-          {children}
+          <SignUpDraftProvider>
+            {options.draft === undefined ? null : <SeedDraft draft={options.draft} />}
+            {children}
+          </SignUpDraftProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
@@ -97,11 +121,22 @@ async function renderScreen(
  * one in a test means reproducing a large generic shape to call two functions on it;
  * the cast is confined to this helper. */
 const navProps = (harness: Harness): any => ({ navigation: harness, route: { params: undefined } });
-const navPropsWithDraft = (harness: Harness): any => ({
+/** The draft the details screen would have left in context before the age gate. */
+const DRAFT: SignUpDraft = {
+  email: 'reader@example.test',
+  password: 'a-sufficiently-long-password',
+  displayName: 'Test Reader',
+};
+
+/** The age gate on the email path. The draft is seeded into context, not passed here. */
+const emailAgeGateProps = (harness: Harness): any => ({
   navigation: harness,
-  route: {
-    params: { email: 'reader@example.test', password: 'a-long-enough-password', displayName: 'R' },
-  },
+  route: { params: { mode: 'email' } },
+});
+/** The age gate on the social path — a signup the backend paused for a date of birth. */
+const socialAgeGateProps = (harness: Harness): any => ({
+  navigation: harness,
+  route: { params: { mode: 'social' } },
 });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -118,7 +153,7 @@ describe.each(['dark', 'light'] as const)('in the %s theme', (mode) => {
   });
 
   it('renders the age gate', async () => {
-    const view = await renderScreen(<AgeGateScreen {...navPropsWithDraft(stubNavigation())} />, { mode });
+    const view = await renderScreen(<AgeGateScreen {...emailAgeGateProps(stubNavigation())} />, { mode });
 
     expect(view.getByTestId('age-gate-dob')).toBeOnTheScreen();
   });
@@ -147,7 +182,7 @@ describe('the age gate', () => {
     const fetchFn = jest.fn(always(() => json({}))) as unknown as typeof fetch;
     const nav = stubNavigation();
 
-    const view = await renderScreen(<AgeGateScreen {...navPropsWithDraft(nav)} />, { fetchFn });
+    const view = await renderScreen(<AgeGateScreen {...emailAgeGateProps(nav)} />, { fetchFn });
 
     await fireEvent.changeText(view.getByTestId('age-gate-dob'), '2020-01-01');
     await fireEvent.press(view.getByTestId('age-gate-submit'));
@@ -160,7 +195,7 @@ describe('the age gate', () => {
 
   it('rejects a malformed date before submitting it', async () => {
     const nav = stubNavigation();
-    const view = await renderScreen(<AgeGateScreen {...navPropsWithDraft(nav)} />);
+    const view = await renderScreen(<AgeGateScreen {...emailAgeGateProps(nav)} />);
 
     await fireEvent.changeText(view.getByTestId('age-gate-dob'), '17/03/1994');
     await fireEvent.press(view.getByTestId('age-gate-submit'));
@@ -176,7 +211,8 @@ describe('the age gate', () => {
     // check does, or the two paths would look different for the same outcome.
     const nav = stubNavigation();
 
-    const view = await renderScreen(<AgeGateScreen {...navPropsWithDraft(nav)} />, {
+    const view = await renderScreen(<AgeGateScreen {...emailAgeGateProps(nav)} />, {
+      draft: DRAFT,
       fetchFn: always(() =>
         json({ error: { code: 'BELOW_MINIMUM_AGE', message: 'too young' } }, 403),
       ),
@@ -193,7 +229,7 @@ describe('the age gate', () => {
   it('never offers a timezone input', async () => {
     // Read from the device, never asked. A picker here would be a worse answer than
     // the device's own setting in every case.
-    const view = await renderScreen(<AgeGateScreen {...navPropsWithDraft(stubNavigation())} />);
+    const view = await renderScreen(<AgeGateScreen {...emailAgeGateProps(stubNavigation())} />);
 
     // No field labelled Timezone. The word appears once, in the hint explaining that
     // we read it from the device — which is the opposite of asking for it.
@@ -202,9 +238,9 @@ describe('the age gate', () => {
   });
 
   it('asks for the date differently on the social path', async () => {
-    // No route params means a social signup the backend paused. The copy has to explain
-    // why an app that just authenticated them is still asking for something.
-    const view = await renderScreen(<AgeGateScreen {...navProps(stubNavigation())} />);
+    // The copy has to explain why an app that just authenticated them is still asking
+    // for something.
+    const view = await renderScreen(<AgeGateScreen {...socialAgeGateProps(stubNavigation())} />);
 
     expect(view.getByText('One more thing')).toBeOnTheScreen();
     expect(view.getByText(/does not share this/iu)).toBeOnTheScreen();

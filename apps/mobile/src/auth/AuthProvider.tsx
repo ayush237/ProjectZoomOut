@@ -68,6 +68,19 @@ export interface AuthContextValue {
   readonly completeSocialSignup: (dateOfBirth: string) => Promise<void>;
   readonly cancelSocialSignup: () => void;
   readonly signOut: () => Promise<void>;
+  /**
+   * Re-reads the profile from the server.
+   *
+   * The only authenticated request the app makes after launch, which makes it the path
+   * an expired session is actually discovered on: if the access token has died and the
+   * refresh token with it, this is where the client ends the session and the shell is
+   * replaced by sign-in.
+   *
+   * @throws {SessionExpiredError} when the session could not be renewed. The status has
+   *   already flipped to `signedOut` by then; the throw is for the caller's own control
+   *   flow, not a second thing to handle.
+   */
+  readonly refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -273,6 +286,14 @@ export function AuthProvider({
     setStatus('signedOut');
   }, []);
 
+  const refreshProfile = useCallback(async (): Promise<void> => {
+    // No try/catch: a dead session is reported by the client through `onSessionEnded`,
+    // which has already returned the app to sign-in. Catching here and setting the
+    // status again would hide whether that wiring works — which is exactly how the
+    // first version of this went wrong.
+    setUser(await client.getProfile());
+  }, [client]);
+
   const signOut = useCallback(async (): Promise<void> => {
     await client.logout();
 
@@ -292,6 +313,7 @@ export function AuthProvider({
       completeSocialSignup,
       cancelSocialSignup,
       signOut,
+      refreshProfile,
     }),
     [
       status,
@@ -303,6 +325,7 @@ export function AuthProvider({
       completeSocialSignup,
       cancelSocialSignup,
       signOut,
+      refreshProfile,
     ],
   );
 

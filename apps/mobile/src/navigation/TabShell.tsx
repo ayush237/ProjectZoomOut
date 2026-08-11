@@ -1,6 +1,8 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { PixelRatio } from 'react-native';
 
 import { Text } from '../components';
+import { asTextGlyph } from '../components/glyphs';
 import { useTheme } from '../design';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ExploreScreen, JourneyScreen, LibraryScreen } from '../screens/shells';
@@ -64,23 +66,35 @@ export function TabShell(): React.JSX.Element {
   );
 }
 
+
 /**
- * Forces **text presentation** on a glyph.
+ * The tab bar's height is fixed by React Navigation, so its glyphs must not scale.
  *
- * Several of these characters have an emoji form, and iOS picks it by default: `↗` and
- * `☺` rendered as full-colour emoji in the simulator, which ignore `color` entirely — so
- * the active tab looked identical to the inactive ones on half the bar. U+FE0E is the
- * variation selector that asks for the monochrome glyph, which then takes the tint.
+ * At `accessibilityExtraExtraExtraLarge` an unscaled-capped glyph rendered at roughly
+ * 2.4× and was clipped to fragments by the bar — leaving four unreadable shapes above
+ * four labels. The **labels still scale**, which is what carries the accessibility
+ * requirement here; the icon is decoration beside them.
+ *
+ * Pre-dividing by the OS scale holds the glyph at a constant visual size, because React
+ * Native multiplies it straight back. `allowFontScaling={false}` would be the obvious
+ * tool and `Text` deliberately does not offer it — that escape hatch is how apps lose
+ * scaling on real content.
  */
-const TEXT_PRESENTATION = '︎';
+const TAB_GLYPH_SIZE = 18;
 
 function glyph(symbol: string) {
   return function TabGlyph({ color }: { color: string }): React.JSX.Element {
+    const size = TAB_GLYPH_SIZE / PixelRatio.getFontScale();
+
     return (
       // Hidden from screen readers: the tab's own label already announces it, and a
       // duplicate glyph would just be noise.
-      <Text variant="h3" style={{ color }} accessibilityElementsHidden>
-        {`${symbol}${TEXT_PRESENTATION}`}
+      <Text
+        variant="h3"
+        style={{ color, fontSize: size, lineHeight: size * 1.25 }}
+        accessibilityElementsHidden
+      >
+        {asTextGlyph(symbol)}
       </Text>
     );
   };

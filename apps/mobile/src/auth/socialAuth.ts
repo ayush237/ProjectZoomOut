@@ -11,10 +11,16 @@ import { appConfig } from '../config';
  * without a native sheet, and what makes "this provider is not configured yet" an
  * ordinary state rather than a crash.
  *
- * **Apple is mandatory on iOS because Google is offered.** App Store Review Guideline
- * 4.8 requires an equivalent private sign-in option wherever a third-party social login
- * appears. This is a submission blocker, not a preference, which is why the Apple
- * button is never conditional on anything but the platform supporting it.
+ * **Both providers are off by default: social sign-in is deferred to post-Phase-1**
+ * (roadmap, 2026-08-11). The code stays because the flow around it — the age gate on
+ * the social path, `SIGNUP_DETAILS_REQUIRED` routing, the held provider token — is
+ * built and tested, and deleting it would mean rebuilding it later against a backend
+ * contract that already exists.
+ *
+ * When they are switched on, **Apple must ship alongside Google on iOS**: App Store
+ * Review Guideline 4.8 requires an equivalent private sign-in option wherever a
+ * third-party social login appears. Enabling Google without Apple is a submission
+ * blocker, which is the one thing to remember about this file.
  */
 
 export interface SocialCredential {
@@ -45,10 +51,22 @@ export class SocialAuthCancelled extends Error {
   }
 }
 
+/**
+ * The provider cannot be used.
+ *
+ * The message is **reader-facing** and says only that, because it is rendered verbatim
+ * by the sign-in screen. Configuration detail — which client id is missing, which
+ * entitlement — goes in `reason`, which is for logs and for whoever is debugging the
+ * build, and is never displayed.
+ */
 export class SocialAuthUnavailable extends Error {
-  constructor(providerId: string) {
-    super(`${providerId} sign-in is not available on this device`);
+  /** Internal detail. Not shown to the reader. */
+  public readonly reason: string;
+
+  constructor(providerName: string, reason = 'not configured') {
+    super(`${providerName} sign-in is not available right now.`);
     this.name = 'SocialAuthUnavailable';
+    this.reason = reason;
   }
 }
 
@@ -59,7 +77,23 @@ export class SocialAuthUnavailable extends Error {
 export class AppleAuthProvider implements SocialAuthProvider {
   public readonly id = 'apple' as const;
 
+  constructor(private readonly enabled: boolean = appConfig.appleSignInEnabled) {}
+
+  /**
+   * Configuration first, then the device.
+   *
+   * The order matters. `AppleAuthentication.isAvailableAsync()` answers "can this
+   * *device* do Sign in with Apple", and on any modern iPhone that is true whatever our
+   * app is entitled to — so on its own it is not a usable gate. Without the
+   * `com.apple.developer.applesignin` entitlement, which this app deliberately does not
+   * carry, the button renders and then fails at the system sheet, which is the worst of
+   * the available outcomes.
+   */
   public async isAvailable(): Promise<boolean> {
+    if (!this.enabled) {
+      return false;
+    }
+
     // iOS-only by definition, and false on a simulator without an iCloud account.
     return Platform.OS === 'ios' && (await AppleAuthentication.isAvailableAsync());
   }
@@ -74,7 +108,7 @@ export class AppleAuthProvider implements SocialAuthProvider {
       });
 
       if (credential.identityToken === null) {
-        throw new SocialAuthUnavailable('Apple');
+        throw new SocialAuthUnavailable('Apple', 'Apple returned no identity token');
       }
 
       return {
@@ -142,16 +176,16 @@ export class GoogleAuthProvider implements SocialAuthProvider {
 
   public requestCredential(): Promise<SocialCredential> {
     if (this.clientId === undefined) {
-      // Reached only if a caller ignores `isAvailable`. Loud, because the alternative
-      // is an OAuth round trip that fails with a message from Google about a missing
-      // client, which tells nobody here anything useful.
-      return Promise.reject(new SocialAuthUnavailable('Google'));
+      // Reached only if a caller ignores `isAvailable`.
+      return Promise.reject(
+        new SocialAuthUnavailable('Google', 'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID is not set'),
+      );
     }
 
     // Intentionally unimplemented until the OAuth client exists. Throwing beats a
     // half-written flow that looks finished in a diff and fails on a device.
     return Promise.reject(
-      new SocialAuthUnavailable('Google (no OAuth client registered — see WP6 report)'),
+      new SocialAuthUnavailable('Google', 'no OAuth client registered — social sign-in is deferred'),
     );
   }
 }

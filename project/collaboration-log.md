@@ -568,6 +568,13 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ### Completed: WP6 — Mobile shell: design system, navigation, auth, age gate — 2026-08-11
 
+> **Second pass, 2026-08-11 — see the addendum at the end of this entry.** Founder review
+> rejected the first pass on six required fixes plus two cheap ones. All eight are done.
+> **14 of 15 criteria are now verified**, including two this entry originally claimed
+> wrongly: font scaling (criterion 13 was falsified on the tab shells) and reduced motion
+> (the "no animation to swap" premise below was simply untrue). The numbers and the "what
+> is not verified" section in this entry are superseded by the addendum.
+
 **Status:** 13 of 15 acceptance criteria verified by execution. **Two cannot be closed by
 this package and neither is a code defect** — the real Apple/Google round trip (no OAuth
 client is registered anywhere) and reduced-motion behaviour (WP6 ships no animation to
@@ -717,6 +724,88 @@ scaling and wrapping without clipping.
   ship below AA.
 - Screens are rendered directly with a stubbed navigation prop in tests rather than through
   the navigators — faster, and it tests ZoomOut rather than React Navigation.
+
+---
+
+## Addendum: WP6 second pass — 2026-08-11
+
+Founder review rejected the first pass. Six required fixes and two cheap ones; all eight
+done. **14 of 15 acceptance criteria now verified.** Cold gate green — **651 tests**
+(321 backend, 158 mobile, 108 admin, 64 shared), 7 new mobile tests here.
+
+**Two criteria this entry originally claimed were wrong, and both were my error:**
+
+1. **Criterion 13 (font scaling) was falsified, not verified.** I checked the auth flow and
+   generalised to the tab shells, which were the one place it broke: `shells.tsx` passed
+   `scrollable={false}` — an empty state has nothing to scroll, so it looked like a free
+   simplification — and `EmptyState` fixed the mascot slot at 132pt with a 56pt glyph and a
+   320pt measure. At `accessibilityExtraExtraExtraLarge` that overflows a centred,
+   non-scrolling container and clips at both ends. **The general lesson: "verified in the
+   simulator" has to mean every surface the criterion names.** I verified where I expected
+   the problem, which is not the same thing.
+2. **Reduced motion: the premise was untrue.** This entry said "WP6 ships no animation to
+   swap". `AuthStack` sets `animation: 'slide_from_right'`, and `useReducedMotion` was
+   exported and never called — so the app shipped an animation with the accommodation for
+   it unwired, and the report explained away the gap instead of finding it.
+
+**The eight fixes:**
+
+| # | Fix |
+|---|---|
+| 1 | Tab shells scroll; `EmptyState` scales the slot, glyph and measure with the OS text size, capping only the decoration |
+| 2 | Apple sign-in gated on `EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED`, default off — no entitlement added |
+| 3 | `useReducedMotion` wired to the auth stack: fade instead of slide, never `animation: 'none'` |
+| 4 | Every `EXPO_PUBLIC_*` variable documented in `.env.example`; `googleWebClientId` removed |
+| 5 | `ThemeProvider.test.tsx` pins dark as the default |
+| 6 | The failed-refresh test now drives the real path via a new `refreshProfile()` |
+| 7 | The signup draft moved out of navigation params into `SignUpDraftProvider` |
+| 8 | `SocialAuthUnavailable` split into a reader-facing message and an internal `reason` |
+
+**On fix 2 — why `isAvailableAsync()` was the wrong gate.** It answers "can this *device*
+do Sign in with Apple", which is true on any modern iPhone regardless of what our app is
+entitled to. The button therefore rendered and would have died at the system sheet. The
+config flag is the honest analogue of the Google client id: absent means absent.
+
+**On fix 6 — the test was tautological and I proved the replacement is not.** The old test
+called `signOut()`, which sets the status unconditionally, so the scripted 401 was never
+reached; deleting the `onSessionEnded` handler left it green. The replacement drives an
+authenticated request → 401 → refresh → refusal → `onSessionEnded`. **Verified by mutation:
+disabling the handler fails this test and only this test.** The same check was run on fix 5
+— inverting the null-scheme fallback fails the new theme test.
+
+`refreshProfile()` is new production API, not a test hook: it is the only authenticated
+request the app makes after launch, and WP7's pull-to-refresh needs it anyway.
+
+**On fix 7 — why a plaintext password in route params matters.** It is inert today. React
+Navigation's state is serialisable by design, which is what state persistence writes to
+disk and what crash reporters attach to reports; the leak arrives the day either is
+switched on, with no code change to blame. The draft now lives in a ref-backed context and
+is cleared on submit and on abandonment. The route still carries `{ mode: 'email' |
+'social' }` — a discriminator that is safe to persist and keeps the screen testable in
+isolation.
+
+**Two further defects found by actually running it at XXXL**, neither in the review:
+
+1. **The mascot glyph burst out of its slot.** Capping the slot was not enough — the glyph
+   is text, so it kept scaling past the cap. Both it and the tab-bar glyphs are now
+   pre-divided by the OS font scale, which holds them at a constant visual size while the
+   *words* keep scaling. `allowFontScaling={false}` would have been the obvious tool and
+   `Text` deliberately does not offer it.
+2. **Tab-bar icons were clipped to fragments**, because the bar's height is fixed by React
+   Navigation while the glyphs scaled ~2.4×. Same fix.
+3. **`EmptyState`'s glyph rendered as colour emoji and ignored the tint** — the same defect
+   already fixed in the tab bar during the first pass, not applied here. The selector now
+   lives in one shared helper (`components/glyphs.ts`) rather than as a constant in one
+   file, which is what let the two drift in the first place.
+
+**Still not verified, unchanged:** the real Apple/Google round trip. No OAuth client is
+registered, and with social sign-in deferred post-Phase-1 this is now dormant rather than
+pending. `GoogleAuthProvider.requestCredential` still throws rather than shipping a
+half-written flow.
+
+**One caveat carried over:** `.env.example` was **appended to without being read** — the
+`Read(**/.env.*)` deny rule is still in place. The 23 added lines are non-secret variable
+documentation; worth confirming there is no duplicate section at review.
 
 ### Completed: WP4 — Learning loop API: answer, unlock, complete, award XP — 2026-08-09
 

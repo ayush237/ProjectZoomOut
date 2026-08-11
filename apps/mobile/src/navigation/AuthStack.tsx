@@ -1,5 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { SignUpDraftProvider } from '../auth/SignUpDraft';
+import { duration, useReducedMotion } from '../design';
 import { AgeGateScreen } from '../screens/auth/AgeGateScreen';
 import { AgeRefusedScreen } from '../screens/auth/AgeRefusedScreen';
 import { ProviderEmailMissingScreen } from '../screens/auth/ProviderEmailMissingScreen';
@@ -29,16 +31,42 @@ export interface AuthStackProps {
  * that would need its own theming to match.
  */
 export function AuthStack({ initialRouteName = 'SignIn' }: AuthStackProps = {}): React.JSX.Element {
+  const reducedMotion = useReducedMotion();
+
   return (
-    <Stack.Navigator
-      initialRouteName={initialRouteName}
-      screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
-    >
-      <Stack.Screen name="SignIn" component={SignInScreen} />
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
-      <Stack.Screen name="AgeGate" component={AgeGateScreen} />
-      <Stack.Screen name="AgeRefused" component={AgeRefusedScreen} />
-      <Stack.Screen name="ProviderEmailMissing" component={ProviderEmailMissingScreen} />
-    </Stack.Navigator>
+    // Wraps the stack, not an individual screen: the draft is written by SignUp and
+    // read by AgeGate, so it has to outlive either of them being unmounted.
+    <SignUpDraftProvider>
+      <Stack.Navigator
+        initialRouteName={initialRouteName}
+        screenOptions={{
+          headerShown: false,
+          /**
+           * **Swapped, not removed** (`design-direction.md` §6).
+           *
+           * A reader with Reduce Motion on gets a fade rather than a slide. The
+           * alternative people reach for — `animation: 'none'` — removes the feedback
+           * entirely, which leaves the reader with no confirmation that anything
+           * happened and is worse than the animation it was meant to accommodate.
+           */
+          animation: reducedMotion ? 'fade' : 'slide_from_right',
+          animationDuration: reducedMotion ? duration.micro : duration.standard,
+        }}
+      >
+        <Stack.Screen name="SignIn" component={SignInScreen} />
+        <Stack.Screen name="SignUp" component={SignUpScreen} />
+        <Stack.Screen
+          name="AgeGate"
+          component={AgeGateScreen}
+          // Only consulted when the stack *opens* here, which happens for exactly one
+          // reason: a social sign-in the backend paused for a date of birth. Arriving
+          // from the details screen passes `{ mode: 'email' }` explicitly, and
+          // navigation params override initial ones.
+          initialParams={{ mode: 'social' }}
+        />
+        <Stack.Screen name="AgeRefused" component={AgeRefusedScreen} />
+        <Stack.Screen name="ProviderEmailMissing" component={ProviderEmailMissingScreen} />
+      </Stack.Navigator>
+    </SignUpDraftProvider>
   );
 }

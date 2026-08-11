@@ -9,6 +9,7 @@ import {
   isCalendarDate,
   meetsAssumedAgeThreshold,
 } from '../../auth/ageGate';
+import { useSignUpDraft } from '../../auth/SignUpDraft';
 import { Button, Screen, StatusMessage, Text, TextField } from '../../components';
 import { useTheme } from '../../design';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -18,10 +19,13 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'AgeGate'>;
 /**
  * The age gate — one screen, both signup paths.
  *
- * A route param means an email signup carrying its draft; **no param means a social
- * signup** the backend paused for missing details. Apple and Google return an identity
- * and an email and nothing else, so a social signup reaches this screen exactly as an
- * email one does. Skipping it there was the failure the WP6 handoff called out.
+ * Apple and Google return an identity and an email and nothing else, so a social signup
+ * reaches this screen exactly as an email one does; skipping it there was the failure
+ * the WP6 handoff called out.
+ *
+ * The route param carries **only which path this is** — safe to persist. The email
+ * draft itself comes from `SignUpDraftProvider`, because it contains a password and
+ * navigation state is serialisable by design.
  *
  * The local check is **UX only** — it stops a reader filling in a form they cannot
  * submit. The server decides, and when it refuses, `BELOW_MINIMUM_AGE` routes to a
@@ -30,9 +34,9 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'AgeGate'>;
 export function AgeGateScreen({ navigation, route }: Props): React.JSX.Element {
   const theme = useTheme();
   const { signUpWithEmail, completeSocialSignup, cancelSocialSignup } = useAuth();
+  const { readDraft, clearDraft } = useSignUpDraft();
 
-  const draft = route.params;
-  const isSocial = draft === undefined;
+  const isSocial = route.params.mode === 'social';
 
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +65,19 @@ export function AgeGateScreen({ navigation, route }: Props): React.JSX.Element {
       if (isSocial) {
         await completeSocialSignup(dateOfBirth);
       } else {
+        const draft = readDraft();
+
+        if (draft === null) {
+          // Reachable only by arriving here without going through the details screen —
+          // a restored navigation state, or a deep link. Sending them back is the only
+          // honest option; there is nothing to submit.
+          navigation.navigate('SignUp');
+          return;
+        }
+
         await signUpWithEmail({ ...draft, dateOfBirth });
+        // The password has done its job; it should not outlive the request.
+        clearDraft();
       }
     } catch (caught) {
       if (caught instanceof ApiError && caught.is(ApiErrorCode.belowMinimumAge)) {
@@ -119,11 +135,12 @@ export function AgeGateScreen({ navigation, route }: Props): React.JSX.Element {
             variant="quiet"
             onPress={() => {
               // A social signup abandoned here has a held provider token to discard;
-              // an email one has only local form state.
+              // an email one has a password to forget.
               if (isSocial) {
                 cancelSocialSignup();
                 return;
               }
+              clearDraft();
               navigation.goBack();
             }}
           />

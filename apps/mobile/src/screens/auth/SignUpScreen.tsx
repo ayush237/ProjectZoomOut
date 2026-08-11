@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { View } from 'react-native';
 
+import { useSignUpDraft } from '../../auth/SignUpDraft';
 import { Button, Screen, Text, TextField } from '../../components';
 import { useTheme } from '../../design';
 import type { AuthStackParamList } from '../../navigation/types';
@@ -23,6 +24,7 @@ const MINIMUM_PASSWORD_LENGTH = 12;
  */
 export function SignUpScreen({ navigation }: Props): React.JSX.Element {
   const theme = useTheme();
+  const { setDraft } = useSignUpDraft();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -45,11 +47,10 @@ export function SignUpScreen({ navigation }: Props): React.JSX.Element {
     setTouched(true);
 
     if (valid) {
-      navigation.navigate('AgeGate', {
-        email: trimmedEmail,
-        password,
-        displayName: trimmedName,
-      });
+      // Into context, not into route params — the password must not reach React
+      // Navigation's serialisable state. See `SignUpDraft.tsx`.
+      setDraft({ email: trimmedEmail, password, displayName: trimmedName });
+      navigation.navigate('AgeGate', { mode: 'email' });
     }
   };
 

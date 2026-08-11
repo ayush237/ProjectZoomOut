@@ -1,6 +1,7 @@
-import { StyleSheet, View } from 'react-native';
+import { PixelRatio, StyleSheet, View } from 'react-native';
 
 import { useTheme } from '../design';
+import { asTextGlyph } from './glyphs';
 import { Text } from './Text';
 
 /**
@@ -11,8 +12,13 @@ import { Text } from './Text';
  * filled by oversized type — but it is a real, sized region rather than absent space.
  *
  * That is the whole point: when the mascot arrives it should be an **asset swap inside
- * this component**, not a redesign of Explore, Library and Journey. Anything that
- * changes the surrounding layout defeats it.
+ * this component**, not a redesign of Explore, Library and Journey.
+ *
+ * **Everything here scales with the OS font setting**, which is the fix for the clipping
+ * this component originally caused. A fixed 132pt slot and a fixed 320pt measure look
+ * right at default text and overflow a centred container at
+ * `accessibilityExtraExtraExtraLarge`, clipping the title and body at both ends — the
+ * exact readers who most need the words are the ones who lose them.
  */
 
 export interface EmptyStateProps {
@@ -23,8 +29,19 @@ export interface EmptyStateProps {
   readonly testID?: string;
 }
 
-/** Sized so an illustration can drop in without the text below it moving. */
-const MASCOT_SLOT_SIZE = 132;
+/** The slot's size at default text size. Grows with the reader's setting. */
+const MASCOT_SLOT_BASE = 132;
+const GLYPH_BASE_SIZE = 56;
+
+/**
+ * Ceiling on how far the decoration is allowed to grow.
+ *
+ * The words scale without limit; the ornament does not. Past roughly this point the
+ * mascot slot starts pushing the title off a small screen, and a decorative element
+ * crowding out the message it decorates is the wrong trade — so the glyph stops
+ * growing while the text carries on.
+ */
+const MAX_DECORATIVE_SCALE = 1.5;
 
 export function EmptyState({
   placeholderGlyph,
@@ -33,6 +50,23 @@ export function EmptyState({
   testID,
 }: EmptyStateProps): React.JSX.Element {
   const theme = useTheme();
+
+  const fontScale = PixelRatio.getFontScale();
+  const decorativeScale = Math.min(fontScale, MAX_DECORATIVE_SCALE);
+  const slotSize = MASCOT_SLOT_BASE * decorativeScale;
+
+  /**
+   * Pre-divided by the OS scale, because React Native multiplies it straight back.
+   *
+   * Capping the slot alone is not enough: the glyph inside it is text, so it keeps
+   * scaling past the cap and bursts out of the box — visible at
+   * `accessibilityExtraExtraExtraLarge`, where a 56pt glyph renders at about 130pt in a
+   * 198pt slot and collides with its own border. Dividing here lands the glyph at
+   * exactly `GLYPH_BASE_SIZE * decorativeScale` after RN re-applies the scale, which
+   * keeps the ornament proportional to the slot at every text size — without reaching
+   * for `allowFontScaling={false}`, which `Text` rightly does not offer.
+   */
+  const glyphSize = (GLYPH_BASE_SIZE * decorativeScale) / fontScale;
 
   return (
     <View testID={testID} style={[styles.container, { gap: theme.spacing.lg }]}>
@@ -44,6 +78,8 @@ export function EmptyState({
         style={[
           styles.mascotSlot,
           {
+            width: slotSize,
+            height: slotSize,
             backgroundColor: theme.surfaceFor('card'),
             borderRadius: theme.radius.lg,
             borderWidth: theme.borderWidth.hairline,
@@ -51,8 +87,12 @@ export function EmptyState({
           },
         ]}
       >
-        <Text variant="display" tone="primary" style={styles.glyph}>
-          {placeholderGlyph}
+        <Text
+          variant="display"
+          tone="primary"
+          style={{ fontSize: glyphSize, lineHeight: glyphSize * 1.15 }}
+        >
+          {asTextGlyph(placeholderGlyph)}
         </Text>
       </View>
 
@@ -60,6 +100,8 @@ export function EmptyState({
         {title}
       </Text>
 
+      {/* A readable measure at default size that gives way rather than clipping when the
+          text scales — `maxWidth` alone would hold 320pt and let the words overflow. */}
       <Text variant="body" tone="textMuted" align="center" style={styles.body}>
         {body}
       </Text>
@@ -69,17 +111,18 @@ export function EmptyState({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    // `flexGrow`, not `flex: 1`: inside a scroll view the content must be free to
+    // exceed the viewport, and `flex: 1` would pin it to the visible height and clip.
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   mascotSlot: {
-    width: MASCOT_SLOT_SIZE,
-    height: MASCOT_SLOT_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+    // Never let the ornament squeeze the text out of a short viewport.
+    flexShrink: 0,
   },
-  glyph: { fontSize: 56, lineHeight: 64 },
-  // A readable measure rather than the full screen width.
-  body: { maxWidth: 320 },
+  body: { maxWidth: 320, width: '100%' },
 });

@@ -21,11 +21,15 @@ const google = new GoogleAuthProvider();
 /**
  * Sign in.
  *
- * **Apple appears whenever Google does**, on iOS. App Store Review Guideline 4.8
- * requires an equivalent private sign-in option alongside any third-party social login,
- * so this pairing is a submission requirement rather than a design choice. Google is
- * hidden until an OAuth client is configured — a button that cannot work is worse than
- * an absent one.
+ * **Neither social provider renders in Phase 1** — social sign-in is deferred (roadmap,
+ * 2026-08-11) and both report themselves unavailable, so the block below collapses to
+ * nothing and email is the only path. The loop stays because it is how the buttons come
+ * back: switching a provider on is a configuration change, not a re-write of this
+ * screen.
+ *
+ * When they return, Apple must appear alongside Google on iOS (Guideline 4.8) — the
+ * rule lives in `socialAuth.ts` with the providers themselves rather than here, so the
+ * screen cannot be the thing that gets it wrong.
  */
 export function SignInScreen({ navigation }: Props): React.JSX.Element {
   const theme = useTheme();

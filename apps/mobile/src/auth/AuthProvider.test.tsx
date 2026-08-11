@@ -470,34 +470,89 @@ describe('leaving the session', () => {
   });
 
   it('lands on sign-in when a refresh is refused mid-session', async () => {
-    // The criterion behind this: a failed refresh must not leave the reader on a screen
-    // whose every request now fails.
+    /**
+     * Drives the **real** path: an authenticated request 401s, the client refreshes,
+     * the server refuses the refresh, the client ends the session and calls
+     * `onSessionEnded`, and the provider returns the app to sign-in.
+     *
+     * The first version of this test called `signOut()`, which sets the status
+     * unconditionally — so the scripted 401 was never reached and deleting the
+     * `onSessionEnded` handler entirely left the test green. It asserted the outcome
+     * without exercising the mechanism.
+     *
+     * This one goes through `refreshProfile`, which does nothing but issue the request
+     * and set the user. If the handler stops working, nothing moves the status and this
+     * fails.
+     */
+    let profileReads = 0;
     let refreshes = 0;
+
     const backend = new FakeBackend()
       .on('/auth/refresh', () => {
         refreshes += 1;
+        // The launch restore is allowed; the mid-session renewal is refused.
         return refreshes === 1
           ? json(SESSION)
           : json({ error: { code: 'INVALID_REFRESH_TOKEN', message: 'gone' } }, 401);
       })
       .on('/users/me', () => {
-        // Restore succeeds, then the session expires on the next profile read.
-        return refreshes === 1 && backend.calls.filter((c) => c.url.endsWith('/users/me')).length > 1
-          ? json({ error: { code: 'INVALID_TOKEN', message: 'expired' } }, 401)
-          : json(PROFILE);
+        profileReads += 1;
+        // First read signs them in; the next one finds a dead access token.
+        return profileReads === 1
+          ? json(PROFILE)
+          : json({ error: { code: 'INVALID_TOKEN', message: 'expired' } }, 401);
       });
 
-    const { result } = await mount(backend, 'refresh-stored');
+    const { result, store } = await mount(backend, 'refresh-stored');
     await waitFor(() => {
       expect(result.current.status).toBe('signedIn');
     });
 
     await act(async () => {
-      await result.current.signOut().catch(() => undefined);
+      await result.current.refreshProfile().catch(() => undefined);
     });
 
     await waitFor(() => {
       expect(result.current.status).toBe('signedOut');
     });
+
+    // The client's half of the same event: local credentials gone, so a relaunch does
+    // not try the dead token again.
+    expect(result.current.user).toBeNull();
+    await expect(store.readRefreshToken()).resolves.toBeNull();
+  });
+
+  it('does not sign the reader out when the renewal fails on the network', async () => {
+    // Being briefly offline is not the same as having an invalid session. Clearing the
+    // keychain on a dropped connection would sign readers out on the underground.
+    let profileReads = 0;
+    let refreshes = 0;
+
+    const backend = new FakeBackend()
+      .on('/auth/refresh', () => {
+        refreshes += 1;
+        if (refreshes > 1) {
+          throw new Error('offline');
+        }
+        return json(SESSION);
+      })
+      .on('/users/me', () => {
+        profileReads += 1;
+        return profileReads === 1
+          ? json(PROFILE)
+          : json({ error: { code: 'INVALID_TOKEN', message: 'expired' } }, 401);
+      });
+
+    const { result, store } = await mount(backend, 'refresh-stored');
+    await waitFor(() => {
+      expect(result.current.status).toBe('signedIn');
+    });
+
+    await act(async () => {
+      await result.current.refreshProfile().catch(() => undefined);
+    });
+
+    expect(result.current.status).toBe('signedIn');
+    await expect(store.readRefreshToken()).resolves.not.toBeNull();
   });
 });
