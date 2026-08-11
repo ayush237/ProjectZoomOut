@@ -61,6 +61,17 @@ export function ExploreScreen(): React.JSX.Element {
    */
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(new Map());
 
+  /**
+   * Whether the membership answer is trustworthy at all.
+   *
+   * If the library fetch failed there is no membership to fall back on, and defaulting
+   * to `false` made every card claim "Add to library" — including books already on the
+   * shelf. Nothing is corrupted by that, but the screen states something false, and a
+   * reader who taps it is told an idempotent add succeeded. Better to say the state is
+   * unknown and let them retry.
+   */
+  const membershipKnown = library.status === 'ready';
+
   const inLibrary = useCallback(
     (trackId: string): boolean => overrides.get(trackId) ?? library.data?.has(trackId) ?? false,
     [overrides, library.data],
@@ -141,6 +152,25 @@ export function ExploreScreen(): React.JSX.Element {
           <StatusMessage tone="error" message={actionError} testID="explore-action-error" />
         )}
 
+        {/* A refresh that failed leaves the catalogue on screen and says so. */}
+        {tracks.refreshError === null ? null : (
+          <StatusMessage
+            tone="error"
+            testID="explore-refresh-error"
+            message={tracks.refreshError}
+          />
+        )}
+
+        {/* Membership unknown: the buttons below cannot say whether a book is already
+            on the shelf, so they stop claiming to. */}
+        {membershipKnown ? null : (
+          <StatusMessage
+            tone="info"
+            testID="explore-library-unknown"
+            message="Could not check your library, so these may already be on your shelf."
+          />
+        )}
+
         <FlatList
           testID="explore-list"
           /**
@@ -171,8 +201,8 @@ export function ExploreScreen(): React.JSX.Element {
               action={
                 <Button
                   testID={`explore-toggle-${item.id}`}
-                  label={inLibrary(item.id) ? 'In your library' : 'Add to library'}
-                  variant={inLibrary(item.id) ? 'secondary' : 'primary'}
+                  label={labelFor(membershipKnown, inLibrary(item.id))}
+                  variant={membershipKnown && inLibrary(item.id) ? 'secondary' : 'primary'}
                   busy={pending.has(item.id)}
                   onPress={() => {
                     void toggle(item);
@@ -185,4 +215,19 @@ export function ExploreScreen(): React.JSX.Element {
       </View>
     </Screen>
   );
+}
+
+/**
+ * What the add button says.
+ *
+ * "Add to library" is a claim that the book is *not* already there. With membership
+ * unknown the honest wording makes no claim either way — and adding is idempotent
+ * server-side, so tapping it is safe regardless.
+ */
+function labelFor(membershipKnown: boolean, alreadyAdded: boolean): string {
+  if (!membershipKnown) {
+    return 'Add to library';
+  }
+
+  return alreadyAdded ? 'In your library' : 'Add to library';
 }

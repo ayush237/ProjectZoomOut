@@ -8,6 +8,7 @@ import {
   ErrorState,
   ProgressBar,
   Screen,
+  StatusMessage,
   Text,
   TrackCard,
 } from '../components';
@@ -71,6 +72,16 @@ export function LibraryScreen(): React.JSX.Element {
   return (
     <Screen testID="library-screen" scrollable={false}>
       <View style={{ gap: theme.spacing.lg, flex: 1 }}>
+        {/* A refresh that failed leaves the list on screen and says so. Without this
+            the spinner just retracts and the reader is looking at stale content with
+            no way to know it. */}
+        {library.refreshError === null ? null : (
+          <StatusMessage
+            tone="error"
+            testID="library-refresh-error"
+            message={library.refreshError}
+          />
+        )}
 
         <FlatList
           testID="library-list"

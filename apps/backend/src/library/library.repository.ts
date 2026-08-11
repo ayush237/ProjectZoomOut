@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import type { DatabaseClient } from '../db/client.js';
 import { userTracks, type UserTrackRow } from '../db/schema.js';
@@ -98,10 +98,19 @@ export class PostgresLibraryRepository implements LibraryRepository {
         and(
           eq(userTracks.userId, userId),
           eq(userTracks.trackId, trackId),
-          // Only when it is actually changing, so a re-completion — replaying the last
-          // Leaf of a finished Track — is a no-op rather than a pointless write on
-          // every request.
-          ne(userTracks.status, status),
+          /**
+           * Only promotes an **active** Track.
+           *
+           * `ne(status, target)` was wrong in a way that would not have shown up until a
+           * reader archived something: it matched every status except the target, so
+           * finishing a Leaf in an `archived` Track would quietly resurrect it as
+           * `completed`. Archiving is a decision the reader made, and completion is not
+           * entitled to overrule it.
+           *
+           * Still idempotent — a replayed completion matches nothing and writes nothing,
+           * which is what makes calling this on every completion safe.
+           */
+          eq(userTracks.status, 'active'),
         ),
       )
       .returning({ id: userTracks.id });

@@ -19,6 +19,16 @@ export interface AsyncResource<T> {
   readonly data: T | null;
   /** Reader-facing text. Never a stack trace, never a raw upstream message. */
   readonly error: string | null;
+  /**
+   * Set when a **refresh** failed while stale data is still on screen.
+   *
+   * A separate field from `error` because the two need different treatment and sharing
+   * one made the failure invisible: a failed refresh keeps `status` at `ready`, and
+   * every screen only rendered `error` when `status === 'error'`, so during a CMS
+   * outage the spinner simply retracted and the reader was shown stale content with no
+   * indication that it was stale.
+   */
+  readonly refreshError: string | null;
   /** True during a pull-to-refresh, when stale data is still on screen. */
   readonly refreshing: boolean;
   /** Re-fetches from scratch, showing the loading state. For the retry button. */
@@ -31,6 +41,7 @@ export function useAsyncResource<T>(load: () => Promise<T>): AsyncResource<T> {
   const [status, setStatus] = useState<ResourceStatus>('loading');
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   /**
@@ -55,9 +66,11 @@ export function useAsyncResource<T>(load: () => Promise<T>): AsyncResource<T> {
 
       if (mode === 'refresh') {
         setRefreshing(true);
+        setRefreshError(null);
       } else {
         setStatus('loading');
         setError(null);
+        setRefreshError(null);
       }
 
       try {
@@ -67,15 +80,29 @@ export function useAsyncResource<T>(load: () => Promise<T>): AsyncResource<T> {
           setData(result);
           setStatus('ready');
           setError(null);
+          setRefreshError(null);
         }
       } catch (caught) {
         if (mounted.current && generation.current === run) {
-          setError(readerMessage(caught));
-          // A failed *refresh* keeps the stale list on screen with an error beside it;
-          // only a failed initial load takes over the screen. Throwing away content the
-          // reader is looking at because a background refresh failed is worse than
-          // showing them something slightly old.
-          setStatus(mode === 'refresh' && data !== null ? 'ready' : 'error');
+          const message = readerMessage(caught);
+
+          /**
+           * A failed *refresh* keeps the stale list on screen **with an error beside
+           * it**; only a failed initial load takes over the screen. Throwing away
+           * content the reader is looking at because a background refresh failed is
+           * worse than showing them something slightly old — but saying nothing at all
+           * is worse than both, because the content is then silently wrong.
+           *
+           * The two go to different fields precisely so a screen cannot render one and
+           * forget the other, which is exactly what happened when they shared `error`.
+           */
+          if (mode === 'refresh' && data !== null) {
+            setRefreshError(message);
+            setStatus('ready');
+          } else {
+            setError(message);
+            setStatus('error');
+          }
         }
       } finally {
         if (mounted.current && generation.current === run) {
@@ -102,7 +129,7 @@ export function useAsyncResource<T>(load: () => Promise<T>): AsyncResource<T> {
     void run('refresh');
   }, [run]);
 
-  return { status, data, error, refreshing, reload, refresh };
+  return { status, data, error, refreshError, refreshing, reload, refresh };
 }
 
 /**

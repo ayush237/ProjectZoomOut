@@ -769,6 +769,113 @@ restart. **Verify accessibility sizes from a cold start, not by toggling live.**
 
 ---
 
+## Addendum: WP7 second pass — takedown cascade and four others — 2026-08-11
+
+Five required fixes and two cheap ones from founder review. All seven done. Cold gate
+green: **734 tests** (361 backend, 201 mobile, 108 admin, 64 shared), 39 new here.
+
+**1. Takedown cascade — Tier A, and it was the real one.**
+
+`ContentService.getLeaf` and `ProgressService.requireVisibleLeaf` checked only the Leaf's
+own `status` and `isPlaceholder`. Unpublishing a **Track** — which is how a legal
+complaint is actually answered, one click on the book rather than twenty on its Leaves —
+cleared Explore, the library and resume, while `GET /content/leaves/:id` carried on
+serving the full Leaf and the progress endpoints carried on grading it and **paying XP
+for it**.
+
+Both call sites now go through `resolveVisibleLeaf`, which resolves the parent and
+applies the same predicate. Written once, in `contentVisibility.ts`, because two copies
+of a takedown rule is how one of them gets missed — which is precisely what happened
+here. Details worth keeping:
+
+- **The 404 names the Leaf, never the Track.** A reader who asked for a Leaf is not
+  entitled to learn that its parent is the reason it is gone.
+- **A deleted Track is handled as well as an unpublished one.** `findTrack` throwing
+  `ContentNotFoundError` is caught and re-thrown as a missing Leaf, so it cannot surface
+  as a 500.
+- **Cost is one extra CMS read per Leaf**, served by the existing TTL cache. Correct
+  trade against serving content somebody has demanded be removed.
+- Enforced in the backend, not by a CMS hook cascading the flag onto children: a hook is
+  a migration that can half-run, and it would leave the backend trusting a denormalised
+  copy of the answer.
+
+**Mutation-checked.** Removing the parent check fails six unit tests. Interestingly it
+fails *no* integration tests — the fake CMS makes an unpublished Track vanish entirely,
+so those exercise the deleted-Track branch while the unit tests exercise the
+draft/placeholder branch. Both branches are real and both are now covered; worth knowing
+that neither layer alone would have caught this.
+
+**2. `user_tracks.status` could stick at `active` forever.** `finishTrackIfDone` sat
+below the early return for a replayed completion, so the rollup only ever ran on the call
+that awarded XP. Two live paths reached the stuck state: a reader who finishes every Leaf
+and *then* adds the Track, and a `setStatus` failure on the final Leaf (swallowed by
+design). Moved above the return, which makes a replay self-healing. Two integration tests
+cover the add-late path and the archived-Track path.
+
+**3. The tautological completion test is gone.** It never answered Leaf 11, so `complete()`
+hit `LeafNotUnlockedError` and `expect([200, 409]).toContain(...)` accepted the 409 — the
+scenario in the title was never exercised. Now answers first and asserts 200.
+
+**4. A failed pull-to-refresh is no longer silent.** `useAsyncResource` forced `status`
+back to `ready` when stale data existed, and no screen read `error` unless
+`status === 'error'`, so during an outage the spinner simply retracted. Added a separate
+`refreshError` field — separate precisely so a screen cannot render one and forget the
+other, which is what sharing `error` caused — and all three screens show it above the
+retained list. Mutation-checked; verified on device by killing the backend mid-session.
+
+**5. Explore no longer claims a membership it could not check.** When the library fetch
+failed, `inLibrary()` fell through to `false` and every card read "Add to library",
+including books already on the shelf. The screen now says the shelf could not be checked
+and stops asserting either way. Adding stays available, because it is idempotent
+server-side.
+
+**Cheap fixes:**
+
+- `setStatus` guarded with `ne(status, 'completed')`, which matched *every* other status —
+  finishing a Leaf would have resurrected an `archived` Track. Now `eq(status, 'active')`.
+- **The `EmptyState` comment was wrong, and so was the code it described.** It claimed
+  `Icon` "cancels the OS font scale internally". `Icon` cancelled nothing — the vendored
+  `create-icon-set.js` already defaults `allowFontScaling: false`, so React Native never
+  multiplied the size, and my division by `fontScale` was **shrinking every icon as the
+  reader's text grew** — to roughly 40% at XXXL. Visible in the earlier XXXL screenshots,
+  where I attributed the small tab icons to a stale render. The division is gone; `size`
+  is now a literal point size. The review caught the wrong explanation; the explanation
+  was wrong because the code was.
+
+**Confirmed rather than fixed blind:**
+
+**Drafts cannot reach the backend, and no `_status` filter should be added.** Both
+`Tracks` and `Leaves` set `read: publishedOrAuthenticated` (`apps/admin/src/access/`),
+which returns a `_status: { equals: 'published' }` constraint for any request without
+`req.user` — and `PayloadClient` calls anonymously. Verified at the config, which is
+definitive. The empirical check against the running CMS is *consistent* but not
+discriminating: the corpus has exactly one Track and one Leaf, both published, so there
+is no draft to be excluded. A redundant query filter would add a second thing to keep
+correct for no gain.
+
+**Manual device verification** (mandatory under the new bar), all from cold starts:
+
+| | dark / default | dark / XXXL | light / default | light / XXXL |
+|---|---|---|---|---|
+| Explore, Library, Journey | ✅ | ✅ | ✅ | ✅ |
+| Refresh-error banner + retained list | — | ✅ | — | — |
+
+Icon sizing re-verified at XXXL after the scaling fix; the earlier pass had run with the
+shrinking bug in place.
+
+**Added to WP14's worklist** (on top of the seven already listed):
+
+8. **`fakePayload` ignores `page` and `limit`** and always answers page 1 of 1, so nothing
+   covers real pagination — including the `listTracks` totals fix, which is verified only
+   for the placeholder filter on a single page.
+9. **No draft-visibility test against the real CMS.** The access rule is confirmed by
+   reading the config; proving it empirically needs a draft document in the corpus, which
+   WP11's seed should create.
+10. **The takedown cascade costs an extra CMS read per Leaf.** Fine behind the TTL cache
+    today; worth measuring once WP8 puts the Leaf player on that path.
+
+---
+
 ## Addendum: WP7 — the app did not launch, and the new testing bar — 2026-08-11
 
 Two things after WP7 was committed at `44ab716`.

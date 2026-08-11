@@ -8,10 +8,9 @@ import type {
 import { NotFoundError } from '../auth/auth.errors.js';
 import { localDateIn } from '../auth/ageGate.js';
 import type { AppConfig } from '../config/env.js';
-import { ContentNotFoundError } from '../content/content.errors.js';
 import { toError } from '../errors.js';
 import type { ContentRepository } from '../content/content.repository.js';
-import { isVisibleIn } from '../content/contentVisibility.js';
+import { isVisibleIn, resolveVisibleLeaf } from '../content/contentVisibility.js';
 import type { PayoffAccessPolicy } from '../content/payoffAccess.js';
 import type { TrackStatusWriter } from '../library/library.repository.js';
 import type { AppLogger } from '../logging/logger.js';
@@ -169,6 +168,18 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
     }
 
     if (existing.completedAt !== null) {
+      /**
+       * Re-evaluated on a replay, before returning.
+       *
+       * Below the early return, the rollup only ever ran on the call that *awarded* the
+       * XP — so `user_tracks.status` could stick at `active` forever in two live cases:
+       * a reader who finishes every Leaf and only then adds the Track, and a
+       * `setStatus` failure on the final Leaf, which is swallowed by design. Running it
+       * here makes a replayed completion self-healing, and it is already idempotent via
+       * the `eq(status, 'active')` guard in the repository.
+       */
+      await this.finishTrackIfDone(userId, leaf.trackId);
+
       return { progress: toDomainProgress(existing), xpAwarded: 0, alreadyCompleted: true };
     }
 
@@ -284,21 +295,16 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
    * returns `PublicLeaf` — by design, since widening it would put the answer key on the
    * wire and make the unlock gate decorative.
    *
-   * Going around `ContentService` means going around its placeholder guard, so the
-   * guard is reapplied here from the same shared predicate rather than reimplemented.
-   * Without this the loop would happily grade — and pay XP for — a Leaf that production
-   * is meant to be hiding.
+   * Going around `ContentService` means going around its guards, so they are reapplied
+   * here from the same shared helper rather than reimplemented. Without this the loop
+   * would happily grade — and pay XP for — a Leaf that production is meant to be hiding,
+   * or one whose Track has been taken down.
    *
-   * @throws {ContentNotFoundError} if absent, unpublished, or placeholder in production.
+   * @throws {ContentNotFoundError} if the Leaf or **its Track** is absent, unpublished,
+   *   or placeholder in production.
    */
   private async requireVisibleLeaf(leafId: string): Promise<Leaf> {
-    const leaf = await this.content.findLeaf(leafId);
-
-    if (!isVisibleIn(this.config.NODE_ENV, leaf)) {
-      throw new ContentNotFoundError('Leaf');
-    }
-
-    return leaf;
+    return resolveVisibleLeaf(this.content, this.config.NODE_ENV, leafId);
   }
 
   /**

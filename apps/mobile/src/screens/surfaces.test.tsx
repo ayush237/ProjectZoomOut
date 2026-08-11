@@ -156,6 +156,25 @@ async function renderSignedIn(
 /** Never resolves, so the screen stays in its loading state for the assertion. */
 const neverResolves: typeof fetch = () => new Promise<Response>(() => undefined);
 
+/**
+ * Triggers pull-to-refresh.
+ *
+ * `fireEvent(list, 'refresh')` does not reach the handler — it lives on the
+ * `RefreshControl` element passed as a prop, not on the list itself — so the control is
+ * reached through the prop and its `onRefresh` invoked directly.
+ */
+async function pullToRefresh(list: {
+  props: { refreshControl?: { props: { onRefresh?: () => void } } };
+}): Promise<void> {
+  // Typed structurally rather than as `ReactTestInstance`: `react-test-renderer` ships
+  // no type declarations, and pulling in `@types/react-test-renderer` for one parameter
+  // is a dependency for nothing.
+  await act(async () => {
+    list.props.refreshControl?.props.onRefresh?.();
+    await Promise.resolve();
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Both themes, every screen                                                   */
 /* -------------------------------------------------------------------------- */
@@ -562,5 +581,131 @@ describe('Journey resume', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* A refresh that fails is not silent                                          */
+/* -------------------------------------------------------------------------- */
+
+describe('when a pull-to-refresh fails', () => {
+  /** Loads once, then fails every later request — a CMS that went down mid-session. */
+  function failsAfterFirstLoad(payload: unknown): FakeBackend {
+    let loads = 0;
+    const backend = new FakeBackend();
+
+    backend.on('/library', () => {
+      loads += 1;
+      return loads === 1
+        ? json(payload)
+        : json(
+            { error: { code: 'CONTENT_UNAVAILABLE', message: 'Content is temporarily unavailable.' } },
+            503,
+          );
+    });
+
+    return backend;
+  }
+
+  it('keeps the stale list and says so', async () => {
+    /**
+     * The failure this closes: `useAsyncResource` forces `status` back to `ready` when
+     * stale data exists, and no screen read `error` unless `status === 'error'`. During
+     * an outage the spinner simply retracted and the reader was left looking at stale
+     * content with nothing to indicate it.
+     */
+    const backend = failsAfterFirstLoad({
+      entries: [entry({ totalLeaves: 3, completedLeaves: 1, nextLeafId: '11', isComplete: false })],
+    });
+
+    const view = await renderSignedIn(<LibraryScreen />, backend);
+    await waitFor(() => {
+      expect(view.getByTestId('library-list')).toBeOnTheScreen();
+    });
+
+    await pullToRefresh(view.getByTestId('library-list'));
+
+    await waitFor(() => {
+      expect(view.getByTestId('library-refresh-error')).toBeOnTheScreen();
+    });
+    // The stale content stays: it is probably still right, and blanking it would be
+    // a worse answer than showing it with a warning.
+    expect(view.getByTestId('library-list')).toBeOnTheScreen();
+  });
+
+  it('clears the warning once a refresh succeeds again', async () => {
+    let loads = 0;
+    const backend = new FakeBackend().on('/library', () => {
+      loads += 1;
+      return loads === 2
+        ? json({ error: { code: 'CONTENT_UNAVAILABLE', message: 'down' } }, 503)
+        : json({
+            entries: [
+              entry({ totalLeaves: 3, completedLeaves: 1, nextLeafId: '11', isComplete: false }),
+            ],
+          });
+    });
+
+    const view = await renderSignedIn(<LibraryScreen />, backend);
+    await waitFor(() => {
+      expect(view.getByTestId('library-list')).toBeOnTheScreen();
+    });
+
+    await pullToRefresh(view.getByTestId('library-list'));
+    await waitFor(() => {
+      expect(view.getByTestId('library-refresh-error')).toBeOnTheScreen();
+    });
+
+    await pullToRefresh(view.getByTestId('library-list'));
+
+    await waitFor(() => {
+      expect(view.queryByTestId('library-refresh-error')).toBeNull();
+    });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Explore does not claim a membership it could not check                      */
+/* -------------------------------------------------------------------------- */
+
+describe('when the library fetch fails on Explore', () => {
+  const catalogueOnly = (): FakeBackend =>
+    new FakeBackend()
+      .on('/content/tracks', () => json({ tracks: [TRACK], page: 1, totalPages: 1, totalTracks: 1 }))
+      .on('/library', () => json({ error: { code: 'CONTENT_UNAVAILABLE', message: 'down' } }, 503));
+
+  it('says the shelf could not be checked', async () => {
+    // Previously `inLibrary()` fell through to false and every card read "Add to
+    // library" — including books already on the shelf. Nothing was corrupted, but the
+    // screen stated something false.
+    const view = await renderSignedIn(<ExploreScreen />, catalogueOnly());
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-library-unknown')).toBeOnTheScreen();
+    });
+  });
+
+  it('still lists the catalogue and allows adding', async () => {
+    // Membership being unknown must not cost the reader the screen: adding is
+    // idempotent server-side, so the action stays available.
+    const view = await renderSignedIn(<ExploreScreen />, catalogueOnly());
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-list')).toBeOnTheScreen();
+    });
+    expect(view.getByTestId('explore-toggle-1')).toBeOnTheScreen();
+  });
+
+  it('shows no such warning when the shelf loads normally', async () => {
+    const backend = new FakeBackend()
+      .on('/content/tracks', () => json({ tracks: [TRACK], page: 1, totalPages: 1, totalTracks: 1 }))
+      .on('/library', () => json({ entries: [] }));
+
+    const view = await renderSignedIn(<ExploreScreen />, backend);
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-list')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('explore-library-unknown')).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import {
   ErrorState,
   ProgressBar,
   Screen,
+  StatusMessage,
   Text,
   TrackCard,
 } from '../components';
@@ -84,6 +85,16 @@ export function JourneyScreen(): React.JSX.Element {
   return (
     <Screen testID="journey-screen" scrollable={false}>
       <View style={{ gap: theme.spacing.lg, flex: 1 }}>
+        {/* A refresh that failed leaves the list on screen and says so. Without this
+            the spinner just retracts and the reader is looking at stale content with
+            no way to know it. */}
+        {journey.refreshError === null ? null : (
+          <StatusMessage
+            tone="error"
+            testID="journey-refresh-error"
+            message={journey.refreshError}
+          />
+        )}
 
         <FlatList
           testID="journey-list"

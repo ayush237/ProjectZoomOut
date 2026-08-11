@@ -59,10 +59,11 @@ export function EmptyState({
   /**
    * Sized against the slot, not the text.
    *
-   * `Icon` already cancels the OS font scale internally, so this is a plain point size:
-   * the icon stays proportional to the slot at every text size. Capping the slot alone
-   * was not enough in WP6 — the old text glyph kept scaling past the cap and burst out
-   * of the box at `accessibilityExtraExtraExtraLarge`.
+   * `Icon` takes a literal point size and never scales — the icon font is rendered with
+   * `allowFontScaling: false` — so multiplying by the *capped* scale here is what keeps
+   * the ornament proportional to its slot as the slot grows. Capping the slot alone was
+   * not enough in WP6: the text glyph it replaced kept scaling past the cap and burst
+   * out of the box at `accessibilityExtraExtraExtraLarge`.
    */
   const glyphSize = GLYPH_BASE_SIZE * decorativeScale;
 
