@@ -12,6 +12,26 @@ Two named sessions in the same project — **Architect** and **Manager** — kep
 
 Re-send the persona message after any `/clear`. `CLAUDE.md` reloads automatically; the persona does not.
 
+## Where planning docs get committed
+
+**Architect commits planning docs straight to `main`, not to Manager's feature branch** (changed 2026-08-11). Everything under `project/` plus `agents/` — roadmap, plan, collaboration log, proposals, personas.
+
+Why: both sessions share one working directory, so uncommitted Architect edits sitting in the tree get swept into Manager's next commit. That happened twice, and a reviewer flagged the second one as an apparent violation of the "Manager never edits the roadmap" rule — which cost real time to disprove. It also means the roadmap on `main` is current immediately, instead of only when a feature branch merges.
+
+Because the working directory is shared, do this **at a package boundary while Manager is idle**, and return the tree to its branch afterwards:
+
+```bash
+git stash push -- project/ agents/
+git checkout main
+git checkout <manager-branch> -- project/ agents/   # only if the branch has newer docs
+git stash pop
+git add project/ agents/ && git commit
+git push origin main
+git checkout <manager-branch>                        # leave the tree where Manager left it
+```
+
+Never do this mid-package. If Manager is working, hold the edits and commit at the next boundary.
+
 ## Handing work from Architect to Manager
 
 The handoff prompt is written into `collaboration-log.md`, not just printed in chat. So the Manager session doesn't need the plan pasted into it — point it at the file:
