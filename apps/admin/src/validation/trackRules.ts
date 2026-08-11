@@ -97,12 +97,79 @@ export function checkCoverUrlPresent(track: TrackDocumentInput): RuleResult {
   return failed('coverUrl', 'A Track cannot be published without a cover image URL.');
 }
 
+/**
+ * Image file extensions a cover URL may end in.
+ *
+ * A closed list rather than "anything with a dot": the failure being prevented is a
+ * *web page* URL passing as an image, and page URLs frequently end in something that
+ * looks like an extension.
+ */
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'] as const;
+
+/**
+ * A published Track's cover must actually be an image.
+ *
+ * `checkCoverUrlPresent` above only asks whether the field is filled, and the seeded
+ * Track passed it with an Amazon **product page** URL — so every Explore card in WP7
+ * silently rendered the fallback icon. Nothing was broken enough to fail; it just
+ * looked unfinished, which is the kind of defect that survives review.
+ *
+ * **This is an honest heuristic, not proof.** It checks that the URL parses, is http(s),
+ * and that its *path* ends in an image extension. It deliberately does not fetch the
+ * URL: a `beforeChange` hook that makes a network call blocks every save on someone
+ * else's uptime, turns an offline laptop into a CMS that cannot save, and would still
+ * only prove what the server returned at that moment. What it catches is the whole of
+ * the observed failure — a page URL where an image belongs. What it misses is a URL
+ * that ends in `.png` and serves something else, which no cheap check can catch and
+ * which nobody has done by accident.
+ */
+export function checkCoverUrlIsImage(track: TrackDocumentInput): RuleResult {
+  // Absence is `checkCoverUrlPresent`'s to report. Failing twice for one empty field
+  // gives the author two messages describing one problem.
+  if (!hasText(track.coverUrl)) {
+    return PASSED;
+  }
+
+  const raw = track.coverUrl.trim();
+  let url: URL;
+
+  try {
+    url = new URL(raw);
+  } catch {
+    return failed(
+      'coverUrl',
+      'The cover image URL is not a valid URL. It should start with https:// and point ' +
+        'directly at an image file.',
+    );
+  }
+
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return failed('coverUrl', 'The cover image URL must be an http or https address.');
+  }
+
+  // The path only — a query string legitimately carries resizing parameters, and
+  // matching against the whole URL would accept `.../page?ref=x.png`.
+  const path = url.pathname.toLowerCase();
+
+  if (!IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension))) {
+    return failed(
+      'coverUrl',
+      'The cover image URL must point directly at an image file, not at a web page. ' +
+        `It should end in one of: ${IMAGE_EXTENSIONS.join(', ')}. ` +
+        'On a retailer product page, right-click the cover and copy the image address.',
+    );
+  }
+
+  return PASSED;
+}
+
 /** Rules enforced only when a Track is being published. */
 export const TRACK_PUBLISH_RULES = [
   checkDisclaimerPresent,
   checkPurchaseLinkPresent,
   checkPublisherPresent,
   checkCoverUrlPresent,
+  checkCoverUrlIsImage,
 ] as const;
 
 export function validateTrack(track: TrackDocumentInput, isPublishing: boolean): RuleResult {

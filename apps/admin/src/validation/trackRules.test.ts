@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  checkCoverUrlIsImage,
   checkCoverUrlPresent,
   checkDisclaimerPresent,
   checkPublisherPresent,
@@ -146,5 +147,90 @@ describe('validateTrack', () => {
 
   it('passes a complete Track on publish', () => {
     expect(validateTrack(completeTrack(), true).ok).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The cover must be an image, not a page                                      */
+/* -------------------------------------------------------------------------- */
+
+describe('checkCoverUrlIsImage', () => {
+  it.each([
+    'https://example.test/cover.png',
+    'https://example.test/cover.jpg',
+    'https://example.test/deep/path/cover.jpeg',
+    'https://example.test/cover.webp',
+    'https://example.test/cover.PNG',
+  ])('accepts %s', (coverUrl) => {
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl })).ok).toBe(true);
+  });
+
+  it('accepts an image URL carrying resize parameters', () => {
+    // Query strings legitimately carry sizing; matching the whole URL instead of the
+    // path would reject every CDN-served cover.
+    const withParams = 'https://images.example.test/cover.jpg?width=400&quality=80';
+
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: withParams })).ok).toBe(true);
+  });
+
+  it('rejects a retailer product page', () => {
+    // The observed failure: the seeded Track pointed at an Amazon product page, so
+    // every Explore card rendered the fallback icon and nothing failed loudly.
+    const productPage =
+      'https://www.amazon.in/Mountain-You-Transforming-Self-Sabotage/dp/B09WXXRNZY';
+
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: productPage })).ok).toBe(false);
+  });
+
+  it('rejects a page whose query string merely mentions an image', () => {
+    const sneaky = 'https://example.test/product/page?thumb=cover.png';
+
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: sneaky })).ok).toBe(false);
+  });
+
+  it('rejects something that is not a URL at all', () => {
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: 'cover.png' })).ok).toBe(false);
+  });
+
+  it('rejects a non-http scheme', () => {
+    const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
+
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: dataUri })).ok).toBe(false);
+  });
+
+  it('says what to do, not just what is wrong', () => {
+    const result = checkCoverUrlIsImage(
+      completeTrack({ coverUrl: 'https://example.test/product/page' }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.violations[0]?.message).toMatch(/right-click/iu);
+    }
+  });
+
+  it('stays silent when the field is empty', () => {
+    // Absence belongs to `checkCoverUrlPresent`. Two messages for one empty field is
+    // worse guidance than one.
+    expect(checkCoverUrlIsImage(completeTrack({ coverUrl: null })).ok).toBe(true);
+  });
+
+  it('blocks publishing a Track whose cover is a page', () => {
+    const result = validateTrack(
+      completeTrack({ coverUrl: 'https://example.test/product/page' }),
+      true,
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('does not block saving that Track as a draft', () => {
+    // Publish-gated like every other Track rule: an author mid-edit is not an error.
+    const result = validateTrack(
+      completeTrack({ coverUrl: 'https://example.test/product/page' }),
+      false,
+    );
+
+    expect(result.ok).toBe(true);
   });
 });

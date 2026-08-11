@@ -1,6 +1,6 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { Leaf as CmsLeaf, Track as CmsTrack } from '@zoomout/shared/cms';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { runMigrations } from '../src/db/migrate.js';
 import { FakePayload } from './helpers/fakePayload.js';
@@ -603,5 +603,99 @@ describe('listing Tracks in production', () => {
     });
 
     expect(bodyOf<{ tracks: unknown[] }>(response).tracks.length).toBeGreaterThan(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Tier A — a draft must never reach a reader, even if the CMS offers one      */
+/* -------------------------------------------------------------------------- */
+
+describe('when the CMS serves drafts', () => {
+  /**
+   * The scenario: `read: publishedOrAuthenticated` has been misconfigured, or a future
+   * Payload upgrade changes its default, and unpublished documents start coming back
+   * from an anonymous read.
+   *
+   * Until WP11 the corpus was entirely published, so nothing had ever *observed* a
+   * draft being excluded — the rule was definitive by inspection and untested. And a
+   * test written against a fake that hides drafts proves only that the fake hides them.
+   * These tests make the fake hand drafts over, so the backend's own `isVisibleIn`
+   * filter is the thing under test: **defence in depth, not a duplicate of Payload.**
+   */
+  beforeEach(() => {
+    payload.serveDrafts = true;
+  });
+
+  afterEach(() => {
+    payload.serveDrafts = false;
+  });
+
+  it('keeps a draft Track out of Explore', async () => {
+    payload.seedTrack({ ...TRACK, id: 40, bookTitle: 'Draft Book' }, { published: false });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/tracks',
+      headers: auth(token),
+    });
+
+    expect(response.body).not.toContain('Draft Book');
+  });
+
+  it('404s a draft Track fetched directly', async () => {
+    payload.seedTrack({ ...TRACK, id: 41 }, { published: false });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/tracks/41',
+      headers: auth(token),
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('404s a draft Leaf', async () => {
+    payload.seedLeaf({ ...LEAF, id: 42, title: 'Draft Leaf' }, { published: false });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/leaves/42',
+      headers: auth(token),
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body).not.toContain('Draft Leaf');
+  });
+
+  it('keeps a draft Leaf out of a Track’s contents', async () => {
+    payload.seedLeaf({ ...LEAF, id: 43, title: 'Draft Leaf In List' }, { published: false });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/tracks/1/leaves',
+      headers: auth(token),
+    });
+
+    expect(response.body).not.toContain('Draft Leaf In List');
+  });
+
+  it('404s a published Leaf whose Track is only a draft', async () => {
+    // The takedown cascade, reached from the draft direction rather than by
+    // unpublishing something that was live.
+    payload.seedTrack({ ...TRACK, id: 44 }, { published: false });
+    payload.seedLeaf({ ...LEAF, id: 45, trackId: 44 }, { published: true });
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/leaves/45',
+      headers: auth(token),
+    });
+
+    expect(response.statusCode).toBe(404);
   });
 });
