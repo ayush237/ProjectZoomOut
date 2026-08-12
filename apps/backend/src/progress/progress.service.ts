@@ -3,13 +3,14 @@ import type {
   CompletionOutcome,
   Leaf,
   LeafProgress,
+  ReaderStanding,
   SessionStatus,
-  StreakStatus,
   TrackProgressSummary,
 } from '@zoomout/shared';
 
 import { NotFoundError } from '../auth/auth.errors.js';
 import { localDateIn } from '../auth/ageGate.js';
+import type { AchievementAwarder, TrackContext } from '../achievements/achievements.service.js';
 import type { AppConfig } from '../config/env.js';
 import { toError } from '../errors.js';
 import type { ContentRepository } from '../content/content.repository.js';
@@ -69,6 +70,11 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
     private readonly trackStatus: TrackStatusWriter,
     /** WP5a. The daily cap and the streak. */
     private readonly sessions: SessionRepository,
+    /**
+     * WP5b. Completion and answering are both evaluation points, and the unlock has to
+     * travel back in this action's response rather than on a later poll.
+     */
+    private readonly achievements: AchievementAwarder,
   ) {
     this.xpRules = {
       completion: config.XP_LEAF_COMPLETION,
@@ -83,11 +89,13 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
    * its own date would let a device with a wrong clock — or a deliberately altered one —
    * reset the cap at will.
    */
-  public async readDay(userId: string): Promise<{ session: SessionStatus; streak: StreakStatus }> {
+  public async readDay(userId: string): Promise<ReaderStanding> {
     const localDate = localDateIn(await this.requireReaderTimezone(userId));
-    const [session, streak] = await Promise.all([
+    const [session, streak, totalXp] = await Promise.all([
       this.sessions.findSession(userId, localDate),
       this.sessions.findStreak(userId),
+      // WP5b. Summed on read, never stored — see `ReaderStanding.totalXp`.
+      this.repository.sumXpAwarded(userId),
     ]);
 
     return {
@@ -97,6 +105,7 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
         longest: streak?.longest ?? 0,
         lastActiveLocalDate: streak?.lastActiveLocalDate ?? null,
       },
+      totalXp,
     };
   }
 
@@ -182,11 +191,18 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
       'Scenario answered',
     );
 
+    /**
+     * An evaluation point, because `first-try-first` is about *answering* rather than
+     * finishing — a reader who answers correctly first time and then puts the phone
+     * down has still done the thing it celebrates. No Track context: nothing about a
+     * single answer can complete a book.
+     */
     return {
       correct,
       progress: toDomainProgress(row),
       payoffUnlocked: unlocked,
       payoff: unlocked ? leaf.payoff : null,
+      unlocked: await this.achievements.awardQuietly(userId),
     };
   }
 
@@ -236,6 +252,16 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
         // A replay must not add to the clock, but it still reports where the day
         // stands — the client shows the limit screen off this.
         session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
+        /**
+         * Empty, and not because evaluation is skipped.
+         *
+         * A replay re-decides that every already-held achievement is still held, every
+         * insert conflicts, and nothing comes back — which is exactly what stops the
+         * client replaying the unlock animation each time a reader re-enters a finished
+         * Leaf. Left as a real evaluation rather than a hardcoded `[]` so that a badge
+         * genuinely earned between the two calls is still awarded.
+         */
+        unlocked: await this.achievements.awardQuietly(userId),
       };
     }
 
@@ -281,6 +307,8 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
         xpAwarded: 0,
         alreadyCompleted: true,
         session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
+        // The call that won awarded them; this one has nothing new to announce.
+        unlocked: await this.achievements.awardQuietly(userId),
       };
     }
 
@@ -315,13 +343,26 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
       'Leaf completed and XP awarded',
     );
 
-    await this.finishTrackIfDone(userId, leaf.trackId);
+    const track = await this.finishTrackIfDone(userId, leaf.trackId);
+
+    /**
+     * The last thing the completion does, and it uses the rollup that was already paid
+     * for above rather than fetching the Track's Leaves a second time.
+     *
+     * Ordered after `accumulate` and `recordActiveDay` on purpose: `daily-cap` reads
+     * today's `cap_reached_at` and the streak achievements read `streak.current`, so
+     * evaluating any earlier would judge the reader against the day they had *before*
+     * the Leaf they just finished — and a reader would reach a 3-day streak without
+     * `streak-3` until their next completion.
+     */
+    const unlocked = await this.achievements.awardQuietly(userId, track, at);
 
     return {
       progress: toDomainProgress(completed),
       xpAwarded: xp,
       alreadyCompleted: false,
       session: this.toSessionStatus(localDate, session),
+      unlocked,
     };
   }
 
@@ -346,7 +387,7 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
   }
 
   /**
-   * Marks the Track complete once its last Leaf is done.
+   * Marks the Track complete once its last Leaf is done, and reports how it stands.
    *
    * This is what finally closes `user_tracks.status`, which has been `active` since WP3
    * because nothing owned the Leaf-count rollup it needed. Completion time is the right
@@ -354,11 +395,21 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
    * a read path, and it would leave the status wrong for any reader who never opens
    * their library.
    *
+   * **Returns the rollup rather than discarding it (WP5b).** `track-complete` and
+   * `perfect-track` need exactly what this method already computed, and asking the CMS
+   * for the same Leaf list twice would double the cost of the product's core
+   * interaction to answer a question that was already on the stack.
+   *
    * Failures here are logged and swallowed. The reader has finished the Leaf and been
    * paid for it; turning a bookkeeping problem into a failed completion would be the
-   * worse outcome, and the next completion re-evaluates it anyway.
+   * worse outcome, and the next completion re-evaluates it anyway. A swallowed failure
+   * reports `{ completed: false, perfect: false }` — the achievement is simply not
+   * awarded this time, which the next completion corrects, rather than being awarded on
+   * incomplete information.
    */
-  private async finishTrackIfDone(userId: string, trackId: string): Promise<void> {
+  private async finishTrackIfDone(userId: string, trackId: string): Promise<TrackContext> {
+    const unknown: TrackContext = { completed: false, perfect: false };
+
     try {
       // The sanctioned repository read again — see `requireVisibleLeaf`. Filtered
       // through the same predicate, so a placeholder Leaf hidden in production is not
@@ -369,18 +420,36 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
 
       const summary = await this.summariseTrack(userId, trackId, leaves);
 
+      /**
+       * Answered-first-try across the whole Track, counted only when it is complete.
+       *
+       * `perfect-track` is "every Leaf answered first-try", which cannot be true of a
+       * book the reader has not finished — and checking accuracy on an unfinished Track
+       * would award Flawless at the first correct answer of a twenty-Leaf book.
+       */
+      const perfect =
+        summary.isComplete &&
+        (await this.repository.countFirstTryCompletions(
+          userId,
+          leaves.map((leaf) => leaf.id),
+        )) === leaves.length;
+
       if (!summary.isComplete) {
-        return;
+        return unknown;
       }
 
       if (await this.trackStatus.setStatus(userId, trackId, 'completed')) {
         this.logger.info({ userId, trackId, leaves: summary.totalLeaves }, 'Track completed');
       }
+
+      return { completed: true, perfect };
     } catch (error) {
       this.logger.error(
         { err: toError(error), userId, trackId },
         'Could not update Track status after completing a Leaf',
       );
+
+      return unknown;
     }
   }
 

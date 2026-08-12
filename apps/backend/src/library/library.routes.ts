@@ -31,11 +31,17 @@ export function registerLibraryRoutes(
     const userId = requireUserId(request);
     const { trackId } = trackIdParams.parse(request.params);
 
-    await service.addTrack(userId, trackId);
+    const unlocked = await service.addTrack(userId, trackId);
 
-    // 204 rather than 201: idempotent, so "created" would be a lie on the second call
-    // and the client has nothing to do with a body either way.
-    return reply.status(HTTP_NO_CONTENT).send();
+    /**
+     * 200 with the unlocks, where WP3 returned 204.
+     *
+     * Still not 201 — the add is idempotent, so "created" would be a lie on the second
+     * call. The body arrived in WP5b because `first-book` has to reach the client in
+     * the response of the action that earned it; a 204 would force the app to poll to
+     * discover a badge it had just won.
+     */
+    return reply.send({ unlocked });
   });
 
   app.delete('/library/tracks/:trackId', { preHandler: authenticate }, async (request, reply) => {

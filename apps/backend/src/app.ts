@@ -4,6 +4,8 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type RawServerDefault } from 'fastify';
 import { ZodError } from 'zod';
 
+import { registerAchievementRoutes } from './achievements/achievements.routes.js';
+import type { AchievementService } from './achievements/achievements.service.js';
 import type { Authenticator } from './auth/authenticate.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
 import type { AuthService } from './auth/auth.service.js';
@@ -37,6 +39,7 @@ export interface AppDependencies {
   readonly contentService: ContentService;
   readonly libraryService: LibraryService;
   readonly progressService: ProgressService;
+  readonly achievementService: AchievementService;
   readonly authenticate: Authenticator;
 }
 
@@ -169,6 +172,7 @@ export async function buildApp(deps: AppDependencies): Promise<ZoomOutApp> {
   registerContentRoutes(app, deps.contentService, deps.authenticate);
   registerLibraryRoutes(app, deps.libraryService, deps.authenticate);
   registerProgressRoutes(app, deps.progressService, deps.authenticate);
+  registerAchievementRoutes(app, deps.achievementService, deps.authenticate);
   registerAuthRoutes(app, deps.authService, deps.config, deps.authenticate);
   registerProfileRoutes(app, deps.profileService, deps.authenticate);
 

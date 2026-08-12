@@ -393,7 +393,9 @@ describe('library', () => {
       url: '/library/tracks/1',
       headers: auth(token),
     });
-    expect(added.statusCode).toBe(204);
+    // 200 since WP5b, where this was 204: the add carries back any achievement it
+    // earned, because an unlock has to arrive in the response of the triggering action.
+    expect(added.statusCode).toBe(200);
 
     const list = await app().inject({ method: 'GET', url: '/library', headers: auth(token) });
     expect(bodyOf<{ entries: unknown[] }>(list).entries).toHaveLength(1);
@@ -409,7 +411,10 @@ describe('library', () => {
       headers: auth(token),
     });
 
-    expect(second.statusCode).toBe(204);
+    expect(second.statusCode).toBe(200);
+    // Still idempotent, and now visibly so: the second add earned nothing, because
+    // `first-book` was already awarded by the first.
+    expect(bodyOf<{ unlocked: unknown[] }>(second).unlocked).toEqual([]);
 
     const list = await app().inject({ method: 'GET', url: '/library', headers: auth(token) });
     expect(bodyOf<{ entries: unknown[] }>(list).entries).toHaveLength(1);

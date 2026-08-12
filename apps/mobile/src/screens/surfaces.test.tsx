@@ -488,7 +488,10 @@ describe('Explore', () => {
       )
       .on('/library/tracks/1', () => {
         added.push('1');
-        return new Response(null, { status: 204 });
+        // 200 with the unlocks since WP5b — `first-book` has to reach the client in
+        // the response of the add that earned it. Empty here: this test is about the
+        // button, and the unlock banner has its own.
+        return json({ unlocked: [] });
       })
       .on('/library', () => json({ entries: [] }));
 

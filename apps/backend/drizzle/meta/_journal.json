@@ -36,6 +36,13 @@
       "when": 1786341600000,
       "tag": "0004_add_daily_session_and_streak",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786540771710,
+      "tag": "0005_add_achievements_and_events",
+      "breakpoints": true
     }
   ]
 }

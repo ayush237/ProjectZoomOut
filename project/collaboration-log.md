@@ -894,6 +894,114 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP5b Parts B and C — achievements and total XP — 2026-08-12
+
+**Status:** 7 of 9 acceptance criteria verified by execution. **The device check is not done, and the reason is a live misconfiguration that Part A was supposed to have closed — it is the first section below, not buried.** Cold gate green with `dist` and `.next` deleted, then `npm ci`: **889 tests** (64 shared, 161 admin, 435 backend, 229 mobile), lint, typecheck and build all exit 0 with real exit codes.
+
+**Branch:** `wp5b-achievements-xp`, from `main` at `02f3cd0`. Part A (`2e99714`) was not touched.
+
+#### Where the time went
+
+Roughly: a tenth on the migration-chain repair below; a fifth on the registry and the facts query; a fifth on wiring the five evaluation points; a fifth on mobile; a quarter on tests including two mutation checks, one of which found a real hole; the rest on the gate and the device attempt. **The device attempt cost more than the mobile work and produced no verification** — see below.
+
+#### The blocker: the backend's `.env` points at Payload's database
+
+**`apps/backend/.env`'s `DATABASE_URL` names `zoomout_cms`, not `zoomout`.** Established by effect, not by reading the file — reading it was denied, which is correct.
+
+The evidence, all from `docker exec psql`:
+
+| Database | Backend tables | Reader data | Drizzle migrations |
+|---|---|---|---|
+| `zoomout` | 5 (through 0003) | **6 users, 10 leaf_progress, 5 user_tracks** | 0000–0003 |
+| `zoomout_cms` | Payload's 20-odd, **plus an empty duplicate set of the backend's** | 0 users, 0 leaf_progress | 0000–0003, then 0004+0005 from my run |
+
+So:
+
+1. **Part A's second bullet is unsatisfied.** "Confirm the backend's migrations land in the backend's database, not Payload's" — they land in Payload's. Part A fixed how the file is *loaded*; nothing checked where it *pointed*. This is precisely the failure mode `02f3cd0` generalised — verification that observes execution rather than effect — reappearing one commit later in the same package.
+2. **This is the root cause of WP5a's failed device check, not the missing `--env-file`.** `zoomout` never received migration 0004, so `daily_session` and `streak` do not exist in the database that holds the six real readers. The cap and streak could not have worked on device whatever WP5a did.
+3. **`npm run db:migrate` reported "Migrations applied" and wrote 0004 and 0005 into `zoomout_cms`.** Four empty tables and one enum, now sitting among Payload's.
+
+**The two cannot coexist, which is why this needs a ruling rather than a workaround.** `apps/admin`'s dev server now fails to boot at Payload's "Pulling schema from database" step, with drizzle-kit issuing `SELECT conname AS primary_key ... connamespace = $1 ... relname = $2` and `params: []` — hence `error: there is no parameter $1` (Postgres 42P02). **I could not establish whether my four tables triggered it.** The malformed query carries no parameters at all, which looks like a library bug that would fire regardless of what is in the database; but those four tables are also the only known change to that database. Confirming it by dropping them was blocked by the permission classifier, correctly — dropping tables in the founder's database is not a call I should make alone. All four are empty (verified before attempting), so the drop is recoverable in principle.
+
+**What I recommend, in order:**
+
+1. Point `apps/backend/.env`'s `DATABASE_URL` at `zoomout`, then `npm run db:migrate`. One line, and it is the actual fix — the backend has been talking to the wrong database for at least two packages.
+2. Then drop `user_achievements`, `reader_events`, `daily_session`, `streak` and the `reader_event_type` enum from `zoomout_cms`, and delete the two rows I added to its `drizzle.__drizzle_migrations` (`created_at` 1786341600000 and 1786540771710). That restores Payload's database to what it was and should let the CMS boot; if it still fails, the introspection error is upstream and independent of this package.
+3. Re-run the device check. Everything it needs is built and unit-covered.
+
+**A background backend dev server may still be listening on :3000, pointed at `zoomout_cms`.** I started it for the check and my attempt to stop it was also blocked. Harmless, but worth killing.
+
+#### Migration 0004's drizzle snapshot was missing, and 0005 was wrong until it was rebuilt
+
+**`drizzle/meta/0004_snapshot.json` did not exist.** WP5a hand-wrote `0004_add_daily_session_and_streak.sql` and hand-added its journal entry, so drizzle's last snapshot was 0003. The first `db:generate` for this package therefore diffed against 0003 and emitted a 0005 that **re-created `daily_session` and `streak`** — which would fail on any database that already had 0004, including a fresh one running migrations in order. That is the Tier A "migrations apply cleanly to an empty database" criterion, and it would have broken every integration suite at once.
+
+Repaired rather than worked around: journal pruned to 0003, the new tables temporarily removed from `schema.ts`, `generate` re-run to reconstruct the missing snapshot, and the emitted SQL **diffed against WP5a's hand-written 0004 — identical but for a trailing newline**, which is what proves the reconstructed snapshot describes what 0004 actually did. Then the journal entry was restored with **its original `when` value (1786341600000)**: drizzle applies entries whose timestamp is later than the last one recorded, so bumping it would re-run 0004 against any database that already had it.
+
+`0005_add_achievements_and_events.sql` now contains only the two new tables. **Anyone hand-writing a migration here must also add its snapshot, or they hand the same trap to the next package.**
+
+#### The registry
+
+Nineteen achievements in `apps/backend/src/achievements/registry.ts`, each a row of `{ id, name, description, tier, unlocks }` where `unlocks` is a pure synchronous predicate over one flat `AchievementFacts` snapshot. Adding a twentieth is a row and a predicate. Two invariants are documented at the top and worth keeping: predicates cannot query, and they are monotonic in the reader's favour except for the consecutive-first-try run, which is the one fact that legitimately resets.
+
+**The catalogue is not in `packages/shared` and the client holds no copy.** `GET /achievements` returns all nineteen with `unlockedAt` resolved per reader, locked ones included. Same reasoning as WP5a's cap thresholds travelling with `SessionStatus`: a client-side list goes stale the moment a twentieth ships, and the reader silently stops being shown the tile §3 wants them to come back for. Shared holds the types only.
+
+**Facts are one round trip.** Ten counts as scalar subqueries in a single statement, all scoped to one reader. Ten queries per completion would put the whole registry in the critical path of the product's core interaction.
+
+**`consecutiveFirstTry` is derived, not maintained.** §4 allows either. Derived means no second copy to drift and no reset branch to forget: it is the leading run of first-try completions ordered newest-first — the position of the most recent non-first-try completion, minus one, or all of them when there is none. Ordered by `completed_at desc, leaf_id desc`, because two completions can share a timestamp and an ambiguous order makes the count non-deterministic.
+
+**`hard_won` requires `not first_try_correct`** as well as `attempt_count >= 4`. `attempt_count` counts every answer and a reader may re-answer after unlocking, so the flag is what separates "wrong three times, then right" from "right immediately, then poked at the other options". It can still over-count for a reader who deliberately answers wrongly *after* being paid; that errs toward the reader, so it stands.
+
+#### Evaluation points, and where the unlock travels
+
+Five, all returning unlocks in the triggering action's response: **Leaf completion**, **answer submission**, **library add**, **cap reached** (inside completion, since `daily-cap` reads the row `accumulate` just wrote), and **a new `POST /events`**.
+
+- **Ordering inside `completeLeaf` is load-bearing.** Evaluation runs after `accumulate` and `recordActiveDay`. Earlier would judge the reader against the day they had *before* the Leaf they just finished — a reader would reach a 3-day streak and not get `streak-3` until their next completion.
+- **`finishTrackIfDone` now returns the rollup instead of discarding it**, feeding `track-complete` and `perfect-track`. Asking the CMS for the same Leaf list twice would double the cost of every completion. A swallowed failure reports `{ completed: false, perfect: false }`, so the badge is skipped this time and re-decided next time rather than awarded on incomplete information.
+- **`perfect-track` is only checked on a complete Track.** Otherwise Flawless fires on the first correct answer of a twenty-Leaf book.
+- **`POST /library/tracks/:trackId` is now 200 with `{ unlocked }`, was 204.** `first-book` has to reach the client in the response of the add that earned it. Still not 201 — the add is idempotent. Two integration tests encoded the 204 and were corrected; the mobile client tolerates a body-less response so an older backend degrades to "no achievements" rather than crashing the shelf's main action.
+- **`awardQuietly` cannot fail its caller.** A completed Leaf has been paid for; turning an unwritable badge into a 500 would cost the reader the Leaf. Failures are logged and the next evaluation re-decides, because the predicates are monotonic.
+
+#### `first-wrap` — an assumption you should check
+
+The proposal lists `first-wrap` and names session wrap-up as an evaluation point; the handoff puts the **wrap-up screen** in WP9. I built the event, not the screen: `POST /events` accepts `session_wrap` alongside `dinner_table_open`, so all nineteen ship reachable and WP9 only has to call it. Generalising the endpoint the handoff described as "a small authenticated event endpoint" for DTK was the cheapest way to avoid shipping a tile nothing can award. **If you would rather `first-wrap` stayed unreachable until WP9, the change is deleting one enum value.**
+
+#### Tier A, and the mutation check that found a hole
+
+Award idempotency is covered at both layers, and finding out that it needed to be is the most useful thing this package's tests did.
+
+- **Replay**: the completion that earns `first-leaf` announces it; the replay announces nothing and the row count stays 1.
+- **Concurrency, through HTTP**: two simultaneous completions, exactly one announcement.
+- **Concurrency, at the repository**: two `award` calls for the same badge in flight, one row and one winner.
+
+**The third test exists because the first two did not catch a mutation.** Swapping `onConflictDoNothing` for an upsert left all nineteen endpoint tests green — the service filters already-held achievements before it ever calls `award`, so a replay never reaches the insert, and two concurrent completions usually serialise far enough apart that the loser also sees the winner's row. Both are fine behaviours; together they meant nothing exercised the unique index that the criterion is actually about. The repository-level race test goes red for that mutation and is the only one that does.
+
+**Second mutation:** removing the engine's `alreadyHeld` filter reddens exactly one registry unit test. Both mutations were reverted and the full suite re-run.
+
+Also Tier A: the migration creates both tables, the unique index exists, and **`users.total_xp` does not exist** — asserted, because that is how the ruling stays true.
+
+#### Part C
+
+`SUM(xp_awarded)` over `leaf_progress`, on `GET /progress/today`, which Profile already calls. `coalesce(..., 0)::int` — `sum` over no rows is null, and `sum` over an integer column is `bigint`, which `pg` returns as a **string**; `"180"` would render correctly and then misbehave the moment anything added to it. **No new index: the existing `leaf_progress_user_id_idx` covers it**, which the handoff's "indexed on `user_id`" already asked for.
+
+`DayStatus` was declared in the mobile client and is now `ReaderStanding` in `delivery.ts` — the duplication CLAUDE.md forbids, fixed while adding a field to it rather than doubled.
+
+#### `delivery.ts` and `gamification.ts` — additive, with the note the constraint asks for
+
+- **`delivery.ts`**: `unlocked` added to `AnswerOutcome` and `CompletionOutcome`; new `ReaderStanding`. Additive; both apps compile.
+- **`gamification.ts` was rewritten, not extended.** Its WP0 shape keyed an achievement by `uuid` and implied a table of achievement rows; the proposal rules a code registry, so identity is a slug. The file carried a `PROVISIONAL` header naming WP5 as where it would be settled, and nothing imported it. `UserAchievement` and `iconUrl` are gone.
+
+#### Deferred — Tier C, for WP14
+
+1. **The device check**, above, and with it the four items it was carrying: WP5a's cap-screen copy, an achievement unlock seen on a device, **iOS Reduce Motion on the WP8 unlock animation** (still WP8's open 11th criterion), and both themes at XXXL.
+2. `AchievementUnlock` and the Profile grid have **no component render tests** — no theme permutations, no XXXL layout assertions, no locked/unlocked visual states. The grid's flow-wrap layout was chosen to survive XXXL by construction and has not been seen at XXXL.
+3. Failure paths on `POST /events` and `GET /achievements` beyond the two auth/validation cases.
+4. `awardQuietly`'s swallow path is not tested — a broken award is silent by design, and nothing asserts the log line.
+5. No test covers a reader crossing `sharp-5`/`sharp-10`, `comeback-10`, `leaves-20` or any streak threshold end to end; those predicates are unit-tested against literals only. Reaching them through HTTP needs 5–20 completions per test.
+
+#### One environment note for the next session
+
+**Node is not on the default `PATH` in a non-interactive shell here** — it lives at `~/.nvm/versions/node/v22.23.2/bin`, and `nvm` is a shell function that does not load. Every command in this package was prefixed with `export PATH="$HOME/.nvm/versions/node/v22.23.2/bin:$PATH"`. Worth knowing before concluding that `npm` is missing.
+
 ### Completed: WP5a — Session cap and streaks — 2026-08-12
 
 **Status:** 7 of 8 acceptance criteria verified by execution. **The device check is not done** — the reason is environmental and is below, not buried. Cold gate green with `dist` and `.next` deleted: lint, typecheck, test and build all exit 0.

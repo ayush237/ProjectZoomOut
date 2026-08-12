@@ -51,6 +51,17 @@ export interface ProgressRepository {
    * a question about one Track.
    */
   listCompletedLeafIds(userId: string, leafIds: readonly string[]): Promise<readonly string[]>;
+  /**
+   * The reader's lifetime XP, summed on read.
+   *
+   * WP5b, Part C. Ruled 2026-08-09 against a `users.total_xp` counter: this table is
+   * the source of truth, and the completion path is idempotent precisely because
+   * replaying it is ordinary — a denormalised total is exactly where that replay would
+   * land as a double increment with no way to detect it afterwards.
+   */
+  sumXpAwarded(userId: string): Promise<number>;
+  /** How many of these Leaves the reader completed having answered first try. */
+  countFirstTryCompletions(userId: string, leafIds: readonly string[]): Promise<number>;
 }
 
 export class PostgresProgressRepository implements ProgressRepository {
@@ -200,6 +211,49 @@ export class PostgresProgressRepository implements ProgressRepository {
       );
 
     return rows.map((row) => row.leafId);
+  }
+
+  /**
+   * `coalesce` because `sum` over no rows is `null`, not zero — a reader who has
+   * completed nothing has 0 XP, and `null` would surface as a missing field on Profile.
+   *
+   * Cast to `int` in SQL: `sum` over an integer column is `bigint`, which `pg` hands
+   * back as a **string**, and `"180"` would render as the total right up until something
+   * tried to add to it. The reader's own rows only, over the existing
+   * `leaf_progress_user_id_idx` — no second index is needed for this.
+   */
+  public async sumXpAwarded(userId: string): Promise<number> {
+    const [row] = await this.client.db
+      .select({ total: sql<number>`coalesce(sum(${leafProgress.xpAwarded}), 0)::int` })
+      .from(leafProgress)
+      .where(eq(leafProgress.userId, userId));
+
+    return row?.total ?? 0;
+  }
+
+  public async countFirstTryCompletions(
+    userId: string,
+    leafIds: readonly string[],
+  ): Promise<number> {
+    if (leafIds.length === 0) {
+      // Same reasoning as `listCompletedLeafIds`: a Track with no visible Leaves is
+      // ordinary in Phase 1, and an empty `inArray` is a SQL error.
+      return 0;
+    }
+
+    const [row] = await this.client.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(leafProgress)
+      .where(
+        and(
+          eq(leafProgress.userId, userId),
+          inArray(leafProgress.leafId, [...leafIds]),
+          isNotNull(leafProgress.completedAt),
+          eq(leafProgress.firstTryCorrect, true),
+        ),
+      );
+
+    return row?.count ?? 0;
   }
 
   public async findReaderTimezone(userId: string): Promise<string | null> {

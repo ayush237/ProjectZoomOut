@@ -63,6 +63,16 @@ const ICONS = {
   idea: 'bulb-outline',
   soundOn: 'volume-medium',
   soundOff: 'volume-mute',
+
+  /* Achievements (WP5b). */
+  /**
+   * One glyph for all nineteen rather than one each.
+   *
+   * Tier drives visual weight through colour and the card, per the proposal — an icon
+   * per achievement would be nineteen shapes to design and to keep meaningful, and a
+   * grid of nineteen different glyphs reads as noise rather than as a collection.
+   */
+  achievement: 'trophy',
 } as const;
 
 export type IconName = keyof typeof ICONS;

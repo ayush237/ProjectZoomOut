@@ -115,6 +115,8 @@ function harness(
     completeIfUnfinished: vi.fn().mockResolvedValue(rowOf({ completedAt: new Date() })),
     findReaderTimezone: vi.fn().mockResolvedValue('Europe/London'),
     listCompletedLeafIds: vi.fn().mockResolvedValue([]),
+    sumXpAwarded: vi.fn().mockResolvedValue(0),
+    countFirstTryCompletions: vi.fn().mockResolvedValue(0),
   };
 
   const content = {
@@ -166,6 +168,16 @@ function harness(
       stubLogger(),
       trackStatus,
       sessions,
+      /**
+       * The awarder, stubbed to award nothing.
+       *
+       * WP5b makes completion and answering evaluation points, but nothing in this file
+       * is about achievements — and `awardQuietly` is by contract unable to fail its
+       * caller, so a stub that returns nothing is the honest neutral. The engine's own
+       * guarantees are integration-tested against a real database, where the unique
+       * index that makes awarding idempotent actually exists.
+       */
+      { awardQuietly: vi.fn().mockResolvedValue([]) },
     ),
     repository,
     content,

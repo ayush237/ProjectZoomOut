@@ -332,6 +332,87 @@ export const streaks = pgTable('streak', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Achievements a reader has earned. One row per unlock, ever.
+ *
+ * `achievement_id` is **text and not a foreign key**, because there is no achievements
+ * table to point at: the catalogue is a code registry (see `achievements/registry.ts`),
+ * so its rows are deployed, not inserted. Storing the slug means a row survives the
+ * registry being reordered, and an achievement that is later retired leaves its
+ * historical unlocks intact rather than cascading them away.
+ *
+ * The unique index is the entire idempotency guarantee. Evaluation runs on every
+ * completion, every answer and every library add, so the *normal* case is re-deciding
+ * that an already-earned achievement is still earned — and two completions landing at
+ * once must not produce two rows and two unlock animations for the same badge.
+ */
+export const userAchievements = pgTable(
+  'user_achievements',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    /** The registry's slug, e.g. `first-leaf`. */
+    achievementId: text('achievement_id').notNull(),
+
+    unlockedAt: timestamp('unlocked_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('user_achievements_user_achievement_unique').on(
+      table.userId,
+      table.achievementId,
+    ),
+    index('user_achievements_user_id_idx').on(table.userId),
+  ],
+);
+
+export const readerEventEnum = pgEnum('reader_event_type', [
+  'dinner_table_open',
+  'session_wrap',
+]);
+
+/**
+ * Reader-signalled events that nothing else in the system records.
+ *
+ * Append-only, and deliberately not a counter. `dinner-party` needs to know a Dinner
+ * Table Knowledge fact was opened, and the proposal notes this is **the only signal we
+ * would ever have that the deep-cut content is read at all** — a counter would answer
+ * the achievement's question and throw that away. With `leaf_id` kept, "which Leaves'
+ * facts get opened" stays answerable later without a second instrumentation pass.
+ *
+ * `leaf_id` is text and nullable: text for the same reason as everywhere else — Leaves
+ * live in the CMS's database — and nullable because a session wrap belongs to a day,
+ * not to a Leaf.
+ */
+export const readerEvents = pgTable(
+  'reader_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    type: readerEventEnum('type').notNull(),
+
+    /** The Leaf whose fact was opened. Null for events that are not about one Leaf. */
+    leafId: text('leaf_id'),
+
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Every read of this table asks "has this reader ever done X", so the type belongs
+    // in the index rather than being filtered after a per-user scan.
+    index('reader_events_user_type_idx').on(table.userId, table.type),
+  ],
+);
+
+export type UserAchievementRow = typeof userAchievements.$inferSelect;
+export type ReaderEventRow = typeof readerEvents.$inferSelect;
+
 export type UserTrackRow = typeof userTracks.$inferSelect;
 export type NewUserTrackRow = typeof userTracks.$inferInsert;
 

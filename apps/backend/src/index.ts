@@ -1,3 +1,5 @@
+import { PostgresAchievementRepository } from './achievements/achievements.repository.js';
+import { AchievementService } from './achievements/achievements.service.js';
 import { buildApp } from './app.js';
 import { createAuthenticator } from './auth/authenticate.js';
 import { PostgresAuthRepository } from './auth/auth.repository.js';
@@ -83,13 +85,28 @@ async function main(): Promise<void> {
     config,
   );
   const libraryRepository = new PostgresLibraryRepository(database);
+  const progressRepository = new PostgresProgressRepository(database);
+
+  /**
+   * Achievements are constructed before the services that trigger them, because both
+   * the learning loop and the library depend on the awarder rather than the other way
+   * round. It reads the reader's timezone through `progressRepository`, which already
+   * exposes exactly that one method — a narrow port, not the whole repository.
+   */
+  const achievementService = new AchievementService(
+    new PostgresAchievementRepository(database),
+    progressRepository,
+    logger,
+  );
+
   const progressService = new ProgressService(
-    new PostgresProgressRepository(database),
+    progressRepository,
     contentRepository,
     config,
     logger,
     libraryRepository,
     new PostgresSessionRepository(database),
+    achievementService,
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
   const libraryService = new LibraryService(
@@ -97,6 +114,7 @@ async function main(): Promise<void> {
     contentService,
     progressService,
     logger,
+    achievementService,
   );
 
   const reaper = new RefreshTokenReaper(
@@ -115,6 +133,7 @@ async function main(): Promise<void> {
     contentService,
     libraryService,
     progressService,
+    achievementService,
     authenticate: createAuthenticator(tokenService),
   });
 

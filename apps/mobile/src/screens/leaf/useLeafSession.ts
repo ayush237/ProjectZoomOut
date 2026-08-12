@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
-import type { AnswerOutcome, DeliveredLeaf, PayoffSlide } from '@zoomout/shared';
+import type {
+  AnswerOutcome,
+  DeliveredLeaf,
+  PayoffSlide,
+  UnlockedAchievement,
+} from '@zoomout/shared';
 
 import type { ApiClient } from '../../api/client';
 import { ApiError, NetworkError } from '../../api/errors';
@@ -45,6 +50,15 @@ export interface LeafSessionState {
   readonly capReached: boolean;
   /** True only on the transition that earned the payoff, so re-entry does not replay it. */
   readonly justUnlocked: boolean;
+  /**
+   * Achievements this session has earned, in the order the server awarded them.
+   *
+   * **Server-decided, never inferred.** The client does not know the thresholds and must
+   * not guess at them — a locally computed "you have now done five" would disagree with
+   * the server the first time a completion was replayed, and the reader would be
+   * congratulated twice for one badge.
+   */
+  readonly unlocked: readonly UnlockedAchievement[];
   /** A reader-facing failure that ends the session — a withdrawn Leaf, most notably. */
   readonly fatalError: string | null;
   /** A recoverable failure; the reader can try the same action again. */
@@ -64,10 +78,19 @@ export interface LeafSession extends LeafSessionState {
   readonly back: () => void;
   readonly answer: (optionId: string) => void;
   readonly complete: (onFinished: () => void) => void;
+  /**
+   * Reports that the reader opened this Leaf's Dinner Table Knowledge fact.
+   *
+   * Fire-and-forget by design: the fact is already on screen, revealed locally, and a
+   * failed report must not undo that or interrupt the reader. What is lost on failure
+   * is one analytics row and — at worst, once — the `dinner-party` badge, which the
+   * next open re-earns because the predicate is monotonic.
+   */
+  readonly reportDinnerTableOpen: () => void;
 }
 
 export interface LeafSessionOptions {
-  readonly api: Pick<ApiClient, 'submitAnswer' | 'completeLeaf'>;
+  readonly api: Pick<ApiClient, 'submitAnswer' | 'completeLeaf' | 'recordEvent'>;
   readonly leafId: string;
   readonly leaf: DeliveredLeaf;
   readonly play: (cue: SoundCue) => void;
@@ -90,8 +113,18 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
   const [firstTryCorrect, setFirstTryCorrect] = useState(false);
   const [capReached, setCapReached] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState<readonly UnlockedAchievement[]>([]);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  /**
+   * One report per Leaf session, guarded by a ref for the same reason as completion.
+   *
+   * The toggle can be tapped repeatedly to hide and re-show the fact, and each of those
+   * is a genuine open — but only the first tells us anything, and nineteen rows from one
+   * reader fidgeting would drown the signal the table exists to collect.
+   */
+  const dinnerTableReported = useRef(false);
 
   /**
    * Guards double submission, and a `useRef` rather than the `completing` state on
@@ -126,6 +159,9 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
             // second round trip — the animation would otherwise start on a spinner.
             setPayoff(outcome.payoff);
             setJustUnlocked(true);
+            // `first-try-first` is earned by answering, so it can land here rather than
+            // at completion. Accumulated, not replaced: a later completion may add more.
+            setUnlocked((current) => [...current, ...outcome.unlocked]);
             play('correct');
             setSlideIndex(SCENARIO_INDEX + 1);
           } else {
@@ -160,6 +196,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
 
           setXpAwarded(outcome.xpAwarded);
           setCapReached(outcome.session.capReached);
+          setUnlocked((current) => [...current, ...outcome.unlocked]);
           play('leafComplete');
           onFinished();
         } catch (caught) {
@@ -201,6 +238,31 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
     setSlideIndex((current) => Math.max(current - 1, 0));
   }, []);
 
+  const reportDinnerTableOpen = useCallback(() => {
+    if (dinnerTableReported.current) {
+      return;
+    }
+
+    dinnerTableReported.current = true;
+
+    void (async () => {
+      try {
+        const outcome = await api.recordEvent('dinner_table_open', leafId);
+
+        setUnlocked((current) => [...current, ...outcome.unlocked]);
+      } catch {
+        /**
+         * Swallowed, and this is the one place in the loop where that is right.
+         *
+         * The reader has already been shown the fact; there is nothing to roll back and
+         * nothing they could do about a failure. Allowing a retry on the next open is
+         * why the guard is reset here rather than left latched.
+         */
+        dinnerTableReported.current = false;
+      }
+    })();
+  }, [api, leafId]);
+
   return {
     slideIndex,
     slide: SLIDES[slideIndex] ?? 'summary',
@@ -213,6 +275,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
     firstTryCorrect,
     capReached,
     justUnlocked,
+    unlocked,
     fatalError,
     actionError,
     canAdvance,
@@ -221,6 +284,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
     back,
     answer,
     complete,
+    reportDinnerTableOpen,
   };
 }
 
