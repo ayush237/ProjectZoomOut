@@ -9,6 +9,79 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-12 — WP9: Session wrap-up and achievement screens
+
+### Task: WP9 — Session wrap-up and achievement screens
+
+**Context:** These two screens are a **growth mechanic, not decoration**. `PRODUCT.md` is explicit: they exist to be screenshotted and shared, and that is the loop by which ZoomOut is meant to spread. They are the only screens in the product whose job is to be seen by someone who is not a user.
+
+WP5b landed the cap screen, achievements and `POST /events` (which already accepts `session_wrap`, so `first-wrap` becomes reachable the moment this package calls it). WP8 landed the Leaf player.
+
+**Objective:** A reader can end their day deliberately, see an attractive summary of what they learnt, and share it — and an achievement unlock is a moment worth capturing rather than a toast.
+
+**Scope:**
+- `apps/backend/` — a session summary endpoint (see below; this backend work is in scope)
+- `apps/mobile/src/screens/` — the wrap-up screen, the achievement unlock screen
+- `apps/mobile/src/` — screen capture and the OS share sheet
+
+---
+
+**Backend — the gap this package must close**
+
+`SessionStatus` carries `xpEarned`, `secondsActive`, `capReached` and the thresholds. **It carries nothing about *which* Leaves were completed today**, so "here is what you learnt" cannot be built from what exists. Verify that before building — do not trust this handoff over the code.
+
+Add a **session summary** for the reader's current local day: Leaves completed today with their titles and their Track, XP earned, current streak, and achievements unlocked today. One call — the wrap-up screen should not assemble itself from four requests.
+
+Reuse `localDateIn()`. This is a local-day query and must not be reinterpreted from a UTC instant.
+
+**Two product decisions, made here rather than by implication** (the WP8 lesson):
+
+1. **Wrapping up is a ceremony, not a lock.** It shows the summary, records the `session_wrap` event, and returns the reader to Journey. **It does not prevent further learning.** The daily cap is the hard stop; "wrap up" is the ritual ending. Locking someone out because they tapped a celebratory button would be punitive and surprising, and a reader who wraps up and then wants one more Leaf should get one. Wrapping twice in a day is fine — the summary reflects the day so far.
+2. **The cap screen leads into the wrap-up screen.** When the cap fires, offer the same summary rather than showing a second, differently-styled ending. Two different endings to one day is worse than one good one. WP5b's cap screen already unlocks `daily-cap` above the notice; keep that ordering — being congratulated for stopping in the same breath as being told you are finished is what makes it read as an ending rather than a refusal.
+
+**Entry points:** offered after completing a Leaf, and available from Journey.
+
+---
+
+**The screens**
+
+- **Both break the app's dark theme deliberately** — `design-direction.md` §8. A dark screenshot in a bright social feed reads as moody rather than triumphant. Use the light or high-contrast variant, and **design them against a mockup of a feed, not against the app.**
+- **Legible as a small thumbnail.** If the streak number and the book are not readable at thumbnail size, the screen has failed at its only job.
+- Carry the streak or XP, the book, and the ZoomOut wordmark.
+- **Compose both around the reserved mascot slot** (§9), filled for now by an illustrative motion element or oversized type. Adding a mascot later should be an asset swap.
+- Achievement icons come through WP7's `Icon` map — `iconUrl` was deliberately removed from `packages/shared` in WP5b and stays gone.
+- Amber owns celebration, not primary teal.
+
+**Sharing**
+
+- Capture the screen to an image and hand it to the OS share sheet.
+- **The captured image must not depend on the device's theme** — it is the light variant regardless of what the reader is using.
+- Handle the reader cancelling the share sheet without leaving the screen in a broken state.
+
+**Out of scope:** report-an-error (WP10); deep links back into the app from a shared image (worth doing, needs a URL scheme and probably a web target — not now); real SFX files; the AI pipeline.
+
+**Constraints:**
+- `content.ts` is frozen. `delivery.ts` is a cross-workspace contract — **additive changes proceed with a note; changing or removing a field needs a ruling.**
+- **Do not check extra-large text sizes.** Known app-wide clipping, ruled 2026-08-12 as out of scope and logged in `launch-blockers.md`. Do not re-raise it.
+- `process.env` only in the config module. Handler → service → repository.
+- **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `install`, `lint`, `typecheck`, `test`, `build` pass
+- [ ] The summary endpoint returns today's completed Leaves, XP, streak and achievements **in one call**, keyed on the reader's local date
+- [ ] **A reader in a non-UTC timezone gets their own day**, not the server's — tested across a rollover
+- [ ] Wrapping up records `session_wrap` and unlocks `first-wrap`
+- [ ] **Wrapping up does not prevent completing another Leaf afterwards** — assert the next completion still awards XP
+- [ ] Hitting the cap offers the same summary screen rather than a separate ending
+- [ ] Both screens render in the light/high-contrast variant **regardless of the device theme**, and the captured image does too
+- [ ] The share sheet opens with an image attached; cancelling leaves the screen usable
+- [ ] **Verified on a device:** complete a Leaf, wrap up, share to yourself, and look at the result **as a thumbnail**. Report whether it reads at that size — that is the criterion, not that the flow completes
+- [ ] CI green
+
+**Testing expectations — tiered bar** (`agents/manager.md`): **Tier A** is the local-date query and that wrapping up does not lock a reader out. **Tier B, one happy path only.** Tier C deferred and listed by name.
+
+**The manual check is the deliverable.** These screens exist to be looked at by strangers, so "the flow completes" proves nothing. Share one to yourself, look at it small, and say whether you would post it. Run the full cold gate **once**, at the end, and report roughly where your time went.
+
 ### Handoff: 2026-08-12 — WP5b: Environment fix, achievements, total XP
 
 ### Task: WP5b — Environment fix, achievements, total XP

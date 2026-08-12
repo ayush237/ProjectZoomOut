@@ -1,5 +1,7 @@
 # Project Plan — Active Feature
 
+> **Active: WP9 — session wrap-up and achievement screens**, handed off 2026-08-12. Handoff in `collaboration-log.md`. WP5b below is signed off and awaiting a push/merge.
+
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
 ## Feature
