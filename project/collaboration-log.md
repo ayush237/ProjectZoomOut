@@ -926,7 +926,14 @@ Finish a Leaf, return to Profile, and it still read "No streak yet", "0 XP" and 
 
 **This is pre-existing and systemic, not introduced by WP5b.** It lives in WP6's design system and affects every screen in the app. It is also why no amount of layout work on the achievement grid would fix it — the grid was the messenger.
 
-**The fix is contained but app-wide in effect:** scale the line height with `PixelRatio.getFontScale()` in `Text.tsx`, or express leading as a multiplier of `fontSize` rather than an absolute. Either changes the rendered look of every screen, which is why I have not taken it unilaterally. **Recommend it as its own small package before WP9**, since three packages have now claimed an XXXL check against a design system that cannot pass one.
+**The fix is contained but app-wide in effect:** scale the line height with `PixelRatio.getFontScale()` in `Text.tsx`, or express leading as a multiplier of `fontSize` rather than an absolute. Either changes the rendered look of every screen, which is why I have not taken it unilaterally.
+
+**Founder ruling, 2026-08-12: not fixing it, and XXXL is dropped as a check.** Recorded here because it is a deliberate trade, not an oversight, and because two things now need to follow from it:
+
+1. **`agents/manager.md`'s manual-verification bar still mandates XXXL on every package** ("Run the app once per package in both themes and at `accessibilityExtraExtraExtraLarge`"). That line should come out, or every future package reports the same failure. Architect's file to change.
+2. **The cost is worth stating once, plainly.** `design-direction.md` §4 argues that readers who size text up are disproportionately the ones who need to, and `Text.tsx` was deliberately built so `allowFontScaling` can never be switched off. The app still honours that setting — it simply clips above roughly the largest two steps. So this is not "XXXL unsupported", it is "XXXL renders broken", which is the worse of the two to ship and the reason it belongs on the launch-blocker list rather than being forgotten.
+
+Added to `project/launch-blockers.md` territory rather than the roadmap, per that file's convention.
 
 #### The cap screen — WP5a's open question, answered
 
