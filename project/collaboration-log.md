@@ -9,6 +9,66 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-12 — WP5a: Session cap and streaks
+
+### Task: WP5a — Session cap and streaks
+
+**Context:** The loop works. This adds the two mechanics that shape how a reader uses it over days rather than minutes: the positive-friction session cap, and the daily streak.
+
+**Deliberately scoped small.** Achievements are WP5b and are not in this package. Package size is being reduced to shorten the feedback loop — do not pull WP5b work forward.
+
+**Objective:** A session ends gracefully at 15 minutes or 500 XP, whichever comes first, and a reader who completes at least one Leaf on a given local day keeps their streak.
+
+**Scope:** `apps/backend/src/progress/` or a sibling module, a migration for `daily_session` and `streak`, and the mobile surfaces that display them.
+
+**Requirements:**
+
+*Session cap*
+- **15 minutes or 500 XP, whichever comes first**, evaluated **server-side**. The client never decides.
+- Resets at the reader's **local midnight**, using `localDateIn()` — the reader's timezone, not UTC and not the server's.
+- **An in-progress Leaf finishes rather than being cut off** mid-Leaf.
+- When the cap is hit, the API says so clearly enough that the client can show a graceful "today's limit reached" screen — **not an error state**. This is a wellbeing feature; the app must not treat it as a failure.
+- XP earned past the cap is not awarded. `calculateLeafXp` returns the *earned* amount and knows nothing about capping — keep that separation.
+
+*Streaks*
+- Maintained by completing **≥1 Leaf in a local day**. No freezes or repairs in Phase 1.
+- Track current and longest, and the last active local date.
+- A day with no completion breaks it. Evaluate against the reader's local date, never a UTC instant.
+
+*Mobile*
+- Show the streak on Profile, and the "today's limit reached" screen when the cap fires.
+- Both themes, and check XXXL on any new screen.
+
+**Out of scope:**
+- **Achievements — WP5b.** Not even the registry.
+- Share and wrap-up screens — WP9
+- Push notifications — unscoped, and streaks will eventually want them
+- Total XP endpoint — carried, and it belongs with WP5b's gamification surface
+
+**Constraints:**
+- `packages/shared/src/content.ts` is frozen. `delivery.ts` is a **cross-workspace contract** — changing it breaks two apps, so treat it with the same care.
+- Handler → service → repository. `process.env` only in the config module.
+- Cap thresholds and the streak rule come from validated config, not literals.
+
+**Acceptance criteria:**
+- [ ] Root `install`, `lint`, `typecheck`, `test`, `build` pass
+- [ ] Migrations apply cleanly to an empty database
+- [ ] **The cap fires at 15 minutes and at 500 XP independently** — test each as the binding constraint, not just one
+- [ ] **A Leaf in progress when the cap fires can still be completed**
+- [ ] **The cap and the streak both reset at the reader's local midnight, not UTC** — tested with a reader in a non-UTC timezone across a rollover, and across a DST shift
+- [ ] **`daily_session` and `streak` are upsert-shaped: test the first write of a day AND the second.** Name the path in the test, not just the outcome — a criterion like "the streak increments" passes against the INSERT branch while `ON CONFLICT` ships unproven. **This exact split hid the WP4 first-try bonus bug.** Mutation-check both: break each branch and confirm only its own test goes red
+- [ ] A day with no completion breaks the streak; the day of a completion does not
+- [ ] Hitting the cap renders a graceful screen on device, not an error
+- [ ] CI green
+
+**Testing expectations — tiered bar** (`agents/manager.md`, tightened 2026-08-12):
+- **Tier A:** everything local-date, both upsert branches, and cap enforcement. Non-negotiable — corrupted streaks cannot be reconstructed after the fact.
+- **Tier B: one happy path only.** No failure paths; they go to WP14.
+- **Tier C:** defer and list.
+- **Manual:** hit the cap on a device and look at the screen. It should feel like a good place to stop, not like being locked out.
+
+Run the full cold gate **once**, at the end. Report roughly where your time went.
+
 ### Handoff: 2026-08-12 — WP8: The Leaf player
 
 ### Task: WP8 — The Leaf player: five slides, the unlock gate, sound

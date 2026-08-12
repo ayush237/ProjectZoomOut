@@ -87,11 +87,15 @@ Never open with the file list or the test count. They are evidence, not conclusi
 
 Anything that would let a reader obtain content they have not earned, keep content that has been withdrawn, or accumulate progress they did not earn, is Tier A whether or not this list names it.
 
-**Tier B — one happy path and one failure path.** Endpoint wiring, mappers, service orchestration. No permutation matrices.
+**Tier B — one happy path. Nothing else** (tightened 2026-08-12 for speed). Endpoint wiring, mappers, service orchestration. Failure paths move to WP14 along with Tier C.
 
 **Tier C — defer to WP14.** Component render tests, theme permutations, loading/empty/error combinations, and exhaustive boundary enumeration where one representative case already exists.
 
 **In exchange, manual verification is mandatory, not optional.** Run the app once per package in both themes and at `accessibilityExtraExtraExtraLarge`, and exercise the flows the acceptance criteria describe. In this project that has caught more real defects than any test suite — the timezone offset bug, the app pinned to light mode, the emoji glyphs ignoring tint, and the font-scaling clip that failed a WP6 criterion. Ten minutes of looking beats an hour of matrices.
+
+**Run the full cold gate once, at the end.** Deleting `dist` and `.next`, reinstalling and running the whole suite is expensive; doing it repeatedly through a package costs real minutes for no new information. Run targeted tests while you work — the workspace or file you are changing — and the full cold gate once before you report.
+
+**Report roughly where your time went** — implementation, tests, manual verification, the gate, the write-up. One line. Package time is the founder's main concern and neither of us currently knows what dominates it, so we are cutting by guess. Change that.
 
 **Two rules survive the change:**
 - Any test written to close a review finding must be **mutation-checked** — break the behaviour and confirm that test, and only that test, goes red.

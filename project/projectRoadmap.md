@@ -19,7 +19,8 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP2.1 | Schema-freeze alignment (4 gate rulings) + small backend gaps (logout, error split, token reaping) | Manager | ✅ Signed off 2026-08-08 (12/12) | — |
 | WP3 | Content API — Explore, Library, Track/Leaf delivery | Manager | ✅ Signed off 2026-08-08 (11/11) | — |
 | WP4 | Learning loop API — answer, unlock payoff, complete Leaf, award XP | Manager | ✅ **Signed off 2026-08-09 (12/12)** — reviewed by `code-reviewer`, no blocking defects | One ~10-line test to add before merge |
-| WP5 | Session cap, streaks, achievements — server-authoritative | Manager | ⬜ **unblocked** | — achievement list written 2026-08-09 |
+| WP5a | Session cap and streaks — server-authoritative | Manager | 🔵 **Handed off 2026-08-12** | — |
+| WP5b | Achievements — registry, evaluation, unlock surfacing | Manager | ⬜ | WP5a |
 | WP6 | Mobile shell — navigation, auth screens, age gate, design system | Manager | ✅ **Signed off 2026-08-11 (14/15)** after a rejected first pass and a clean second | 15th void — Apple/Google dormant |
 | WP7 | Mobile surfaces — Explore, Library, Journey, Profile | Manager | ✅ **Signed off 2026-08-11 (11/11)** after a rejected first pass | — |
 | WP11 | Seed fixture — full-length placeholder Track (~20 Leaves) | Manager | ✅ **Signed off 2026-08-12 (10/11)** | 11th deferred to WP8, where it becomes verifiable by tapping |
@@ -230,6 +231,7 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | ~~The draft filter is definitive at config but never empirically exercised~~ | — | Manager, WP7 | ✅ **Closed empirically 2026-08-12** — 28 Tracks exist, 27 reach an anonymous caller. The thing WP7 could only argue from config is now measured |
 | **Explore has no pagination affordance** — stops at twenty with no indication anything follows | Live rather than theoretical now that the corpus is 28 Tracks | Manager, WP11 | **Assigned to WP8** |
 | **Three XXXL layout issues exposed by realistic titles** | Only visible once seeded content had real-length titles rather than fixture stubs | Manager, WP11 | **WP14** |
+| ~~The unlock auto-advances to the payoff slide~~ | — | Manager, WP8 | ✅ **Closed 2026-08-12** — founder played it on a device and confirmed it reads fine. Stays as built |
 | **The unlock auto-advances to the payoff slide**, so the reward animates during a screen transition and the spring competes with the navigation | **Open ruling.** Architect's lean: unlock on the *scenario* slide in response to the tap, then advance once it resolves — the reward should be causally attached to the answer, not to the navigation, or it reads as "here is the next screen" rather than "you opened this". Decided by implication in WP8 and correctly flagged rather than left silent | Manager, WP8 | **Blocked on the founder's device check** — a feel question nobody should rule on from a description |
 | **Reduced motion is correct by inspection but unobserved** — a static screenshot cannot distinguish a spring from a fade | WP8's one unclosed criterion. Correctly refused rather than claimed, which is the WP6 failure not repeating | Manager, WP8 | **Founder device check** |
 | **Re-reading a finished Track from Library is not possible** | Needs a `firstLeafId` — a shared-type change plus backend rollup work the WP8 handoff did not ask for | Manager, WP8 | **WP14**, or its own small item if it turns out to matter sooner |
