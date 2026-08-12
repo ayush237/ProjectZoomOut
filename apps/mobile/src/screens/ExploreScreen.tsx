@@ -5,8 +5,9 @@ import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
 import type { TrackPage } from '../api/client';
 import { useApi } from '../auth/AuthProvider';
 import { Button, EmptyState, ErrorState, Screen, StatusMessage, Text, TrackCard } from '../components';
-import { useTheme } from '../design';
+import { spacing, useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
+import { useMoreTracks } from './useMoreTracks';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
 
 /**
@@ -23,6 +24,9 @@ export function ExploreScreen(): React.JSX.Element {
 
   const load = useCallback(async (): Promise<TrackPage> => api.listTracks(), [api]);
   const tracks = useAsyncResource<TrackPage>(load);
+
+  /** Everything past page one; see `useMoreTracks` for why it is a separate hook. */
+  const more = useMoreTracks(api, tracks.data);
 
   /**
    * Which Tracks are already on the shelf.
@@ -129,7 +133,7 @@ export function ExploreScreen(): React.JSX.Element {
     );
   }
 
-  const list = tracks.data?.tracks ?? [];
+  const list = [...(tracks.data?.tracks ?? []), ...more.tracks];
 
   if (list.length === 0) {
     return (
@@ -184,6 +188,23 @@ export function ExploreScreen(): React.JSX.Element {
           data={list}
           keyExtractor={(track) => track.id}
           contentContainerStyle={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.xl }}
+          /**
+           * Infinite scroll rather than a "Load more" button.
+           *
+           * The catalogue is a browsing surface — a reader flicking through covers
+           * should not have to stop and tap every twenty. The threshold is half a
+           * screen, which on a list of tall cards is roughly one card of warning.
+           */
+          onEndReached={more.loadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            <ExploreListFooter
+              loading={more.loading}
+              error={more.error}
+              hasMore={more.hasMore}
+              onRetry={more.loadMore}
+            />
+          }
           refreshControl={
             <RefreshControl
               refreshing={tracks.refreshing}
@@ -214,6 +235,55 @@ export function ExploreScreen(): React.JSX.Element {
         />
       </View>
     </Screen>
+  );
+}
+
+/**
+ * The tail of the catalogue: a spinner, a failure, or the end.
+ *
+ * The end-of-list line matters more than it looks. Without it a reader who reaches the
+ * bottom cannot tell whether they have seen everything or whether loading silently
+ * failed — which is exactly the ambiguity Explore shipped with before pagination
+ * existed at all.
+ */
+function ExploreListFooter({
+  loading,
+  error,
+  hasMore,
+  onRetry,
+}: {
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly hasMore: boolean;
+  readonly onRetry: () => void;
+}): React.JSX.Element | null {
+  if (loading) {
+    return (
+      <View testID="explore-loading-more" style={{ paddingVertical: spacing.xl }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if (error !== null) {
+    return (
+      <View testID="explore-more-error" style={{ paddingVertical: spacing.lg, gap: spacing.md }}>
+        <StatusMessage tone="error" message={error} />
+        <Button label="Try again" variant="secondary" onPress={onRetry} />
+      </View>
+    );
+  }
+
+  if (hasMore) {
+    return null;
+  }
+
+  return (
+    <View testID="explore-end" style={{ paddingVertical: spacing.xl }}>
+      <Text variant="small" tone="textMuted" align="center">
+        That is every Track for now.
+      </Text>
+    </View>
   );
 }
 

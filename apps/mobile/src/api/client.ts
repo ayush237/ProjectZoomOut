@@ -1,4 +1,12 @@
-import type { Track, TrackProgressSummary, User } from '@zoomout/shared';
+import type {
+  AnswerOutcome,
+  CompletionOutcome,
+  DeliveredLeaf,
+  LeafProgress,
+  Track,
+  TrackProgressSummary,
+  User,
+} from '@zoomout/shared';
 
 import { ApiError, NetworkError, SessionExpiredError } from './errors';
 import type { TokenStore } from './tokenStore';
@@ -261,6 +269,85 @@ export class ApiClient {
   /** Also idempotent — removing something absent is the intent already satisfied. */
   public async removeFromLibrary(trackId: string): Promise<void> {
     await this.send('DELETE', `/library/tracks/${encodeURIComponent(trackId)}`, undefined, true);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* The learning loop                                                   */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * One Leaf, as this reader is allowed to receive it.
+   *
+   * **The payoff arrives as `null` until it is earned** — absent from the object, not
+   * blanked. That is the whole product differentiator expressed as a type, and the
+   * reason this returns `DeliveredLeaf` rather than `PublicLeaf`. There is deliberately
+   * no client-side path that reconstructs a locked payoff: if the server did not send
+   * it, the app does not have it.
+   *
+   * The response is **not** run through `publicLeafSchema`. That parser predates the
+   * Dinner Table Knowledge refinement and would reject valid takeaway slides; the
+   * project constraint against pointing it at input like this is explicit.
+   */
+  public async getLeaf(leafId: string): Promise<DeliveredLeaf> {
+    return this.send<DeliveredLeaf>(
+      'GET',
+      `/content/leaves/${encodeURIComponent(leafId)}`,
+      undefined,
+      true,
+    );
+  }
+
+  /**
+   * Marks a Leaf opened.
+   *
+   * Idempotent, and re-entering a Leaf creates nothing the second time — the existing
+   * progress is the point of the response. Calling it is what makes `firstTryCorrect`
+   * meaningful: an answer submitted without a start still grades, but the attempt count
+   * it is measured against begins here.
+   */
+  public async startLeaf(leafId: string): Promise<LeafProgress> {
+    const body = await this.send<{ progress: LeafProgress }>(
+      'POST',
+      `/progress/leaves/${encodeURIComponent(leafId)}/start`,
+      undefined,
+      true,
+    );
+
+    return body.progress;
+  }
+
+  /**
+   * Submits an option **id** and is told the result.
+   *
+   * The client never sees, infers or sends `isCorrect`. It posts which option was
+   * chosen; the server decides. A wrong answer is a 200 with `correct: false` — it is
+   * the designed-for outcome of the mechanic, not an error, and treating it as one
+   * would turn the retry loop into an error state.
+   */
+  public async submitAnswer(leafId: string, optionId: string): Promise<AnswerOutcome> {
+    return this.send<AnswerOutcome>(
+      'POST',
+      `/progress/leaves/${encodeURIComponent(leafId)}/answer`,
+      { optionId },
+      true,
+    );
+  }
+
+  /**
+   * Completes a Leaf and returns what this call awarded.
+   *
+   * Idempotent server-side: `xpAwarded` is zero on a replay and `alreadyCompleted` says
+   * so, which is what lets the player render "you earned 100" once rather than on every
+   * re-entry. The client still guards against double submission — see the player — but
+   * the server is what makes that guard a belt rather than the only strap.
+   */
+  public async completeLeaf(leafId: string): Promise<CompletionOutcome> {
+    return this.send<CompletionOutcome>(
+      'POST',
+      `/progress/leaves/${encodeURIComponent(leafId)}/complete`,
+      undefined,
+      true,
+    );
   }
 
   /* ------------------------------------------------------------------ */

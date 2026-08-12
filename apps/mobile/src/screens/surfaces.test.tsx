@@ -1,9 +1,14 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';
+import { Text as RNText } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import { MemoryTokenStore } from '../api/tokenStore';
+import { NavigationContainer, useRoute, type RouteProp } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import { AuthProvider } from '../auth/AuthProvider';
+import type { AppStackParamList } from '../navigation/types';
 import { ThemeProvider, type ThemeMode } from '../design';
 import { ExploreScreen } from './ExploreScreen';
 import { JourneyScreen } from './JourneyScreen';
@@ -112,11 +117,32 @@ class FakeBackend {
   };
 }
 
+/**
+ * A stand-in for the Leaf player that renders its own route params.
+ *
+ * The real player fetches a Leaf on mount, which would drag the whole content API into
+ * a navigation test. What is under test is that the right ids reach the destination, so
+ * the destination only needs to say what it received.
+ */
+function StubPlayer(): React.JSX.Element {
+  const route = useRoute<RouteProp<AppStackParamList, 'LeafPlayer'>>();
+
+  return (
+    <RNText testID="stub-player">
+      {`leaf:${route.params.leafId} track:${route.params.trackId}`}
+    </RNText>
+  );
+}
+
+const PlayerStack = createNativeStackNavigator<AppStackParamList>();
+
 /** Signed in before the screen mounts, since every surface here fetches on mount. */
 async function renderSignedIn(
   element: ReactElement,
   backend: FakeBackend,
   mode: ThemeMode = 'dark',
+  /** Mount a real stack with a stub player, for tests that press through to it. */
+  withPlayerRoute = false,
 ): Promise<ReturnType<typeof render> extends Promise<infer R> ? R : never> {
   backend.on('/auth/refresh', () =>
     json({
@@ -137,7 +163,20 @@ async function renderSignedIn(
           baseUrl="https://api.test"
           fetchFn={backend.fetch}
         >
-          {children}
+          {/* Library and Journey open the Leaf player from WP8, so they call
+              `useNavigation` and need a navigator above them. Rendering them bare
+              throws before the first assertion. Most tests only need the context; the
+              ones that press a resume button need somewhere for it to go. */}
+          <NavigationContainer>
+            {withPlayerRoute ? (
+              <PlayerStack.Navigator screenOptions={{ headerShown: false }}>
+                <PlayerStack.Screen name="Tabs">{() => <>{children}</>}</PlayerStack.Screen>
+                <PlayerStack.Screen name="LeafPlayer" component={StubPlayer} />
+              </PlayerStack.Navigator>
+            ) : (
+              children
+            )}
+          </NavigationContainer>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
@@ -261,7 +300,7 @@ describe('while loading', () => {
             baseUrl="https://api.test"
             fetchFn={neverResolves}
           >
-            {children}
+            <NavigationContainer>{children}</NavigationContainer>
           </AuthProvider>
         </ThemeProvider>
       </SafeAreaProvider>
@@ -548,18 +587,15 @@ describe('Journey resume', () => {
 
   it('targets the Leaf id the server chose', async () => {
     /**
-     * Asserted on the **id**, which is what the acceptance criterion asks for.
+     * Asserted on the **id that arrives at the player**, which is what the acceptance
+     * criterion asks for. "Navigation succeeded" would pass against a button that
+     * resumed at the first Leaf of every Track.
      *
-     * "Navigation succeeded" would pass against a button that resumed at the first Leaf
-     * of every Track. The player does not exist until WP8, so the target is observed
-     * where it currently goes — the console — rather than through a navigator that has
-     * nothing to navigate to.
+     * WP8 replaced the console-log placeholder this used to observe, so the assertion
+     * now runs through a real stack with a stub destination that renders its own route
+     * params — which is a stronger claim than the log ever was: it proves the params
+     * survive the navigator, not just that the right string was computed.
      */
-    const logged: unknown[] = [];
-    const spy = jest.spyOn(console, 'log').mockImplementation((...args) => {
-      logged.push(args.join(' '));
-    });
-
     const backend = new FakeBackend().on('/library', () =>
       json({
         entries: [
@@ -568,19 +604,19 @@ describe('Journey resume', () => {
       }),
     );
 
-    try {
-      const view = await renderSignedIn(<JourneyScreen />, backend);
+    const view = await renderSignedIn(<JourneyScreen />, backend, 'dark', true);
 
-      await waitFor(() => {
-        expect(view.getByTestId('journey-resume-1')).toBeOnTheScreen();
-      });
+    await waitFor(() => {
+      expect(view.getByTestId('journey-resume-1')).toBeOnTheScreen();
+    });
 
-      await fireEvent.press(view.getByTestId('journey-resume-1'));
+    await fireEvent.press(view.getByTestId('journey-resume-1'));
 
-      expect(logged.join(' ')).toContain('Leaf 42');
-    } finally {
-      spy.mockRestore();
-    }
+    await waitFor(() => {
+      // Both ids: the Leaf is what the criterion names, and the Track id travelling
+      // with it is what lets the player title itself without a second fetch.
+      expect(view.getByTestId('stub-player')).toHaveTextContent('leaf:42 track:1');
+    });
   });
 });
 

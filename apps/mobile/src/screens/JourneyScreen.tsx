@@ -1,8 +1,11 @@
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { LibraryEntry } from '../api/client';
 import { useApi } from '../auth/AuthProvider';
+import type { AppStackParamList } from '../navigation/types';
 import {
   Button,
   EmptyState,
@@ -29,9 +32,12 @@ import { useRefreshOnFocus } from './useRefreshOnFocus';
  * right Leaf id to a placeholder destination — the route and the target are what WP7
  * owes WP8, not the screen behind them.
  */
+type AppNavigation = NativeStackNavigationProp<AppStackParamList>;
+
 export function JourneyScreen(): React.JSX.Element {
   const theme = useTheme();
   const api = useApi();
+  const navigation = useNavigation<AppNavigation>();
 
   const load = useCallback(async (): Promise<readonly LibraryEntry[]> => api.listLibrary(), [api]);
   const journey = useAsyncResource<readonly LibraryEntry[]>(load);
@@ -125,7 +131,7 @@ export function JourneyScreen(): React.JSX.Element {
                   testID={`journey-resume-${item.track.id}`}
                   label={item.progress.completedLeaves === 0 ? 'Start reading' : 'Resume'}
                   onPress={() => {
-                    resumeAt(item.progress.nextLeafId);
+                    resumeAt(navigation, item);
                   }}
                 />
               }
@@ -144,18 +150,23 @@ export function JourneyScreen(): React.JSX.Element {
 }
 
 /**
- * Where resume goes until WP8 builds the Leaf player.
+ * Opens the Leaf player at the server-chosen resume target.
  *
- * Deliberately a named function taking the Leaf id rather than an inline no-op: the id
- * is the part with an acceptance criterion on it, and WP8 replaces the body of this
- * function with a navigation call rather than hunting through JSX for the right place
- * to put one.
+ * WP7 left this as a named function precisely so WP8 could replace its body rather than
+ * hunt through JSX. The null guard stays: the list is already filtered on `nextLeafId`,
+ * so a null here would mean the filter and the button had diverged, and navigating to a
+ * player with no Leaf is a worse failure than doing nothing.
  */
-function resumeAt(leafId: string | null): void {
+function resumeAt(navigation: AppNavigation, entry: LibraryEntry): void {
+  const leafId = entry.progress.nextLeafId;
+
   if (leafId === null) {
     return;
   }
 
-  // eslint-disable-next-line no-console -- the placeholder destination, until WP8.
-  console.log(`[journey] resume at Leaf ${leafId}`);
+  navigation.navigate('LeafPlayer', {
+    leafId,
+    trackId: entry.track.id,
+    trackTitle: entry.track.bookTitle,
+  });
 }

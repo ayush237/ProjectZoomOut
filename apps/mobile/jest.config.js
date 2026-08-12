@@ -19,6 +19,19 @@
  */
 module.exports = {
   preset: 'jest-expo',
+  /**
+   * Reanimated 4 reaches its worklet runtime through `react-native-worklets`, whose
+   * `.native.ts` entry points call into a TurboModule that does not exist under Node —
+   * importing the package throws at `loadUnpackers` before any test runs, and its own
+   * `mock.js` throws too, because that mock re-imports the real index.
+   *
+   * This resolver, shipped by the package for exactly this, drops the `.native`
+   * extensions when resolving anything under `react-native-worklets`, so Jest picks up
+   * the plain JS implementation instead. It has to be a resolver rather than a
+   * `jest.mock`: the failure happens during module resolution, which is earlier than
+   * any mock can intercept.
+   */
+  resolver: 'react-native-worklets/jest/resolver.js',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testMatch: ['<rootDir>/src/**/*.test.ts', '<rootDir>/src/**/*.test.tsx'],
   collectCoverageFrom: ['src/**/*.{ts,tsx}', '!src/**/*.test.{ts,tsx}'],

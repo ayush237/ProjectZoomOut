@@ -3,8 +3,8 @@ import { ActivityIndicator, View } from 'react-native';
 
 import { useAuth } from '../auth/AuthProvider';
 import { useTheme } from '../design';
+import { AppStack } from './AppStack';
 import { AuthStack } from './AuthStack';
-import { TabShell } from './TabShell';
 
 /**
  * Chooses the tree from the session state.
@@ -57,7 +57,7 @@ export function RootNavigator(): React.JSX.Element {
   return (
     <NavigationContainer theme={navigationTheme}>
       {status === 'signedIn' ? (
-        <TabShell />
+        <AppStack />
       ) : (
         <AuthStack initialRouteName={status === 'needsSignupDetails' ? 'AgeGate' : 'SignIn'} />
       )}

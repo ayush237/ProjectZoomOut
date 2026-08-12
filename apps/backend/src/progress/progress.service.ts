@@ -1,7 +1,8 @@
 import type {
+  AnswerOutcome,
+  CompletionOutcome,
   Leaf,
   LeafProgress,
-  PayoffSlide,
   TrackProgressSummary,
 } from '@zoomout/shared';
 
@@ -323,17 +324,9 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
   }
 }
 
-export interface AnswerOutcome {
-  readonly correct: boolean;
-  readonly progress: LeafProgress;
-  readonly payoffUnlocked: boolean;
-  /** The earned payoff slide, or null while it is still locked. */
-  readonly payoff: PayoffSlide | null;
-}
-
-export interface CompletionOutcome {
-  readonly progress: LeafProgress;
-  /** What *this call* awarded. Zero on a replay; `progress.xpAwarded` holds the total. */
-  readonly xpAwarded: number;
-  readonly alreadyCompleted: boolean;
-}
+/**
+ * Both outcomes moved to `packages/shared/src/delivery.ts` in WP8 — the mobile app
+ * renders them, and CLAUDE.md allows only one definition of a shape that crosses a
+ * workspace boundary. Re-exported so existing importers of this module are unaffected.
+ */
+export type { AnswerOutcome, CompletionOutcome };

@@ -32,3 +32,28 @@ export type TabParamList = {
   Library: undefined;
   Journey: undefined;
 };
+
+/**
+ * The signed-in stack, with the tab shell as its root.
+ *
+ * The Leaf player is pushed **over** the tabs rather than living inside one. A Leaf is
+ * reachable from both Journey and Library, so putting it in either tab's stack would
+ * give it two identities and a back button that returns to the wrong place. Presented
+ * over the shell it has one route, and the tab a reader came from is still underneath
+ * when they finish.
+ */
+export type AppStackParamList = {
+  Tabs: undefined;
+  /**
+   * **Ids and a title only.** React Navigation's state is serialisable and may be
+   * persisted or attached to a crash report, so route params carry references, never
+   * content — the same rule that moved the signup password out of `AgeGate` in WP6.
+   * The player fetches the Leaf itself, which is also what keeps the payoff gate on the
+   * server: a params-passed Leaf would be a Leaf the client already holds.
+   */
+  LeafPlayer: {
+    readonly leafId: string;
+    readonly trackId: string;
+    readonly trackTitle: string;
+  };
+};
