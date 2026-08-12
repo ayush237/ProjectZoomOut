@@ -9,6 +9,88 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-12 — WP8: The Leaf player
+
+### Task: WP8 — The Leaf player: five slides, the unlock gate, sound
+
+**Context:** This is the product. Everything built so far — auth, content delivery, grading, XP, the shell, the surfaces, the seed — exists to make this one screen possible. **After WP8 the founder can judge whether the thesis holds**, which is the highest-value information available and has been unavailable for eleven packages.
+
+The mechanic: a reader reads a summary, answers a three-option scenario, and the payoff unlocks **only** on a correct answer. That gate is the product's entire differentiator. Everything in this handoff serves it.
+
+**Objective:** A reader opens a Leaf from Journey or Library, moves through all five slides, answers the scenario, unlocks the payoff, completes the Leaf, and sees XP awarded — server-decided throughout, on a real device, in both themes.
+
+**Scope:** (verify, don't trust blindly)
+- `apps/mobile/src/screens/` — the Leaf player and its slide components
+- `apps/mobile/src/api/` — progress client methods
+- `apps/mobile/src/design/` — motion for the unlock; a sound layer
+- Explore pagination (see below)
+
+**Requirements:**
+
+*The five slides, in fixed order*
+1. **Summary** — short text.
+2. **Scenario** — the prompt and exactly three options. The client submits an **option id** and is told the result. It never receives, infers or submits `isCorrect`.
+3. **Payoff** — **locked until a correct answer.** The server already enforces this; the client must not render a locked payoff even briefly, and must not hold it in memory before it is earned.
+4. **Sticky notes** — 2–6, on a board.
+5. **Takeaway** — plus an optional Dinner Table Knowledge fact, opened deliberately by the reader.
+
+*The unlock — the signature moment*
+- **This is the most crafted animation in the app** (`design-direction.md` §6). It is where the active-recall thesis stops being a claim and becomes something a reader feels. Spend disproportionate time here.
+- Spring-based. Reward-coloured, not primary — amber owns celebration.
+- **Reduced motion gets its first real exercise here.** `useReducedMotion` and `motionPlan` exist and have never driven a real animation. Swap to a fade; never remove the feedback.
+
+*Answering*
+- **Wrong answers retry without limit.** The payoff stays locked; the stakes are XP, not access. A wrong answer must not feel like a rebuke — it is the mechanic working.
+- Correct-on-first-try earns more XP. Show what was earned.
+- **Never signal right or wrong by colour alone** — icon and motion too. `correct` green and `primary` teal are adjacent in hue.
+- An option id rejected as unknown is a client error, not a wrong answer; do not conflate them.
+
+*Completion*
+- Completing is idempotent server-side. The client must not double-submit on a retry or a fast double-tap.
+- After completion, return the reader to the Track roadmap with progress updated.
+
+*Sound*
+- **Build the sound layer with a swappable asset map and ship no assets** (ruled 2026-08-12). Trigger points: correct, incorrect, Leaf completion. Respect the hardware silent switch and provide a setting.
+- **Incorrect must not be punishing** — unlimited retries mean a harsh tone turns a normal intermediate state into a scolding.
+- Retrofitting trigger points across a finished player is far worse than stubbing them now, which is why the layer is in scope while the files are not.
+
+*Explore pagination — folded in deliberately*
+- Explore shows twenty of twenty-eight Tracks and stops with no affordance. Add one — infinite scroll or an explicit control, your call.
+- Small, and it belongs here: WP8 is the package where the app gets judged on a device.
+
+**Out of scope:**
+- Session cap, streaks, achievements — WP5
+- Share and wrap-up screens — WP9
+- Report-an-error — WP10
+- Voiceover — Phase 2; the schema reserves the field
+- Real SFX files
+
+**Constraints:**
+- **`ContentService.getLeaf` returns `DeliveredLeaf`; the payoff arrives only when earned.** Do not widen it, and do not add a client-side path around it.
+- **Never parse untrusted input with `publicLeafSchema`** — it predates the Dinner Table Knowledge refinement.
+- A withdrawn Track withdraws its Leaves via `resolveVisibleLeaf`. **The player must handle a Leaf disappearing mid-session** — a takedown can land while a reader is on slide 3. Fail to a readable message, not a crash.
+- Follow `CLAUDE.md` in full. **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `npm install`, `lint`, `typecheck`, `test`, `build` all pass
+- [ ] A reader opens a Leaf from Journey and from Library, and completes all five slides
+- [ ] **The payoff body is absent from every response and from client memory until a correct answer** — asserted on the payload, not on what renders
+- [ ] `isCorrect` appears in no response body, asserted at the route level
+- [ ] Twelve wrong answers in a row never lock a reader out; the thirteenth, correct, unlocks
+- [ ] First-try correct awards more than a later correct answer, and the reader is shown what they earned
+- [ ] Completing twice — replay and fast double-tap — awards XP once
+- [ ] A Leaf withdrawn mid-session fails to a readable message, not a crash
+- [ ] **Reduced motion swaps the unlock animation for a fade**, verified with the OS setting on
+- [ ] Explore pages past twenty Tracks
+- [ ] **Verified on a device, from a cold start, in both themes and at `accessibilityExtraExtraExtraLarge`** — all five slides, plus the partial-rollup render deferred from WP11
+- [ ] CI green
+
+**Testing expectations — tiered bar** (`agents/manager.md`):
+- **Tier A:** the payoff gate, `isCorrect` containment, completion idempotency including double-tap, and withdrawn-content handling. All four are the product's or the project's load-bearing guarantees.
+- **Tier B:** slide navigation, the answer round trip, XP display, pagination.
+- **Tier C, defer to WP14:** slide-component render permutations and theme matrices. **List what you defer.**
+- **Manual verification is the deliverable here, not a check on it.** WP11 proved the point: 792 passing tests against a fixture whose flagship Track was invisible on device. Play the Leaf. Get answers wrong on purpose. **Report how the unlock feels** — that is a product finding and worth more than any assertion in this package.
+
 ### Handoff: 2026-08-11 — WP11: Seed fixture, a full-length placeholder Track
 
 ### Task: WP11 — Seed fixture: a full-length placeholder Track
