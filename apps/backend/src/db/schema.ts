@@ -5,6 +5,7 @@ import {
   integer,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -271,11 +272,74 @@ export const leafProgress = pgTable(
   ],
 );
 
+/**
+ * One row per reader per **local** day.
+ *
+ * The composite primary key is doing real work: it is the `ON CONFLICT` target that
+ * makes accumulating a session an upsert rather than a read-modify-write. Two Leaves
+ * completed at the same moment must add to one row, not race to create two.
+ *
+ * `local_date` and not a timestamp, for the reason WP4 recorded on
+ * `leaf_progress.completed_local_date`: a day is a fact about where the reader is, and
+ * re-deriving it later from a UTC instant silently reassigns activity when someone
+ * travels.
+ */
+export const dailySessions = pgTable(
+  'daily_session',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+
+    localDate: date('local_date', { mode: 'string' }).notNull(),
+
+    secondsActive: integer('seconds_active').notNull().default(0),
+    xpEarned: integer('xp_earned').notNull().default(0),
+
+    /**
+     * When the cap was hit. Null while still under it.
+     *
+     * A timestamp rather than a boolean so "when did they stop today" is answerable —
+     * and because a boolean would have to be recomputed every time the thresholds move,
+     * whereas this records what actually happened under the rules of the day.
+     */
+    capReachedAt: timestamp('cap_reached_at', { withTimezone: true }),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.localDate] })],
+);
+
+/**
+ * One row per reader, ever.
+ *
+ * `current` and `longest` are both stored rather than deriving `longest` from history:
+ * the history is `leaf_progress.completed_local_date`, and recomputing a longest streak
+ * across a growing table on every completion is a scan that gets slower forever.
+ */
+export const streaks = pgTable('streak', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+
+  current: integer('current').notNull().default(0),
+  longest: integer('longest').notNull().default(0),
+
+  /** Null for a reader who has never completed a Leaf. */
+  lastActiveLocalDate: date('last_active_local_date', { mode: 'string' }),
+
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type UserTrackRow = typeof userTracks.$inferSelect;
 export type NewUserTrackRow = typeof userTracks.$inferInsert;
 
 export type LeafProgressRow = typeof leafProgress.$inferSelect;
 export type NewLeafProgressRow = typeof leafProgress.$inferInsert;
+
+export type DailySessionRow = typeof dailySessions.$inferSelect;
+export type StreakRow = typeof streaks.$inferSelect;
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;

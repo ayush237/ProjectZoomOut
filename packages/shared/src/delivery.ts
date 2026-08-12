@@ -59,4 +59,35 @@ export interface CompletionOutcome {
   /** What *this call* awarded. Zero on a replay; `progress.xpAwarded` holds the total. */
   readonly xpAwarded: number;
   readonly alreadyCompleted: boolean;
+  /** The reader's day, after this completion. Added in WP5a. */
+  readonly session: SessionStatus;
+}
+
+/**
+ * Where the reader stands against today's cap.
+ *
+ * **The thresholds travel with the state on purpose.** The client has to say "500 XP"
+ * on the limit screen, and a client that knows the number independently is a second
+ * copy of a product decision that lives in backend configuration — it would go stale
+ * silently the first time the cap moved.
+ *
+ * `capReached` is the server's verdict, not a comparison for the client to make. The
+ * totals are here to render a progress indicator, never to re-derive the decision.
+ */
+export interface SessionStatus {
+  /** The reader's own calendar date, not UTC. */
+  readonly localDate: string;
+  readonly secondsActive: number;
+  readonly xpEarned: number;
+  readonly capReached: boolean;
+  readonly capSeconds: number;
+  readonly capXp: number;
+}
+
+/** Current and longest run of days with at least one completed Leaf. */
+export interface StreakStatus {
+  readonly current: number;
+  readonly longest: number;
+  /** Null for a reader who has never completed a Leaf. */
+  readonly lastActiveLocalDate: string | null;
 }

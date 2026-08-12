@@ -131,6 +131,7 @@ function LeafSessionView({
         <CompletionSummary
           xpAwarded={session.xpAwarded}
           firstTryCorrect={session.firstTryCorrect}
+          capReached={session.capReached}
           onDone={leave}
         />
       </PlayerFrame>
@@ -217,10 +218,12 @@ function LeafSessionView({
 function CompletionSummary({
   xpAwarded,
   firstTryCorrect,
+  capReached,
   onDone,
 }: {
   readonly xpAwarded: number;
   readonly firstTryCorrect: boolean;
+  readonly capReached: boolean;
   readonly onDone: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
@@ -249,6 +252,36 @@ function CompletionSummary({
         <Text variant="small" tone="textMuted" align="center" testID="leaf-first-try">
           First try — that is the bonus.
         </Text>
+      ) : null}
+
+      {/**
+       * The daily cap, and it is not an error.
+       *
+       * PRODUCT.md treats stopping as a feature, so this reads as an ending rather than
+       * a refusal: no warning tone, no "limit", no locked icon. The reader has just
+       * finished something — the sentence should sound like the natural close of a
+       * session, which is the only reason a wellbeing feature ever works.
+       */}
+      {capReached ? (
+        <View
+          testID="leaf-cap-reached"
+          style={{
+            alignSelf: 'stretch',
+            marginTop: theme.spacing.lg,
+            padding: theme.spacing.lg,
+            borderRadius: theme.radius.lg,
+            backgroundColor: theme.surfaceFor('card'),
+            gap: theme.spacing.sm,
+          }}
+        >
+          <Text variant="h3" align="center">
+            That is today done
+          </Text>
+          <Text variant="small" tone="textMuted" align="center">
+            You have finished your session for today. Come back tomorrow — the next Leaf
+            will be waiting, and spacing it out is what makes it stick.
+          </Text>
+        </View>
       ) : null}
 
       <View style={{ alignSelf: 'stretch', paddingTop: theme.spacing.xl }}>

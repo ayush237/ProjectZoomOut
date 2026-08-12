@@ -41,6 +41,8 @@ export interface LeafSessionState {
   /** Set once the reader has finished; drives the XP summary. */
   readonly xpAwarded: number | null;
   readonly firstTryCorrect: boolean;
+  /** The server's verdict that today's session is over. Never computed here. */
+  readonly capReached: boolean;
   /** True only on the transition that earned the payoff, so re-entry does not replay it. */
   readonly justUnlocked: boolean;
   /** A reader-facing failure that ends the session — a withdrawn Leaf, most notably. */
@@ -86,6 +88,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
   const [completing, setCompleting] = useState(false);
   const [xpAwarded, setXpAwarded] = useState<number | null>(null);
   const [firstTryCorrect, setFirstTryCorrect] = useState(false);
+  const [capReached, setCapReached] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -156,6 +159,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
           const outcome = await api.completeLeaf(leafId);
 
           setXpAwarded(outcome.xpAwarded);
+          setCapReached(outcome.session.capReached);
           play('leafComplete');
           onFinished();
         } catch (caught) {
@@ -207,6 +211,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
     completing,
     xpAwarded,
     firstTryCorrect,
+    capReached,
     justUnlocked,
     fatalError,
     actionError,

@@ -191,6 +191,14 @@ function fakeApi(overrides: {
             progress: { ...PROGRESS, completedAt: '2026-08-12T10:05:00.000Z', xpAwarded: 100 },
             xpAwarded: 100,
             alreadyCompleted: false,
+        session: {
+          localDate: '2026-08-12',
+          secondsActive: 60,
+          xpEarned: 100,
+          capReached: false,
+          capSeconds: 900,
+          capXp: 500,
+        },
           }),
       ),
   };
@@ -318,6 +326,14 @@ describe('completion', () => {
         progress: { ...PROGRESS, completedAt: '2026-08-12T10:05:00.000Z', xpAwarded: 100 },
         xpAwarded: 0,
         alreadyCompleted: true,
+        session: {
+          localDate: '2026-08-12',
+          secondsActive: 60,
+          xpEarned: 100,
+          capReached: false,
+          capSeconds: 900,
+          capXp: 500,
+        },
       })),
     });
     const { result } = await renderSession(api);
@@ -350,6 +366,14 @@ describe('completion', () => {
       progress: PROGRESS,
       xpAwarded: 100,
       alreadyCompleted: false,
+        session: {
+          localDate: '2026-08-12',
+          secondsActive: 60,
+          xpEarned: 100,
+          capReached: false,
+          capSeconds: 900,
+          capXp: 500,
+        },
     });
 
     await flush(() => {
@@ -448,5 +472,48 @@ describe('slide navigation', () => {
 
     // Re-entering the payoff slide later must not bounce the card again.
     expect(result.current.justUnlocked).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WP5a — the daily cap reaches the client as a verdict, not a calculation      */
+/* -------------------------------------------------------------------------- */
+
+describe('the session cap', () => {
+  it('carries the server’s verdict through to the completion screen', async () => {
+    /**
+     * Tier B, one happy path. What matters here is that `capReached` is *transported*
+     * rather than derived: the client has the XP total and the threshold in the same
+     * object, and the temptation to compare them locally is exactly how a wellbeing
+     * feature ends up disagreeing with the server that enforces it.
+     */
+    const api = fakeApi({
+      completeLeaf: jest.fn(() =>
+        Promise.resolve({
+          progress: { ...PROGRESS, completedAt: '2026-08-12T10:05:00.000Z', xpAwarded: 100 },
+          xpAwarded: 100,
+          alreadyCompleted: false,
+          session: {
+            localDate: '2026-08-12',
+            secondsActive: 400,
+            // Deliberately *under* the XP threshold: the cap fired on time, and a
+            // client comparing xpEarned to capXp would conclude the day is still open.
+            xpEarned: 120,
+            capReached: true,
+            capSeconds: 300,
+            capXp: 500,
+          },
+        }),
+      ),
+    });
+
+    const { result } = await renderSession(api);
+
+    await flush(() => {
+      result.current.complete(() => undefined);
+    });
+
+    expect(result.current.capReached).toBe(true);
+    expect(result.current.xpAwarded).toBe(100);
   });
 });

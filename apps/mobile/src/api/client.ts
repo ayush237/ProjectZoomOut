@@ -3,6 +3,8 @@ import type {
   CompletionOutcome,
   DeliveredLeaf,
   LeafProgress,
+  SessionStatus,
+  StreakStatus,
   Track,
   TrackProgressSummary,
   User,
@@ -88,6 +90,12 @@ export interface LibraryEntry {
   readonly addedAt: string;
   readonly status: 'active' | 'completed' | 'archived';
   readonly progress: TrackProgressSummary;
+}
+
+/** Today's cap state and the reader's streak, in one round trip. */
+export interface DayStatus {
+  readonly session: SessionStatus;
+  readonly streak: StreakStatus;
 }
 
 export interface ApiClientOptions {
@@ -341,6 +349,18 @@ export class ApiClient {
    * re-entry. The client still guards against double submission — see the player — but
    * the server is what makes that guard a belt rather than the only strap.
    */
+  /**
+   * Today's cap state and the reader's streak.
+   *
+   * No date parameter, deliberately. "Today" is the server's answer, computed from the
+   * reader's stored timezone — a client that sent its own date could reset its cap by
+   * changing the device clock, and the cap is a wellbeing feature that has to survive
+   * the reader's own worst impulses.
+   */
+  public async getToday(): Promise<DayStatus> {
+    return this.send<DayStatus>('GET', '/progress/today', undefined, true);
+  }
+
   public async completeLeaf(leafId: string): Promise<CompletionOutcome> {
     return this.send<CompletionOutcome>(
       'POST',

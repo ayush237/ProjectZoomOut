@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
-import { useAuth } from '../auth/AuthProvider';
-import { Button, Screen, StatusMessage, Text } from '../components';
+import type { DayStatus } from '../api/client';
+import { useApi, useAuth } from '../auth/AuthProvider';
+import { Button, Icon, Screen, StatusMessage, Text } from '../components';
 import { useTheme } from '../design';
+import { useAsyncResource } from './useAsyncResource';
 
 /**
  * The only real tab in WP6.
@@ -45,6 +47,8 @@ export function ProfileScreen(): React.JSX.Element {
 
         {error === null ? null : <StatusMessage tone="error" message={error} testID="profile-error" />}
 
+        <StreakCard />
+
         <View
           style={{
             backgroundColor: theme.surfaceFor('card'),
@@ -81,6 +85,69 @@ export function ProfileScreen(): React.JSX.Element {
         </View>
       </View>
     </Screen>
+  );
+}
+
+/**
+ * The streak, and how much of today is left.
+ *
+ * Loaded here rather than lifted into `AuthProvider`: it changes on every completion,
+ * and a value cached at sign-in would be wrong for the whole session. Failure is
+ * silent — Profile's job is the account, and a missing streak must not take the screen
+ * down or block signing out.
+ */
+function StreakCard(): React.JSX.Element | null {
+  const theme = useTheme();
+  const api = useApi();
+
+  const load = useCallback(async (): Promise<DayStatus> => api.getToday(), [api]);
+  const day = useAsyncResource<DayStatus>(load);
+
+  if (day.status !== 'ready' || day.data === null) {
+    return null;
+  }
+
+  const { streak, session } = day.data;
+
+  return (
+    <View
+      testID="profile-streak"
+      style={{
+        backgroundColor: theme.surfaceFor('card'),
+        borderRadius: theme.radius.lg,
+        borderWidth: theme.borderWidth.hairline,
+        borderColor: theme.palette.border,
+        padding: theme.spacing.xl,
+        gap: theme.spacing.lg,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+        <Icon name="journey" size={22} color={theme.palette.reward} />
+        {/* `flex: 1` so the number and the label wrap rather than collide at XXXL. */}
+        <Text variant="h2" tone="reward" testID="profile-streak-current" style={{ flex: 1 }}>
+          {streak.current === 0
+            ? 'No streak yet'
+            : `${String(streak.current)}-day streak`}
+        </Text>
+      </View>
+
+      <Text variant="small" tone="textMuted">
+        {streak.current === 0
+          ? 'Finish a Leaf today to start one.'
+          : `Your longest is ${String(streak.longest)} days.`}
+      </Text>
+
+      {/**
+       * Today's session, phrased as an amount done rather than an amount remaining.
+       * "You have 200 XP left" invites a reader to go and spend it, which is the
+       * opposite of what a wellbeing cap is for.
+       */}
+      <Text variant="small" tone={session.capReached ? 'reward' : 'textMuted'} testID="profile-today">
+        {session.capReached
+          ? 'You have finished today’s session.'
+          : `${String(session.xpEarned)} XP today.`}
+      </Text>
+    </View>
   );
 }
 
