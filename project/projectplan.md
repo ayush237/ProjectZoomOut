@@ -2,47 +2,43 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-> **Current state (2026-08-09):** WP4 signed off 12/12 and merged. **WP6 is the active package** — handoff in `collaboration-log.md`, dated 2026-08-09. WP5 is also unblocked (achievement list written) and runs after WP6.
-
 ## Feature
-**WP6 — Mobile shell: design system, navigation, auth, age gate** — handed off 2026-08-09.
+**WP5b — Environment fix, achievements, total XP**
 
-Design input: `project/proposals/design-direction.md`, approved 2026-08-08. Achievement list for WP5: `project/proposals/achievements.md`.
+Parts B and C accepted 2026-08-12. **Part A reopened.** WP5b is not signed off.
 
-## Previous
-**WP4 — Learning loop API: answer, unlock, complete, award XP** — ✅ signed off 12/12, reviewed by `code-reviewer`, merged.
-
-Sixth package of the approved Phase 1 milestone. Full milestone plan: `project/proposals/phase-1-implementation-plan.md`.
-
-Previous: WP0 ✅ · WP1 ✅ · WP2 ✅ · schema-freeze gate ✅ · WP2.1 ✅ · WP3 ✅ (11/11, signed off 2026-08-08).
+Goal for the milestone: **an end-to-end working app** — every Phase 1 feature working against seeded content on a device. Remaining after WP5b: the device gate, WP9, WP10. Launch blockers are parked in `launch-blockers.md`.
 
 ## Status
-**`Handed off`** (2026-08-08)
+`Parts B and C accepted` · **`Part A reopened — blocking`**
 
-## Problem
-Everything built so far is scaffolding around one mechanic: a reader answers a scenario, and the payoff unlocks only when they get it right. That mechanic does not exist yet. WP4 is where the product's thesis — active recall beats passive summary — becomes something the server actually enforces.
+## The blocker
+`apps/backend/.env`'s `DATABASE_URL` points at **`zoomout_cms`**, Payload's database, not `zoomout`.
 
-## Proposed approach
-Grading is server-side. The client submits a scenario option id and is told the result; it never receives or submits the answer key. Grading needs `isCorrect`, so it fetches the full `Leaf` through `ContentRepository.findLeaf` — the single deliberate exception to routing content reads through `ContentService`, commented as such at the call site.
+- `zoomout` holds the real readers — 6 users, 10 `leaf_progress`, 5 `user_tracks` — and only migrations 0000–0003.
+- `zoomout_cms` holds Payload's content plus an empty duplicate of the backend's tables.
+- So `daily_session` and `streak` never existed in the database holding real data. **That, not the missing `--env-file`, is why WP5a's device check failed.**
+- `db:migrate` then reported success while writing 0004 and 0005 into Payload's database, and `apps/admin` now fails to boot at Payload's schema-pull.
 
-`LeafProgress` per (reader, Leaf) tracks attempts, first-try correctness, completion and XP. Wrong answers retry without limit; the payoff stays locked until correct. Completion is idempotent, because replaying it is the obvious way to farm XP.
+Part A fixed how the env file is *loaded* and never checked where it *points* — the exact failure the acceptance commit for that same package had just generalised. Third instance of the shape, which is why it is now an acceptance criterion rather than a written rule.
 
-## Alternatives considered
-Grading on the client with server verification afterwards — lower latency and simpler offline story, but it means shipping the answer key, which makes the unlock gate decorative and the product thesis with it. Never seriously on the table; recorded because it is the obvious shortcut someone will suggest later.
+## Reopened Part A — acceptance criteria, phrased as observable state
+- [ ] `zoomout` contains `daily_session` and `streak`, and records migrations 0000–0005
+- [ ] `zoomout_cms` contains **no** backend tables and no drizzle migration bookkeeping
+- [ ] `apps/backend` boots and `GET /progress/today` returns 200
+- [ ] `apps/admin` boots and serves the seeded content
+- [ ] Both databases backed up before any destructive step
 
-## Architectural impact
-Adds the progress domain and the first table whose rows represent user achievement rather than user identity. Establishes how XP is calculated and awarded, which WP5's session cap and streaks then constrain.
+Not "the command ran". The state, checked.
 
-## Risks
-- **XP double-award on replay** — the exploit a client triggers by retrying a failed request. Covered by an explicit acceptance criterion.
-- **Payoff leaking before a correct answer**, via some route other than the obvious one. Tested rather than assumed.
-- **Local-date drift** — WP4 does not build `DailySession` or `Streak`, but any date it persists that WP5 will group by day must use `localDateIn()` rather than leaving WP5 a UTC timestamp to reinterpret.
+## Accepted in Parts B and C
+Nineteen achievements as a code registry with slug identity; idempotent awarding proven at the repository level; total XP derived on read; `POST /events` carrying `dinner_table_open` and `session_wrap`; `ReaderStanding` and `unlocked` added to `delivery.ts`; `DayStatus` deduplicated into shared.
 
 ## Open questions
-None.
+None. Three rulings closed 2026-08-12 — `first-wrap` keeps its event, the `gamification.ts` rewrite including its removals, and the additive `delivery.ts` changes.
 
-## Next after this
-**WP6 — mobile shell.** Unblocked: design direction approved 2026-08-08, Xcode installed, simulator check closed in WP2.1. WP5 needs the achievement list first, which is still outstanding from the founder.
+## Next
+The **device verification gate** (founder, ~10 min, five steps — see the roadmap), which is blocked until the database situation is resolved. Then WP9, then WP10.
 
 ## Handoff prompt
-See `project/collaboration-log.md` — Handoffs, 2026-08-08 (WP4).
+See `project/collaboration-log.md` — Handoffs, 2026-08-12 (WP5b).

@@ -106,6 +106,10 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 **Report roughly where your time went** — implementation, tests, manual verification, the gate, the write-up. One line. Package time is the founder's main concern and neither of us currently knows what dominates it, so we are cutting by guess. Change that.
 
+**Verify effect, never execution.** A command that ran is not a change that happened — `re.sub` succeeds when it matches nothing, an append succeeds against the wrong file, a migration succeeds against the wrong database. Check the resulting state: the row is there, the column exists, the table is in *this* database. This has now caused three defects in this project, including one inside the very package that recorded the rule.
+
+**A hand-written migration must ship its drizzle snapshot.** WP5a hand-wrote SQL and a journal entry without one, so `db:generate` diffed against the previous snapshot and emitted a duplicate migration re-creating both tables — which fails on an empty database and would have broken every integration suite.
+
 **Two rules survive the change:**
 - Any test written to close a review finding must be **mutation-checked** — break the behaviour and confirm that test, and only that test, goes red.
 - **Report what you did not test.** A deferred Tier C area belongs in the completion report so WP14 has a worklist rather than an archaeology project.
