@@ -4,7 +4,11 @@ Owned by Architect.
 
 ## Phase 1 status board
 
-**Single source of truth for "what's done, what's next."** Architect updates this at every sign-off and every handoff. Everything below it in this file is longer-lived context — milestones, backlog, decisions, debt.
+**Single source of truth for "what's done, what's next."** Architect updates this at every sign-off and every handoff.
+
+**Current goal: an end-to-end working app** — every Phase 1 feature working against seeded content on a device. That is **WP5b → WP9 → WP10**, three packages.
+
+**Launch blockers live in `launch-blockers.md`, not here** (split 2026-08-12). Deployment, password reset, test hardening, real content, and every legal item are parked there so they stop competing with the build. Nothing in that file blocks current work.
 
 Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 
@@ -26,10 +30,8 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP11 | Seed fixture — full-length placeholder Track (~20 Leaves) | Manager | ✅ **Signed off 2026-08-12 (10/11)** | 11th deferred to WP8, where it becomes verifiable by tapping |
 | WP8 | Mobile Leaf player — 5 slides, unlock gate, SFX | Manager | ✅ **Signed off 2026-08-12 (10/11)** — the loop works on a device | 11th is a **founder** device check: reduced-motion, and how the unlock feels |
 | WP9 | Shareable session wrap-up + achievement screens | Manager | 🔒 | WP5, WP8 |
-| WP10 | Report-an-error flow, fix queue, takedown path | Manager | 🔒 | WP3 |
-| **WP12** | **Deployment — backend, CMS and Postgres on GCP; device-reachable API** | Manager | ⬜ **not yet scheduled** | Needed by WP8 for real-device testing, and required for launch |
-| **WP13** | **Password reset via transactional email** | Manager | ⬜ **not yet scheduled** | Pre-launch blocker — now the only account-recovery path |
-| **WP14** | **Test hardening** — everything deferred as Tier C during the velocity phase | Manager | ⬜ **not yet scheduled** | Pre-launch. Worklist comes from each package's completion report |
+| WP10 | Report-an-error flow, fix queue, takedown path | Manager | ⬜ **last package before the app is complete** | WP9 |
+| — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 
 ### Blocked on the founder
 
@@ -47,13 +49,8 @@ Nothing on this list can be handed to Manager. Four of the five items above mark
 | ~~Achievement list~~ | — | — | ✅ **Delegated to Architect and written 2026-08-09** — `proposals/achievements.md`, 19 achievements |
 | ~~Install Xcode~~ | — | — | ✅ **Installed 2026-08-08.** Simulator verification appended to WP2.1 |
 | ~~Register OAuth clients~~ | — | — | ✅ **Not needed — social sign-in deferred 2026-08-11.** Email/password only for Phase 1 |
-| SFX assets — sourcing and licensing | unknown | Polish, **not WP8** | ⬜ — WP8 ships a swappable asset map so these drop in later |
-| **Unpublish "The mountain is you"** — the schema-freeze gate Track | ~1 min | Nothing, but it carries placeholder prose under a real author's name and fails the new cover rule | ⬜ **do this** — unpublish, do not delete |
 | **One device session after WP5b closes four checks at once** — the cap screen, iOS Reduce Motion on the unlock, and the two XXXL items | ~3 min | WP5a's 8th criterion, WP8's 11th | ⬜ after WP5b |
 | ~~Play a Leaf on a device~~ | ~30 sec | **Closes WP8's 11th criterion and settles the auto-advance ruling.** Does the unlock feel earned or like a page turn? Then repeat with iOS Reduce Motion on: does it fade rather than spring? | ⬜ **highest-value 30 seconds available** |
-| Review pipeline-generated Leaves (~20) — Critic-in-the-Loop | ~15–25 min each | Public launch, not the build | ⬜ pre-launch, after the pipeline |
-| **IP counsel review of generated content + vendor DPAs** | legal | Public launch — now higher stakes, since launch content is AI-generated | ⬜ pre-launch |
-| Age-gate threshold + Content Curation Policy owner | legal | Public launch | ⬜ pre-launch |
 
 ### When the founder can try it
 
@@ -73,6 +70,7 @@ Four distinct moments. Sequence, not dates — there is no velocity data and no 
 - `projectplan.md` — the one work package in flight, in detail
 - `collaboration-log.md` — every handoff and completion report, newest first
 - `proposals/phase-1-implementation-plan.md` — the full milestone plan and its reasoning
+- **`launch-blockers.md`** — everything between a working app and a shippable one. Parked, deliberately
 
 ## Vision
 ZoomOut turns non-fiction books into gamified, interactive micro-lessons that build lasting retention — reclaiming screen time from algorithmic feeds with focused, ~15-minute sessions that require active engagement instead of passive consumption.
