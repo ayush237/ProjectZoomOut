@@ -24,7 +24,8 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP3 | Content API — Explore, Library, Track/Leaf delivery | Manager | ✅ Signed off 2026-08-08 (11/11) | — |
 | WP4 | Learning loop API — answer, unlock payoff, complete Leaf, award XP | Manager | ✅ **Signed off 2026-08-09 (12/12)** — reviewed by `code-reviewer`, no blocking defects | One ~10-line test to add before merge |
 | WP5a | Session cap and streaks — server-authoritative | Manager | ✅ **Signed off 2026-08-12 (7/8)** | 8th is a device check, blocked on the env fix in WP5b |
-| WP5b | Env fix, achievements, total XP | Manager | 🔵 **Handed off 2026-08-12** | — |
+| WP5b | Env fix, achievements, total XP | Manager | 🔵 **Part A done** (on main, `2e99714`); B and C in flight on `wp5b-achievements-xp` | — |
+| **GATE** | **Device verification — 10 min, founder-owned** | **Founder** | ⬜ **scheduled after WP5b** | WP5b |
 | WP6 | Mobile shell — navigation, auth screens, age gate, design system | Manager | ✅ **Signed off 2026-08-11 (14/15)** after a rejected first pass and a clean second | 15th void — Apple/Google dormant |
 | WP7 | Mobile surfaces — Explore, Library, Journey, Profile | Manager | ✅ **Signed off 2026-08-11 (11/11)** after a rejected first pass | — |
 | WP11 | Seed fixture — full-length placeholder Track (~20 Leaves) | Manager | ✅ **Signed off 2026-08-12 (10/11)** | 11th deferred to WP8, where it becomes verifiable by tapping |
@@ -49,7 +50,13 @@ Nothing on this list can be handed to Manager. Four of the five items above mark
 | ~~Achievement list~~ | — | — | ✅ **Delegated to Architect and written 2026-08-09** — `proposals/achievements.md`, 19 achievements |
 | ~~Install Xcode~~ | — | — | ✅ **Installed 2026-08-08.** Simulator verification appended to WP2.1 |
 | ~~Register OAuth clients~~ | — | — | ✅ **Not needed — social sign-in deferred 2026-08-11.** Email/password only for Phase 1 |
-| **One device session after WP5b closes four checks at once** — the cap screen, iOS Reduce Motion on the unlock, and the two XXXL items | ~3 min | WP5a's 8th criterion, WP8's 11th | ⬜ after WP5b |
+| **GATE: device verification session** — its own slot, not the tail of a package | ~10 min | Closes deferrals from **three** packages | ⬜ **after WP5b**. Slipped twice because it was always the tail of something larger; given its own slot for that reason |
+| ↳ 1. Restart the backend | 1 cmd | Closes WP5b Part A's last criterion — the running process still points at the old database |  |
+| ↳ 2. Play a Leaf to the cap | | Does "That is today done" read as an ending or a refusal? |  |
+| ↳ 3. Unlock an achievement | | Does the moment land? |  |
+| ↳ 4. iOS Reduce Motion on, replay the unlock | | Fade rather than spring — **WP8's open 11th criterion** |  |
+| ↳ 5. Both themes at XXXL on the new screens | | Carries the three XXXL items from WP11 |  |
+| **Narrow `Read(**/.env.*)` in `.claude/settings.json`** | ~1 min | Three incidents so far; see the debt register | ⬜ recommended |
 | ~~Play a Leaf on a device~~ | ~30 sec | **Closes WP8's 11th criterion and settles the auto-advance ruling.** Does the unlock feel earned or like a page turn? Then repeat with iOS Reduce Motion on: does it fade rather than spring? | ⬜ **highest-value 30 seconds available** |
 
 ### When the founder can try it
@@ -238,6 +245,10 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | ~~The unlock auto-advances to the payoff slide~~ | — | Manager, WP8 | ✅ **Closed 2026-08-12** — founder played it on a device and confirmed it reads fine. Stays as built |
 | **The unlock auto-advances to the payoff slide**, so the reward animates during a screen transition and the spring competes with the navigation | **Open ruling.** Architect's lean: unlock on the *scenario* slide in response to the tap, then advance once it resolves — the reward should be causally attached to the answer, not to the navigation, or it reads as "here is the next screen" rather than "you opened this". Decided by implication in WP8 and correctly flagged rather than left silent | Manager, WP8 | **Blocked on the founder's device check** — a feel question nobody should rule on from a description |
 | **Reduced motion is correct by inspection but unobserved** — a static screenshot cannot distinguish a spring from a fade | WP8's one unclosed criterion. Correctly refused rather than claimed, which is the WP6 failure not repeating | Manager, WP8 | **Founder device check** |
+| ~~Backend has no `apps/backend/.env`~~ | — | Manager, WP5a | ✅ **Closed 2026-08-12** — `--env-file-if-exists` on dev and migrate, so a fresh clone gets "See .env.example" rather than a crash |
+| **Verification that observes execution rather than effect is not verification** — WP5a's `printf >>` created a 235-byte stray `apps/backend/.env.example`; building `.env` from that stub produced a file with no `DATABASE_URL`, and the write silently no-opped. The check confirmed the command ran, not that it changed anything (`re.sub` succeeds when it matches nothing) | Same class as WP4's criterion that passed without the mechanism working. Cost WP5a its device check | Manager, WP5b | Recorded as a standing rule |
+| **`Read(**/.env.*)` has now caused three incidents** — a false "not done" claim in WP4, a stray stub file in WP5a, and WP5a's failed device check | The rule forces blind writes to a committed template that contains no secrets. **Architect recommendation, reversing an earlier retraction: narrow it to `.env` and `.env.local` and let `.env.example` be readable.** Founder's security config, founder's call | Architect, 2026-08-12 | ⬜ **founder decision** |
+| **`2e99714`'s message and diff disagree** — it describes only the env fix but also carries `launch-blockers.md` and roadmap changes swept from the shared tree | Flagged rather than amended, correctly: the commit is on `origin/main` and rewriting pushed history is worse than an inaccurate message. `f743b31` explains it | Manager, WP5b | Closed — recorded, not fixed |
 | **Backend has no `apps/backend/.env`** — it runs only from a shell with `DATABASE_URL` already exported | **Has now blocked two packages**: WP11's CMS operator account and WP5a's device check, where a migration landed in Payload's database rather than the backend's. Will block WP12. Ruled 2026-08-12: gitignored `.env` plus `--env-file` on dev and migrate scripts is standard practice, not a compromise — the password lives only in the untracked file | Manager, WP5a | **WP5b, first item** |
 | **Session time is elapsed-time-per-Leaf, clamped to five minutes** | The only signal available without a client heartbeat. Under-counts a genuinely slow reader, which errs toward letting them continue — the right direction to be wrong for a wellbeing feature | Manager, WP5a | Open — **a real activity signal needs scheduling**, not deferring indefinitely |
 | **Trap: `CASE … ELSE NULL` beside a bound parameter will not plan in Postgres** | Surfaced as a 500 on completion and reddened twelve integration tests with `expected undefined to be false`, no type error anywhere | Manager, WP5a | Recorded — it will recur |
