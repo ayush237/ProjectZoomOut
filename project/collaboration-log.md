@@ -9,6 +9,55 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-12 — WP5b: Environment fix, achievements, total XP
+
+### Task: WP5b — Environment fix, achievements, total XP
+
+**Context:** Last of the gamification packages. It opens with a small environment fix that has now blocked two packages, then builds the achievement system from `project/proposals/achievements.md`.
+
+**Objective:** The backend runs from a fresh clone without shell setup; nineteen achievements unlock, persist and surface; a reader's total XP is available for the profile.
+
+---
+
+**Part A — the environment fix. Do this first; it unblocks your own device verification.**
+
+- A **gitignored `apps/backend/.env`**, plus `--env-file` on the `dev` and `db:migrate` scripts so both read it. Approved 2026-08-12 — the password lives only in the untracked file, and the root `.env.example` already documents every variable.
+- Confirm the backend's migrations land in the **backend's** database, not Payload's. WP5a's device check failed because one did not.
+- A fresh clone should reach a running backend by copying `.env.example` and running migrate. Verify that, don't assume it.
+
+**Part B — achievements**
+
+- All **nineteen** from `project/proposals/achievements.md`, exactly as specified there.
+- **A registry, not branches** — id, name, description, tier, predicate — evaluated by one engine. Adding a twentieth should be a row and a predicate.
+- **Awarding is idempotent**: unique on `(user_id, achievement_id)`. Replay is the ordinary failure mode here, not an exotic one.
+- **Unlocks return in the response of the action that triggered them**, so the client animates immediately rather than polling.
+- Evaluation points: Leaf completion, answer submission, library add, session wrap-up, cap reached, and Dinner Table Knowledge open.
+- **One new piece of instrumentation:** a DTK open must be recorded — nothing tracks it today. A small authenticated event endpoint. It is also the only signal we would ever have that the deep-cut content is read at all.
+- Four achievements are **unreachable at launch** with one 20-Leaf Track. Ship them anyway; a visible locked tile is a reason to return. See §3 of the proposal.
+
+**Part C — total XP**
+
+- Expose a reader's total XP, **derived on read** (`SUM(xp_awarded)` over `leaf_progress`, indexed on `user_id`) — ruled 2026-08-09. Do not add `users.total_xp`; a denormalised counter drifts from its source and the idempotent-completion path is exactly where a double increment would land.
+
+**Mobile:** achievements on Profile, unlock animation on award, total XP displayed. Reward amber owns celebration, not primary teal.
+
+**Out of scope:** share and wrap-up screens (WP9), report-an-error (WP10), push notifications, a real activity signal for session time.
+
+**Constraints:** `content.ts` frozen. `delivery.ts` is a cross-workspace contract — **additive changes proceed with a note; changing or removing a field needs a ruling.** Handler → service → repository.
+
+**Acceptance criteria:**
+- [ ] Root `install`, `lint`, `typecheck`, `test`, `build` pass
+- [ ] **A fresh clone reaches a running backend via `.env.example` alone**, and migrations land in the backend's database
+- [ ] All nineteen achievements exist and match the proposal
+- [ ] **Awarding twice awards once** — replay and concurrency
+- [ ] An unlock arrives in the triggering action's response, not on a later poll
+- [ ] A DTK open is recorded and unlocks `dinner-party`
+- [ ] Total XP matches `SUM(xp_awarded)` and no `users.total_xp` column exists
+- [ ] **Device check, one session, closing four deferred items:** WP5a's cap screen ("That is today done" — does it read as an ending or a refusal?), an achievement unlock, **iOS Reduce Motion on the WP8 unlock animation** (WP8's open 11th criterion), and both themes at XXXL
+- [ ] CI green
+
+**Testing expectations — tiered bar:** **Tier A** is award idempotency, replay and concurrent. **Tier B, one happy path only.** Tier C deferred and listed. Run the full cold gate **once**, at the end, and report roughly where your time went.
+
 ### Handoff: 2026-08-12 — WP5a: Session cap and streaks
 
 ### Task: WP5a — Session cap and streaks
