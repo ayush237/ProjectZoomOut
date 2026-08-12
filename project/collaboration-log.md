@@ -785,6 +785,71 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP8 — The Leaf player: five slides, the unlock gate, sound — 2026-08-12
+
+**Status:** 10 of 11 acceptance criteria verified by execution; one verified by inspection rather than observation, and said so below. Cold gate green with `dist` and `.next` deleted: **816 tests** (64 shared, 161 admin, 366 backend, 225 mobile), lint, typecheck and build all clean with real exit codes.
+
+**Branch:** `wp8-leaf-player`, from `main` at `20e9ef4`.
+
+#### The loop works on a device
+
+Signed in cold, opened the Demo Track from Journey at Leaf 8 — the server's resume target after seven complete — and played it through: summary, scenario, a deliberate wrong answer, a correct one, payoff, sticky notes, takeaway, finish. **"+80 XP", not 100, because the first answer was wrong.** That is the first-try differential demonstrated end to end; the earlier API run paid 100 for a first-try correct answer on the same corpus.
+
+The unlock renders as designed: amber open padlock, "UNLOCKED", the payoff card with an amber edge, prose in the `payoff` type variant WP6 reserved for exactly this slide.
+
+#### What shipped
+
+| Piece | Location |
+|---|---|
+| Delivery types, moved out of the backend | `packages/shared/src/delivery.ts` |
+| `getLeaf`, `startLeaf`, `submitAnswer`, `completeLeaf` | `apps/mobile/src/api/client.ts` |
+| Stack above the tabs, so a Leaf opens from either surface | `apps/mobile/src/navigation/AppStack.tsx` |
+| The five slides | `apps/mobile/src/screens/leaf/*Slide.tsx` |
+| The loop as a state machine | `apps/mobile/src/screens/leaf/useLeafSession.ts` |
+| The player chrome | `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` |
+| Sound: trigger points, no assets | `apps/mobile/src/sound/` |
+| Explore pagination | `apps/mobile/src/screens/useMoreTracks.ts` |
+
+**`DeliveredLeaf`, `AnswerOutcome` and `CompletionOutcome` moved to `packages/shared`.** They were defined inside `apps/backend`, and WP8 made the mobile app their second consumer — CLAUDE.md allows one definition of a shape that crosses a workspace boundary. A new module rather than an addition to `content.ts`, which is frozen. The backend re-exports them so no call site changed.
+
+#### Two defects found by playing it, not by testing it
+
+**1. The check button stayed armed with a wrong answer.** After submitting option A and being told it was wrong, A was struck out — but "Check answer" remained enabled with A still selected, so one more tap resubmitted it. That spends an attempt to be told the same thing, which is the precise cost that separating "select" from "check" exists to avoid. The selection is now derived and goes dead the moment its option is graded wrong. Mutation-checked: removing the guard fails exactly that test.
+
+**2. An infinite render loop in the pagination hook.** The tail reset was keyed on the first page's *object identity*. `useAsyncResource` happens to hold a stable object so the screen was fine, but any caller building the page inline re-fires the effect every render — an unbounded update loop and a hard crash, one prop-shape change away. Found because the test did exactly that and killed the jest worker. Now keyed on a content signature, which is also better semantics: a refresh returning the same catalogue keeps the tail and the reader's scroll position.
+
+#### Tier A, and where it lives
+
+The backend's Tier A ground was already covered by WP4 and WP7's second pass — `isCorrect` absent from every route (`progress.integration.test.ts:508`), concurrent and replayed completion (635, 617), twelve wrong answers then a correct one (365), the takedown cascade (1040+). Duplicating it would have added no information.
+
+**WP8's Tier A is therefore on the client**, which is genuinely new ground:
+
+- The payoff is absent from **client state**, asserted on the session object and on a `JSON.stringify` of it — not on what renders. A test that only checked the payoff was off-screen would pass against a client that had fetched the prose and hidden it.
+- A locked payoff is a **navigation** gate, not a rendering one: there is no route past the scenario. Mutation-checked.
+- A fast double-tap on Finish submits once. The guard is a ref, not state, because both handlers land in one React batch; the bug it prevents is not double XP — the server is idempotent — but the second response arriving with `xpAwarded: 0` and telling a reader who double-tapped that they earned nothing. Mutation-checked.
+- A 404 mid-session is fatal and readable, and the message does not name the Track — the backend hides which Track was withdrawn, and the client must not undo that.
+
+#### Reduced motion — verified by inspection, not by observation
+
+`useReducedMotion` gates the branch, and with it on the payoff fades over `duration.standard` instead of springing. **I did not observe the difference on a device.** A static screenshot cannot distinguish a spring from a fade, and I am not going to claim a feel I did not experience. What is verified: the branch exists, the reduced path still animates rather than snapping, and the payoff renders either way. Someone should watch it with the setting on before this is called done.
+
+The same caveat applies to the unlock itself. I saw the end state, which is correct. **How it feels is unverified** — that judgement needs a human watching the transition, and it is the one thing in this package worth your own thirty seconds.
+
+#### One product observation worth a ruling
+
+**A correct answer auto-advances to the payoff slide.** The reader does not tap Next — the gate opens and the screen changes in the same moment. That makes the reward land during a slide transition, so the spring competes with the navigation. It may be exactly right, or the unlock may want to happen *on* the scenario slide before moving. It is a design decision I made by implication and should not have made alone.
+
+#### Deferred — WP14 worklist
+
+1. **Reduced-motion and unlock feel on a device**, per above.
+2. **Re-reading a finished Track from Library.** `nextLeafId` is null once a Track is complete, so a finished book has no way back in. Fixing it means a `firstLeafId` on `TrackProgressSummary` — a shared-type change plus backend rollup work the handoff did not ask for.
+3. Slide-component render permutations and theme matrices (Tier C, as scoped).
+4. The three XXXL layout items carried from WP11 — headers wrapping, Library pushing progress below the fold, cover thumbnails not scaling.
+
+#### Closed from WP11
+
+**The partial rollup now renders on device**: Journey showed "7 OF 20 COMPLETE" with the bar a third filled, then 8 of 20 after finishing a Leaf. WP11 deferred this because it needed a signed-out simulator; the app had signed itself out, so it came free.
+
 ### Completed: WP11 — Seed fixture: a full-length placeholder Track — 2026-08-12
 
 **Status:** 10 of 11 acceptance criteria verified by execution. One deferred by founder decision (below). Gate green: **792 tests** (64 shared, 161 admin, 366 backend, 201 mobile), lint, typecheck and build all clean.

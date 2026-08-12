@@ -1,4 +1,10 @@
-import { toPublicLeaf, type Leaf, type PayoffSlide, type PublicLeaf, type Track } from '@zoomout/shared';
+import {
+  toPublicLeaf,
+  type DeliveredLeaf,
+  type Leaf,
+  type PublicLeaf,
+  type Track,
+} from '@zoomout/shared';
 
 import type { AppConfig } from '../config/env.js';
 import type { AppLogger } from '../logging/logger.js';
@@ -17,18 +23,12 @@ export interface LeafSummary {
 }
 
 /**
- * A Leaf as one specific reader is allowed to receive it.
- *
- * `PublicLeaf` with the payoff made conditional. The answer key is already gone by
- * construction; this narrows it further by who is asking, which `PublicLeaf` cannot
- * express because it has no reader.
+ * `DeliveredLeaf` moved to `packages/shared/src/delivery.ts` in WP8, when the mobile
+ * app became its second consumer and CLAUDE.md's one-definition rule started to bite.
+ * Re-exported here so the many call sites that import it from this module keep working,
+ * and so the payoff gate stays discoverable from the class that enforces it.
  */
-export interface DeliveredLeaf extends Omit<PublicLeaf, 'payoff'> {
-  /** Null until earned. The prose is absent from the object, not blanked. */
-  readonly payoff: PayoffSlide | null;
-  /** The contract the client renders against; `payoff === null` is its enforcement. */
-  readonly payoffUnlocked: boolean;
-}
+export type { DeliveredLeaf };
 
 /**
  * Content delivery decisions.

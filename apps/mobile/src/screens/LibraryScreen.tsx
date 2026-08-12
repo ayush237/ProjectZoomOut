@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { LibraryEntry } from '../api/client';
 import { useApi } from '../auth/AuthProvider';
 import {
+  Button,
   EmptyState,
   ErrorState,
   ProgressBar,
@@ -13,6 +16,7 @@ import {
   TrackCard,
 } from '../components';
 import { useTheme } from '../design';
+import type { AppStackParamList } from '../navigation/types';
 import { useAsyncResource } from './useAsyncResource';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
 
@@ -24,9 +28,12 @@ import { useRefreshOnFocus } from './useRefreshOnFocus';
  * every Leaf and every progress row per book, which is the request explosion the
  * backend's `TrackProgressSummary` exists to prevent.
  */
+type AppNavigation = NativeStackNavigationProp<AppStackParamList>;
+
 export function LibraryScreen(): React.JSX.Element {
   const theme = useTheme();
   const api = useApi();
+  const navigation = useNavigation<AppNavigation>();
 
   const load = useCallback(async (): Promise<readonly LibraryEntry[]> => api.listLibrary(), [api]);
   const library = useAsyncResource<readonly LibraryEntry[]>(load);
@@ -104,7 +111,32 @@ export function LibraryScreen(): React.JSX.Element {
             />
           }
           renderItem={({ item }) => (
-            <TrackCard track={item.track} testID={`library-track-${item.track.id}`}>
+            <TrackCard
+              track={item.track}
+              testID={`library-track-${item.track.id}`}
+              /**
+               * Library opens a Leaf too, not just Journey — one of the two entry
+               * points the acceptance criteria name.
+               *
+               * Keyed on `nextLeafId` rather than on `isComplete`, so the button is
+               * absent exactly when it would have nowhere to go: a finished Track and
+               * an empty one both report null, and both should show progress without a
+               * control that does nothing.
+               */
+              {...(item.progress.nextLeafId === null
+                ? {}
+                : {
+                    action: (
+                      <Button
+                        testID={`library-open-${item.track.id}`}
+                        label={item.progress.completedLeaves === 0 ? 'Start reading' : 'Continue'}
+                        onPress={() => {
+                          openLeaf(navigation, item);
+                        }}
+                      />
+                    ),
+                  })}
+            >
               <ProgressBar
                 testID={`library-progress-${item.track.id}`}
                 completed={item.progress.completedLeaves}
@@ -122,4 +154,27 @@ export function LibraryScreen(): React.JSX.Element {
       </View>
     </Screen>
   );
+}
+
+/**
+ * Opens a Leaf from the shelf, at the server-chosen resume target.
+ *
+ * **Re-reading a finished Track is deliberately not offered here.** `nextLeafId` is
+ * null once every Leaf is done, and the only way to reopen one would be a new
+ * `firstLeafId` on `TrackProgressSummary` — a shared-type change plus backend rollup
+ * work for something the handoff does not ask for. Recorded for WP14 instead; a
+ * finished book keeps its "Finished" marker and no button.
+ */
+function openLeaf(navigation: AppNavigation, entry: LibraryEntry): void {
+  const leafId = entry.progress.nextLeafId;
+
+  if (leafId === null) {
+    return;
+  }
+
+  navigation.navigate('LeafPlayer', {
+    leafId,
+    trackId: entry.track.id,
+    trackTitle: entry.track.bookTitle,
+  });
 }

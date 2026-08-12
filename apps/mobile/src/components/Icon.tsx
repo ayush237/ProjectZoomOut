@@ -42,6 +42,27 @@ const ICONS = {
   info: 'information-circle',
   chevron: 'chevron-forward',
   book: 'book-outline',
+
+  /* The Leaf player (WP8). */
+  close: 'close',
+  back: 'arrow-back',
+  next: 'arrow-forward',
+  /**
+   * The payoff gate, both states.
+   *
+   * A padlock rather than a tint, because §6's rule is that right and wrong are never
+   * signalled by colour alone — `correct` green and `primary` teal are adjacent in hue
+   * and indistinguishable to a good share of readers.
+   */
+  locked: 'lock-closed',
+  unlocked: 'lock-open',
+  /** Answer feedback. Deliberately a different *shape* from `success`, not a recolour. */
+  incorrect: 'close-circle',
+  note: 'reader-outline',
+  /** Dinner Table Knowledge — the one thing on the takeaway slide a reader opens. */
+  idea: 'bulb-outline',
+  soundOn: 'volume-medium',
+  soundOff: 'volume-mute',
 } as const;
 
 export type IconName = keyof typeof ICONS;

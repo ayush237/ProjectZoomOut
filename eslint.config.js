@@ -82,8 +82,10 @@ export default tseslint.config(
 
   // Metro and Babel configs must stay CommonJS — the React Native toolchain loads
   // them with `require`, regardless of what the root package.json says about ESM.
+  // `jest.setup.js` belongs here for the same reason: Jest loads it with `require`,
+  // and mocking a native module means handing back a `require`d replacement.
   {
-    files: ['apps/mobile/*.config.js', '**/*.cjs'],
+    files: ['apps/mobile/*.config.js', 'apps/mobile/jest.setup.js', '**/*.cjs'],
     languageOptions: {
       sourceType: 'commonjs',
       globals: {

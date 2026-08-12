@@ -16,6 +16,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/auth/AuthProvider';
 import { ThemeProvider, useTheme } from './src/design';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { SoundProvider } from './src/sound/SoundProvider';
 
 /**
  * The app root.
@@ -65,7 +66,11 @@ function AppBody(): React.JSX.Element {
 
       {ready ? (
         <AuthProvider>
-          <RootNavigator />
+          {/* Outside the navigator so the setting survives every screen, and so WP5's
+              streak and achievement cues have the same provider to reach for. */}
+          <SoundProvider>
+            <RootNavigator />
+          </SoundProvider>
         </AuthProvider>
       ) : (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

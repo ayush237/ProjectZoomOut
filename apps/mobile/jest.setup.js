@@ -44,6 +44,19 @@ jest.mock('expo-secure-store', () => {
   };
 });
 
+/**
+ * Reanimated's worklet runtime is native, and importing the real package under Node
+ * throws before a single test runs — `loadUnpackers` reaches for a TurboModule that
+ * does not exist. The shipped mock renders `Animated.View` as a plain `View` and makes
+ * `withSpring`/`withTiming` return their target value immediately.
+ *
+ * That is the right trade for this suite: it asserts what a reader can *see and do* —
+ * which option is disabled, what copy appears, whether the payoff is on screen — none
+ * of which should depend on an animation having played. The unlock's actual feel is
+ * verified on a device, which is the only place it means anything.
+ */
+jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+
 /** Fonts load instantly and successfully; a real load needs a native bundler. */
 jest.mock('expo-font', () => ({
   useFonts: () => [true, null],
