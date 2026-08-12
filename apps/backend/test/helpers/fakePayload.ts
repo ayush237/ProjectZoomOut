@@ -38,6 +38,18 @@ export class FakePayload {
    */
   public ignoreWhereFilters = false;
 
+  /**
+   * When true, unpublished documents are **returned** rather than hidden, carrying
+   * `_status: 'draft'`.
+   *
+   * Models Payload's access control being misconfigured — the one thing standing
+   * between a draft and an anonymous caller is `read: publishedOrAuthenticated`, which
+   * is a line of config somebody could change. With drafts hidden by the fake, a test
+   * asserting "no draft is served" only proves the fake hides them; the backend's own
+   * `isVisibleIn` filter is never reached. This flag reaches it.
+   */
+  public serveDrafts = false;
+
   private constructor() {
     this.server = createServer((request, response) => {
       this.handle(request.url ?? '', response);
@@ -112,16 +124,28 @@ export class FakePayload {
       ? null
       : url.searchParams.get('where[isPlaceholder][not_equals]');
 
+    /** Whether a document is visible to this request, per the flag above. */
+    const visible = (kind: 'track' | 'leaf', id: number): boolean =>
+      this.serveDrafts || this.published.has(`${kind}:${String(id)}`);
+
+    /** Payload reports the publish state on the document; the mapper reads it. */
+    const withStatus = <T extends { id: number }>(kind: 'track' | 'leaf', doc: T): T => ({
+      ...doc,
+      _status: this.published.has(`${kind}:${String(doc.id)}`) ? 'published' : 'draft',
+    });
+
     const docs: readonly (CmsTrack | CmsLeaf)[] = url.pathname.endsWith('/tracks')
       ? this.tracks
-          .filter((track) => this.published.has(`track:${String(track.id)}`))
+          .filter((track) => visible('track', track.id))
+          .map((track) => withStatus('track', track))
           .filter((track) => idFilter === null || String(track.id) === idFilter)
           .filter(
             (track) =>
               placeholderFilter !== 'true' || (track.isPlaceholder ?? true) === false,
           )
       : this.leaves
-          .filter((leaf) => this.published.has(`leaf:${String(leaf.id)}`))
+          .filter((leaf) => visible('leaf', leaf.id))
+          .map((leaf) => withStatus('leaf', leaf))
           .filter((leaf) => idFilter === null || String(leaf.id) === idFilter)
           .filter((leaf) => trackFilter === null || relationshipId(leaf.trackId) === trackFilter);
 

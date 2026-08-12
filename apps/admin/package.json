@@ -2,7 +2,7 @@
   "name": "@zoomout/admin",
   "version": "0.0.0",
   "private": true,
-  "description": "ZoomOut content CMS — Payload 3.x admin for authoring Tracks and Leaves",
+  "description": "ZoomOut content CMS \u2014 Payload 3.x admin for authoring Tracks and Leaves",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "payload": "payload",
     "generate:types": "payload generate:types",
-    "generate:importmap": "payload generate:importmap"
+    "generate:importmap": "payload generate:importmap",
+    "create-admin": "payload run src/scripts/createAdmin.ts",
+    "seed": "tsx src/seed/seed.ts"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.87.0",
@@ -35,6 +37,7 @@
     "@types/node": "^22.10.2",
     "@types/react": "~19.2.2",
     "@types/react-dom": "~19.2.3",
+    "tsx": "^4.19.2",
     "typescript": "~6.0.3",
     "vitest": "^4.1.10"
   }
