@@ -898,7 +898,7 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 **Supersedes the "Not done: the device check" section of the report below.** The environment blocker is resolved: `apps/backend/.env` now names `zoomout`, migrations 0000–0005 are applied there, and the backend, CMS and app all run together against real seeded content.
 
-**Six of the eight device items pass. Two do not, and one of those is a pre-existing app-wide defect.**
+**Seven of the eight device items pass. The one that does not is a pre-existing app-wide defect.**
 
 | Item | Result |
 |---|---|
@@ -910,7 +910,7 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 | **iOS Reduce Motion on the unlock — WP8's open 11th criterion** | ✅ **with a caveat, below** |
 | Light and dark theme | ✅ both, grid legible in each |
 | **Both themes at `accessibilityExtraExtraExtraLarge`** | ❌ **fails — see below** |
-| WP5a's cap screen ("That is today done") | ❌ not reached — needs 500 XP, four more Leaves |
+| WP5a's cap screen ("That is today done") | ✅ reached on device — see below |
 
 #### Defect 1, fixed: Profile showed stale everything
 
@@ -927,6 +927,16 @@ Finish a Leaf, return to Profile, and it still read "No streak yet", "0 XP" and 
 **This is pre-existing and systemic, not introduced by WP5b.** It lives in WP6's design system and affects every screen in the app. It is also why no amount of layout work on the achievement grid would fix it — the grid was the messenger.
 
 **The fix is contained but app-wide in effect:** scale the line height with `PixelRatio.getFontScale()` in `Text.tsx`, or express leading as a multiplier of `fontSize` rather than an absolute. Either changes the rendered look of every screen, which is why I have not taken it unilaterally. **Recommend it as its own small package before WP9**, since three packages have now claimed an XXXL check against a design system that cannot pass one.
+
+#### The cap screen — WP5a's open question, answered
+
+Reached honestly, by completing five Leaves on the device until the session hit 500 XP (637 seconds elapsed, so **XP was the binding constraint**, which is the calibration WP5a intended). `cap_reached_at` is set in `daily_session`.
+
+**It reads as an ending, not a refusal**, and one thing does more work than the copy: `daily-cap` — "Enough for Today · Reach the daily limit — and stop" — unlocks *on the same screen*, above the notice. So the moment a reader is told they are finished, they are also congratulated for it. That is §2 of the achievements proposal doing exactly what it argued for: an app that treats hitting the cap as a failure state teaches readers to resent it, and this one hands them a badge instead.
+
+The order on screen is XP → three unlocks → "That is today done" → Done. The notice sits last, so the session closes on the sentence about coming back tomorrow rather than on a reward. No warning tone, no "limit", no lock iconography — the word "limit" appears only inside the achievement's own description, where it is being celebrated.
+
+**Recommend the founder look at one screenshot of this before WP9** rather than take my reading of it; tone is the one thing a Manager should not sign off alone.
 
 #### The Reduce Motion caveat
 
