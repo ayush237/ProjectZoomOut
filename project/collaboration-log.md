@@ -894,6 +894,50 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Addendum: WP5b — the device check is done, and it found two defects — 2026-08-12
+
+**Supersedes the "Not done: the device check" section of the report below.** The environment blocker is resolved: `apps/backend/.env` now names `zoomout`, migrations 0000–0005 are applied there, and the backend, CMS and app all run together against real seeded content.
+
+**Six of the eight device items pass. Two do not, and one of those is a pre-existing app-wide defect.**
+
+| Item | Result |
+|---|---|
+| Achievement grid on Profile, locked tiles included | ✅ 19 tiles, "4 of 19" after earning four |
+| Total XP on Profile | ✅ 100 XP, matching `SUM(xp_awarded)` |
+| Achievement unlock on device | ✅ three banners on the completion screen, reward amber, trophy icon |
+| Dinner Table open recorded from the app | ✅ `reader_events` row with `leaf_id = 2`, `dinner-party` awarded |
+| Payoff unlock (WP8's signature moment) | ✅ amber, open padlock |
+| **iOS Reduce Motion on the unlock — WP8's open 11th criterion** | ✅ **with a caveat, below** |
+| Light and dark theme | ✅ both, grid legible in each |
+| **Both themes at `accessibilityExtraExtraExtraLarge`** | ❌ **fails — see below** |
+| WP5a's cap screen ("That is today done") | ❌ not reached — needs 500 XP, four more Leaves |
+
+#### Defect 1, fixed: Profile showed stale everything
+
+Finish a Leaf, return to Profile, and it still read "No streak yet", "0 XP" and "1 of 19" while the database held 100 XP and four badges. Both cards fetched once at mount and never again, so every number stayed stale for the session. Library, Journey and Explore already call `useRefreshOnFocus`; Profile — the screen where every value changes as a side effect of reading elsewhere — did not. Fixed in `13c1084` and re-verified on device.
+
+**Only manual verification could have caught this.** The unit tests mount the component once and assert on what it renders, which is exactly the state that was correct.
+
+#### Defect 2, not fixed, needs an Architect ruling: the app is unusable at XXXL
+
+**Every screen clips text mid-glyph at `accessibilityExtraExtraExtraLarge`** — not just WP5b's. Explore's Track titles render as slivers, buttons show fragments of letters, the Profile header is cut in half. Screenshots taken on both Explore and Profile.
+
+**Cause:** `design/typography.ts` gives every variant an **absolute `lineHeight`** (`display: 32/40`, `body: 16/26`, and so on) and `components/Text.tsx` applies it directly. React Native scales `fontSize` by the OS text-size setting — `allowFontScaling` is correctly never disabled — but it does **not** scale `lineHeight`. At XXXL a 32pt display font renders near 99pt inside a 40pt line box, so the glyphs are clipped by the line box itself.
+
+**This is pre-existing and systemic, not introduced by WP5b.** It lives in WP6's design system and affects every screen in the app. It is also why no amount of layout work on the achievement grid would fix it — the grid was the messenger.
+
+**The fix is contained but app-wide in effect:** scale the line height with `PixelRatio.getFontScale()` in `Text.tsx`, or express leading as a multiplier of `fontSize` rather than an absolute. Either changes the rendered look of every screen, which is why I have not taken it unilaterally. **Recommend it as its own small package before WP9**, since three packages have now claimed an XXXL check against a design system that cannot pass one.
+
+#### The Reduce Motion caveat
+
+Reduce Motion was enabled at the OS level and the payoff unlock was earned again on a fresh Leaf. The unlock renders correctly: the amber "UNLOCKED" label, the open padlock and the payoff panel are all present, so **the accommodation does not remove the feedback** — which is the rule §6 actually states. What a still screenshot cannot prove is that the transition *faded* rather than *sprang*; that claim rests on reading `PayoffSlide`'s reduced-motion branch, which swaps `withSpring` on scale for `withTiming` on opacity. Recorded as verified-by-inspection for the transition itself and verified-by-execution for the end state.
+
+#### Environment facts the next session will need
+
+- The founder's local Postgres runs in container `zoomout-postgres`; `zoomout` is the backend's database and `zoomout_cms` is Payload's. They are **not** interchangeable and the backend pointing at the wrong one is what cost WP5a and most of WP5b's verification time.
+- **`zoomout_cms` still holds seven empty backend tables and the `drizzle` schema** from the mistaken migrate runs, plus three orphan enum types. Dropping them needs founder approval; the CMS boots with them present but **migration `0005` cannot run against that database** while `reader_event_type` survives, because its first statement creates that type.
+- Metro must be running for the app to pick up mobile changes. A stale bundle served a version of Explore without the unlock banner and looked exactly like a missing feature.
+
 ### Completed: WP5b Parts B and C — achievements and total XP — 2026-08-12
 
 **Status:** 7 of 9 acceptance criteria verified by execution. **The device check is not done, and the reason is a live misconfiguration that Part A was supposed to have closed — it is the first section below, not buried.** Cold gate green with `dist` and `.next` deleted, then `npm ci`: **889 tests** (64 shared, 161 admin, 435 backend, 229 mobile), lint, typecheck and build all exit 0 with real exit codes.
