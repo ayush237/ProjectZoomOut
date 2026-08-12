@@ -703,6 +703,69 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP11 — Seed fixture: a full-length placeholder Track — 2026-08-12
+
+**Status:** 10 of 11 acceptance criteria verified by execution. One deferred by founder decision (below). Gate green: **792 tests** (64 shared, 161 admin, 366 backend, 201 mobile), lint, typecheck and build all clean.
+
+**Branch:** `wp11-seed-fixture`, from merged `main` (`9c360fc`).
+
+#### What shipped
+
+| Piece | Location |
+|---|---|
+| Cover-image publish rule | `apps/admin/src/validation/trackRules.ts` — `checkCoverUrlIsImage` |
+| Placeholder corpus generator | `apps/admin/src/seed/placeholderContent.ts` |
+| Payload REST client | `apps/admin/src/seed/payloadRestClient.ts` |
+| Idempotent seed runner | `apps/admin/src/seed/seed.ts` — `npm run seed --workspace=apps/admin` |
+| Operator bootstrap/reset | `apps/admin/src/scripts/createAdmin.ts` — `npm run create-admin --workspace=apps/admin` |
+| Draft-exclusion integration tests | `apps/backend/test/content.integration.test.ts` |
+| `serveDrafts` on the CMS fake | `apps/backend/test/helpers/fakePayload.ts` |
+
+The corpus: one 20-Leaf Track, 25 filler Tracks, one draft Track and one draft Leaf. Every record carries `isPlaceholder: true`; the Track is attributed to "ZoomOut Sample Content (not a real author)".
+
+#### The draft gap is now closed by observation, not inference
+
+This is the result worth reading first. WP7 could only establish that `read: publishedOrAuthenticated` *should* exclude drafts — the corpus contained none, so the empirical check was consistent but not discriminating. There is now a draft Track and a draft Leaf in the database.
+
+Against the live CMS: **28 Tracks exist, 27 reach an anonymous caller.** The draft Leaf is likewise absent. Five Tier A integration tests cover the same ground against `fakePayload`, mutation-checked — disabling `isVisibleIn` fails six.
+
+#### Three defects the seed exposed
+
+The handoff predicted manual verification would be the real test. It was; the assertions all passed while the device found these.
+
+**1. The flagship Track was unreachable.** Explore sorts by `bookTitle` ascending, 20 per page. Under its original title the 20-Leaf Track sorted 26th of 27 — page two, which the app has no affordance to reach. The seed's entire deliverable was invisible on device while every test passed. Renamed to "Placeholder Demo Track", which sorts ahead of all 25 fillers, with a mutation-checked test pinning that ordering.
+
+**2. The covers were invisible.** I had set the placeholder image background to `#141A1E`, the app's own card colour. The images loaded correctly but had no visible edge, so a working cover and a failed one looked identical — a fixture unable to demonstrate the thing it exists for. Now a mid-tone slate that reads against both themes.
+
+**3. `bookTitle` is the upsert key, so renaming orphans records.** Added `RETIRED_TRACK_TITLES` and a delete step, guarded on both a hardcoded name list and the `isPlaceholder` flag, so the seed stays correct across fixture revisions rather than only on a fresh database.
+
+#### Verified on device (iPhone 16 Pro Max, Expo Go)
+
+- Explore: 27 Tracks, Demo Track first, covers rendering as images rather than the fallback
+- Library: **0 OF 20 COMPLETE** — the 20-Leaf Track wired end to end through the rollup
+- Library: a zero-Leaf filler Track shows "NO LEAVES YET" rather than "0 of 0"
+- Journey: correctly omits the zero-Leaf Track, since there is nothing to resume
+- Both themes, and `accessibilityExtraExtraExtraLarge` in both
+
+Rollup at partial completion verified **at the API** — 7 of 20, `status: active`, `nextLeafId: 9`, `isComplete: false`, 700 XP at 100/Leaf. The Leaf player is WP8, so partial progress cannot be produced by tapping; it was driven through the WP4 loop with a synthetic local test user.
+
+#### Deferred — WP14 worklist
+
+1. **On-device render of the partial rollup.** Founder decision, 2026-08-12: showing it requires signing the simulator out of the app account, whose password is not to hand. Verified at the API instead.
+2. **Explore has no pagination affordance.** It stops dead at 20 items — no "load more", no infinite scroll, no indication anything follows. The corpus now crosses the boundary (27 vs `DEFAULT_PER_PAGE = 20`), so this is live, not theoretical. The Track rename routes around it; it does not fix it.
+3. **Screen headers wrap badly at XXXL.** "Explore" breaks across two lines with a single orphaned "e".
+4. **Library pushes progress below the fold at XXXL.** With a realistic-length title the progress bar and completion count need a scroll. No clipping — WP6's fix holds — but the most important information on the screen is off it.
+5. **Cover thumbnails do not scale with text**, so at XXXL a five-line title sits beside a small fixed cover.
+6. Exhaustive validation permutations on the cover rule (Tier C, as scoped).
+
+#### Needs an Architect ruling
+
+**"The mountain is you" is still published.** WP7's hand-authored Track, plus one Leaf. It carries `isPlaceholder: true` so it cannot reach production, but it is attributed to **Brianna Wiest, a real author**, and `LEGAL.md` names invented content under a real writer's name as the highest-severity risk in the product. Its `coverUrl` is an Amazon product page, so it renders the fallback — and it now *fails* the new cover rule, meaning the CMS will refuse to re-publish it. It is only still live because it predates the rule. My recommendation is to unpublish it; the placeholder corpus supersedes what it was for. Not actioned — it is authored content and not mine to remove.
+
+#### Scope note
+
+`createAdmin.ts` was not in the handoff. The seed authenticates as a CMS operator, and the only way to obtain one was Payload's create-first-user screen — which works exactly once per database and is unrecoverable afterwards, since this instance has no outbound email and so cannot deliver a password reset. We hit that wall during this package. The script runs through `payload run`, which calls `loadEnv()` before dispatching, so `.env` is read by Payload rather than passed in by hand, and which exits via `process.exit(0)` rather than `payload.destroy()` — sidestepping the pool-shutdown defect WP1 recorded against the Local API.
+
 ### Completed: WP7 — Mobile surfaces: Explore, Library, Journey — 2026-08-11
 
 **Status:** All 11 acceptance criteria verified by execution. Cold gate green with

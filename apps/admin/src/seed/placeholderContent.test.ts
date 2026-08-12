@@ -9,8 +9,10 @@ import {
   buildFillerTrack,
   buildPlaceholderLeaf,
   buildPlaceholderTrack,
+  FILLER_TRACK_COUNT,
   PLACEHOLDER_LEAF_COUNT,
   PLACEHOLDER_TRACK_TITLE,
+  RETIRED_TRACK_TITLES,
 } from './placeholderContent';
 
 /**
@@ -167,6 +169,30 @@ describe('the corpus exercises the surfaces', () => {
     for (const leaf of everyLeaf) {
       expect(leaf.scenario.options.filter((option) => option.isCorrect)).toHaveLength(1);
     }
+  });
+});
+
+describe('the full-length Track is reachable', () => {
+  it('sorts ahead of every filler Track', () => {
+    /**
+     * Explore is ordered by `bookTitle` ascending, twenty to a page, and the app has no
+     * way to reach page two. Under its first name this Track sorted 26th of 27 and was
+     * invisible on device — the fixture shipped its whole point out of reach. This test
+     * is what stops a future rename doing it again.
+     */
+    const fillers = Array.from({ length: FILLER_TRACK_COUNT }, (_, index) =>
+      buildFillerTrack(index).bookTitle,
+    );
+
+    for (const filler of fillers) {
+      expect(PLACEHOLDER_TRACK_TITLE.localeCompare(filler)).toBeLessThan(0);
+    }
+  });
+
+  it('never lists its own current title as retired', () => {
+    // The seed deletes retired titles before it writes. Listing the live one would make
+    // every run delete and recreate the Track, losing its id and any progress against it.
+    expect(RETIRED_TRACK_TITLES).not.toContain(PLACEHOLDER_TRACK_TITLE);
   });
 });
 

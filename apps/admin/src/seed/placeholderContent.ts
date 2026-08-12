@@ -63,9 +63,15 @@ export interface SeedLeaf {
  * new CMS rule requires and what Explore needs in order to stop rendering the fallback.
  * It is also visibly a placeholder on screen, which is the point — a stock photo would
  * make mock content look finished.
+ *
+ * **The colours are mid-tone on purpose.** The first version used the app's own dark
+ * surface (`#141A1E`), which made the cover indistinguishable from the card behind it on
+ * device — a loaded image and a failed one looked identical, so the fixture could not
+ * demonstrate the very thing it exists to demonstrate. A slate that is lighter than the
+ * dark theme's card and darker than the light theme's reads as a cover in both.
  */
 function coverFor(label: string): string {
-  return `https://placehold.co/400x600/141A1E/3DDCC8.png?text=${encodeURIComponent(label)}`;
+  return `https://placehold.co/400x600/445A66/FFFFFF.png?text=${encodeURIComponent(label)}`;
 }
 
 const DISCLAIMER =
@@ -77,8 +83,26 @@ const DISCLAIMER =
  * The full-length Track: one book's worth of structure, none of its content.
  *
  * Attributed to a fictional author on purpose — see the note at the top of this file.
+ *
+ * **"Demo" so it sorts ahead of "Filler".** The backend orders Explore by `bookTitle`
+ * ascending and serves twenty per page. Under the original title this Track sorted 26th
+ * of 27 — onto page two, which the mobile app currently has no way to reach, so the one
+ * Track with any Leaves on it was invisible on device. Sorting it first is what the
+ * fixture wanted anyway: whoever runs the seed should land on the full-length Track, not
+ * on filler. The pagination gap itself is real and recorded separately; this does not
+ * paper over it, it just stops the fixture depending on it.
  */
-export const PLACEHOLDER_TRACK_TITLE = 'Placeholder Track — Twenty Sample Leaves';
+export const PLACEHOLDER_TRACK_TITLE = 'Placeholder Demo Track — Twenty Sample Leaves';
+
+/**
+ * Titles this fixture used to publish under, removed on the next run.
+ *
+ * `bookTitle` is the upsert key, so renaming a Track orphans the old record rather than
+ * updating it — it would sit in the corpus with a `leafCount` of twenty and no Leaves,
+ * because the Leaves are re-pointed at the new one. Deleting by name keeps the seed
+ * correct across fixture revisions instead of only on a fresh database.
+ */
+export const RETIRED_TRACK_TITLES: readonly string[] = ['Placeholder Track — Twenty Sample Leaves'];
 
 export function buildPlaceholderTrack(leafCount: number): SeedTrack {
   return {

@@ -126,6 +126,18 @@ export class PayloadRestClient {
     });
   }
 
+  /**
+   * Deletes a document by id.
+   *
+   * Only reached for titles listed in `RETIRED_TRACK_TITLES`, and only after the caller
+   * has confirmed the record carries `isPlaceholder`. A seed that can delete is a seed
+   * that can delete the wrong thing, so the destructive path is deliberately narrow:
+   * an explicit, hardcoded list of names this fixture itself published under.
+   */
+  public async delete(collection: string, id: number): Promise<void> {
+    await this.request('DELETE', `/api/${collection}/${String(id)}`);
+  }
+
   private async request<T>(
     method: string,
     path: string,

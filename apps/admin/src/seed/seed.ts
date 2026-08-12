@@ -26,10 +26,11 @@ import {
   FILLER_TRACK_COUNT,
   PLACEHOLDER_LEAF_COUNT,
   PLACEHOLDER_TRACK_TITLE,
+  RETIRED_TRACK_TITLES,
   type SeedLeaf,
   type SeedTrack,
 } from './placeholderContent';
-import { PayloadRestClient, PayloadRestError } from './payloadRestClient';
+import { type PayloadDocument, PayloadRestClient, PayloadRestError } from './payloadRestClient';
 
 /* eslint-disable no-restricted-properties --
  * A standalone script, not part of the running app. It has no access to the validated
@@ -42,8 +43,39 @@ const ADMIN_PASSWORD = process.env['PAYLOAD_ADMIN_PASSWORD'];
 interface SeedSummary {
   tracksCreated: number;
   tracksUpdated: number;
+  tracksRemoved: number;
   leavesCreated: number;
   leavesUpdated: number;
+}
+
+/**
+ * Drops Tracks this fixture published under a name it no longer uses.
+ *
+ * Runs before the writes so the corpus total at the end is accurate. Guarded twice: the
+ * title must appear in `RETIRED_TRACK_TITLES`, and the record must still carry
+ * `isPlaceholder`. If someone has repurposed that title for real content, the seed says
+ * so and leaves it alone rather than deleting an author's work.
+ */
+async function removeRetiredTracks(client: PayloadRestClient, summary: SeedSummary): Promise<void> {
+  for (const title of RETIRED_TRACK_TITLES) {
+    const existing = await client.findOneBy<PayloadDocument & { isPlaceholder?: boolean }>(
+      'tracks',
+      'bookTitle',
+      title,
+    );
+
+    if (existing === null) {
+      continue;
+    }
+
+    if (existing.isPlaceholder !== true) {
+      console.warn(`Leaving "${title}" alone: it is no longer flagged as placeholder content.`);
+      continue;
+    }
+
+    await client.delete('tracks', existing.id);
+    summary.tracksRemoved += 1;
+  }
 }
 
 /**
@@ -107,9 +139,12 @@ async function seed(): Promise<void> {
   const summary: SeedSummary = {
     tracksCreated: 0,
     tracksUpdated: 0,
+    tracksRemoved: 0,
     leavesCreated: 0,
     leavesUpdated: 0,
   };
+
+  await removeRetiredTracks(client, summary);
 
   /* The full-length Track — the one WP8 will actually be judged against. */
   const trackId = await upsertTrack(
@@ -155,7 +190,7 @@ async function seed(): Promise<void> {
   console.warn(
     [
       'Seed complete.',
-      `  Tracks:  ${String(summary.tracksCreated)} created, ${String(summary.tracksUpdated)} updated`,
+      `  Tracks:  ${String(summary.tracksCreated)} created, ${String(summary.tracksUpdated)} updated, ${String(summary.tracksRemoved)} retired`,
       `  Leaves:  ${String(summary.leavesCreated)} created, ${String(summary.leavesUpdated)} updated`,
       `  Corpus:  ${String(totalTracks)} Tracks total (including the unpublished draft)`,
     ].join('\n'),
