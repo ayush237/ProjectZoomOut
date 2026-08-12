@@ -1,12 +1,13 @@
 import type {
+  AchievementStatus,
   AnswerOutcome,
   CompletionOutcome,
   DeliveredLeaf,
   LeafProgress,
-  SessionStatus,
-  StreakStatus,
+  ReaderStanding,
   Track,
   TrackProgressSummary,
+  UnlockedAchievement,
   User,
 } from '@zoomout/shared';
 
@@ -92,11 +93,23 @@ export interface LibraryEntry {
   readonly progress: TrackProgressSummary;
 }
 
-/** Today's cap state and the reader's streak, in one round trip. */
-export interface DayStatus {
-  readonly session: SessionStatus;
-  readonly streak: StreakStatus;
+/**
+ * Today's cap state, the reader's streak, and their lifetime XP, in one round trip.
+ *
+ * An alias rather than a second declaration: WP5b moved the shape into
+ * `packages/shared` when it gained `totalXp`, because two apps now render it and
+ * CLAUDE.md allows one definition of a shape that crosses the boundary. The name is
+ * kept so the screens that already read it do not churn.
+ */
+export type DayStatus = ReaderStanding;
+
+/** What an event the reader signalled unlocked, if anything. */
+export interface EventOutcome {
+  readonly unlocked: readonly UnlockedAchievement[];
 }
+
+/** The events only the reader can report — nothing else observes them server-side. */
+export type ReaderEventType = 'dinner_table_open' | 'session_wrap';
 
 export interface ApiClientOptions {
   readonly baseUrl: string;
@@ -269,9 +282,25 @@ export class ApiClient {
     return body.entries;
   }
 
-  /** Idempotent: adding a Track already in the library succeeds and changes nothing. */
-  public async addToLibrary(trackId: string): Promise<void> {
-    await this.send('POST', `/library/tracks/${encodeURIComponent(trackId)}`, undefined, true);
+  /**
+   * Idempotent: adding a Track already in the library succeeds and changes nothing.
+   *
+   * Returns any achievements the add earned — `first-book` on the reader's very first.
+   * The unlock arrives in this response rather than being discovered by a later poll,
+   * so the shelf can celebrate at the moment of the tap.
+   */
+  public async addToLibrary(trackId: string): Promise<readonly UnlockedAchievement[]> {
+    const body = await this.send<{ unlocked?: readonly UnlockedAchievement[] } | undefined>(
+      'POST',
+      `/library/tracks/${encodeURIComponent(trackId)}`,
+      undefined,
+      true,
+    );
+
+    // Tolerates a body-less response. This route answered 204 before WP5b, and
+    // `readBody` returns `undefined` for one — so a client running against an older
+    // backend gets "no achievements" rather than a crash on the shelf's main action.
+    return body?.unlocked ?? [];
   }
 
   /** Also idempotent — removing something absent is the intent already satisfied. */
@@ -366,6 +395,45 @@ export class ApiClient {
       'POST',
       `/progress/leaves/${encodeURIComponent(leafId)}/complete`,
       undefined,
+      true,
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Achievements                                                        */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The whole catalogue, with this reader's unlocks resolved against it.
+   *
+   * **Locked entries come back too** and the app renders them. The list is the server's
+   * — the client deliberately holds no copy, so shipping a twentieth achievement is a
+   * backend deploy rather than an app store release, and a reader on an old build is
+   * never shown a grid missing the tile they are working toward.
+   */
+  public async listAchievements(): Promise<readonly AchievementStatus[]> {
+    const body = await this.send<{ achievements: readonly AchievementStatus[] }>(
+      'GET',
+      '/achievements',
+      undefined,
+      true,
+    );
+
+    return body.achievements;
+  }
+
+  /**
+   * Reports something only the reader can tell the server, and returns what it unlocked.
+   *
+   * Opening a Dinner Table Knowledge fact is invisible server-side: the takeaway slide
+   * ships with the Leaf and the fact is revealed by a tap on this device. Without this
+   * call nothing would know the deep-cut content is read at all.
+   */
+  public async recordEvent(type: ReaderEventType, leafId?: string): Promise<EventOutcome> {
+    return this.send<EventOutcome>(
+      'POST',
+      '/events',
+      { type, ...(leafId === undefined ? {} : { leafId }) },
       true,
     );
   }

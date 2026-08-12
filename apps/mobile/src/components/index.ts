@@ -7,6 +7,7 @@
  * and building one before those exist would be guessing at their requirements.
  */
 
+export { AchievementUnlock } from './AchievementUnlock';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorState, type ErrorStateProps } from './ErrorState';

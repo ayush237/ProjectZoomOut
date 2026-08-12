@@ -19,8 +19,17 @@ import { MIN_TOUCH_TARGET, useTheme } from '../../design';
  */
 export function TakeawaySlide({
   data,
+  onOpenDinnerTable,
 }: {
   readonly data: TakeawaySlideData;
+  /**
+   * Called the first time the fact is revealed (WP5b).
+   *
+   * Opening it is invisible server-side — the fact travels with the Leaf and is revealed
+   * by this tap — so this callback is the only thing that records the deep-cut content
+   * was read. Deliberately not called on the tap that *hides* it again.
+   */
+  readonly onOpenDinnerTable?: (() => void) | undefined;
 }): React.JSX.Element {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -48,6 +57,13 @@ export function TakeawaySlide({
           <Pressable
             testID="dinner-table-toggle"
             onPress={() => {
+              // Read outside the updater: a state updater must stay pure, and React
+              // may invoke it twice. The one-report-per-session guard lives in
+              // `useLeafSession`, so a stale read here costs nothing.
+              if (!open) {
+                onOpenDinnerTable?.();
+              }
+
               setOpen((current) => !current);
             }}
             accessibilityRole="button"

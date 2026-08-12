@@ -2,11 +2,18 @@ import { useCallback } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { DeliveredLeaf } from '@zoomout/shared';
+import type { DeliveredLeaf, UnlockedAchievement } from '@zoomout/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useApi } from '../../auth/AuthProvider';
-import { Button, ErrorState, Icon, StatusMessage, Text } from '../../components';
+import {
+  AchievementUnlock,
+  Button,
+  ErrorState,
+  Icon,
+  StatusMessage,
+  Text,
+} from '../../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../../design';
 import type { AppStackParamList } from '../../navigation/types';
 import { useSound } from '../../sound/SoundProvider';
@@ -132,6 +139,7 @@ function LeafSessionView({
           xpAwarded={session.xpAwarded}
           firstTryCorrect={session.firstTryCorrect}
           capReached={session.capReached}
+          unlocked={session.unlocked}
           onDone={leave}
         />
       </PlayerFrame>
@@ -204,7 +212,9 @@ function LeafSessionView({
 
       {session.slide === 'stickyNotes' ? <StickyNotesSlide data={leaf.stickyNotes} /> : null}
 
-      {session.slide === 'takeaway' ? <TakeawaySlide data={leaf.takeaway} /> : null}
+      {session.slide === 'takeaway' ? (
+        <TakeawaySlide data={leaf.takeaway} onOpenDinnerTable={session.reportDinnerTableOpen} />
+      ) : null}
     </PlayerFrame>
   );
 }
@@ -219,11 +229,13 @@ function CompletionSummary({
   xpAwarded,
   firstTryCorrect,
   capReached,
+  unlocked,
   onDone,
 }: {
   readonly xpAwarded: number;
   readonly firstTryCorrect: boolean;
   readonly capReached: boolean;
+  readonly unlocked: readonly UnlockedAchievement[];
   readonly onDone: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
@@ -253,6 +265,18 @@ function CompletionSummary({
           First try — that is the bonus.
         </Text>
       ) : null}
+
+      {/**
+       * Below the XP, above the cap notice.
+       *
+       * The XP is what the reader was expecting and the badge is the surprise, so the
+       * expected thing lands first and the surprise arrives underneath it. Putting the
+       * badge on top would make the reader hunt for the number they came for — and the
+       * cap notice stays last because it is the sentence that ends the session.
+       */}
+      <View style={{ alignSelf: 'stretch' }}>
+        <AchievementUnlock achievements={unlocked} />
+      </View>
 
       {/**
        * The daily cap, and it is not an error.

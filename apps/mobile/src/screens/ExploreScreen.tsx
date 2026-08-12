@@ -1,10 +1,19 @@
-import type { Track } from '@zoomout/shared';
+import type { Track, UnlockedAchievement } from '@zoomout/shared';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
 import type { TrackPage } from '../api/client';
 import { useApi } from '../auth/AuthProvider';
-import { Button, EmptyState, ErrorState, Screen, StatusMessage, Text, TrackCard } from '../components';
+import {
+  AchievementUnlock,
+  Button,
+  EmptyState,
+  ErrorState,
+  Screen,
+  StatusMessage,
+  Text,
+  TrackCard,
+} from '../components';
 import { spacing, useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
 import { useMoreTracks } from './useMoreTracks';
@@ -55,6 +64,8 @@ export function ExploreScreen(): React.JSX.Element {
 
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Achievements the last add earned. Server-decided; the client never infers them. */
+  const [unlocked, setUnlocked] = useState<readonly UnlockedAchievement[]>([]);
 
   /**
    * Local decisions layered over the fetched membership.
@@ -91,7 +102,14 @@ export function ExploreScreen(): React.JSX.Element {
         if (already) {
           await api.removeFromLibrary(track.id);
         } else {
-          await api.addToLibrary(track.id);
+          /**
+           * `first-book` is awarded here, and this is the only place it can be seen.
+           *
+           * For most readers it is the first achievement they ever earn, and it is
+           * earned on a screen with no completion summary to carry it — so the banner
+           * appears above the catalogue rather than being discovered later on Profile.
+           */
+          setUnlocked(await api.addToLibrary(track.id));
         }
 
         // Recorded locally rather than by refetching the whole library: the server call
@@ -155,6 +173,8 @@ export function ExploreScreen(): React.JSX.Element {
         {actionError === null ? null : (
           <StatusMessage tone="error" message={actionError} testID="explore-action-error" />
         )}
+
+        <AchievementUnlock achievements={unlocked} />
 
         {/* A refresh that failed leaves the catalogue on screen and says so. */}
         {tracks.refreshError === null ? null : (

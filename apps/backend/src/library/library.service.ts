@@ -1,5 +1,6 @@
-import type { Track, TrackProgressSummary } from '@zoomout/shared';
+import type { Track, TrackProgressSummary, UnlockedAchievement } from '@zoomout/shared';
 
+import type { AchievementAwarder } from '../achievements/achievements.service.js';
 import type { AppLogger } from '../logging/logger.js';
 import { toError } from '../errors.js';
 import { ContentNotFoundError } from '../content/content.errors.js';
@@ -34,6 +35,8 @@ export class LibraryService {
     private readonly content: ContentService,
     private readonly progress: TrackProgressReader,
     private readonly logger: AppLogger,
+    /** WP5b. Adding a book is an evaluation point — `first-book`. */
+    private readonly achievements: AchievementAwarder,
   ) {}
 
   /**
@@ -43,13 +46,19 @@ export class LibraryService {
    * the way in: a reader cannot add a draft, or — in production — a placeholder, by
    * guessing an id. Idempotent, so tapping "add" twice succeeds twice.
    *
+   * @returns any achievements the add earned, for the response of this action.
    * @throws {ContentNotFoundError} if no visible Track has that id.
    */
-  public async addTrack(userId: string, trackId: string): Promise<void> {
+  public async addTrack(userId: string, trackId: string): Promise<readonly UnlockedAchievement[]> {
     await this.content.getTrack(trackId);
 
     await this.repository.addTrack(userId, trackId);
     this.logger.info({ userId, trackId }, 'Track added to library');
+
+    // After the write, so `first-book` sees the row it is about. Adding the same Track
+    // twice re-evaluates and awards nothing the second time, which is the same
+    // idempotency the repository already gives the membership row itself.
+    return this.achievements.awardQuietly(userId);
   }
 
   /**

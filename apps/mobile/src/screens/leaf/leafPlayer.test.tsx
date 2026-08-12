@@ -170,6 +170,7 @@ const LOCKED_LEAF = {
 function fakeApi(overrides: {
   submitAnswer?: jest.Mock;
   completeLeaf?: jest.Mock;
+  recordEvent?: jest.Mock;
 } = {}) {
   return {
     submitAnswer:
@@ -181,6 +182,7 @@ function fakeApi(overrides: {
             progress: { ...PROGRESS, firstTryCorrect: false, correctAt: null },
             payoffUnlocked: false,
             payoff: null,
+            unlocked: [],
           }),
       ),
     completeLeaf:
@@ -199,8 +201,12 @@ function fakeApi(overrides: {
           capSeconds: 900,
           capXp: 500,
         },
+            unlocked: [],
           }),
       ),
+    // WP5b. Awards nothing by default, so the existing gate tests are unaffected.
+    recordEvent:
+      overrides.recordEvent ?? jest.fn(() => Promise.resolve({ unlocked: [] })),
   };
 }
 
@@ -209,6 +215,7 @@ const correctOutcome: AnswerOutcome = {
   progress: PROGRESS,
   payoffUnlocked: true,
   payoff: { body: PAYOFF_PROSE },
+  unlocked: [],
 };
 
 async function renderSession(api: ReturnType<typeof fakeApi>, leaf: DeliveredLeaf = LOCKED_LEAF) {
@@ -334,6 +341,9 @@ describe('completion', () => {
           capSeconds: 900,
           capXp: 500,
         },
+        // A replay awards nothing, so it announces nothing. The server decides this;
+        // the empty list here is the shape that decision arrives in.
+        unlocked: [],
       })),
     });
     const { result } = await renderSession(api);
@@ -374,6 +384,7 @@ describe('completion', () => {
           capSeconds: 900,
           capXp: 500,
         },
+      unlocked: [],
     });
 
     await flush(() => {
@@ -503,6 +514,7 @@ describe('the session cap', () => {
             capSeconds: 300,
             capXp: 500,
           },
+          unlocked: [],
         }),
       ),
     });
@@ -515,5 +527,75 @@ describe('the session cap', () => {
 
     expect(result.current.capReached).toBe(true);
     expect(result.current.xpAwarded).toBe(100);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Achievements (WP5b)                                                         */
+/* -------------------------------------------------------------------------- */
+
+describe('achievements', () => {
+  const BADGE = {
+    id: 'first-leaf',
+    name: 'First Light',
+    description: 'Complete your first Leaf.',
+    tier: 'common' as const,
+    unlockedAt: '2026-08-12T10:05:00.000Z',
+  };
+
+  it('carries what the completion awarded, without inferring it', async () => {
+    /**
+     * Tier B, one happy path. The client is told; it never decides. There is
+     * deliberately no branch here that counts completed Leaves locally — a client that
+     * knew the thresholds would disagree with the server the first time a completion
+     * was replayed, and congratulate the reader twice for one badge.
+     */
+    const api = fakeApi({
+      completeLeaf: jest.fn(() =>
+        Promise.resolve({
+          progress: { ...PROGRESS, completedAt: '2026-08-12T10:05:00.000Z', xpAwarded: 100 },
+          xpAwarded: 100,
+          alreadyCompleted: false,
+          session: {
+            localDate: '2026-08-12',
+            secondsActive: 60,
+            xpEarned: 100,
+            capReached: false,
+            capSeconds: 900,
+            capXp: 500,
+          },
+          unlocked: [BADGE],
+        }),
+      ),
+    });
+
+    const { result } = await renderSession(api);
+
+    await flush(() => {
+      result.current.complete(() => undefined);
+    });
+
+    expect(result.current.unlocked).toEqual([BADGE]);
+  });
+
+  it('reports a Dinner Table Knowledge open once, and keeps what it unlocked', async () => {
+    // The only signal that the deep-cut content is read at all. Reported once per
+    // session: the toggle can be tapped repeatedly, and each re-open is a real open,
+    // but nineteen rows from one reader fidgeting would drown the signal.
+    const recordEvent = jest.fn(() =>
+      Promise.resolve({ unlocked: [{ ...BADGE, id: 'dinner-party', name: 'Dinner Party' }] }),
+    );
+    const { result } = await renderSession(fakeApi({ recordEvent }));
+
+    await flush(() => {
+      result.current.reportDinnerTableOpen();
+    });
+    await flush(() => {
+      result.current.reportDinnerTableOpen();
+    });
+
+    expect(recordEvent).toHaveBeenCalledTimes(1);
+    expect(recordEvent).toHaveBeenCalledWith('dinner_table_open', '10');
+    expect(result.current.unlocked.map((achievement) => achievement.id)).toEqual(['dinner-party']);
   });
 });

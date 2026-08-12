@@ -20,6 +20,7 @@
 
 import type { LeafProgress } from './progress.js';
 import type { PayoffSlide, PublicLeaf } from './content.js';
+import type { UnlockedAchievement } from './gamification.js';
 
 /**
  * A Leaf as one specific reader is allowed to receive it.
@@ -52,6 +53,8 @@ export interface AnswerOutcome {
   readonly payoffUnlocked: boolean;
   /** The earned payoff slide, or null while it is still locked. */
   readonly payoff: PayoffSlide | null;
+  /** Achievements this answer earned. Added in WP5b; empty on most answers. */
+  readonly unlocked: readonly UnlockedAchievement[];
 }
 
 export interface CompletionOutcome {
@@ -61,6 +64,39 @@ export interface CompletionOutcome {
   readonly alreadyCompleted: boolean;
   /** The reader's day, after this completion. Added in WP5a. */
   readonly session: SessionStatus;
+  /**
+   * Achievements this completion earned. Added in WP5b.
+   *
+   * **In the response of the triggering action, not on a later poll** — the unlock
+   * animation fires on the completion screen the reader is already looking at, and a
+   * client that had to ask a second time would either animate late or animate on
+   * re-entry to a Leaf that awarded nothing.
+   *
+   * Empty on a replay, because awarding is idempotent: the second call earns nothing,
+   * so it announces nothing.
+   */
+  readonly unlocked: readonly UnlockedAchievement[];
+}
+
+/**
+ * Where a reader stands, in one round trip: today's cap, the streak, and lifetime XP.
+ *
+ * One shape rather than three endpoints because Profile renders all of it at once and
+ * the limit screen needs the session half. **Defined here rather than in each app** —
+ * the mobile client previously declared its own `DayStatus` for the WP5a half of this,
+ * which is exactly the duplication CLAUDE.md forbids for a shape crossing the boundary.
+ */
+export interface ReaderStanding {
+  readonly session: SessionStatus;
+  readonly streak: StreakStatus;
+  /**
+   * Lifetime XP, **derived on read** — `SUM(xp_awarded)` over the reader's Leaf
+   * progress, ruled 2026-08-09. There is deliberately no stored counter: the completion
+   * path is idempotent precisely because replaying it is the ordinary failure mode, and
+   * a denormalised total is where that replay would land as a double increment nobody
+   * could later detect.
+   */
+  readonly totalXp: number;
 }
 
 /**
