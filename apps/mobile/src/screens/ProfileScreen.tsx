@@ -7,6 +7,7 @@ import { useApi, useAuth } from '../auth/AuthProvider';
 import { Button, Icon, Screen, StatusMessage, Text } from '../components';
 import { useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
+import { useRefreshOnFocus } from './useRefreshOnFocus';
 
 /**
  * The account, and now the reader's standing.
@@ -107,6 +108,16 @@ function StreakCard(): React.JSX.Element | null {
   const load = useCallback(async (): Promise<DayStatus> => api.getToday(), [api]);
   const day = useAsyncResource<DayStatus>(load);
 
+  /**
+   * Re-read on focus, as Library, Journey and Explore already do.
+   *
+   * Found on device: finish a Leaf, come back to Profile, and it still says "0 XP" and
+   * "No streak yet" — the card had loaded once at mount and never again, so the numbers
+   * were stale for the rest of the session. Every value here changes as a side effect of
+   * reading, which is precisely the case tab focus exists to cover.
+   */
+  useRefreshOnFocus(day.refresh);
+
   if (day.status !== 'ready' || day.data === null) {
     return null;
   }
@@ -201,6 +212,10 @@ function AchievementGrid(): React.JSX.Element | null {
     [api],
   );
   const achievements = useAsyncResource<readonly AchievementStatus[]>(load);
+
+  // Same reason as the streak card: a badge earned in the player must be visible on
+  // the very next visit to this tab, not after a restart.
+  useRefreshOnFocus(achievements.refresh);
 
   if (achievements.status !== 'ready' || achievements.data === null) {
     return null;
