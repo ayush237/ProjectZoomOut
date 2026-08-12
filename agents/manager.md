@@ -100,7 +100,9 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 **Tier C — defer to WP14.** Component render tests, theme permutations, loading/empty/error combinations, and exhaustive boundary enumeration where one representative case already exists.
 
-**In exchange, manual verification is mandatory, not optional.** Run the app once per package in both themes and at `accessibilityExtraExtraExtraLarge`, and exercise the flows the acceptance criteria describe. In this project that has caught more real defects than any test suite — the timezone offset bug, the app pinned to light mode, the emoji glyphs ignoring tint, and the font-scaling clip that failed a WP6 criterion. Ten minutes of looking beats an hour of matrices.
+**In exchange, manual verification is mandatory, not optional.** Run the app once per package **in both themes**, and exercise the flows the acceptance criteria describe.
+
+**Do not check extra-large text sizes** (removed 2026-08-12 by founder ruling). `design/typography.ts` sets an absolute `lineHeight` while React Native scales `fontSize` only, so text clips at the top steps — app-wide, pre-existing in WP6's design system, and deliberately not being fixed. Re-checking it every package re-reports one known defect and burns the time the tiered bar was meant to save. It is logged in `launch-blockers.md`; do not re-raise it. In this project that has caught more real defects than any test suite — the timezone offset bug, the app pinned to light mode, the emoji glyphs ignoring tint, and the font-scaling clip that failed a WP6 criterion. Ten minutes of looking beats an hour of matrices.
 
 **Run the full cold gate once, at the end.** Deleting `dist` and `.next`, reinstalling and running the whole suite is expensive; doing it repeatedly through a package costs real minutes for no new information. Run targeted tests while you work — the workspace or file you are changing — and the full cold gate once before you report.
 

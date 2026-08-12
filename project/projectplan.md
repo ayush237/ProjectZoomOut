@@ -5,14 +5,20 @@ Owned by Architect. Represents the single feature currently being planned or imp
 ## Feature
 **WP5b — Environment fix, achievements, total XP**
 
-Parts B and C accepted 2026-08-12. **Part A reopened.** WP5b is not signed off.
+✅ **Signed off 2026-08-12, 9 of 9.** Part A resolved and verified by query. Branch `wp5b-achievements-xp` — six commits, **not yet pushed**.
 
 Goal for the milestone: **an end-to-end working app** — every Phase 1 feature working against seeded content on a device. Remaining after WP5b: the device gate, WP9, WP10. Launch blockers are parked in `launch-blockers.md`.
 
 ## Status
-`Parts B and C accepted` · **`Part A reopened — blocking`**
+**`Signed off`** (2026-08-12)
 
-## The blocker
+## Part A — resolved
+
+Was: `apps/backend/.env` named `zoomout_cms`, so the backend talked to Payload's database and `daily_session`/`streak` never existed where the real readers live. Now fixed and verified **by query, not exit code** — `zoomout` holds all nine tables and records migrations 0000–0005 with six readers intact; `zoomout_cms` is cleared of backend tables, the drizzle schema and enum types, with Payload's 20 tables and all 28 Tracks / 22 Leaves untouched.
+
+Payload's `there is no parameter $1` boot failure is explained: it was our tables in their database, not an upstream drizzle-kit bug.
+
+## Original diagnosis
 `apps/backend/.env`'s `DATABASE_URL` points at **`zoomout_cms`**, Payload's database, not `zoomout`.
 
 - `zoomout` holds the real readers — 6 users, 10 `leaf_progress`, 5 `user_tracks` — and only migrations 0000–0003.
@@ -38,7 +44,9 @@ Nineteen achievements as a code registry with slug identity; idempotent awarding
 None. Three rulings closed 2026-08-12 — `first-wrap` keeps its event, the `gamification.ts` rewrite including its removals, and the additive `delivery.ts` changes.
 
 ## Next
-The **device verification gate** (founder, ~10 min, five steps — see the roadmap), which is blocked until the database situation is resolved. Then WP9, then WP10.
+**WP9 — shareable session wrap-up and achievement screens.** The device gate is closed: seven items verified, including that the cap screen reads as an ending rather than a refusal — `daily-cap` unlocks *above* the notice, so the reader is congratulated for stopping in the same breath they are told they are finished.
+
+Then **WP10**, and the app is complete end to end.
 
 ## Handoff prompt
 See `project/collaboration-log.md` — Handoffs, 2026-08-12 (WP5b).
