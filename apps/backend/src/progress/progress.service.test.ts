@@ -117,6 +117,9 @@ function harness(
     listCompletedLeafIds: vi.fn().mockResolvedValue([]),
     sumXpAwarded: vi.fn().mockResolvedValue(0),
     countFirstTryCompletions: vi.fn().mockResolvedValue(0),
+    // WP9's summary read. Nothing in this file exercises it; the local-date query it
+    // exists for is proven against real Postgres in the integration suite.
+    listCompletedOn: vi.fn().mockResolvedValue([]),
   };
 
   const content = {

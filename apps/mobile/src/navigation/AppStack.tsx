@@ -1,6 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { LeafPlayerScreen } from '../screens/leaf/LeafPlayerScreen';
+import { AchievementShareScreen } from '../screens/share/AchievementShareScreen';
+import { WrapUpScreen } from '../screens/share/WrapUpScreen';
 import { TabShell } from './TabShell';
 import type { AppStackParamList } from './types';
 
@@ -34,6 +36,19 @@ export function AppStack(): React.JSX.Element {
           gestureEnabled: false,
         }}
       />
+      {/**
+       * Both share screens sit above the shell for the same reason the player does:
+       * each is reachable from more than one place — the wrap-up from Journey and from
+       * finishing a Leaf, the achievement card from wherever the badge was earned — so a
+       * copy inside each tab would give them several identities and a back button that
+       * returns to the wrong one.
+       *
+       * Ordinary pushes rather than full-screen modals: unlike the player these are
+       * destinations a reader should be able to swipe back out of, and neither has
+       * progress to abandon.
+       */}
+      <Stack.Screen name="WrapUp" component={WrapUpScreen} />
+      <Stack.Screen name="AchievementShare" component={AchievementShareScreen} />
     </Stack.Navigator>
   );
 }

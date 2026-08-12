@@ -141,6 +141,20 @@ function LeafSessionView({
           capReached={session.capReached}
           unlocked={session.unlocked}
           onDone={leave}
+          onWrapUp={() => {
+            /**
+             * Replaces the player rather than stacking on it (WP9).
+             *
+             * `pop` then `navigate` so the reader lands on the wrap-up with the tab they
+             * came from underneath — going back from the summary must not drop them into
+             * a finished Leaf they have already left.
+             */
+            navigation.pop();
+            navigation.navigate('WrapUp');
+          }}
+          onShareAchievement={(achievement) => {
+            navigation.navigate('AchievementShare', achievement);
+          }}
         />
       </PlayerFrame>
     );
@@ -231,12 +245,16 @@ function CompletionSummary({
   capReached,
   unlocked,
   onDone,
+  onWrapUp,
+  onShareAchievement,
 }: {
   readonly xpAwarded: number;
   readonly firstTryCorrect: boolean;
   readonly capReached: boolean;
   readonly unlocked: readonly UnlockedAchievement[];
   readonly onDone: () => void;
+  readonly onWrapUp: () => void;
+  readonly onShareAchievement: (achievement: UnlockedAchievement) => void;
 }): React.JSX.Element {
   const theme = useTheme();
 
@@ -274,8 +292,32 @@ function CompletionSummary({
        * badge on top would make the reader hunt for the number they came for — and the
        * cap notice stays last because it is the sentence that ends the session.
        */}
-      <View style={{ alignSelf: 'stretch' }}>
+      <View style={{ alignSelf: 'stretch', gap: theme.spacing.sm }}>
         <AchievementUnlock achievements={unlocked} />
+
+        {/**
+         * An unlock becomes shareable only if the reader asks (WP9).
+         *
+         * Deliberately a quiet secondary control under the banner rather than an
+         * automatic push to the share screen: the badge was earned by reading, and
+         * hijacking the screen to ask for a social post would interrupt the very thing
+         * it is rewarding. Only the first is offered — three "share this" buttons after
+         * a five-Leaf session is nagging, and the rest stay on Profile.
+         */}
+        {unlocked.length > 0 && unlocked[0] !== undefined ? (
+          <Button
+            testID="leaf-share-achievement"
+            label={unlocked.length === 1 ? 'Share this badge' : `Share “${unlocked[0].name}”`}
+            variant="secondary"
+            onPress={() => {
+              const first = unlocked[0];
+
+              if (first !== undefined) {
+                onShareAchievement(first);
+              }
+            }}
+          />
+        ) : null}
       </View>
 
       {/**
@@ -305,10 +347,31 @@ function CompletionSummary({
             You have finished your session for today. Come back tomorrow — the next Leaf
             will be waiting, and spacing it out is what makes it stick.
           </Text>
+
+          {/**
+           * The cap leads into the wrap-up, not into a second ending (WP9 ruling).
+           *
+           * Two differently-styled endings to one day is worse than one good one, so
+           * the cap notice hands the reader to the same summary they would reach
+           * deliberately from Journey — with the badge for stopping already above it.
+           */}
+          <View style={{ paddingTop: theme.spacing.sm }}>
+            <Button label="See your day" onPress={onWrapUp} testID="leaf-cap-wrap-up" />
+          </View>
         </View>
       ) : null}
 
-      <View style={{ alignSelf: 'stretch', paddingTop: theme.spacing.xl }}>
+      <View style={{ alignSelf: 'stretch', paddingTop: theme.spacing.xl, gap: theme.spacing.md }}>
+        {/* Under the cap, wrapping up is an offer rather than the main action — most
+            readers are carrying on to the next Leaf, and Done is what they want. */}
+        {capReached ? null : (
+          <Button
+            label="Wrap up today"
+            variant="secondary"
+            onPress={onWrapUp}
+            testID="leaf-wrap-up"
+          />
+        )}
         <Button label="Done" onPress={onDone} testID="leaf-done" />
       </View>
     </View>

@@ -96,6 +96,26 @@ export class ContentService {
   }
 
   /**
+   * One Leaf's metadata — title, Track, order — and nothing else.
+   *
+   * Added in WP9 for the wrap-up screen, which needs to name what a reader finished
+   * today and has only Leaf ids to go on. Deliberately **not** `getLeaf`: that returns
+   * slide bodies and takes a reader because the payoff is per-reader, and a summary
+   * screen has no business fetching prose it will not render. This keeps the payoff out
+   * of a response that has no gate to enforce.
+   *
+   * Goes through `resolveVisibleLeaf`, so a Leaf whose Track has since been taken down
+   * is a 404 here too — a withdrawn book must not resurface in a shareable image.
+   *
+   * @throws {ContentNotFoundError} if the Leaf or its Track is absent or hidden here.
+   */
+  public async getLeafSummary(leafId: string): Promise<LeafSummary> {
+    const leaf = await resolveVisibleLeaf(this.repository, this.config.NODE_ENV, leafId);
+
+    return toLeafSummary(leaf);
+  }
+
+  /**
    * One full Leaf, as this reader is allowed to see it.
    *
    * Takes a reader id because the payoff is per-reader: the same Leaf is a different

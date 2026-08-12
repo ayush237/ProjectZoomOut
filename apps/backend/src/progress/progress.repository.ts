@@ -62,6 +62,15 @@ export interface ProgressRepository {
   sumXpAwarded(userId: string): Promise<number>;
   /** How many of these Leaves the reader completed having answered first try. */
   countFirstTryCompletions(userId: string, leafIds: readonly string[]): Promise<number>;
+  /**
+   * Everything the reader completed on one of **their** calendar days.
+   *
+   * Filtered on `completed_local_date`, the column WP4 added precisely so this question
+   * never has to be answered by reinterpreting a UTC instant against whatever timezone
+   * the reader happens to have now. A reader who finishes a Leaf at 11pm in Auckland and
+   * then flies to London must still see it under the day they earned it.
+   */
+  listCompletedOn(userId: string, localDate: string): Promise<readonly LeafProgressRow[]>;
 }
 
 export class PostgresProgressRepository implements ProgressRepository {
@@ -254,6 +263,29 @@ export class PostgresProgressRepository implements ProgressRepository {
       );
 
     return row?.count ?? 0;
+  }
+
+  /**
+   * Ordered by completion time so the wrap-up screen lists the day as it happened.
+   *
+   * Runs on `leaf_progress_user_completed_date_idx`, the index WP4 added for exactly
+   * this read.
+   */
+  public async listCompletedOn(
+    userId: string,
+    localDate: string,
+  ): Promise<readonly LeafProgressRow[]> {
+    return this.client.db
+      .select()
+      .from(leafProgress)
+      .where(
+        and(
+          eq(leafProgress.userId, userId),
+          eq(leafProgress.completedLocalDate, localDate),
+          isNotNull(leafProgress.completedAt),
+        ),
+      )
+      .orderBy(leafProgress.completedAt);
   }
 
   public async findReaderTimezone(userId: string): Promise<string | null> {

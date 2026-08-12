@@ -967,6 +967,80 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP9 — Session wrap-up and achievement screens — 2026-08-13
+
+**Status:** All 10 acceptance criteria verified by execution, including the thumbnail check — which **failed on first look and was fixed**, and that is the most useful thing in this report. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **898 tests** (64 shared, 161 admin, 444 backend, 229 mobile), lint, typecheck and build all exit 0.
+
+**Branch:** `wp9-wrapup-share`, from `main` at `ab00f9a`.
+
+#### Where the time went
+
+Roughly: a twentieth de-risking screen capture before writing anything; a quarter on the backend summary; a third on the two screens and the share layer; a fifth on tests including two mutation checks; the rest on the device session and the gate. **The device session found two defects and produced the package's only real design decision**, which is the second time running that manual verification has out-earned the test suite.
+
+#### The risk I retired first
+
+Capture needs `react-native-view-shot`, which has iOS native code — and WP0 recorded that this host has no CocoaPods and therefore cannot build a development client. If that module were not in Expo Go, the share criterion would have been unbuildable here and Architect needed to know on day one, not at the device check.
+
+It is in Expo Go: both it and `expo-sharing` are listed in `node_modules/expo/bundledNativeModules.json`, which is also why `expo install` pinned view-shot to an exact `5.1.0`. **Confirmed by execution later** — the share sheet opened with a 71 KB PNG attached, in Expo Go, with no dev build.
+
+#### The backend gap the handoff predicted, verified before building
+
+The handoff said `SessionStatus` carries nothing about *which* Leaves were completed and told me not to trust it. It is correct: `SessionStatus` is six scalars and `ReaderStanding` wraps it with a streak and lifetime XP. Nothing named a Leaf.
+
+`GET /progress/summary` now returns the reader's local day in one call — Leaves completed with their title and book, XP earned, the streak, achievements earned today, and the session state. Notes worth keeping:
+
+- **Its own service, not a method on `ProgressService`.** The summary composes progress, content and achievements, and `ProgressService` *cannot* depend on `ContentService` — content already depends on progress as its `PayoffAccessPolicy`, so that edge would close a cycle. `SessionSummaryService` sits above both, as `LibraryService` does.
+- **Content is read through `ContentService`, never the repository.** This names books in an image built to be posted in public, so the placeholder guard and the takedown cascade must apply. A Leaf whose Track has since been withdrawn is dropped from the summary and the rest of the day survives — tested.
+- **`xpEarned` comes from the day's row, not `sum(leaves)`.** They legitimately differ: a Leaf completed after the cap fires is worth zero but should still be listed.
+- **A new `ContentService.getLeafSummary`** — metadata only. Deliberately not `getLeaf`, which returns slide bodies and takes a reader because the payoff is per-reader; a summary has no business fetching prose it will not render.
+
+#### Two product rulings, implemented as ruled
+
+**Wrapping up is a ceremony, not a lock.** `POST /events` already accepted `session_wrap` from WP5b, so this only had to call it. It records the wrap, unlocks `first-wrap`, and returns the reader to Journey — and the next completion still awards full XP, which is asserted rather than assumed. Wrapping twice is fine and produces two events and one badge.
+
+**Opening the summary records nothing.** The summary is a `GET` and the wrap is a separate `POST`. Arriving from Journey to look at your day must not log an ending you did not declare, which a single combined call would have done every time.
+
+**The cap leads into the wrap-up.** The cap notice now carries a "See your day" button into the same screen instead of a second, differently-styled ending.
+
+#### The device session, and the two things it caught
+
+**1. The wrap-up screen had no visible way out.** With no completions yet, the only exit was the iOS edge-swipe — invisible, and absent on Android. "Back to Journey" now renders unconditionally rather than only after wrapping.
+
+**2. The thumbnail check failed, and this is the criterion the handoff called the deliverable.** I pulled the actual captured PNG off the simulator, scaled it to 130px — feed-thumbnail size — and looked at it. **The streak read; the book did not.** It was `body`-weight, `textMuted` grey, wrapped across two lines: three properties each working against legibility, and at that size it dissolved into texture.
+
+Fixed by making the book `h3`, full contrast, clipped to a single line. **A truncated title a stranger can read beats a complete one they cannot.** Re-captured and re-checked at the same size: both the streak and the book now survive, and my answer to "would you post it" is yes.
+
+That verdict is a judgement, not a measurement — the founder should look at `wrapup-v2-thumb.png` before WP10 if they want to overrule it.
+
+#### Tests, and a mutation that found a hole in my own test
+
+Tier A is the local-date query and that wrapping up does not lock anyone out.
+
+- **An Auckland reader gets their own day.** 10:00 and 12:00 UTC on 2026-02-10 are two different local dates there; the summary reports the second Leaf under the 11th and does not carry the first across.
+- **Wrapping up does not prevent the next completion** — the following Leaf still awards 100 XP and appears in the summary.
+- **A withdrawn Track drops out of the summary** without taking the day with it.
+
+**Mutation checks.** Removing the `completed_local_date` filter reddens exactly the Auckland test. The second mutation is the useful one: replacing the achievements' `at time zone` conversion with a naive `unlocked_at::date` **passed all nine tests**. My test had picked 10:00 UTC, where the server's date and Auckland's happen to agree, so it could not distinguish the two. Rewritten around 12:00 UTC — where they *must* disagree — it now kills that mutation and nothing else.
+
+**One Tier A guarantee cannot be mutation-checked**, and it is worth saying so plainly: "wrapping up does not lock the reader out" asserts the *absence* of a mechanism. There is no line to break, because there is no lock. That test guards a future regression rather than proving present behaviour.
+
+#### `delivery.ts` — additive, with the note the constraint asks for
+
+`SessionSummary` and `CompletedLeafSummary` added; nothing changed or removed. Both apps compile.
+
+#### Not verified, and deferred
+
+1. **The achievement share screen was not exercised end to end on a device.** It renders the same `ShareCard` through the same capture path as the wrap-up screen, both of which are verified — but its own route, from the completion screen's "Share this badge" button, was never walked, because the test account earned no new badge during the session and manufacturing one would have proved nothing. **This is the one criterion I am reporting as verified by construction rather than by execution.**
+2. **No component render tests** for `ShareCard`, `WrapUpScreen` or `AchievementShareScreen` — no theme permutations, no empty/populated matrices. Tier C.
+3. **The share layer has no unit tests.** `shareView`'s four outcomes — shared, cancelled, unavailable, failed — are branch logic over two mocked platform modules, and only the happy path and cancel were seen on device.
+4. **Android is entirely unverified.** `collapsable={false}` is on the captured view specifically because Android flattens container views out of the native hierarchy and there would be nothing to photograph; that reasoning is untested.
+5. **The captured image's theme independence is proven only in dark mode** — the card was forced light while the device was dark, which is the case that matters, but the reverse was not checked.
+
+#### For whoever picks up WP10
+
+- **Metro must be restarted after adding a native module**, and the app reloaded. A stale bundle silently serves the previous JS and looks exactly like a feature that does not work.
+- The captured file lands in the simulator's container under `.../tmp/ReactNative/*.png`. Pulling it out and scaling it down is the only honest way to run the thumbnail check — the on-screen preview is far too large to judge.
+
 ### Addendum: WP5b — the device check is done, and it found two defects — 2026-08-12
 
 **Supersedes the "Not done: the device check" section of the report below.** The environment blocker is resolved: `apps/backend/.env` now names `zoomout`, migrations 0000–0005 are applied there, and the backend, CMS and app all run together against real seeded content.

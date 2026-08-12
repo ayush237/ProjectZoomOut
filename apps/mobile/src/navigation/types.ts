@@ -56,4 +56,25 @@ export type AppStackParamList = {
     readonly trackId: string;
     readonly trackTitle: string;
   };
+  /**
+   * The end-of-day summary (WP9). No params: the screen fetches the day itself, and
+   * "today" is the server's answer from the reader's stored timezone. Passing a date
+   * here would put a second opinion about the reader's day into navigation state.
+   */
+  WrapUp: undefined;
+  /**
+   * One achievement, framed for sharing.
+   *
+   * Carries the badge's *presentation* rather than an id, because the caller already
+   * holds the whole thing — it arrived in the response of the action that earned it —
+   * and re-fetching it by id to render a screen the reader is already looking at would
+   * be a round trip for nothing. Still no prose or credentials, so it stays safe to
+   * persist as navigation state.
+   */
+  AchievementShare: {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly tier: 'common' | 'rare' | 'milestone';
+  };
 };
