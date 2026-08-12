@@ -18,7 +18,13 @@ Re-send the persona message after any `/clear`. `CLAUDE.md` reloads automaticall
 
 Why: both sessions share one working directory, so uncommitted Architect edits sitting in the tree get swept into Manager's next commit. That happened twice, and a reviewer flagged the second one as an apparent violation of the "Manager never edits the roadmap" rule — which cost real time to disprove. It also means the roadmap on `main` is current immediately, instead of only when a feature branch merges.
 
-Because the working directory is shared, do this **at a package boundary while Manager is idle**, and return the tree to its branch afterwards:
+**The enforceable rule is explicit staging on both sides** (revised 2026-08-12). "Do it while Manager is idle" was the original rule and it failed, because neither session can tell when the other is working. So instead:
+
+- **Neither session ever runs `git add .` or `git commit -a`.** Stage specific paths, then check `git diff --cached --name-only` before committing. Architect stages `project/` and `agents/` only and aborts if any `apps/` or `packages/` path appears; Manager stages only the code paths it touched.
+- **Manager never commits to `main`.** Architect commits planning docs there; Manager works on its package branch.
+- If either session sees changes it did not make, it leaves them alone.
+
+The sequence Architect uses:
 
 ```bash
 git stash push -- project/ agents/
