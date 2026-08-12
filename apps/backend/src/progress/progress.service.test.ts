@@ -5,6 +5,7 @@ import { NotFoundError } from '../auth/auth.errors.js';
 import { loadConfig, type AppConfig } from '../config/env.js';
 import { ContentNotFoundError } from '../content/content.errors.js';
 import type { ContentRepository } from '../content/content.repository.js';
+import type { DailySessionRow, StreakRow } from '../db/schema.js';
 import type { LeafProgressRow } from '../db/schema.js';
 import type { AppLogger } from '../logging/logger.js';
 import { LeafNotUnlockedError, UnknownScenarioOptionError } from './progress.errors.js';
@@ -63,6 +64,35 @@ interface Harness {
     listLeavesForTrack: ReturnType<typeof vi.fn>;
   };
   readonly trackStatus: { setStatus: ReturnType<typeof vi.fn> };
+  readonly sessions: {
+    session: DailySessionRow | null;
+    findSession: ReturnType<typeof vi.fn>;
+    accumulate: ReturnType<typeof vi.fn>;
+    findStreak: ReturnType<typeof vi.fn>;
+    recordActiveDay: ReturnType<typeof vi.fn>;
+  };
+}
+
+function emptySessionRow(capReached: boolean): DailySessionRow {
+  return {
+    userId: 'user-1',
+    localDate: '2026-08-12',
+    secondsActive: 0,
+    xpEarned: 0,
+    capReachedAt: capReached ? new Date('2026-08-12T10:00:00.000Z') : null,
+    createdAt: new Date('2026-08-12T09:00:00.000Z'),
+    updatedAt: new Date('2026-08-12T10:00:00.000Z'),
+  };
+}
+
+function stubStreakRow(): StreakRow {
+  return {
+    userId: 'user-1',
+    current: 1,
+    longest: 1,
+    lastActiveLocalDate: '2026-08-12',
+    updatedAt: new Date('2026-08-12T10:00:00.000Z'),
+  };
 }
 
 function harness(
@@ -72,6 +102,8 @@ function harness(
     nodeEnv?: string;
     track?: ReturnType<typeof buildTrack>;
     trackLeaves?: readonly ReturnType<typeof buildLeaf>[];
+    /** Start the day already over the cap, so a completion earns nothing. */
+    capReached?: boolean;
   } = {},
 ): Harness {
   const row = options.row ?? null;
@@ -99,6 +131,31 @@ function harness(
 
   const trackStatus = { setStatus: vi.fn().mockResolvedValue(true) };
 
+  /**
+   * The session store, stubbed.
+   *
+   * Deliberately not a working in-memory accumulator. The cap and the streak are
+   * upsert-shaped and their guarantees are written in SQL — `ON CONFLICT`, `greatest`,
+   * Postgres date arithmetic — so a JavaScript re-implementation here would prove the
+   * re-implementation and ship the statements unverified. That is exactly the split the
+   * handoff warns about, and those tests live in the integration suite against a real
+   * database. What this needs to do is let the existing unit tests run, and let a test
+   * that cares set the pre-existing session with `sessions.session`.
+   */
+  const sessions = {
+    session: null as DailySessionRow | null,
+    findSession: vi.fn(() => Promise.resolve(sessions.session)),
+    accumulate: vi.fn(() =>
+      Promise.resolve(sessions.session ?? emptySessionRow(options.capReached === true)),
+    ),
+    findStreak: vi.fn(() => Promise.resolve(null)),
+    recordActiveDay: vi.fn(() => Promise.resolve(stubStreakRow())),
+  };
+
+  if (options.capReached === true) {
+    sessions.session = emptySessionRow(true);
+  }
+
   return {
     service: new ProgressService(
       repository,
@@ -108,10 +165,12 @@ function harness(
       configFor(options.nodeEnv),
       stubLogger(),
       trackStatus,
+      sessions,
     ),
     repository,
     content,
     trackStatus,
+    sessions,
   };
 }
 

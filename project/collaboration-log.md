@@ -845,6 +845,65 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP5a — Session cap and streaks — 2026-08-12
+
+**Status:** 7 of 8 acceptance criteria verified by execution. **The device check is not done** — the reason is environmental and is below, not buried. Cold gate green with `dist` and `.next` deleted: lint, typecheck, test and build all exit 0.
+
+**Branch:** `wp5a-session-cap-streaks`, from `main` at `e60e8f4`.
+
+#### Where the time went
+
+Roughly: a fifth on schema, migration and config; a fifth on the two upserts; a fifth on service integration; **two fifths on tests**, split between writing them and two detours worth naming — a Postgres type-inference failure and a token expiry that masqueraded as a date bug. Both are recorded below because both will recur.
+
+#### The cap, and the one design decision inside it
+
+**15 minutes or 500 XP, whichever first, evaluated server-side.** Both thresholds are validated config, never literals.
+
+The decision worth review: **the cap does not interrupt.** A reader under the cap when they open a Leaf is paid in full for it even if finishing crosses the line; the *next* Leaf earns nothing. That is how "an in-progress Leaf finishes rather than being cut off" and "XP past the cap is not awarded" are both true at once. Refusing the completion instead would discard work already done, which is the cruel reading of a wellbeing feature. `calculateLeafXp` is not told about capping — it answers what was earned, the cap decides what is paid.
+
+**Session time is measured as elapsed time per Leaf, clamped.** That is the only signal available without a client heartbeat, and it is wrong in a known way: a reader who opens a Leaf and finishes it the next morning would otherwise spend the whole day's budget on one Leaf. `SESSION_MAX_LEAF_SECONDS` (300) bounds it, which under-counts a genuinely slow reader — erring toward letting them keep reading. **A real activity signal is not this package and should be scheduled.**
+
+#### Tier A, and the mutation checks
+
+Every local-date and upsert criterion is covered against real Postgres, because the guarantees are written in SQL — `ON CONFLICT`, `greatest`, date arithmetic — and a JavaScript re-implementation in a unit test would prove the re-implementation.
+
+- **Cap on XP**, with the time cap set out of reach so nothing else could have fired.
+- **Cap on time**, with the XP cap set out of reach, backdating `started_at` so the elapsed subtraction is the real one.
+- **A Leaf in progress finishes and is paid.**
+- **Local midnight, not UTC**: an Auckland reader at 10:00 and 12:00 UTC — one UTC date, two local dates, two `daily_session` rows, streak 2.
+- **A DST day is one day**: London across the 2026-03-29 spring-forward, streak 2. A streak built on subtracting 86,400 seconds breaks here.
+- **Both upsert branches, named**: the INSERT on the first completion of a day and the `ON CONFLICT` on the second, for `daily_session` and for `streak` separately.
+- A gap breaks the streak and `longest` survives it; two completions in one day do not double-count.
+
+**Three mutations, each killing exactly one test:** replacing the `daily_session` accumulate with an overwrite reddens only the ON CONFLICT test; making the streak's same-day branch increment reddens only the double-count test; removing the cap's XP zeroing reddens only the XP-cap test.
+
+#### Two detours worth recording
+
+**A `CASE … ELSE NULL` beside a bound parameter fails to plan.** Postgres cannot infer a type for an untyped `NULL` opposite a parameter, and the whole upsert failed — surfacing as a 500 on completion, with twelve integration tests reporting `expected undefined to be false` and nothing resembling a type error anywhere. Explicit `::timestamptz` and `::int` casts fix it. Anyone writing a conditional upsert in this codebase will meet this.
+
+**A 24-hour test span expires a 15-minute access token.** The local-midnight tests advance the clock across a day boundary, which also advances it past token expiry, so the second request 401s and the failure reads exactly like a date bug. The day-crossing tests use a tuned app with a week-long TTL — isolating the subject rather than working around it.
+
+#### Not done: the device check
+
+**The handoff asks me to hit the cap on a device and judge whether it reads as a good place to stop. I have not.** The backend is not running and will not start from `npm run dev` — `tsx watch src/index.ts` does not load `.env`, so `DATABASE_URL` and `AUTH_JWT_SECRET` are undefined. It ran earlier today, so the founder starts it some other way; I did not want to guess at their setup or invent a second one.
+
+What that leaves unverified is the only thing that matters about this feature: **whether "That is today done" reads as an ending or as a refusal.** The copy avoids "limit", any warning tone and any lock iconography, and sits on a card below the XP the reader just earned — but that is design intent, not evidence. It needs eyes.
+
+The streak surface on Profile is in the same position: built, typechecked, unit-covered, unseen.
+
+#### Contract change needing sign-off
+
+**`CompletionOutcome` gained a `session` field, and `delivery.ts` gained `SessionStatus` and `StreakStatus`.** The handoff flags `delivery.ts` as a cross-workspace contract to treat with the care of a frozen file. The change is additive and both apps compile, but it is a change to the file you named. The thresholds travel with the state deliberately: the limit screen has to say "500 XP", and a client that knew that number independently would go stale the first time the cap moved.
+
+New endpoint: `GET /progress/today`, returning both. No date parameter — a client that sent its own could reset its cap by changing the device clock.
+
+#### Deferred
+
+1. **The device check**, above.
+2. A real activity signal to replace elapsed-time-per-Leaf.
+3. Tier C: cap and streak render permutations, theme matrices.
+4. Carried from WP8 and WP11 and still open: reduced-motion verification, re-reading a finished Track, the three XXXL layout items.
+
 ### Completed: WP8 — The Leaf player: five slides, the unlock gate, sound — 2026-08-12
 
 **Status:** 10 of 11 acceptance criteria verified by execution; one verified by inspection rather than observation, and said so below. Cold gate green with `dist` and `.next` deleted: **816 tests** (64 shared, 161 admin, 366 backend, 225 mobile), lint, typecheck and build all clean with real exit codes.

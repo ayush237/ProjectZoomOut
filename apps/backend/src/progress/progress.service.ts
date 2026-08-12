@@ -3,6 +3,8 @@ import type {
   CompletionOutcome,
   Leaf,
   LeafProgress,
+  SessionStatus,
+  StreakStatus,
   TrackProgressSummary,
 } from '@zoomout/shared';
 
@@ -20,6 +22,8 @@ import { summariseTrackProgress, type CountableLeaf } from './trackProgress.js';
 import { toDomainProgress, untouchedProgress } from './progress.mapper.js';
 import { LeafNotUnlockedError } from './progress.errors.js';
 import type { ProgressRepository } from './progress.repository.js';
+import type { SessionRepository } from './session.repository.js';
+import type { DailySessionRow } from '../db/schema.js';
 import { calculateLeafXp, type XpRules } from './xp.js';
 
 /**
@@ -63,10 +67,49 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
      * remove one.
      */
     private readonly trackStatus: TrackStatusWriter,
+    /** WP5a. The daily cap and the streak. */
+    private readonly sessions: SessionRepository,
   ) {
     this.xpRules = {
       completion: config.XP_LEAF_COMPLETION,
       firstTryBonus: config.XP_FIRST_TRY_BONUS,
+    };
+  }
+
+  /**
+   * Today's session and the reader's streak, for Profile and the limit screen.
+   *
+   * "Today" is resolved here rather than accepted from the caller: a client that sent
+   * its own date would let a device with a wrong clock — or a deliberately altered one —
+   * reset the cap at will.
+   */
+  public async readDay(userId: string): Promise<{ session: SessionStatus; streak: StreakStatus }> {
+    const localDate = localDateIn(await this.requireReaderTimezone(userId));
+    const [session, streak] = await Promise.all([
+      this.sessions.findSession(userId, localDate),
+      this.sessions.findStreak(userId),
+    ]);
+
+    return {
+      session: this.toSessionStatus(localDate, session),
+      streak: {
+        current: streak?.current ?? 0,
+        longest: streak?.longest ?? 0,
+        lastActiveLocalDate: streak?.lastActiveLocalDate ?? null,
+      },
+    };
+  }
+
+  /** A row, or the zero state for a reader who has not started today. */
+  private toSessionStatus(localDate: string, row: DailySessionRow | null): SessionStatus {
+    return {
+      localDate,
+      secondsActive: row?.secondsActive ?? 0,
+      xpEarned: row?.xpEarned ?? 0,
+      // `row === null` is a reader who has not started today; both mean not capped.
+      capReached: row !== null && row.capReachedAt !== null,
+      capSeconds: this.config.SESSION_CAP_SECONDS,
+      capXp: this.config.SESSION_CAP_XP,
     };
   }
 
@@ -168,6 +211,11 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
       throw new LeafNotUnlockedError();
     }
 
+    const at = new Date();
+    // The reader's own calendar date, not the server's. Streaks and the daily cap group
+    // by this; deriving it from `at` in UTC is plan §3.5's named bug.
+    const localDate = localDateIn(await this.requireReaderTimezone(userId), at);
+
     if (existing.completedAt !== null) {
       /**
        * Re-evaluated on a replay, before returning.
@@ -181,20 +229,40 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
        */
       await this.finishTrackIfDone(userId, leaf.trackId);
 
-      return { progress: toDomainProgress(existing), xpAwarded: 0, alreadyCompleted: true };
+      return {
+        progress: toDomainProgress(existing),
+        xpAwarded: 0,
+        alreadyCompleted: true,
+        // A replay must not add to the clock, but it still reports where the day
+        // stands — the client shows the limit screen off this.
+        session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
+      };
     }
 
-    const xp = calculateLeafXp(this.xpRules, existing);
-    const at = new Date();
+    /**
+     * The cap as it stood **before** this Leaf.
+     *
+     * This is what makes "an in-progress Leaf finishes rather than being cut off" and
+     * "XP past the cap is not awarded" both true at once. A reader who was under the
+     * cap when they started is paid in full for the Leaf they are on, even if finishing
+     * it crosses the line; the next Leaf they complete is the one that earns nothing.
+     * Refusing the completion instead would be the cruel reading — it would discard
+     * work already done.
+     *
+     * `calculateLeafXp` is not told about any of this. It answers what the Leaf *earned*
+     * and the cap decides what is *paid*, which keeps the award rules readable on their
+     * own and is the separation the handoff asks for.
+     */
+    const before = await this.sessions.findSession(userId, localDate);
+    const capAlreadyReached = before !== null && before.capReachedAt !== null;
+    const xp = capAlreadyReached ? 0 : calculateLeafXp(this.xpRules, existing);
 
     const completed = await this.repository.completeIfUnfinished({
       userId,
       leafId,
       xpAwarded: xp,
       at,
-      // The reader's own calendar date, not the server's. WP5 groups streaks and the
-      // daily cap by this; deriving it from `at` in UTC is plan §3.5's named bug.
-      localDate: localDateIn(await this.requireReaderTimezone(userId), at),
+      localDate,
     });
 
     if (completed === null) {
@@ -208,17 +276,73 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
 
       this.logger.warn({ userId, leafId }, 'Concurrent completion; no XP awarded twice');
 
-      return { progress: toDomainProgress(current), xpAwarded: 0, alreadyCompleted: true };
+      return {
+        progress: toDomainProgress(current),
+        xpAwarded: 0,
+        alreadyCompleted: true,
+        session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
+      };
     }
 
+    /**
+     * The clock and the streak, after the award and only on the call that won.
+     *
+     * Ordered after `completeIfUnfinished` deliberately: that statement is the one that
+     * decides whether this request is the real completion, so accumulating before it
+     * would let a losing concurrent request add time and XP for a Leaf it did not
+     * complete.
+     */
+    const session = await this.sessions.accumulate({
+      userId,
+      localDate,
+      seconds: this.leafSeconds(existing.startedAt, at),
+      xp,
+      at,
+      capSeconds: this.config.SESSION_CAP_SECONDS,
+      capXp: this.config.SESSION_CAP_XP,
+    });
+
+    await this.sessions.recordActiveDay(userId, localDate, at);
+
     this.logger.info(
-      { userId, leafId, xpAwarded: xp, firstTryCorrect: completed.firstTryCorrect },
+      {
+        userId,
+        leafId,
+        xpAwarded: xp,
+        firstTryCorrect: completed.firstTryCorrect,
+        capReached: session.capReachedAt !== null,
+      },
       'Leaf completed and XP awarded',
     );
 
     await this.finishTrackIfDone(userId, leaf.trackId);
 
-    return { progress: toDomainProgress(completed), xpAwarded: xp, alreadyCompleted: false };
+    return {
+      progress: toDomainProgress(completed),
+      xpAwarded: xp,
+      alreadyCompleted: false,
+      session: this.toSessionStatus(localDate, session),
+    };
+  }
+
+  /**
+   * How much of the daily clock this Leaf spent.
+   *
+   * Elapsed time between opening the Leaf and completing it, clamped. That is the only
+   * measure available without a client heartbeat, and it is **wrong in a specific,
+   * known way**: a reader who opens a Leaf and returns to it tomorrow would otherwise
+   * spend their whole budget on one Leaf. The clamp bounds that to
+   * `SESSION_MAX_LEAF_SECONDS`, which under-counts a genuinely slow reader — erring
+   * toward letting them continue, which is the right direction for a wellbeing feature.
+   *
+   * A real activity signal belongs with whatever measures time on the client, and is
+   * not this package.
+   */
+  private leafSeconds(startedAt: Date, at: Date): number {
+    const elapsed = Math.floor((at.getTime() - startedAt.getTime()) / 1000);
+
+    // A negative value means clock skew between rows, not travel backwards in time.
+    return Math.max(0, Math.min(elapsed, this.config.SESSION_MAX_LEAF_SECONDS));
   }
 
   /**

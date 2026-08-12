@@ -31,6 +31,20 @@ export function registerProgressRoutes(
   service: ProgressService,
   authenticate: Authenticator,
 ): void {
+  /**
+   * Today's cap state and the reader's streak.
+   *
+   * One endpoint rather than two: Profile shows the streak, the limit screen shows the
+   * cap, and both are one round trip at app open. Neither takes a date parameter —
+   * "today" is the server's answer, computed from the reader's stored timezone, so a
+   * device with a skewed clock cannot reset its own cap.
+   */
+  app.get('/progress/today', { preHandler: authenticate }, async (request, reply) => {
+    const userId = requireUserId(request);
+
+    return reply.send(await service.readDay(userId));
+  });
+
   app.get('/progress/leaves/:leafId', { preHandler: authenticate }, async (request, reply) => {
     const userId = requireUserId(request);
     const { leafId } = leafIdParams.parse(request.params);

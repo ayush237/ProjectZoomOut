@@ -21,6 +21,7 @@ import { PostgresHealthRepository } from './health/health.repository.js';
 import { HealthService } from './health/health.service.js';
 import { createLogger } from './logging/logger.js';
 import { PostgresProgressRepository } from './progress/progress.repository.js';
+import { PostgresSessionRepository } from './progress/session.repository.js';
 import { ProgressService } from './progress/progress.service.js';
 import { ProfileService } from './users/profile.service.js';
 
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
     config,
     logger,
     libraryRepository,
+    new PostgresSessionRepository(database),
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
   const libraryService = new LibraryService(

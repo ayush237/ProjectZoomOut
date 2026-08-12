@@ -141,6 +141,35 @@ const environmentSchema = z.object({
   XP_FIRST_TRY_BONUS: z.coerce.number().int().min(0).default(20),
 
   /**
+   * The daily session cap: **whichever of these two comes first**.
+   *
+   * This is positive friction, not a limit to be tuned for engagement — PRODUCT.md
+   * treats stopping as a feature. Both thresholds are configuration rather than
+   * literals precisely because the right numbers are a product question that will be
+   * argued about with real readers, and re-arguing them should not require a deploy.
+   *
+   * 500 XP lands near five first-try Leaves against the 80 + 20 award above; fifteen
+   * minutes is the session length the whole product is designed around.
+   */
+  SESSION_CAP_SECONDS: z.coerce.number().int().min(1).default(900),
+  SESSION_CAP_XP: z.coerce.number().int().min(1).default(500),
+
+  /**
+   * The most any single Leaf may contribute to the daily clock.
+   *
+   * Session time is measured as the elapsed time between opening a Leaf and completing
+   * it, which is the only signal the server has without a client heartbeat. That
+   * measure is honest for a reader who works straight through and absurd for one who
+   * opens a Leaf, puts the phone down, and finishes it the next morning — without a
+   * clamp, a single Leaf would spend the whole day's budget.
+   *
+   * Five minutes is roughly twice a realistic Leaf. A reader genuinely slower than that
+   * is under-counted, which errs toward letting them keep reading — the right direction
+   * for a wellbeing feature to be wrong in.
+   */
+  SESSION_MAX_LEAF_SECONDS: z.coerce.number().int().min(1).default(300),
+
+  /**
    * How often expired refresh tokens are swept.
    *
    * Only expired rows are removed — revoked-but-unexpired ones are what make reuse

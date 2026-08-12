@@ -18,6 +18,7 @@ import { PostgresHealthRepository } from '../../src/health/health.repository.js'
 import { HealthService } from '../../src/health/health.service.js';
 import { createLogger } from '../../src/logging/logger.js';
 import { PostgresProgressRepository } from '../../src/progress/progress.repository.js';
+import { PostgresSessionRepository } from '../../src/progress/session.repository.js';
 import { ProgressService } from '../../src/progress/progress.service.js';
 import { ProfileService } from '../../src/users/profile.service.js';
 
@@ -77,6 +78,7 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     config,
     logger,
     libraryRepository,
+    new PostgresSessionRepository(database),
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
 

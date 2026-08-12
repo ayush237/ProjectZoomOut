@@ -1,6 +1,6 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import type { Leaf as CmsLeaf, Track as CmsTrack } from '@zoomout/shared/cms';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { runMigrations } from '../src/db/migrate.js';
 import { FakePayload } from './helpers/fakePayload.js';
@@ -1106,5 +1106,402 @@ describe('when a Track is taken down', () => {
 
     const response = await readLeaf(reader);
     expect(response.body).not.toContain('Track');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WP5a — the daily cap                                                        */
+/* -------------------------------------------------------------------------- */
+
+interface DayBody {
+  session: {
+    localDate: string;
+    secondsActive: number;
+    xpEarned: number;
+    capReached: boolean;
+    capSeconds: number;
+    capXp: number;
+  };
+  streak: { current: number; longest: number; lastActiveLocalDate: string | null };
+}
+
+const readDay = (reader: Reader) =>
+  app().inject({ method: 'GET', url: '/progress/today', headers: auth(reader.token) });
+
+/** A reader on a tuned app, so the cap can be reached without seeding seven Leaves. */
+async function tunedReader(
+  tuned: TestApp,
+  timezone = 'Europe/London',
+): Promise<Reader> {
+  const signup = await tuned.app.inject({
+    method: 'POST',
+    url: '/auth/signup',
+    payload: {
+      email: `cap-${String(Math.random()).slice(2)}@example.test`,
+      password: 'a-sufficiently-long-password',
+      displayName: 'Capped Reader',
+      dateOfBirth: '1994-03-17',
+      timezone,
+    },
+  });
+  const body = bodyOf<{ userId: string; accessToken: string }>(signup);
+  return { userId: body.userId, token: body.accessToken };
+}
+
+async function finishOn(tuned: TestApp, reader: Reader, leafId: number, optionId: string) {
+  await tuned.app.inject({
+    method: 'POST',
+    url: `/progress/leaves/${String(leafId)}/answer`,
+    headers: auth(reader.token),
+    payload: { optionId },
+  });
+
+  return tuned.app.inject({
+    method: 'POST',
+    url: `/progress/leaves/${String(leafId)}/complete`,
+    headers: auth(reader.token),
+  });
+}
+
+describe('the daily cap', () => {
+  it('fires on XP, with XP as the binding constraint', async () => {
+    /**
+     * The two thresholds are tested separately and each as the *only* one that could
+     * have fired: here the time cap is set far out of reach, so a pass cannot be the
+     * clock's doing. Testing them together would let one cover for the other.
+     */
+    const tuned = await buildTestApp({
+      databaseUrl: container.getConnectionUri(),
+      env: {
+        CONTENT_API_URL: payload.apiUrl,
+        CONTENT_CACHE_TTL_SECONDS: '0',
+        AUTH_RATE_LIMIT_MAX: '1000',
+        SESSION_CAP_XP: '100',
+        SESSION_CAP_SECONDS: '86400',
+      },
+    });
+
+    try {
+      const reader = await tunedReader(tuned);
+
+      // One first-try Leaf is 80 + 20 = exactly the cap.
+      const first = bodyOf<CompletionBody & { session: DayBody['session'] }>(
+        await finishOn(tuned, reader, 10, CORRECT_OPTION),
+      );
+      expect(first.xpAwarded).toBe(100);
+      expect(first.session.capReached).toBe(true);
+      expect(first.session.xpEarned).toBe(100);
+
+      // The next Leaf still completes — it simply earns nothing.
+      const second = bodyOf<CompletionBody & { session: DayBody['session'] }>(
+        await finishOn(tuned, reader, 11, OTHER_LEAF_OPTION),
+      );
+      expect(second.xpAwarded).toBe(0);
+      expect(second.alreadyCompleted).toBe(false);
+      expect(second.progress.completedAt).not.toBeNull();
+    } finally {
+      await tuned.close();
+    }
+  });
+
+  it('fires on elapsed time, with time as the binding constraint', async () => {
+    // XP set out of reach, so only the clock can trip this.
+    const tuned = await buildTestApp({
+      databaseUrl: container.getConnectionUri(),
+      env: {
+        CONTENT_API_URL: payload.apiUrl,
+        CONTENT_CACHE_TTL_SECONDS: '0',
+        AUTH_RATE_LIMIT_MAX: '1000',
+        SESSION_CAP_XP: '1000000',
+        SESSION_CAP_SECONDS: '60',
+        SESSION_MAX_LEAF_SECONDS: '300',
+      },
+    });
+
+    try {
+      const reader = await tunedReader(tuned);
+
+      await tuned.app.inject({
+        method: 'POST',
+        url: '/progress/leaves/10/answer',
+        headers: auth(reader.token),
+        payload: { optionId: CORRECT_OPTION },
+      });
+
+      // Backdate the open Leaf so the elapsed time is real rather than simulated: the
+      // service measures `completed_at - started_at`, and this is that subtraction.
+      await tuned.database.pool.query(
+        `update leaf_progress set started_at = now() - interval '120 seconds' where user_id = $1`,
+        [reader.userId],
+      );
+
+      const completed = bodyOf<CompletionBody & { session: DayBody['session'] }>(
+        await tuned.app.inject({
+          method: 'POST',
+          url: '/progress/leaves/10/complete',
+          headers: auth(reader.token),
+        }),
+      );
+
+      expect(completed.session.capReached).toBe(true);
+      expect(completed.session.secondsActive).toBeGreaterThanOrEqual(60);
+      // Still paid for the Leaf that crossed the line — see below.
+      expect(completed.xpAwarded).toBe(100);
+    } finally {
+      await tuned.close();
+    }
+  });
+
+  it('lets a Leaf already in progress finish, and pays for it', async () => {
+    /**
+     * The wellbeing rule: the cap does not interrupt. A reader who was under the cap
+     * when they opened a Leaf is paid in full for it even though finishing crossed the
+     * line — discarding work already done would be the cruel reading. The *next* Leaf
+     * is the one that earns nothing, which the XP test above asserts.
+     */
+    const tuned = await buildTestApp({
+      databaseUrl: container.getConnectionUri(),
+      env: {
+        CONTENT_API_URL: payload.apiUrl,
+        CONTENT_CACHE_TTL_SECONDS: '0',
+        AUTH_RATE_LIMIT_MAX: '1000',
+        SESSION_CAP_XP: '10',
+      },
+    });
+
+    try {
+      const reader = await tunedReader(tuned);
+      const completed = bodyOf<CompletionBody & { session: DayBody['session'] }>(
+        await finishOn(tuned, reader, 10, CORRECT_OPTION),
+      );
+
+      expect(completed.progress.completedAt).not.toBeNull();
+      expect(completed.xpAwarded).toBe(100);
+      expect(completed.session.capReached).toBe(true);
+    } finally {
+      await tuned.close();
+    }
+  });
+
+  it('reports the thresholds so the client never hardcodes them', async () => {
+    const reader = await createReader();
+    const day = bodyOf<DayBody>(await readDay(reader));
+
+    expect(day.session.capXp).toBe(500);
+    expect(day.session.capSeconds).toBe(900);
+    expect(day.session.capReached).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WP5a — daily_session and streak are upsert-shaped                           */
+/* -------------------------------------------------------------------------- */
+
+describe('daily_session accumulates rather than overwriting', () => {
+  it('takes the INSERT branch on the first completion of a day', async () => {
+    // Named deliberately: this is the branch that passes even when `ON CONFLICT` is
+    // broken, which is exactly how the WP4 first-try bug survived its test.
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const rows = await harness.database.pool.query<{ xp_earned: number; n: string }>(
+      `select xp_earned, count(*) over () as n from daily_session where user_id = $1`,
+      [reader.userId],
+    );
+
+    expect(rows.rowCount).toBe(1);
+    expect(rows.rows[0]?.xp_earned).toBe(100);
+  });
+
+  it('takes the ON CONFLICT branch on the second completion of the same day', async () => {
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const rows = await harness.database.pool.query<{ xp_earned: number }>(
+      `select xp_earned from daily_session where user_id = $1`,
+      [reader.userId],
+    );
+
+    // One row, and the totals added. A broken conflict clause either raises a duplicate
+    // key error or leaves this at 100.
+    expect(rows.rowCount).toBe(1);
+    expect(rows.rows[0]?.xp_earned).toBe(200);
+  });
+});
+
+describe('the streak', () => {
+  it('takes the INSERT branch on a reader’s very first completion', async () => {
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    const day = bodyOf<DayBody>(await readDay(reader));
+    expect(day.streak.current).toBe(1);
+    expect(day.streak.longest).toBe(1);
+  });
+
+  it('takes the ON CONFLICT branch on a second completion the same day, without double counting', async () => {
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const day = bodyOf<DayBody>(await readDay(reader));
+
+    // Two completions, one day. The conflict branch must recognise "same day" and leave
+    // the count alone — incrementing here would inflate every active reader's streak.
+    expect(day.streak.current).toBe(1);
+  });
+
+  it('continues when yesterday was active', async () => {
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    // Move the stored day back one, which is what "yesterday" means to the SQL.
+    await harness.database.pool.query(
+      `update streak set last_active_local_date = last_active_local_date - 1 where user_id = $1`,
+      [reader.userId],
+    );
+
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const day = bodyOf<DayBody>(await readDay(reader));
+    expect(day.streak.current).toBe(2);
+    expect(day.streak.longest).toBe(2);
+  });
+
+  it('breaks after a day with no completion, and keeps the longest', async () => {
+    const reader = await createReader();
+    await finishLeaf(reader, 10, CORRECT_OPTION);
+
+    await harness.database.pool.query(
+      `update streak set current = 9, longest = 9,
+         last_active_local_date = last_active_local_date - 3 where user_id = $1`,
+      [reader.userId],
+    );
+
+    await finishLeaf(reader, 11, OTHER_LEAF_OPTION);
+
+    const day = bodyOf<DayBody>(await readDay(reader));
+    expect(day.streak.current).toBe(1);
+    // A restart must not erase the record.
+    expect(day.streak.longest).toBe(9);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* WP5a — the day boundary is the reader's, not UTC's                          */
+/* -------------------------------------------------------------------------- */
+
+describe('local midnight, not UTC midnight', () => {
+  /**
+   * Only `Date` is faked. Faking timers wholesale would stall the connection pool and
+   * the HTTP injection, and none of what is under test depends on a timer — it depends
+   * on what `new Date()` says when the service asks.
+   */
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * A tuned app with a long-lived access token.
+   *
+   * Advancing the clock across a day boundary also advances it past the fifteen-minute
+   * token expiry, so the second request comes back 401 and the test fails for a reason
+   * that has nothing to do with dates. Widening the TTL isolates what is under test
+   * rather than working around it — the token lifetime is not the subject here.
+   */
+  async function dayCrossingApp(): Promise<TestApp> {
+    return buildTestApp({
+      databaseUrl: container.getConnectionUri(),
+      env: {
+        CONTENT_API_URL: payload.apiUrl,
+        CONTENT_CACHE_TTL_SECONDS: '0',
+        AUTH_RATE_LIMIT_MAX: '1000',
+        // A week. The DST test spans exactly 24 hours, so a one-day TTL expires on the
+        // boundary itself and the failure looks like a date bug.
+        AUTH_ACCESS_TOKEN_TTL_SECONDS: '604800',
+      },
+    });
+  }
+
+  it('starts a new day at the reader’s midnight while UTC is still yesterday', async () => {
+    /**
+     * Auckland is UTC+13 in February. At 10:00 UTC it is 23:00 the same day there; at
+     * 12:00 UTC it is 01:00 the *next* day. Both instants share a UTC date, so a server
+     * grouping by UTC would file them under one day — the reader would lose a day of
+     * streak and gain a second day's worth of cap.
+     */
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-02-10T10:00:00.000Z'));
+
+    const tuned = await dayCrossingApp();
+
+    try {
+      const reader = await tunedReader(tuned, 'Pacific/Auckland');
+      await finishOn(tuned, reader, 10, CORRECT_OPTION);
+
+      vi.setSystemTime(new Date('2026-02-10T12:00:00.000Z'));
+      await finishOn(tuned, reader, 11, OTHER_LEAF_OPTION);
+
+      const rows = await tuned.database.pool.query<{ local_date: string }>(
+        `select to_char(local_date, 'YYYY-MM-DD') as local_date
+           from daily_session where user_id = $1 order by local_date`,
+        [reader.userId],
+      );
+
+      // Two rows, two consecutive local dates, from one UTC date.
+      expect(rows.rows.map((r) => r.local_date)).toEqual(['2026-02-10', '2026-02-11']);
+
+      const day = bodyOf<DayBody>(
+        await tuned.app.inject({
+          method: 'GET',
+          url: '/progress/today',
+          headers: auth(reader.token),
+        }),
+      );
+
+      expect(day.streak.current).toBe(2);
+      // A fresh day means a fresh cap: yesterday's XP is not carried across.
+      expect(day.session.xpEarned).toBe(100);
+    } finally {
+      vi.useRealTimers();
+      await tuned.close();
+    }
+  });
+
+  it('treats a DST day as one day, not twenty-five hours', async () => {
+    /**
+     * London springs forward at 01:00 UTC on 2026-03-29, so that local day is 23 hours
+     * long. A streak computed by subtracting 86,400 seconds from a timestamp gets the
+     * previous day wrong across this boundary and breaks the streak of every reader in
+     * the zone. Postgres `date - 1` is calendar arithmetic and does not.
+     */
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-28T12:00:00.000Z'));
+
+    const tuned = await dayCrossingApp();
+
+    try {
+      const reader = await tunedReader(tuned, 'Europe/London');
+      await finishOn(tuned, reader, 10, CORRECT_OPTION);
+
+      // The next local day, on the far side of the shift.
+      vi.setSystemTime(new Date('2026-03-29T12:00:00.000Z'));
+      await finishOn(tuned, reader, 11, OTHER_LEAF_OPTION);
+
+      const day = bodyOf<DayBody>(
+        await tuned.app.inject({
+          method: 'GET',
+          url: '/progress/today',
+          headers: auth(reader.token),
+        }),
+      );
+
+      expect(day.streak.current).toBe(2);
+      expect(day.session.localDate).toBe('2026-03-29');
+    } finally {
+      vi.useRealTimers();
+      await tuned.close();
+    }
   });
 });
