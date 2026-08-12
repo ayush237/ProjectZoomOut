@@ -952,7 +952,11 @@ Reduce Motion was enabled at the OS level and the payoff unlock was earned again
 #### Environment facts the next session will need
 
 - The founder's local Postgres runs in container `zoomout-postgres`; `zoomout` is the backend's database and `zoomout_cms` is Payload's. They are **not** interchangeable and the backend pointing at the wrong one is what cost WP5a and most of WP5b's verification time.
-- **`zoomout_cms` still holds seven empty backend tables and the `drizzle` schema** from the mistaken migrate runs, plus three orphan enum types. Dropping them needs founder approval; the CMS boots with them present but **migration `0005` cannot run against that database** while `reader_event_type` survives, because its first statement creates that type.
+- **`zoomout_cms` is now clean** (2026-08-12, with founder approval): the seven backend tables, the `drizzle` schema and the backend's enum types are gone. Payload's 20 tables, 28 Tracks and 22 Leaves are untouched, and its own six enums remain.
+
+  **Proven by a cold restart, not by assumption.** `apps/admin` was stopped and started again: `/admin` 200, `/api/tracks` 200 with 27 published Tracks, anonymous `/api/admins` still 403, and **zero schema-pull errors in the boot log**. That settles the open question from the first pass — Payload's `there is no parameter $1` failure was caused by the backend's tables and ledger living in its database, not by an upstream drizzle-kit bug.
+
+  Two things worth knowing for next time. The drop must use `drop ... if exists`: a single missing object aborts the whole transaction under `ON_ERROR_STOP`, which is what happened on the first attempt — it rolled back cleanly and changed nothing, but it reads like a failure. And `next dev` refuses to start while it believes a previous dev server is alive; the old process survived `SIGTERM` and needed `SIGKILL` before the restart would proceed.
 - Metro must be running for the app to pick up mobile changes. A stale bundle served a version of Explore without the unlock banner and looked exactly like a missing feature.
 
 ### Completed: WP5b Parts B and C — achievements and total XP — 2026-08-12
