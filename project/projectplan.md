@@ -2,7 +2,9 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-> **Active: WP15 — Leaf v2 (assets and apply-in-life).** Handed off 2026-08-13; handoff in `collaboration-log.md`. It unblocks the Phase 2 content pipeline, which cannot start until the app can store and render what it generates.
+> **WP15 signed off 2026-08-13, 10/10.** The app can now store and render what the pipeline will generate.
+>
+> **Next: WP16 — pipeline skeleton**, in a dedicated Pipeline Manager session. Handoff written once WP15 merges.
 >
 > Pipeline architecture: `proposals/content-pipeline.md`. Its dedicated session persona: `agents/pipeline-manager.md`.
 

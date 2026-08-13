@@ -118,6 +118,10 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 **Some assertions cannot be mutation-checked, and should say so.** "Wrapping up does not lock the reader out" asserts the *absence* of a mechanism — there is no line to break. Such a test guards a future regression rather than proving present behaviour. Note which of your tests are in this category; it is real information for WP14.
 
+**Any change to the content model requires the maximal-fixture contract test to pass.** One test in `apps/backend`, run against **real Payload rather than the stand-in**: author a Leaf through Payload's REST API with *every* optional field populated, fetch it through the backend, assert every field survives. WP15 shipped a mapper that dropped all three new fields with 932 tests green, because dropped optional fields are indistinguishable from absent ones.
+
+This is the deliberate exception to WP3's ruling that integration tests use a Payload stand-in. The stand-in is right for behaviour we control; it is exactly wrong for a contract test whose purpose is detecting drift between two real systems, because the fake inherits the same blind spot as the code under test.
+
 **Two rules survive the change:**
 - Any test written to close a review finding must be **mutation-checked** — break the behaviour and confirm that test, and only that test, goes red.
 - **Report what you did not test.** A deferred Tier C area belongs in the completion report so WP14 has a worklist rather than an archaeology project.

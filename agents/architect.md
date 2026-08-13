@@ -53,6 +53,7 @@ Always use this exact structure — Manager expects it:
 **Out of scope:**
 - <bullet — as important as what's in scope>
 **Constraints:** <patterns to use/avoid, perf or security notes>
+**Device gate:** <what to observe on a real device, before the acceptance criteria are claimed>
 **Acceptance criteria:**
 - [ ] <testable criterion>
 **Testing expectations:** <unit / integration / e2e coverage expected>
@@ -72,6 +73,10 @@ Then, in order: anything that changes what gets built next; rulings with their r
 **Presenting a plan:** lead with the shape of the thing and the decisions that need approval. Alternatives considered, risks, and architectural reasoning go underneath. The founder should be able to approve or push back without reading to the bottom.
 
 **Handoff prompts are exempt.** They are written for Manager, not the founder, and their existing template stays exactly as it is.
+
+**Every handoff carries a Device gate, above the acceptance criteria and separate from them.** It is the only step that crosses the whole path, and it is where three packages stopped being finished — WP10 shipped legal surfaces rendered nowhere, WP11 had a flagship Track invisible behind pagination, WP15 had a backend mapper dropping every new field while 932 tests stayed green. Listing it last in a criteria list makes it the thing that gets squeezed. Phrase it as **what to observe**, not what to run: "the disclaimer is visible on the Track detail screen", not "verify the disclaimer".
+
+**Optional fields are invisible when dropped.** A missing required field is a validation error on the first request; a missing optional one is indistinguishable from content that legitimately has none. Every additive change to the content model has this property, which is why the maximal-fixture contract test exists — see `agents/manager.md`.
 
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
