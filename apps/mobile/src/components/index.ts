@@ -16,6 +16,7 @@ export { TrackCard, type TrackCardProps } from './TrackCard';
 export { TrackLegal } from './TrackLegal';
 export { Icon, type IconName, type IconProps } from './Icon';
 export { Screen, type ScreenProps } from './Screen';
+export { SlideImage } from './SlideImage';
 export { StatusMessage, type StatusMessageProps, type StatusTone } from './StatusMessage';
 export { Text, type TextProps } from './Text';
 export { TextField, type TextFieldProps } from './TextField';

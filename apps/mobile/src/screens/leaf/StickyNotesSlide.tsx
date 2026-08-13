@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import type { StickyNotesSlide as StickyNotesSlideData } from '@zoomout/shared';
 
-import { Icon, Text } from '../../components';
+import { Icon, SlideImage, Text } from '../../components';
 import { useTheme } from '../../design';
 
 /**
@@ -31,6 +31,18 @@ export function StickyNotesSlide({
           {data.notes.length === 1 ? '1 note' : `${String(data.notes.length)} notes`}
         </Text>
       </View>
+
+      {/**
+       * The diagram, above the notes (WP15).
+       *
+       * Above rather than below, and never instead: `notes` stays required in the
+       * schema, so a diagram that fails to load still leaves a slide that says
+       * something. Absent on every pre-Leaf-v2 Leaf, which is why nothing is reserved
+       * when it is missing.
+       */}
+      {data.diagram === undefined ? null : (
+        <SlideImage asset={data.diagram} testID="stickynotes-diagram" />
+      )}
 
       <View style={{ gap: theme.spacing.md }} accessibilityRole="list">
         {data.notes.map((note, index) => (

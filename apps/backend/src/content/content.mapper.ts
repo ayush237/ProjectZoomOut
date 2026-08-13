@@ -3,6 +3,9 @@ import {
   leafSchema,
   SOURCE_LOCATOR_REQUIRED_MESSAGE,
   trackSchema,
+  type DiagramAsset,
+  type DiagramSpecFormat,
+  type ImageAsset,
   type Leaf,
   type Track,
 } from '@zoomout/shared';
@@ -118,12 +121,14 @@ export function mapLeaf(document: CmsLeaf): MappingResult<Leaf> {
         text: option.text ?? undefined,
         isCorrect: option.isCorrect ?? false,
       })),
+      ...optionalImage(document.scenario?.image),
       ...optionalAudio(document.scenario?.audio),
     },
     payoff: mapBodySlide(document.payoff),
     stickyNotes: {
       // Payload array rows are objects; the domain model is a plain string list.
       notes: (document.stickyNotes?.notes ?? []).map((row) => row.note ?? ''),
+      ...optionalDiagram(document.stickyNotes?.diagram),
       ...optionalAudio(document.stickyNotes?.audio),
     },
     takeaway: {
@@ -131,6 +136,9 @@ export function mapLeaf(document: CmsLeaf): MappingResult<Leaf> {
       ...(isAbsent(document.takeaway?.dinnerTableKnowledge)
         ? {}
         : { dinnerTableKnowledge: document.takeaway.dinnerTableKnowledge }),
+      ...(isAbsent(document.takeaway?.applyInLife)
+        ? {}
+        : { applyInLife: document.takeaway.applyInLife }),
       ...optionalAudio(document.takeaway?.audio),
     },
 
@@ -211,6 +219,82 @@ function optionalAudio(audio: CmsAudio): { audio?: { url: string; durationSecond
       url: audio.url,
       ...(isAbsent(audio.durationSeconds) ? {} : { durationSeconds: audio.durationSeconds }),
     },
+  };
+}
+
+type CmsImage =
+  | { url?: string | null; alt?: string | null; width?: number | null; height?: number | null }
+  | undefined;
+
+type CmsDiagram = (CmsImage & { spec?: string | null; specFormat?: string | null }) | undefined;
+
+/**
+ * Emits an `image` key only when there is a usable URL — the same rule as `optionalAudio`,
+ * and for the same reason: Payload writes an empty group rather than omitting it, so
+ * without this every Leaf would carry `image: { url: undefined, alt: undefined }`.
+ *
+ * **A URL without alt text is passed through, not repaired.** The obvious-looking
+ * alternative — dropping the image when alt is missing — would make this gate agree with
+ * the CMS by staying quiet, which is exactly what the two-gate design forbids: the CMS
+ * refuses to publish an asset without alt, so a published one that lacks it means the
+ * gates disagree and the Leaf must not ship. `''` fails `alt`'s `min(1)` and the failure
+ * is reported against `scenario.image.alt`, naming the field an editor has to fix.
+ */
+function optionalImage(image: CmsImage): { image?: ImageAsset } {
+  const asset = mapImageParts(image);
+
+  return asset === null ? {} : { image: asset };
+}
+
+/**
+ * The diagram is an image plus the spec it was rendered from (content-pipeline R4).
+ *
+ * `specFormat` is passed through unvalidated: `diagramAssetSchema` owns which formats
+ * exist, and narrowing the string here would put that list in two places and let them
+ * drift. An unknown format is rejected by the schema with the field named.
+ */
+function optionalDiagram(diagram: CmsDiagram): { diagram?: DiagramAsset } {
+  const asset = mapImageParts(diagram);
+
+  if (asset === null) {
+    return {};
+  }
+
+  return {
+    diagram: {
+      ...asset,
+      ...(isAbsent(diagram?.spec) || diagram.spec.length === 0 ? {} : { spec: diagram.spec }),
+      ...(isAbsent(diagram?.specFormat)
+        ? {}
+        : // Cast, with the schema as the check: `specFormat` is a Payload `select` typed
+          // as a bare string, and `diagramAssetSchema` rejects anything not in
+          // `DIAGRAM_SPEC_FORMATS`. Narrowing it here instead would duplicate that list.
+          { specFormat: diagram.specFormat as DiagramSpecFormat }),
+    },
+  };
+}
+
+/**
+ * The fields every image asset shares. `null` means "no image here at all".
+ *
+ * **Trimmed before the schema sees it**, because `min(1)` counts `"  "` as content. The
+ * CMS strips whitespace in a `beforeChange` hook, so a document authored through the
+ * admin UI arrives clean — but this mapper also reads rows the Phase 2 pipeline writes
+ * directly, which never pass through that hook. Untrimmed, a space-only alt would
+ * satisfy both gates and reach a screen reader as silence.
+ */
+function mapImageParts(image: CmsImage): ImageAsset | null {
+  const url = image?.url?.trim() ?? '';
+
+  if (url.length === 0) {
+    return null;
+  }
+
+  return {
+    url,
+    alt: image?.alt?.trim() ?? '',
+    ...(isAbsent(image?.width) ? {} : { width: image.width }),
+    ...(isAbsent(image?.height) ? {} : { height: image.height }),
   };
 }
 

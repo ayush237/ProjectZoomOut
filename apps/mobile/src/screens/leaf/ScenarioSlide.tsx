@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { PublicScenarioSlide } from '@zoomout/shared';
 
-import { Button, Icon, Text } from '../../components';
+import { Button, Icon, SlideImage, Text } from '../../components';
 import { MIN_TOUCH_TARGET, duration, spring, useReducedMotion, useTheme } from '../../design';
 
 const OPTION_LABELS = ['A', 'B', 'C'] as const;
@@ -102,6 +102,18 @@ export function ScenarioSlide({
         <Text variant="caption" tone="textMuted">
           Your turn
         </Text>
+
+        {/**
+         * The illustration, above the prompt (WP15).
+         *
+         * Absent on every Leaf authored before Leaf v2, and the slide must look exactly
+         * as it did for those — so this renders nothing at all when there is no image,
+         * rather than reserving an empty box.
+         */}
+        {data.image === undefined ? null : (
+          <SlideImage asset={data.image} testID="scenario-image" />
+        )}
+
         <Text variant="h3">{data.prompt}</Text>
       </View>
 

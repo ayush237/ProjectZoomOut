@@ -8,6 +8,7 @@ import sharp from 'sharp';
 
 import { Admins } from './collections/Admins';
 import { Leaves } from './collections/Leaves';
+import { Media } from './collections/Media';
 import { Tracks } from './collections/Tracks';
 import { loadConfig } from './config/env';
 
@@ -54,7 +55,7 @@ export default buildConfig({
     },
   },
 
-  collections: [Admins, Tracks, Leaves],
+  collections: [Admins, Tracks, Leaves, Media],
 
   editor: lexicalEditor(),
 

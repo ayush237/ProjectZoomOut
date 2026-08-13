@@ -48,6 +48,25 @@ export interface StickyNoteInput {
   readonly note?: string | null;
 }
 
+/**
+ * An image asset as Payload delivers it (WP15).
+ *
+ * Every field optional and nullable, like everything else here: a group whose fields
+ * are all empty arrives as an object of nulls rather than as `undefined`, which is
+ * exactly the case the "asset without alt" rule has to tell apart from "no asset".
+ */
+export interface ImageAssetInput {
+  readonly url?: string | null;
+  readonly alt?: string | null;
+  readonly width?: number | null;
+  readonly height?: number | null;
+}
+
+export interface DiagramAssetInput extends ImageAssetInput {
+  readonly spec?: string | null;
+  readonly specFormat?: string | null;
+}
+
 export interface SourceReferenceInput {
   readonly slideKey?: string | null;
   readonly chapter?: string | null;
@@ -63,14 +82,21 @@ export interface LeafDocumentInput {
     | {
         readonly prompt?: string | null;
         readonly options?: readonly ScenarioOptionInput[] | null;
+        readonly image?: ImageAssetInput | null;
       }
     | null;
   readonly payoff?: { readonly body?: string | null } | null;
-  readonly stickyNotes?: { readonly notes?: readonly StickyNoteInput[] | null } | null;
+  readonly stickyNotes?:
+    | {
+        readonly notes?: readonly StickyNoteInput[] | null;
+        readonly diagram?: DiagramAssetInput | null;
+      }
+    | null;
   readonly takeaway?:
     | {
         readonly body?: string | null;
         readonly dinnerTableKnowledge?: string | null;
+        readonly applyInLife?: string | null;
       }
     | null;
   readonly sourceReferences?: readonly SourceReferenceInput[] | null;

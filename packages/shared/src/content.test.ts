@@ -404,3 +404,130 @@ describe('isProductionPublishable', () => {
     expect(isProductionPublishable(leaf)).toBe(false);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Leaf v2 — WP15                                                              */
+/* -------------------------------------------------------------------------- */
+
+describe('Leaf v2 assets', () => {
+  /**
+   * **The Tier A guarantee of WP15, stated as a test.**
+   *
+   * The schema was thawed to add three fields, and the whole justification for doing
+   * it that way is that the change is additive: content authored before Leaf v2 has
+   * none of them and must stay valid with no backfill. `buildLeafInput` is the
+   * pre-v2 fixture — every other test in this file has been parsing it since WP0.
+   */
+  it('accepts a Leaf with none of the new fields', () => {
+    const parsed = leafSchema.parse(buildLeafInput());
+
+    expect(parsed.scenario.image).toBeUndefined();
+    expect(parsed.stickyNotes.diagram).toBeUndefined();
+    expect(parsed.takeaway.applyInLife).toBeUndefined();
+  });
+
+  it('accepts a Leaf carrying all three', () => {
+    const input = buildLeafInput();
+
+    const parsed = leafSchema.parse({
+      ...input,
+      scenario: {
+        ...input.scenario,
+        image: { url: 'https://cdn.test/scenario.png', alt: 'A person choosing a path' },
+      },
+      stickyNotes: {
+        ...input.stickyNotes,
+        diagram: {
+          url: 'https://cdn.test/diagram.png',
+          alt: 'Two overlapping circles',
+          spec: 'graph TD; A-->B;',
+          specFormat: 'mermaid',
+        },
+      },
+      takeaway: { ...input.takeaway, applyInLife: 'Try it once before Friday.' },
+    });
+
+    expect(parsed.scenario.image?.alt).toBe('A person choosing a path');
+    expect(parsed.stickyNotes.diagram?.specFormat).toBe('mermaid');
+    expect(parsed.takeaway.applyInLife).toBe('Try it once before Friday.');
+  });
+
+  it('rejects an image with no alt text', () => {
+    // The accessibility guarantee, made unrepresentable rather than merely reviewed.
+    const input = buildLeafInput();
+
+    const result = leafSchema.safeParse({
+      ...input,
+      scenario: { ...input.scenario, image: { url: 'https://cdn.test/scenario.png' } },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an image with blank alt text', () => {
+    // Whitespace is trimmed on save in the CMS, so `" "` arrives as `""` — it must
+    // read as absent rather than satisfying the requirement on a technicality.
+    const input = buildLeafInput();
+
+    const result = leafSchema.safeParse({
+      ...input,
+      scenario: { ...input.scenario, image: { url: 'https://cdn.test/x.png', alt: '' } },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a diagram spec with no specFormat', () => {
+    // A spec whose language is unknown cannot be re-rendered, which is the only
+    // reason to keep the spec at all (content-pipeline R4).
+    const input = buildLeafInput();
+
+    const result = leafSchema.safeParse({
+      ...input,
+      stickyNotes: {
+        ...input.stickyNotes,
+        diagram: { url: 'https://cdn.test/d.png', alt: 'A diagram', spec: 'graph TD; A-->B;' },
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a diagram with no spec at all', () => {
+    // An illustration-only diagram is legitimate; the spec is what makes it editable,
+    // not what makes it valid.
+    const input = buildLeafInput();
+
+    const result = leafSchema.safeParse({
+      ...input,
+      stickyNotes: {
+        ...input.stickyNotes,
+        diagram: { url: 'https://cdn.test/d.png', alt: 'A diagram' },
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('carries the scenario image through to the client but never the answer key', () => {
+    /**
+     * `toPublicLeaf` is deliberately total, so adding a field to `scenario` breaks
+     * compilation until it is handled — but "handled" could have meant dropping it.
+     * This asserts the choice: the illustration is what the reader is meant to see,
+     * and only `isCorrect` is stripped.
+     */
+    const input = buildLeafInput();
+    const leaf = leafSchema.parse({
+      ...input,
+      scenario: {
+        ...input.scenario,
+        image: { url: 'https://cdn.test/scenario.png', alt: 'An illustration' },
+      },
+    });
+
+    const publicLeaf = toPublicLeaf(leaf);
+
+    expect(publicLeaf.scenario.image?.alt).toBe('An illustration');
+    expect(JSON.stringify(publicLeaf)).not.toContain('isCorrect');
+  });
+});
