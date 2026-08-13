@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ZoomOutApp } from '../app.js';
 import { requireUserId, type Authenticator } from '../auth/authenticate.js';
 import type { ProgressService } from './progress.service.js';
+import type { SessionSummaryService } from './sessionSummary.service.js';
 
 /**
  * Learning-loop endpoints. All authenticated.
@@ -29,6 +30,7 @@ const answerBody = z.object({ optionId: z.string().min(1) }).strict();
 export function registerProgressRoutes(
   app: ZoomOutApp,
   service: ProgressService,
+  summaries: SessionSummaryService,
   authenticate: Authenticator,
 ): void {
   /**
@@ -43,6 +45,22 @@ export function registerProgressRoutes(
     const userId = requireUserId(request);
 
     return reply.send(await service.readDay(userId));
+  });
+
+  /**
+   * The reader's day, assembled for the wrap-up screen (WP9).
+   *
+   * A **GET**, and deliberately not the thing that records the wrap: ending a session is
+   * an event the reader causes and goes to `POST /events`, while this only reports. Two
+   * calls rather than one so that opening the summary from Journey — or re-opening it
+   * after the cap fires — does not silently log a second wrap-up.
+   *
+   * No date parameter, for the same reason as `/progress/today`.
+   */
+  app.get('/progress/summary', { preHandler: authenticate }, async (request, reply) => {
+    const userId = requireUserId(request);
+
+    return reply.send(await summaries.read(userId));
   });
 
   app.get('/progress/leaves/:leafId', { preHandler: authenticate }, async (request, reply) => {

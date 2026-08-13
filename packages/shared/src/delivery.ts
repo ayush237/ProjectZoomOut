@@ -20,7 +20,7 @@
 
 import type { LeafProgress } from './progress.js';
 import type { PayoffSlide, PublicLeaf } from './content.js';
-import type { UnlockedAchievement } from './gamification.js';
+import type { Achievement, UnlockedAchievement } from './gamification.js';
 
 /**
  * A Leaf as one specific reader is allowed to receive it.
@@ -86,6 +86,56 @@ export interface CompletionOutcome {
  * the mobile client previously declared its own `DayStatus` for the WP5a half of this,
  * which is exactly the duplication CLAUDE.md forbids for a shape crossing the boundary.
  */
+/**
+ * One Leaf the reader finished today, named well enough to show someone else.
+ *
+ * Carries the book as well as the Leaf because the wrap-up screen is built to be
+ * screenshotted: "3 Leaves" means nothing to a stranger, and "3 Leaves from *Atomic
+ * Habits*" is the whole point of sharing it.
+ */
+export interface CompletedLeafSummary {
+  readonly leafId: string;
+  readonly title: string;
+  readonly trackId: string;
+  readonly trackTitle: string;
+  /** What this Leaf paid. Zero for one completed after the cap had already fired. */
+  readonly xpAwarded: number;
+  readonly firstTryCorrect: boolean;
+}
+
+/**
+ * A reader's day, assembled in one call for the wrap-up screen (WP9).
+ *
+ * **Why this exists rather than the client stitching it together:** `SessionStatus`
+ * carries totals and says nothing about *which* Leaves were completed, so "here is what
+ * you learnt" could not be built from what shipped in WP5a. The alternative was four
+ * requests — session, streak, progress, achievements — resolved against content on the
+ * client, which is both slower and a second place where "today" would have to be
+ * decided.
+ *
+ * **"Today" is the reader's local day, resolved server-side** from their stored
+ * timezone, exactly as `GET /progress/today` does it. A client that sent its own date
+ * could rewrite its history by changing the device clock.
+ */
+export interface SessionSummary {
+  /** The reader's own calendar date, not UTC. */
+  readonly localDate: string;
+  /** Completed today, in the order they were finished. Empty before the first one. */
+  readonly leaves: readonly CompletedLeafSummary[];
+  /** XP earned today. From the day's row, not a sum of `leaves` — the cap can differ. */
+  readonly xpEarned: number;
+  readonly streak: StreakStatus;
+  /**
+   * Achievements earned **today**, not the reader's whole collection.
+   *
+   * `Achievement` rather than `UnlockedAchievement`: the screen groups them under one
+   * date it already has, so a per-badge timestamp would be noise.
+   */
+  readonly achievements: readonly Achievement[];
+  /** Where the day stands, so the screen can tell an ending from a pause. */
+  readonly session: SessionStatus;
+}
+
 export interface ReaderStanding {
   readonly session: SessionStatus;
   readonly streak: StreakStatus;

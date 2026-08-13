@@ -5,6 +5,7 @@ import type {
   DeliveredLeaf,
   LeafProgress,
   ReaderStanding,
+  SessionSummary,
   Track,
   TrackProgressSummary,
   UnlockedAchievement,
@@ -388,6 +389,17 @@ export class ApiClient {
    */
   public async getToday(): Promise<DayStatus> {
     return this.send<DayStatus>('GET', '/progress/today', undefined, true);
+  }
+
+  /**
+   * The reader's day, in one call — what the wrap-up screen renders.
+   *
+   * A read, not the wrap itself: opening the summary from Journey must not record that
+   * the reader ended their session. `recordEvent('session_wrap')` is the separate,
+   * deliberate action.
+   */
+  public async getSessionSummary(): Promise<SessionSummary> {
+    return this.send<SessionSummary>('GET', '/progress/summary', undefined, true);
   }
 
   public async completeLeaf(leafId: string): Promise<CompletionOutcome> {

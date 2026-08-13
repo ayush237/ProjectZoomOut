@@ -110,7 +110,27 @@ export function JourneyScreen(): React.JSX.Element {
            * lines and takes half the viewport — pinned, it pushes the content the
            * reader came for off the bottom of every screen.
            */
-          ListHeaderComponent={<Text variant="display">Journey</Text>}
+          ListHeaderComponent={
+            <View style={{ gap: theme.spacing.lg }}>
+              <Text variant="display">Journey</Text>
+              {/**
+               * The deliberate way in to the end-of-day summary (WP9).
+               *
+               * On Journey rather than in the tab bar because ending the day is
+               * something a reader chooses at the end of one, not a place they navigate
+               * to — and this is the screen they are already on when deciding whether to
+               * read another. Opening it records nothing; only the button inside it does.
+               */}
+              <Button
+                testID="journey-wrap-up"
+                label="See today’s summary"
+                variant="secondary"
+                onPress={() => {
+                  navigation.navigate('WrapUp');
+                }}
+              />
+            </View>
+          }
           ListHeaderComponentStyle={{ paddingBottom: theme.spacing.sm }}
           data={active}
           keyExtractor={(entry) => entry.track.id}

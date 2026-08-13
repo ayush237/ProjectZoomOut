@@ -1,4 +1,5 @@
 import { PostgresAchievementRepository } from './achievements/achievements.repository.js';
+import { SessionSummaryService } from './progress/sessionSummary.service.js';
 import { AchievementService } from './achievements/achievements.service.js';
 import { buildApp } from './app.js';
 import { createAuthenticator } from './auth/authenticate.js';
@@ -86,6 +87,8 @@ async function main(): Promise<void> {
   );
   const libraryRepository = new PostgresLibraryRepository(database);
   const progressRepository = new PostgresProgressRepository(database);
+  const sessionRepository = new PostgresSessionRepository(database);
+  const achievementRepository = new PostgresAchievementRepository(database);
 
   /**
    * Achievements are constructed before the services that trigger them, because both
@@ -94,7 +97,7 @@ async function main(): Promise<void> {
    * exposes exactly that one method — a narrow port, not the whole repository.
    */
   const achievementService = new AchievementService(
-    new PostgresAchievementRepository(database),
+    achievementRepository,
     progressRepository,
     logger,
   );
@@ -105,10 +108,19 @@ async function main(): Promise<void> {
     config,
     logger,
     libraryRepository,
-    new PostgresSessionRepository(database),
+    sessionRepository,
     achievementService,
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
+  const sessionSummaryService = new SessionSummaryService(
+    progressRepository,
+    sessionRepository,
+    achievementRepository,
+    contentService,
+    config,
+    logger,
+  );
+
   const libraryService = new LibraryService(
     libraryRepository,
     contentService,
@@ -133,6 +145,7 @@ async function main(): Promise<void> {
     contentService,
     libraryService,
     progressService,
+    sessionSummaryService,
     achievementService,
     authenticate: createAuthenticator(tokenService),
   });

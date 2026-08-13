@@ -1,4 +1,5 @@
 import { PostgresAchievementRepository } from '../../src/achievements/achievements.repository.js';
+import { SessionSummaryService } from '../../src/progress/sessionSummary.service.js';
 import { AchievementService } from '../../src/achievements/achievements.service.js';
 import { buildApp, type ZoomOutApp } from '../../src/app.js';
 import { createAuthenticator } from '../../src/auth/authenticate.js';
@@ -75,8 +76,10 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
   );
   const libraryRepository = new PostgresLibraryRepository(database);
   const progressRepository = new PostgresProgressRepository(database);
+  const sessionRepository = new PostgresSessionRepository(database);
+  const achievementRepository = new PostgresAchievementRepository(database);
   const achievementService = new AchievementService(
-    new PostgresAchievementRepository(database),
+    achievementRepository,
     progressRepository,
     logger,
   );
@@ -86,13 +89,22 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     config,
     logger,
     libraryRepository,
-    new PostgresSessionRepository(database),
+    sessionRepository,
     achievementService,
   );
   const contentService = new ContentService(contentRepository, config, logger, progressService);
 
   const authRepository = new PostgresAuthRepository(database);
   const tokenService = new TokenService(config);
+
+  const sessionSummaryService = new SessionSummaryService(
+    progressRepository,
+    sessionRepository,
+    achievementRepository,
+    contentService,
+    config,
+    logger,
+  );
 
   const app = await buildApp({
     config,
@@ -115,6 +127,7 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
       achievementService,
     ),
     progressService,
+    sessionSummaryService,
     achievementService,
     authenticate: createAuthenticator(tokenService),
   });

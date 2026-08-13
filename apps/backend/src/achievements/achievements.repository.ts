@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import type { DatabaseClient } from '../db/client.js';
 import {
@@ -53,6 +53,19 @@ export interface AchievementRepository {
     leafId: string | null,
     at: Date,
   ): Promise<ReaderEventRow>;
+  /**
+   * Achievements earned on one of the reader's **own** calendar days.
+   *
+   * `unlocked_at` is a UTC instant, so the reader's timezone has to be applied to it
+   * here rather than assumed. This is the one place in the achievement domain where a
+   * naive `::date` cast would silently file a late-evening unlock under the wrong day
+   * for everyone east or west of the server.
+   */
+  listUnlockedOn(
+    userId: string,
+    timezone: string,
+    localDate: string,
+  ): Promise<readonly UserAchievementRow[]>;
 }
 
 /** `count(*)` is `bigint`, which `pg` returns as a string. Cast in SQL, not in JS. */
@@ -181,6 +194,29 @@ export class PostgresAchievementRepository implements AchievementRepository {
         target: [userAchievements.userId, userAchievements.achievementId],
       })
       .returning();
+  }
+
+  /**
+   * `unlocked_at at time zone $tz` converts the stored instant into the reader's wall
+   * clock, and only then is it reduced to a date. Comparing `unlocked_at::date` instead
+   * would answer the server's day — the same class of bug as deriving a completion date
+   * from a UTC timestamp, which is why WP4 stored `completed_local_date` at all.
+   */
+  public async listUnlockedOn(
+    userId: string,
+    timezone: string,
+    localDate: string,
+  ): Promise<readonly UserAchievementRow[]> {
+    return this.client.db
+      .select()
+      .from(userAchievements)
+      .where(
+        and(
+          eq(userAchievements.userId, userId),
+          sql`(${userAchievements.unlockedAt} at time zone ${timezone})::date = ${localDate}::date`,
+        ),
+      )
+      .orderBy(userAchievements.unlockedAt);
   }
 
   public async recordEvent(
