@@ -72,6 +72,7 @@ Needs a transactional email provider, which needs the domain Stage 1 sets up. Ev
 | Generate and review content | Critic-in-the-Loop: ~15–25 min of founder review per Leaf |
 | Replace all placeholder content | Enforced mechanically — `isPlaceholder` records cannot reach production |
 | Unpublish "The mountain is you" | One minute; carries placeholder prose under a real author's name |
+| **Book source acquisition policy** | The MVP ingests PDFs for ~5 books, ruled acceptable for building on 2026-08-13. **Launch needs a written policy per book** — a purchased copy, a licensed text, or a publisher agreement — because ingesting a full copyrighted work is a reproduction and `LEGAL.md` argues about *output* only. Provenance and retention are built into the pipeline from the start; what is missing is the policy it honours |
 | **Vendor DPAs** | Gemini/Vertex, ElevenLabs. Cannot start before the pipeline exists |
 | **IP counsel review of generated output** | `LEGAL.md` requires review of *actual output*, not the strategy document |
 | **Decide the streak/library-size question** | Let re-completion count, ship more books, or accept that streaks only matter as the library grows |

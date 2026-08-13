@@ -2,6 +2,10 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
+> **Active: WP15 — Leaf v2 (assets and apply-in-life).** Handed off 2026-08-13; handoff in `collaboration-log.md`. It unblocks the Phase 2 content pipeline, which cannot start until the app can store and render what it generates.
+>
+> Pipeline architecture: `proposals/content-pipeline.md`. Its dedicated session persona: `agents/pipeline-manager.md`.
+
 ## 🏁 Phase 1 is complete — 2026-08-13
 
 **No package is in flight.** Fourteen packages, WP0 through WP10, all signed off.
@@ -16,6 +20,8 @@ Every Phase 1 mechanic works end to end on a device: sign up and pass the age ga
 
 ## Next
 
-**No feature work is queued.** `project/launch-blockers.md` is now the active plan and needs sequencing rather than appending — that is the next Architect session, not a handoff.
+`project/launch-blockers.md` is sequenced into five stages and is the active launch plan.
+
+**Phase 2 has begun**, ahead of most of that list, at the founder's direction: WP15 lands the schema, then the pipeline packages WP16–WP20 run in a dedicated Pipeline Manager session.
 
 The three that will dominate it: **Payload's public reachability** (a security hole, not a task — an exposed CMS makes the payoff gate and the answer key bypassable), **password reset** (email/password is the only way in), and **the content pipeline** (longest lead time, not yet designed, and its own planning cycle).

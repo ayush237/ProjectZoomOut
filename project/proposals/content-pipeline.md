@@ -35,7 +35,12 @@ The plan reads as an additive service. It is not: assets and apply-in-life are *
 
 **Apply-in-life belongs on the takeaway slide, not as a sixth slide.** The fixed five-slide structure is load-bearing: it is a compile-time guarantee in the shared types, a `group` field per slide in Payload, and the spine of the player. A sixth slide is a redesign; a field is a migration.
 
-### R2 — "Branches" were ruled out; decide deliberately this time
+### R2 — Branches: dropped ✅ *(ruled 2026-08-13)*
+
+**Resolved: branches are omitted entirely.** The Breakdown node emits an ordered list of Leaves and nothing else. It may group thematically while reasoning, but that grouping is not represented in its output, in the schema, or in the product. This confirms the 2026-08-06 ruling rather than reopening it.
+
+<details><summary>Original recommendation, kept for the record</summary>
+
 
 The plan says "breakdown the book into branches and leaves." Branch was ruled **not modeled** on 2026-08-06 — the original brief's Tree/Branch/Leaf was legal framing, and Track → Leaf is the real structure.
 
@@ -45,6 +50,7 @@ Two honest options:
 - **A real layer.** Journey renders themed sections. At 20–30 Leaves a flat list genuinely is hard to navigate, so this has become a better idea than it was in August — but it is schema, CMS and UI work on top of R1.
 
 **Do not let the pipeline emit branches into a product that has no concept of them.** Pick one.
+</details>
 
 ### R3 — Split the Reviewer in two. This is the most important recommendation here
 
@@ -82,12 +88,13 @@ The founder's instinct — that the human must see each node's *output* — is p
 
 Ingesting a full copyrighted work into a vector store is a reproduction. `LEGAL.md`'s fair-use position is argued about *output* — it does not address ingestion, which is precisely what the live AI-copyright litigation is about.
 
-**Required before the first book is ingested:**
-- A documented **acquisition policy** — a purchased copy, a licensed text, or a publisher agreement. Written down, per book.
-- A **retention policy** — recommendation: retain embeddings and the specific short passages cited as source references; **delete the raw full text after generation completes.** That leaves an audit trail proving grounding without holding a copy of the book.
-- **Provenance recorded per Track**: which edition, acquired how, ingested when, deleted when.
+**Ruled 2026-08-13:** the MVP ingests **PDFs, for about five books**. The written acquisition policy is **deferred to launch** and is now tracked in `launch-blockers.md`.
 
-This is a founder-and-counsel item, not an engineering one, but the pipeline must be built to honour whatever it says.
+**Two things are architectural, not policy, and are built from the start:**
+- **Provenance per Track** — which book, which edition, which file, ingested when, deleted when. It costs nothing to record and is retroactively impossible to reconstruct.
+- **Retention behaviour** — retain embeddings and the short passages cited as source references; **delete the raw full text when a run completes.** An audit trail that proves grounding without holding a copy of the book. Building the pipeline to retain everything is building the thing counsel will later ask to be undone.
+
+**Worth stating plainly:** if the promotional launch ships content generated during this MVP phase, that content reaches real users — so the acquisition *question* is not fully deferred, only the written policy is.
 
 ### R7 — Bound the cycles, and price the thing
 
@@ -205,11 +212,18 @@ This finally requires the **role-based permissions** deferred since WP1 — writ
 
 ---
 
-## 6. Open questions for the founder
+## 6. Founder decisions — 2026-08-13
 
-1. **Branches** — pipeline-internal grouping, or a real product layer? (R2)
-2. **Source acquisition and retention policy** — required before ingesting anything. (R6)
-3. **Who is the content writer?** The plan implies a role that does not exist yet, and it drives Payload permissions.
-4. **Is `apply-in-life` a takeaway field or something the reader opens separately**, like Dinner Table Knowledge?
-5. **Budget ceiling per Track** — determines revision caps and how many asset candidates are generated.
-6. **Does the pipeline run against the same Payload as the app**, or its own instance until trusted? Recommend the same one, writing drafts only.
+| Question | Ruling |
+|---|---|
+| Branches | **Dropped entirely.** Breakdown emits ordered Leaves and nothing else |
+| Source | **PDF, ~5 books for the MVP.** Written acquisition policy deferred to launch; provenance and retention built from the start |
+| Sequencing | **App-side schema first (WP15)**, then the pipeline |
+| R1, R3, R4, R5, R7 | All accepted as recommended |
+
+### Still open, answerable as we go
+
+1. **Who is the content writer?** The plan implies a role that does not exist yet, and it drives Payload permissions.
+2. **Is `apply-in-life` a takeaway field or something the reader opens separately**, like Dinner Table Knowledge? WP15 assumes a field; say so if you want a disclosure.
+3. **Budget ceiling per Track** — determines revision caps and how many asset candidates are generated.
+4. **Does the pipeline run against the same Payload as the app**, or its own instance until trusted? Recommend the same one, writing drafts only.

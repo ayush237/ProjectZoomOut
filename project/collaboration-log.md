@@ -9,6 +9,58 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-13 — WP15: Leaf v2 — assets and apply-in-life
+
+### Task: WP15 — Leaf v2: assets and apply-in-life
+
+**Context:** Phase 2's content pipeline will generate two things a Leaf cannot currently hold — an illustration for the scenario slide, a diagram for the sticky-notes slide — plus an "apply in life" prompt on the takeaway. **The pipeline cannot start until the app can store and render them**, so this package comes first. Full context: `project/proposals/content-pipeline.md`, R1.
+
+**This is a deliberate, ruled change to a frozen schema.** `packages/shared/src/content.ts` was frozen 2026-08-08, and its header says a change needs an Architect ruling plus a migration plan. This is that ruling. Re-freeze it when you are done, with the date updated and this package named.
+
+**Objective:** A Leaf can carry a scenario image, a sticky-notes diagram and an apply-in-life prompt; all three render in the player; all three are authorable in the CMS; and the 28 existing Tracks remain valid without a backfill.
+
+**Scope:** `packages/shared/src/content.ts`, `apps/admin/` collections and validation, `apps/mobile/` player slides, `apps/backend/` only if the mapper needs it.
+
+**Requirements:**
+
+*Schema — all three fields optional*
+- `scenario.image?` — an image asset: `url`, `alt`, and optional `width`/`height`.
+- `stickyNotes.diagram?` — a diagram asset: `url`, `alt`, plus an optional **`spec`** and `specFormat`. The spec is the source the diagram was rendered from (Mermaid or a constrained JSON) and exists so a writer can correct a diagram by editing text rather than regenerating an image (R4).
+- `takeaway.applyInLife?` — a string.
+- **Optional is the point.** The 28 seeded Tracks stay valid, and there is no backfill. Do not make any of them required.
+- **`alt` is required whenever an asset is present.** These are the first images in the product and the app honours OS accessibility settings.
+- Follow `audioRefSchema`'s existing shape for consistency — it is the precedent for a reserved asset reference.
+
+*CMS*
+- Author both assets and the apply-in-life text. Images go through **Payload's upload collection** — set that up here, because the pipeline will write into it later.
+- Publish-time rules unchanged except: **an asset present without `alt` cannot be published.**
+
+*Player*
+- Scenario slide renders the image when present; sticky-notes slide renders the diagram when present. **Both slides must look right with the field absent** — that is the current state of every existing Leaf.
+- Loading and failure states. A broken image URL must not break the slide; WP11 found a cover pointing at a web page rather than an image, so assume this will happen.
+- Apply-in-life renders on the takeaway slide. Decide and state whether it is always visible or opens like Dinner Table Knowledge — the founder has not ruled, and either is defensible.
+
+**Out of scope:** the pipeline itself, generating any asset, the diagram renderer, deployment, Android.
+
+**Constraints:**
+- `delivery.ts` is a cross-workspace contract — additive proceeds with a note; changing or removing needs a ruling.
+- Do not check extra-large text sizes. Known, ruled, logged.
+- **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `install`, `lint`, `typecheck`, `test`, `build` pass
+- [ ] **All 28 existing Tracks and 22 Leaves still validate and still serve** — the change is additive, verified by query rather than by reasoning
+- [ ] A Leaf with all three new fields authors, publishes and renders
+- [ ] **A Leaf with none of them renders exactly as before** on both affected slides
+- [ ] Publishing an asset without `alt` is rejected
+- [ ] A broken image URL degrades gracefully rather than breaking the slide
+- [ ] Migration applies cleanly to an empty database
+- [ ] `content.ts` is re-frozen with the date updated and WP15 named
+- [ ] **Verified on a device** in both themes
+- [ ] CI green
+
+**Testing expectations — tiered bar:** **Tier A** — existing content still validates and serves, and an asset without `alt` cannot be published. **Tier B, one happy path.** Tier C deferred and named. Full cold gate once, at the end; report roughly where your time went.
+
 ### Handoff: 2026-08-13 — WP10: Report an error, the fix queue, and the legal surfaces
 
 ### Task: WP10 — Report an error, the fix queue, and the legal surfaces
