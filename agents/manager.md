@@ -112,6 +112,10 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 **A hand-written migration must ship its drizzle snapshot.** WP5a hand-wrote SQL and a journal entry without one, so `db:generate` diffed against the previous snapshot and emitted a duplicate migration re-creating both tables — which fails on an empty database and would have broken every integration suite.
 
+**A timezone test proves nothing unless the two timezones disagree at the instant it picks.** WP9 replaced an `at time zone` conversion with a naive `::date` cast and all nine tests still passed — the chosen instant was one where the server's date and Auckland's happened to agree, so no assertion could tell them apart. This is a different mistake from not writing the test, and it looks identical in a green run. Pick the instant deliberately, and mutation-check it.
+
+**Some assertions cannot be mutation-checked, and should say so.** "Wrapping up does not lock the reader out" asserts the *absence* of a mechanism — there is no line to break. Such a test guards a future regression rather than proving present behaviour. Note which of your tests are in this category; it is real information for WP14.
+
 **Two rules survive the change:**
 - Any test written to close a review finding must be **mutation-checked** — break the behaviour and confirm that test, and only that test, goes red.
 - **Report what you did not test.** A deferred Tier C area belongs in the completion report so WP14 has a worklist rather than an archaeology project.

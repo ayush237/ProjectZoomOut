@@ -9,6 +9,71 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-13 — WP10: Report an error, the fix queue, and the legal surfaces
+
+### Task: WP10 — Report an error, the fix queue, and the legal surfaces
+
+**Context:** The last package before the app is complete end to end. It is a **legal requirement, not a feature**: `LEGAL.md` and `PRODUCT.md` both require a user-facing "report an error" action on every Leaf, routed to a fix queue with a defined SLA. That obligation is part of what makes the fair-use position defensible, alongside the takedown path that already works.
+
+Deliberately small. Do not expand it.
+
+**Objective:** A reader can report an error on any Leaf; reports land somewhere the founder can actually see them; and the legal surfaces that are currently only *enforced at the API* are confirmed to be *visible in the app*.
+
+**Scope:** `apps/backend/` (report endpoint, operator read), `apps/mobile/src/screens/` (the report action and its sheet), and whatever the §3 verification turns up.
+
+---
+
+**1. Report an error**
+
+- An action on **every Leaf**, reachable from the player. Not buried.
+- A short form: a reason from a small enum (factual error, wrong answer marked correct, offensive content, other) plus optional free text.
+- Persist to the backend. `ErrorReport` already exists in `packages/shared` from WP0 — **read it before designing the table; it may need adjusting rather than replacing.**
+- Capture enough to act on: reader id, Leaf id, its Track, the reason, the text, and when.
+- Rate-limit it. It is an unauthenticated-shaped write path in spirit — a reader can submit repeatedly.
+- Confirm to the reader that it was received. This is a trust surface; silence reads as being ignored.
+
+**2. The fix queue**
+
+- Reports must be **readable by the founder**, or the queue is a table nobody looks at and the legal commitment is not met.
+- **Keep this minimal.** An authenticated operator read endpoint gated by a token from validated config is enough for Phase 1 — not a UI, not a dashboard, not Payload integration (which would cross a database boundary for no gain).
+- Include a status field (`open` / `resolved`) so the queue can be worked. Nothing needs to set it automatically.
+- **The SLA is a documented process, not software.** Write it into `project/LEGAL.md` under the content-integrity section: who reviews, how often, and what "within hours" means operationally for a takedown versus a factual correction. That documentation is part of this package's deliverable.
+
+**3. Verify the legal surfaces are actually displayed — this is the part most likely to have fallen through**
+
+WP3 made a Track **unservable** without a non-endorsement disclaimer and at least one purchase-forward link. Nothing has ever checked that the app **shows** them. Servable is not the same as visible, and the legal requirement is the second one.
+
+- Confirm the **non-endorsement disclaimer** is visible on the Track detail screen.
+- Confirm the **purchase-forward link** is visible and tappable, and opens the retailer.
+- `PRODUCT.md` requires the purchase link on **Track completion** specifically — check whether completing a Track surfaces it, and if not, add it.
+- If any of these are missing, adding them is in scope.
+
+---
+
+**Out of scope:** deployment, password reset, test hardening, the AI pipeline, Android verification, extra-large text — all parked in `launch-blockers.md`. A moderation or admin UI. Email notification of reports (needs the transactional provider WP13 introduces).
+
+**Constraints:**
+- `content.ts` is frozen. `delivery.ts` is a cross-workspace contract — additive proceeds with a note; changing or removing needs a ruling.
+- **Do not check extra-large text sizes.** Known, ruled, logged.
+- Composition services sit above domain services — if reports need content, follow `SessionSummaryService`'s shape rather than reaching sideways from a domain service.
+- **"Verified locally" means `dist` and `.next` deleted.**
+
+**Acceptance criteria:**
+- [ ] Root `install`, `lint`, `typecheck`, `test`, `build` pass
+- [ ] A report can be filed from **any Leaf** and is persisted with reader, Leaf, Track, reason, text and timestamp
+- [ ] The reader gets confirmation that it was received
+- [ ] The operator endpoint lists reports and is **refused without the token** — assert the refusal, not just the success
+- [ ] Report submission is rate-limited
+- [ ] **The non-endorsement disclaimer is visible on Track detail** — verified by looking at the screen, not by confirming the field is in the API response
+- [ ] **The purchase-forward link is visible and opens the retailer**, and is present on Track completion
+- [ ] The SLA process is written into `project/LEGAL.md`
+- [ ] **Verified on a device:** file a report, see the confirmation, then read it back through the operator endpoint. Also walk the **achievement share screen** end to end — WP9 verified it by construction only, and by now the test account may have an unlocked badge to trigger it
+- [ ] CI green
+
+**Testing expectations — tiered bar:** **Tier A** — a report is persisted and the operator endpoint refuses an untokened request. **Tier B, one happy path only.** Tier C deferred and named.
+
+Run the full cold gate **once**, at the end, and report roughly where your time went. **Note which of your tests assert the absence of a mechanism** and therefore cannot be mutation-checked.
+
 ### Handoff: 2026-08-12 — WP9: Session wrap-up and achievement screens
 
 ### Task: WP9 — Session wrap-up and achievement screens
