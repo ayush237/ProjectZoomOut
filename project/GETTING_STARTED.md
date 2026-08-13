@@ -8,6 +8,10 @@ Two named sessions in the same project — **Architect** and **Manager** — kep
 
 > You are the Manager for this project. Read `agents/manager.md` in full before doing anything else, then confirm you've internalized it.
 
+> You are the Pipeline Manager for this project. Read `agents/pipeline-manager.md` in full before doing anything else, then confirm you've internalized it.
+
+The **Pipeline Manager** is a third session, added 2026-08-13 for the Phase 2 content pipeline. It owns `apps/pipeline` and nothing else; Manager keeps the app, backend and CMS. Both report to Architect.
+
 **Send the persona message on its own and wait for the confirmation before giving it work.** Bundling the persona and the first task into one message reliably produces a session that skims the persona on its way to the task — and the persona is exactly what keeps Architect out of `apps/` and Manager out of the planning docs.
 
 Re-send the persona message after any `/clear`. `CLAUDE.md` reloads automatically; the persona does not.
