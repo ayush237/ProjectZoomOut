@@ -88,13 +88,17 @@ The founder's instinct — that the human must see each node's *output* — is p
 
 Ingesting a full copyrighted work into a vector store is a reproduction. `LEGAL.md`'s fair-use position is argued about *output* — it does not address ingestion, which is precisely what the live AI-copyright litigation is about.
 
-**Ruled 2026-08-13:** the MVP ingests **PDFs, for about five books**. The written acquisition policy is **deferred to launch** and is now tracked in `launch-blockers.md`.
+**Ruled 2026-08-13:** input is **EPUB primary, PDF fallback**. EPUB is structured HTML — chapters, headings and paragraphs are marked up — while PDF is a layout format whose reading order must be reconstructed, interleaving columns and splicing headers and footnotes mid-sentence. That degrades every downstream node and grounding worst of all, because a mangled passage makes a bad source reference. A parsing decision, not a legal one.
+
+**The MVP uses downloaded files**, and the written acquisition policy is **deferred to launch** — tracked in `launch-blockers.md`.
 
 **Two things are architectural, not policy, and are built from the start:**
-- **Provenance per Track** — which book, which edition, which file, ingested when, deleted when. It costs nothing to record and is retroactively impossible to reconstruct.
+- **Provenance per Track** — which book, which edition, which file, ingested when, deleted when, **and an explicit `acquisition` status**: `public-domain` · `licensed` · `purchased` · `undocumented`. Recording it honestly costs nothing now and means that when the launch question resolves, the Tracks needing regeneration are a query rather than an act of memory. It is retroactively impossible to reconstruct.
 - **Retention behaviour** — retain embeddings and the short passages cited as source references; **delete the raw full text when a run completes.** An audit trail that proves grounding without holding a copy of the book. Building the pipeline to retain everything is building the thing counsel will later ask to be undone.
 
-**Worth stating plainly:** if the promotional launch ships content generated during this MVP phase, that content reaches real users — so the acquisition *question* is not fully deferred, only the written policy is.
+**Worth stating plainly:** if the promotional launch ships content generated during this MVP phase, that content reaches real users — so the acquisition *question* is not fully deferred, only the written policy is. **Treat MVP-phase content as replaceable**: if the acquisition question resolves toward purchased or licensed copies, Tracks marked `undocumented` are regenerated from a properly sourced file. Building with that expectation is cheap; assuming that content ships is what creates pressure later.
+
+**Build the pipeline on books with no question attached.** Public-domain or explicitly free-to-distribute non-fiction — *The Almanack of Naval Ravikant*, *Meditations*, *As a Man Thinketh*, *Think and Grow Rich* — is real enough to judge output quality while carrying zero exposure during the phase where output is thrown away anyway. There is no reason the engineering phase should carry risk at all.
 
 ### R7 — Bound the cycles, and price the thing
 

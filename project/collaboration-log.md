@@ -21,6 +21,8 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 **Scope:** `packages/shared/src/content.ts`, `apps/admin/` collections and validation, `apps/mobile/` player slides, `apps/backend/` only if the mapper needs it.
 
+**Note for WP16 (pipeline), recorded here so it is not lost:** input is **EPUB primary, PDF fallback**, and every Track records an `acquisition` status — `public-domain` / `licensed` / `purchased` / `undocumented`. Build the pipeline against public-domain titles.
+
 **Requirements:**
 
 *Schema — all three fields optional*
