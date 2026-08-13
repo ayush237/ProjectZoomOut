@@ -196,6 +196,104 @@ describe('mapLeaf', () => {
     expect(leaf.takeaway).not.toHaveProperty('dinnerTableKnowledge');
   });
 
+  /**
+   * Leaf v2 (WP15). These three fields are the whole reason the package exists, and
+   * every one of them is optional — so the mapper dropping them silently looks exactly
+   * like content that has none. That is not a hypothetical: the first cut of WP15
+   * shipped the CMS fields and the player components with no mapping between them, and
+   * the app rendered a Leaf that had all three authored as though it had none.
+   */
+  describe('Leaf v2 assets', () => {
+    const image = {
+      url: 'https://cdn.test/scenario.png',
+      alt: 'A commuter checking their phone on a platform',
+      width: 800,
+      height: 450,
+    };
+
+    it('carries the scenario image through', () => {
+      const leaf = expectOk(
+        mapLeaf(cmsLeaf({ scenario: { ...cmsLeaf().scenario, image } })),
+      );
+
+      expect(leaf.scenario.image).toEqual(image);
+    });
+
+    it('carries the diagram, its spec and its format through', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({
+            stickyNotes: {
+              ...cmsLeaf().stickyNotes,
+              diagram: {
+                url: 'https://cdn.test/loop.png',
+                alt: 'Cue leads to routine leads to reward',
+                spec: 'graph LR; cue-->routine-->reward',
+                specFormat: 'mermaid',
+              },
+            },
+          }),
+        ),
+      );
+
+      expect(leaf.stickyNotes.diagram).toEqual({
+        url: 'https://cdn.test/loop.png',
+        alt: 'Cue leads to routine leads to reward',
+        spec: 'graph LR; cue-->routine-->reward',
+        specFormat: 'mermaid',
+      });
+    });
+
+    it('carries applyInLife through', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({ takeaway: { body: 'x', applyInLife: 'Name one cue you noticed today.' } }),
+        ),
+      );
+
+      expect(leaf.takeaway.applyInLife).toBe('Name one cue you noticed today.');
+    });
+
+    it('omits an asset whose group Payload wrote empty', () => {
+      // Payload persists the group even when an author fills nothing in, so without the
+      // URL check every Leaf in the library would carry a broken image.
+      const leaf = expectOk(
+        mapLeaf(cmsLeaf({ scenario: { ...cmsLeaf().scenario, image: { url: null, alt: null } } })),
+      );
+
+      expect(leaf.scenario).not.toHaveProperty('image');
+    });
+
+    it('rejects the Leaf when an image has a URL but no alt text', () => {
+      // The two gates disagreeing is the failure being caught: the CMS refuses to
+      // publish this, so serving it would mean one of the two is not running. Dropping
+      // the image instead would hide that — and cost a reader who cannot see it the
+      // only description they get.
+      const result = mapLeaf(
+        cmsLeaf({ scenario: { ...cmsLeaf().scenario, image: { url: image.url, alt: '  ' } } }),
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reasons.join(' ')).toContain('scenario.image.alt');
+    });
+
+    it('rejects a diagram whose spec format is not one the renderer knows', () => {
+      const result = mapLeaf(
+        cmsLeaf({
+          stickyNotes: {
+            ...cmsLeaf().stickyNotes,
+            diagram: { url: image.url, alt: 'A diagram', spec: 'digraph {}', specFormat: 'dot' },
+          },
+        }),
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reasons.join(' ')).toContain(
+        'stickyNotes.diagram.specFormat',
+      );
+    });
+  });
+
   describe('constraints tightened at the schema freeze', () => {
     it('rejects a source reference with a note but no locator', () => {
       const result = mapLeaf(
