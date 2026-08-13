@@ -1,64 +1,107 @@
-# Launch Blockers — parked until the app works end to end
+# The Road to Launch — sequenced
 
-**Purpose:** everything that stands between a *working app* and a *shippable product*, kept out of `projectRoadmap.md` so it stops competing for attention with the build.
+**Phase 1 closed 2026-08-13.** Every Phase 1 feature is built and works end to end on a device. This file is now the active plan.
 
-**Phase 1 closed 2026-08-13.** The end-to-end app is done, so **this file is now the active plan** and needs sequencing rather than appending.
-
-**Definition in use:** an *end-to-end working app* means every Phase 1 feature works against seeded content on a device. That is **WP5b → WP9 → WP10**. Everything below is after that.
+Sequenced 2026-08-13. Five stages, ordered by what blocks what and by lead time — not by size.
 
 ---
 
-## 1. Engineering
+## Part 1 — Product status
 
-| Item | Why it blocks launch | Owner |
-|---|---|---|
-| **WP12 — deployment** | Backend, CMS and Postgres on GCP with a device-reachable API. Nothing is deployed; the DB is a local container. The simulator reaches `localhost`, a real phone cannot | Manager |
-| **Payload must not be publicly reachable** | Payload's REST API serves `payoff` and `isCorrect` anonymously by design — that is how the backend reads published-only content. If it is reachable from the internet, **the payoff gate and the answer key are both bypassable.** "Private networking" currently exists as a comment in one file and nowhere else. **The single highest-consequence item in this file** | WP12 |
-| **`create-admin` must not be invocable from the deployed app** | It is a privilege-escalation path. Operator command, run out-of-band — never a route or a startup hook | WP12 |
-| **WP13 — password reset** | Email/password is the only sign-in method, so a forgotten password means a permanently lost account, streak and library. Needs a transactional email provider | Manager |
-| **WP14 — test hardening** | Everything deferred as Tier C during the velocity phase, plus each package's deferral list | Manager |
-| **Rate limit on answer submission** | Unbounded authenticated write path. `attempt_count` is an unbounded `integer`, so sustained abuse eventually overflows into a permanent 500 on that Leaf | Manager |
-| **A real session-activity signal** | Session time is currently elapsed-time-per-Leaf clamped to five minutes. Under-counts a slow reader, erring toward letting them continue — acceptable, but an approximation | Manager |
-| **N+1 progress rollup** | One Track fetch and one Leaf list per library entry. Fine at a few books; thirty is thirty requests per Library open. Ruled approach: batch with `where[id][in]`, cache the ordered Leaf-id list on a longer TTL | Manager |
-| **The achievement share screen has never been walked end to end** | Verified by construction across WP9 and WP10 — same `ShareCard`, same capture path as the wrap-up screen, both verified — but its own route has never been exercised, because reaching it needs a badge to unlock on a completion screen and the test account has earned none. **Three deferrals now; it needs a deliberate fixture rather than waiting for it to happen naturally** | Manager |
-| **Android is entirely unverified** | Every device check has been iOS. Includes the `collapsable={false}` guard in the share capture, which exists specifically because Android flattens container views and would otherwise leave nothing to photograph | Manager |
-| **Push notifications** | Not scoped anywhere. A streak mechanic without reminders is much weaker — a reader who forgets loses it with no prompt | Unscoped |
-| **Extra-large text clips, app-wide** | `design/typography.ts` sets an absolute `lineHeight`; React Native scales `fontSize` but not `lineHeight`, so glyphs are cut by their own line box at the top accessibility steps. Pre-existing in WP6's design system. **The honest framing is "XXXL renders broken", not "XXXL unsupported"** — the app still honours the OS setting and then clips, which is the worse of the two states to ship, because a reader who needs large text gets a broken screen rather than a plain one. Founder ruled 2026-08-12 not to fix it now and to drop it as a per-package check; that ruling is about *sequencing*, and it does not make the defect go away. Likely a one-line fix (relative line heights or `allowFontScaling` strategy), but app-wide to verify | Manager |
+### What a reader can do today
 
-## 2. Content
-
-| Item | Why it blocks launch | Owner |
-|---|---|---|
-| **Real content** | Everything is placeholder. Launch content comes from the **AI pipeline**, which is deliberately deferred until all app and admin work is done and needs its own planning cycle | Founder → Architect |
-| **Replace all placeholder content** | `isPlaceholder` records are blocked from production in code, so this is enforced mechanically — but the replacement work is real | Founder |
-| **Unpublish "The mountain is you"** | Carries placeholder prose under a real author's name and fails the cover rule. One minute in the admin UI | Founder |
-| **Streaks are structurally capped by library size** | A streak needs one Leaf per day; twenty Leaves supports at most twenty days, and a reader at the intended pace exhausts the library in four. **The streak breaks for exactly the readers who engage most.** Options: let re-completion count, ship more books, or accept streaks only matter as the library grows | Founder decision |
-
-## 3. Legal and compliance
-
-All from `LEGAL.md`, all still without an assigned owner.
-
-| Item | Why it blocks launch |
+| | |
 |---|---|
-| **Age-gate threshold** | Implemented as configurable with a default of 13, so the code is not blocked — but the legal answer is undecided and COPPA/GDPR-K compliance depends on it |
-| **Content Curation Policy** | The criteria excluding authors with official companion apps and publishers in active AI litigation. Owner TBD since the original brief |
-| **Vendor DPAs** | Gemini/Vertex and ElevenLabs, once the pipeline exists |
-| **IP counsel review of generated content** | Higher stakes now that launch content is AI-generated rather than hand-written. `LEGAL.md` requires review of *actual output*, not just the strategy document |
-| **IP counsel review of the launch book list** | Required before launch |
-| **Content moderation** | Required before Reading Circles (Phase 3), not after |
-| **Subscription compliance** | FTC negative-option rules. Moot until Phase 4 monetization |
+| **Account** | Sign up with email and password, pass the age gate, sign in and out |
+| **Explore** | Browse published books, paginated |
+| **Library** | Add and remove books, see per-book progress |
+| **Journey** | See active books, resume at the next incomplete Leaf |
+| **Learn** | Play a Leaf through all five slides: summary, scenario, payoff, sticky notes, takeaway |
+| **The gate** | Answer a 3-option scenario; wrong answers retry without limit; the payoff unlocks only on a correct answer |
+| **Earn** | 80 XP per Leaf plus 20 for a first-try answer; a daily streak in the reader's own timezone |
+| **Stop** | A 15-minute / 500 XP cap that reads as an ending rather than a refusal |
+| **Share** | Wrap up the day and share a summary card; unlock and share achievements (19 of them) |
+| **Trust** | Non-endorsement disclaimer and purchase link on every book; report an error on any Leaf |
+| **Look** | Dark and light themes |
 
-## 4. App Store
+**The core thesis is real and enforced server-side.** Grading, the payoff gate, XP, the cap and streaks are all decided by the server — none of it is client-trusted, so the active-recall mechanic is a genuine gate rather than a UI convention.
+
+### What is missing, in order of how much it matters
+
+| Gap | What it means for a reader |
+|---|---|
+| **No real content** | 28 placeholder books. **The product currently has nothing to teach.** This is the whole game |
+| **No password reset** | Email/password is the only way in. Forget it and the account, streak and library are gone permanently |
+| **Not deployed** | Runs against a laptop. Cannot be used on a real phone by anyone |
+| **Streaks break after ~4 days** | One 20-Leaf book cannot sustain a daily streak. It fails for exactly the readers who engage most |
+| **No sound effects** | The sound layer exists with no audio. Gamification lands flatter than designed |
+| **No re-reading** | Finishing a book is a dead end — there is no way back into it |
+| **No push notifications** | A streak mechanic with no reminder |
+| **Large text clips** | The app honours the OS text setting and then cuts the glyphs. Worse than not honouring it |
+| **Android unverified** | Every check has been iOS |
+| **No voiceover** | Phase 2 by design, not a defect |
+
+---
+
+## Part 2 — The five stages
+
+### Stage 1 · Make it real
+**Manager: WP12 — deployment. Architect: design the content pipeline, in parallel.**
 
 | Item | Note |
 |---|---|
-| **Sign in with Apple** | Currently **not required** — the requirement only applies when another third-party social login is offered, and Phase 1 ships email/password only. It returns the moment Google sign-in ships |
-| **Privacy nutrition labels, age rating, review submission** | Not yet started |
+| Deploy backend, CMS and Postgres to GCP | The app becomes usable on a real phone |
+| **Payload must not be publicly reachable** | **The one genuine security hole.** Payload's REST API serves the payoff and the answer key anonymously — that is how the backend reads published-only content. Exposed, the entire unlock gate is bypassable. Today "private networking" is a comment in one file |
+| `create-admin` stays out-of-band | A privilege-escalation path; never a route or a startup hook |
+| `GET /health` becomes a schema probe | It currently reports the database up while every table it needs is missing — a deploy verified with it shows green against an empty database |
+| Migrations survive a half-cleaned database | One surviving object aborts the whole transaction |
+
+*Why first:* everything external depends on it, it carries the only security hole, and it is the longest engineering package. The pipeline design runs alongside because it is planning work that costs Manager nothing and has the longest lead time of anything on this list.
+
+### Stage 2 · Make it safe to use
+**Manager: WP13 — password reset.**
+
+Needs a transactional email provider, which needs the domain Stage 1 sets up. Every day this waits, more real accounts exist that can be permanently lost.
+
+### Stage 3 · Make it worth using
+**The content pipeline, then real content.**
+
+| Item | Note |
+|---|---|
+| Build the pipeline | Book → Leaves via Gemini/Vertex. Designed in Stage 1, built here |
+| Generate and review content | Critic-in-the-Loop: ~15–25 min of founder review per Leaf |
+| Replace all placeholder content | Enforced mechanically — `isPlaceholder` records cannot reach production |
+| Unpublish "The mountain is you" | One minute; carries placeholder prose under a real author's name |
+| **Vendor DPAs** | Gemini/Vertex, ElevenLabs. Cannot start before the pipeline exists |
+| **IP counsel review of generated output** | `LEGAL.md` requires review of *actual output*, not the strategy document |
+| **Decide the streak/library-size question** | Let re-completion count, ship more books, or accept that streaks only matter as the library grows |
+
+*Why here:* this is the longest stretch and where the real product appears. It also drags the legal work with it — counsel cannot review output that does not exist.
+
+### Stage 4 · Make it hold up
+**Manager: WP14 — test hardening, plus the polish tier.**
+
+Deferred Tier C from every package · rate limit on answer submission · the N+1 progress rollup · extra-large text clipping · Android verification · the achievement share screen (needs a deliberate fixture — three deferrals now) · a real session-activity signal · push notifications · re-reading a finished Track.
+
+*Why here:* hardening code you are still changing is wasted. Push notifications only matter once streaks can survive, which needs content.
+
+### Stage 5 · Ship
+App Store: privacy nutrition labels, age rating, review submission. Sign in with Apple is **not** required while email/password is the only method — it returns the moment Google sign-in ships.
+
+*Gated on decisions that must start in Stage 1, not here.*
 
 ---
 
-## How this list is worked
+## Part 3 — Blocked on the founder
 
-After WP10 closes, this becomes the active plan and gets sequenced properly. Until then it is a parking lot — new launch-only items get appended here rather than into the roadmap's debt register.
+| # | Item | Cost | Blocks | Open since |
+|---|---|---|---|---|
+| 1 | **Age-gate threshold** — the legal answer, not the code | a decision | Stage 5, and COPPA/GDPR-K compliance | the original brief |
+| 2 | **Content Curation Policy owner** — the criteria excluding authors with companion apps and publishers in AI litigation | a decision | Which books can launch at all | the original brief |
+| 3 | **GCP account and billing** | ~30 min | **Stage 1 cannot start without it** | now |
+| 4 | **A domain** | ~15 min | Deployment and the email provider both need it | now |
+| 5 | **Streak vs library size** — a product call | a decision | Stage 3 | 2026-08-09 |
+| 6 | **SFX assets** — sourcing and licensing | unknown | Stage 4 polish | 2026-08-06 |
+| 7 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
 
-The three genuinely urgent ones, when the time comes: **Payload's public reachability** (a security hole, not a task), **password reset** (a support catastrophe waiting), and the **content pipeline** (the longest lead time by far, and it hasn't been designed yet).
+**Items 3 and 4 are the only ones blocking work right now.** Items 1 and 2 have been open since the beginning and are the ones most likely to surprise you late — a curation policy discovered in Stage 5 can invalidate content produced in Stage 3.
