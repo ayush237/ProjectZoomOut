@@ -1032,6 +1032,79 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP10 — Report an error, the fix queue, and the legal surfaces — 2026-08-13
+
+**Status:** 9 of 10 acceptance criteria verified by execution; the tenth is half-done and named below rather than counted. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **913 tests** (64 shared, 161 admin, 459 backend, 229 mobile), lint, typecheck and build all exit 0.
+
+**Branch:** `wp10-report-error-legal`, from `main` at `bb7abc0`.
+
+#### Where the time went
+
+Roughly: a fifth on the report path end to end; a fifth on the fix queue and its refusal; **two fifths on §3**, which turned out to be a build rather than a check; the rest on the SLA, tests and the device session.
+
+#### §3 was not a verification. It was a missing feature.
+
+**The disclaimer and the purchase links were rendered nowhere in the app.** Not on a Track detail screen — there was no Track detail screen. `TrackCard` rendered a cover, a title and an author, and the only occurrences of `disclaimer` or `purchaseLinks` anywhere under `apps/mobile/src` were **in a test fixture**.
+
+So the position since WP7 has been: `trackSchema` requires both fields, WP3 makes a Track unservable without them, the API returns them on every response — and no reader has ever seen either. **Servable is not visible, and it is the visible one `LEGAL.md` rests on.** The handoff was right to suspect this and understated it.
+
+What that meant for scope: the handoff says "confirm the disclaimer is visible on the Track detail screen", which presupposes a screen that does not exist. Adding one is the smallest thing that satisfies the requirement, so this package includes:
+
+- **`TrackLegal`** — one component carrying the disclaimer *and* the purchase links, deliberately inseparable. A purchase link without the disclaimer beside it is exactly the affiliate-looking surface the disclaimer exists to disown.
+- **`TrackDetailScreen`** — author, title, publisher, description, and `TrackLegal`. Deliberately not a contents list; Journey and Library already own "where am I in this".
+- **Every Track card in Explore, Library and Journey is now tappable into it**, so the obligation is reachable from every screen that shows a book.
+- **`CompletionOutcome.trackCompleted`** (additive to `delivery.ts`, noted below) so the purchase link appears **on Track completion**, which `PRODUCT.md` requires specifically and which the client previously had no way to detect — it knows its own Leaf, not how many remain.
+
+**Verified by looking at the screen**, not at an API response: the disclaimer renders in full under "About this book", and tapping the purchase link opened Safari at the retailer URL. The seed's placeholder URL does not resolve, which is content, not a defect.
+
+#### Report an error
+
+`ErrorReport` existed from WP0 and needed adjusting rather than replacing, as the handoff predicted. Three real gaps: `reason` was a free string (now the four-value enum, so the queue is sortable without reading prose), there was no free-text field, and `trackId` was missing. Status narrowed from four speculative states to `open`/`resolved` — the file was marked PROVISIONAL pending exactly this package.
+
+Two decisions worth recording:
+
+- **`trackId` is denormalised at filing time.** The thing pulled in a takedown is a Track, and resolving Leaf → Track at triage would mean asking the CMS about content that may by then be gone. A report about withdrawn content is the report most worth reading.
+- **`user_id` is `on delete set null`, not cascade.** A deleted account must not erase evidence that a factual claim was disputed. `errorReportSchema.userId` is nullable to match, rather than the domain lying about a row it cannot describe.
+
+The action sits in the player on **every slide**, quiet and below the content. Submitting keeps the sheet open and states the SLA, because on a trust surface silence reads as being ignored.
+
+#### The fix queue
+
+`GET /moderation/reports`, gated by `MODERATION_OPERATOR_TOKEN` from validated config, compared with `timingSafeEqual`. **Unset config refuses everyone** — the same fail-closed shape WP2 chose for unconfigured providers, and the one mistake here would publish every reader-submitted report on any deployment that forgot the variable.
+
+The SLA is written into `project/LEGAL.md` under content integrity: who reviews, how often, and a severity table separating a same-day unpublish for suspected fabrication from a one-working-day correction for a factual error. It also states what the commitment does *not* cover — reporters get no follow-up until WP13's email provider exists.
+
+#### Tests, and what cannot be mutation-checked
+
+Tier A is that a report is persisted and that the queue refuses an untokened caller. The refusal has seven cases, including a valid *reader* token and the right token under the wrong scheme.
+
+**Mutation check:** making an unconfigured token return `true` instead of `false` reddens exactly one test — "refuses everyone when no operator token is configured" — and nothing else.
+
+**Two things here assert an absence and therefore cannot be mutation-checked**, which the handoff asked me to name:
+
+1. **"Refuses an untokened caller."** There is no line to break; the guard *is* the mechanism. Deleting it makes the tests fail, but that is deletion, not mutation.
+2. **"A report survives its reporter being deleted."** This asserts that no cascade exists. A mutation would mean *adding* `on delete cascade` — writing the bug the test forbids, which is a schema change rather than a behaviour flip.
+
+Both guard future regressions rather than proving present behaviour, same as WP9's "wrapping up does not lock the reader out".
+
+#### The device session
+
+Filed a report from the player against Leaf 9, saw the confirmation, and read it back through the operator endpoint: `wrong_answer`, track 29 resolved server-side, status `open`. The queue's refusal was also exercised against the running server — no token and wrong token both 401, correct token 200.
+
+**Three reloads were wasted on a stale bundle before I noticed Metro had died again.** This is the third package it has cost time in. `open_url` alone does not fix it — the app re-attaches to a dead packager and silently serves its last download. **`xcrun simctl terminate <udid> host.exp.Exponent` then re-opening is what actually forces a fresh bundle**, and that is worth doing before concluding a feature is broken.
+
+#### Not verified
+
+**The achievement share screen still has not been walked end to end** — carried from WP9 and still outstanding. Reaching it needs an unlock on the completion screen, and the test account earned no new badge during this session. It remains verified by construction only: it renders the same `ShareCard` through the same capture path as the wrap-up screen, both of which are proven.
+
+Deferred Tier C, by name: no component render tests for `ReportErrorSheet`, `TrackDetailScreen` or `TrackLegal`; no test that the report action appears on every slide rather than one; the rate limiter is tested at its boundary but not across the window reset; and `Linking.openURL` failure is swallowed by design and unasserted.
+
+#### `delivery.ts` and `moderation.ts`
+
+`delivery.ts`: `trackCompleted` added to `CompletionOutcome`. Additive; both apps compile.
+
+`moderation.ts`: settled from PROVISIONAL, as its own header directed. `reason` narrowed to an enum, `status` narrowed to two values, `trackId` and `detail` added, `userId` made nullable. **The status narrowing is a removal** — `triaged` and `rejected` are gone. Nothing referenced them.
+
 ### Completed: WP9 — Session wrap-up and achievement screens — 2026-08-13
 
 **Status:** All 10 acceptance criteria verified by execution, including the thumbnail check — which **failed on first look and was fixed**, and that is the most useful thing in this report. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **898 tests** (64 shared, 161 admin, 444 backend, 229 mobile), lint, typecheck and build all exit 0.

@@ -1,3 +1,5 @@
+import { PostgresModerationRepository } from './moderation/moderation.repository.js';
+import { ModerationService } from './moderation/moderation.service.js';
 import { PostgresAchievementRepository } from './achievements/achievements.repository.js';
 import { SessionSummaryService } from './progress/sessionSummary.service.js';
 import { AchievementService } from './achievements/achievements.service.js';
@@ -129,6 +131,13 @@ async function main(): Promise<void> {
     achievementService,
   );
 
+  const moderationService = new ModerationService(
+    new PostgresModerationRepository(database),
+    contentService,
+    config,
+    logger,
+  );
+
   const reaper = new RefreshTokenReaper(
     authRepository,
     logger,
@@ -146,6 +155,7 @@ async function main(): Promise<void> {
     libraryService,
     progressService,
     sessionSummaryService,
+    moderationService,
     achievementService,
     authenticate: createAuthenticator(tokenService),
   });

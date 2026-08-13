@@ -1,6 +1,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { LeafPlayerScreen } from '../screens/leaf/LeafPlayerScreen';
+import { TrackDetailScreen } from '../screens/TrackDetailScreen';
 import { AchievementShareScreen } from '../screens/share/AchievementShareScreen';
 import { WrapUpScreen } from '../screens/share/WrapUpScreen';
 import { TabShell } from './TabShell';
@@ -47,6 +48,7 @@ export function AppStack(): React.JSX.Element {
        * destinations a reader should be able to swipe back out of, and neither has
        * progress to abandon.
        */}
+      <Stack.Screen name="TrackDetail" component={TrackDetailScreen} />
       <Stack.Screen name="WrapUp" component={WrapUpScreen} />
       <Stack.Screen name="AchievementShare" component={AchievementShareScreen} />
     </Stack.Navigator>

@@ -243,7 +243,7 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
        * here makes a replayed completion self-healing, and it is already idempotent via
        * the `eq(status, 'active')` guard in the repository.
        */
-      await this.finishTrackIfDone(userId, leaf.trackId);
+      const replayTrack = await this.finishTrackIfDone(userId, leaf.trackId);
 
       return {
         progress: toDomainProgress(existing),
@@ -252,6 +252,9 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
         // A replay must not add to the clock, but it still reports where the day
         // stands — the client shows the limit screen off this.
         session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
+        // Re-derived on a replay too: the reader may be re-entering the Leaf that
+        // finished the book, and the purchase link should still be offered.
+        trackCompleted: replayTrack.completed,
         /**
          * Empty, and not because evaluation is skipped.
          *
@@ -309,6 +312,7 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
         session: this.toSessionStatus(localDate, await this.sessions.findSession(userId, localDate)),
         // The call that won awarded them; this one has nothing new to announce.
         unlocked: await this.achievements.awardQuietly(userId),
+        trackCompleted: (await this.finishTrackIfDone(userId, leaf.trackId)).completed,
       };
     }
 
@@ -363,6 +367,7 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
       alreadyCompleted: false,
       session: this.toSessionStatus(localDate, session),
       unlocked,
+      trackCompleted: track.completed,
     };
   }
 

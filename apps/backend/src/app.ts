@@ -18,6 +18,8 @@ import type { LibraryService } from './library/library.service.js';
 import { registerHealthRoutes } from './health/health.routes.js';
 import type { HealthService } from './health/health.service.js';
 import type { AppLogger } from './logging/logger.js';
+import { registerModerationRoutes } from './moderation/moderation.routes.js';
+import type { ModerationService } from './moderation/moderation.service.js';
 import { registerProgressRoutes } from './progress/progress.routes.js';
 import type { ProgressService } from './progress/progress.service.js';
 import type { SessionSummaryService } from './progress/sessionSummary.service.js';
@@ -41,6 +43,7 @@ export interface AppDependencies {
   readonly libraryService: LibraryService;
   readonly progressService: ProgressService;
   readonly sessionSummaryService: SessionSummaryService;
+  readonly moderationService: ModerationService;
   readonly achievementService: AchievementService;
   readonly authenticate: Authenticator;
 }
@@ -175,6 +178,7 @@ export async function buildApp(deps: AppDependencies): Promise<ZoomOutApp> {
   registerLibraryRoutes(app, deps.libraryService, deps.authenticate);
   registerProgressRoutes(app, deps.progressService, deps.sessionSummaryService, deps.authenticate);
   registerAchievementRoutes(app, deps.achievementService, deps.authenticate);
+  registerModerationRoutes(app, deps.moderationService, deps.config, deps.authenticate);
   registerAuthRoutes(app, deps.authService, deps.config, deps.authenticate);
   registerProfileRoutes(app, deps.profileService, deps.authenticate);
 

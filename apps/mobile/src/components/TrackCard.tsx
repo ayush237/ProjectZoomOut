@@ -1,6 +1,6 @@
 import type { Track } from '@zoomout/shared';
 import type { ReactNode } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { useTheme } from '../design';
 import { Icon } from './Icon';
@@ -23,6 +23,15 @@ export interface TrackCardProps {
   readonly action?: ReactNode;
   /** Progress bar or similar, rendered between the details and the action. */
   readonly children?: ReactNode;
+  /**
+   * Opens the book's detail page (WP10).
+   *
+   * Optional so a card can stay inert where there is nowhere useful to go, but every
+   * list that shows a Track should pass it: the detail page is where the
+   * non-endorsement disclaimer and the purchase links live, and a card with no route
+   * to them leaves those obligations unreachable from that screen.
+   */
+  readonly onPress?: (() => void) | undefined;
   readonly testID?: string;
 }
 
@@ -30,7 +39,7 @@ const COVER_WIDTH = 64;
 /** Roughly the proportions of a printed book, so covers do not letterbox. */
 const COVER_ASPECT = 2 / 3;
 
-export function TrackCard({ track, action, children, testID }: TrackCardProps): React.JSX.Element {
+export function TrackCard({ track, action, children, onPress, testID }: TrackCardProps): React.JSX.Element {
   const theme = useTheme();
 
   return (
@@ -45,7 +54,15 @@ export function TrackCard({ track, action, children, testID }: TrackCardProps): 
         gap: theme.spacing.lg,
       }}
     >
-      <View style={[styles.row, { gap: theme.spacing.lg }]}>
+      <Pressable
+        accessibilityRole={onPress === undefined ? undefined : 'button'}
+        {...(onPress === undefined
+          ? {}
+          : { accessibilityLabel: `${track.bookTitle}, about this book`, onPress })}
+        disabled={onPress === undefined}
+        testID={testID === undefined ? undefined : `${testID}-open`}
+        style={[styles.row, { gap: theme.spacing.lg }]}
+      >
         <Cover url={track.coverUrl} title={track.bookTitle} />
 
         {/* Flexes so long titles wrap instead of pushing the cover off the card, which
@@ -58,7 +75,7 @@ export function TrackCard({ track, action, children, testID }: TrackCardProps): 
             {track.author}
           </Text>
         </View>
-      </View>
+      </Pressable>
 
       {children}
       {action}

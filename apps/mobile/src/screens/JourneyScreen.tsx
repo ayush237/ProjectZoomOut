@@ -146,6 +146,9 @@ export function JourneyScreen(): React.JSX.Element {
             <TrackCard
               track={item.track}
               testID={`journey-track-${item.track.id}`}
+              onPress={() => {
+                navigation.navigate('TrackDetail', { trackId: item.track.id });
+              }}
               action={
                 <Button
                   testID={`journey-resume-${item.track.id}`}

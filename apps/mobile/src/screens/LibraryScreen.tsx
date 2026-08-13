@@ -114,6 +114,9 @@ export function LibraryScreen(): React.JSX.Element {
             <TrackCard
               track={item.track}
               testID={`library-track-${item.track.id}`}
+              onPress={() => {
+                navigation.navigate('TrackDetail', { trackId: item.track.id });
+              }}
               /**
                * Library opens a Leaf too, not just Journey — one of the two entry
                * points the acceptance criteria name.

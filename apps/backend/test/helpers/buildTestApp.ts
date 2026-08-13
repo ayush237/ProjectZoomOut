@@ -1,3 +1,5 @@
+import { PostgresModerationRepository } from '../../src/moderation/moderation.repository.js';
+import { ModerationService } from '../../src/moderation/moderation.service.js';
 import { PostgresAchievementRepository } from '../../src/achievements/achievements.repository.js';
 import { SessionSummaryService } from '../../src/progress/sessionSummary.service.js';
 import { AchievementService } from '../../src/achievements/achievements.service.js';
@@ -106,6 +108,13 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     logger,
   );
 
+  const moderationService = new ModerationService(
+    new PostgresModerationRepository(database),
+    contentService,
+    config,
+    logger,
+  );
+
   const app = await buildApp({
     config,
     logger,
@@ -128,6 +137,7 @@ export async function buildTestApp(options: TestAppOptions): Promise<TestApp> {
     ),
     progressService,
     sessionSummaryService,
+    moderationService,
     achievementService,
     authenticate: createAuthenticator(tokenService),
   });

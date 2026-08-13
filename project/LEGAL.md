@@ -46,6 +46,41 @@ The highest-severity risk is fabricated content attributed to a real author — 
 - User-facing "report an error" action on every Leaf, routed to a fix queue with a defined SLA.
 - Takedown process able to pull a Track within hours of a verified complaint, not weeks.
 
+### The fix queue SLA (defined 2026-08-13, WP10)
+
+The SLA is **a process a person follows, not software**. Nothing in the app enforces
+these timings; they are the commitment the correction channel is only meaningful
+because of, and they are what "a defined SLA" above refers to.
+
+**Who reviews.** The founder, until there is somebody else. Reports are read by a human
+in every case — no report is auto-closed, and the queue has exactly two states (`open`
+and `resolved`) precisely so that "resolved" always means a person looked.
+
+**How often.** The queue is checked **once every working day**. Reports arrive through
+`GET /moderation/reports`, behind an operator token; the backend also logs every filing
+at `warn` level, so a report is visible in the ordinary logs without anyone polling.
+
+**What the clock is, by severity.** Two different promises, and conflating them is what
+makes an SLA meaningless:
+
+| Report | Response |
+|---|---|
+| `offensive`, or anything alleging **fabricated content attributed to a real author** | **Same day.** Unpublish the Track first and investigate afterwards — reversing an unpublish costs nothing, and leaving a false claim attributed to a named author up while it is investigated is the risk this whole policy exists to avoid. |
+| `wrong_answer` — an option marked correct that is not | **One working day.** The payoff gate is teaching the wrong thing, so it is a correctness bug with a legal edge, but it is not a false claim about a person. |
+| `factual_error` | **One working day** to triage, corrected in the next content pass. |
+| `other` | Read within one working day, no correction commitment. |
+
+**What "within hours" means operationally.** The takedown commitment above is about the
+*mechanism*, and the mechanism is already immediate: unpublishing a Track in the CMS
+removes it from every API response within the content cache TTL (60 seconds, capped at
+600 by configuration). So the hours are review time, not engineering time — the founder
+has to decide, and the pulling itself is one action in the admin UI.
+
+**What this does not cover.** Reports are not acknowledged by email; the reader gets an
+in-app confirmation at submission and nothing afterwards. Closing that loop needs the
+transactional email provider WP13 introduces, and until then the SLA is a promise about
+what happens to the content, not about what the reporter is told.
+
 ## Open compliance items (pre-launch blockers)
 Each requires an owner and decision before launch:
 - **Data privacy** — privacy policy and DPAs for all third-party AI vendors (Gemini, ElevenLabs, Vertex); GDPR/CCPA assessment.

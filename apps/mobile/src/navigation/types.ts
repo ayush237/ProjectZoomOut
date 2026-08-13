@@ -61,6 +61,12 @@ export type AppStackParamList = {
    * "today" is the server's answer from the reader's stored timezone. Passing a date
    * here would put a second opinion about the reader's day into navigation state.
    */
+  /**
+   * One book's detail page (WP10) — where the non-endorsement disclaimer and the
+   * purchase-forward links are shown. Id only; the screen fetches the Track, so a
+   * withdrawn book fails the same way everywhere else does.
+   */
+  TrackDetail: { readonly trackId: string };
   WrapUp: undefined;
   /**
    * One achievement, framed for sharing.
