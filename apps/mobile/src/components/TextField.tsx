@@ -28,6 +28,14 @@ export interface TextFieldProps {
   readonly error?: string | undefined;
   /** Guidance shown under the field while it is valid, e.g. a date format. */
   readonly hint?: string | undefined;
+  /**
+   * Grows to several lines for free text (WP10's error report).
+   *
+   * The height is set here rather than left to the platform because an auto-sizing
+   * multiline input starting at one line reads as a single-line field, and readers
+   * write one clause into it and stop.
+   */
+  readonly multiline?: boolean;
   readonly testID?: string;
 }
 
@@ -42,6 +50,7 @@ export function TextField({
   autoComplete = 'off',
   error,
   hint,
+  multiline = false,
   testID,
 }: TextFieldProps): React.JSX.Element {
   const theme = useTheme();
@@ -75,6 +84,10 @@ export function TextField({
         {...(keyboardType === undefined ? {} : { keyboardType })}
         autoCapitalize={autoCapitalize}
         autoComplete={autoComplete}
+        multiline={multiline}
+        // `top` so text starts at the top of a tall box rather than vertically centred,
+        // which on Android is the difference between a text area and an odd-looking input.
+        {...(multiline ? { textAlignVertical: 'top' as const } : {})}
         accessibilityLabel={label}
         // Announced, so a screen reader reaches the field already knowing it is wrong
         // rather than discovering it from a message rendered somewhere after it.
@@ -90,6 +103,7 @@ export function TextField({
             borderWidth: focused || error !== undefined ? theme.borderWidth.focus : theme.borderWidth.hairline,
             paddingHorizontal: theme.spacing.lg,
             paddingVertical: theme.spacing.md,
+            ...(multiline ? { minHeight: 96 } : {}),
           },
         ]}
       />

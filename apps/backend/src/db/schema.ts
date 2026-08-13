@@ -410,6 +410,65 @@ export const readerEvents = pgTable(
   ],
 );
 
+export const errorReportReasonEnum = pgEnum('error_report_reason', [
+  'factual_error',
+  'wrong_answer',
+  'offensive',
+  'other',
+]);
+
+export const errorReportStatusEnum = pgEnum('error_report_status', ['open', 'resolved']);
+
+/**
+ * The fix queue — reader-submitted reports against a Leaf.
+ *
+ * **A legal requirement, not a feedback table.** `LEGAL.md` commits ZoomOut to a
+ * user-facing correction channel with a defined SLA, and that commitment is part of what
+ * makes the fair-use position defensible. A row here is the start of a clock.
+ *
+ * `leaf_id` and `track_id` are text and not foreign keys, for the same reason as
+ * everywhere else — content lives in the CMS's database. **`track_id` is denormalised
+ * deliberately**: it is resolved when the report is filed so that triage never depends
+ * on the Leaf still resolving. A report about content that has since been unpublished is
+ * exactly the report most worth reading, and it must not become unreadable because the
+ * thing it describes was pulled.
+ *
+ * Deliberately **not** cascade-deleted with the user. A deleted account must not erase
+ * the evidence that a factual claim was disputed; `user_id` is nullable so the reference
+ * can be dropped while the report survives.
+ */
+export const errorReports = pgTable(
+  'error_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    /** Null once the reporting account is gone. The report itself is retained. */
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+
+    leafId: text('leaf_id').notNull(),
+    /** Resolved at submission time, so a takedown target survives the content vanishing. */
+    trackId: text('track_id').notNull(),
+
+    reason: errorReportReasonEnum('reason').notNull(),
+
+    /** Optional free text from the reader. */
+    detail: text('detail'),
+
+    status: errorReportStatusEnum('status').notNull().default('open'),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (table) => [
+    // The queue is read as "what is still open, oldest first" — that is the only access
+    // pattern Phase 1 has, and it is the one the founder's SLA is measured against.
+    index('error_reports_status_created_idx').on(table.status, table.createdAt),
+    index('error_reports_leaf_id_idx').on(table.leafId),
+  ],
+);
+
+export type ErrorReportRow = typeof errorReports.$inferSelect;
+
 export type UserAchievementRow = typeof userAchievements.$inferSelect;
 export type ReaderEventRow = typeof readerEvents.$inferSelect;
 

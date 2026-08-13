@@ -169,6 +169,35 @@ const environmentSchema = z.object({
    */
   SESSION_MAX_LEAF_SECONDS: z.coerce.number().int().min(1).default(300),
 
+  /* ---------------------------------------------------------------------- */
+  /* Moderation — the fix queue (WP10)                                       */
+  /* ---------------------------------------------------------------------- */
+
+  /**
+   * Bearer token for the operator read of the error-report queue.
+   *
+   * **Optional, and unset means the endpoint refuses everyone** — the same
+   * fail-closed shape as the unconfigured social providers in WP2. The alternative,
+   * defaulting to something, would put the whole fix queue behind a guessable string;
+   * the alternative to *that*, requiring it, would stop the backend booting for local
+   * development over an operator tool nobody is using yet.
+   *
+   * Compared in constant time at the call site, and long enough that guessing is not
+   * the attack worth worrying about.
+   */
+  MODERATION_OPERATOR_TOKEN: z.string().min(MINIMUM_SECRET_LENGTH).optional(),
+
+  /**
+   * Reports permitted per IP per window.
+   *
+   * Lower than the auth limit and deliberately so: filing an error report is a
+   * deliberate act a reader performs a handful of times, while signing in is something
+   * a flaky connection makes them repeat. This is an authenticated write that creates a
+   * row on the reader's say-so, which is exactly the shape that needs a ceiling.
+   */
+  REPORT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(5),
+  REPORT_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(300),
+
   /**
    * How often expired refresh tokens are swept.
    *

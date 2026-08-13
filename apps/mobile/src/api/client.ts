@@ -1,5 +1,7 @@
 import type {
   AchievementStatus,
+  ErrorReport,
+  ErrorReportReason,
   AnswerOutcome,
   CompletionOutcome,
   DeliveredLeaf,
@@ -409,6 +411,34 @@ export class ApiClient {
       undefined,
       true,
     );
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Reporting an error                                                  */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Files an error report against a Leaf.
+   *
+   * **A legal surface, not feedback.** `LEGAL.md` commits ZoomOut to a user-facing
+   * correction channel, and the returned report is what lets the app confirm receipt
+   * rather than swallowing the tap — silence here reads as being ignored.
+   *
+   * @throws {ApiError} 429 when the reader has filed too many too quickly.
+   */
+  public async reportError(
+    leafId: string,
+    reason: ErrorReportReason,
+    detail?: string,
+  ): Promise<ErrorReport> {
+    const body = await this.send<{ report: ErrorReport }>(
+      'POST',
+      `/content/leaves/${encodeURIComponent(leafId)}/reports`,
+      { reason, ...(detail === undefined || detail.trim() === '' ? {} : { detail: detail.trim() }) },
+      true,
+    );
+
+    return body.report;
   }
 
   /* ------------------------------------------------------------------ */

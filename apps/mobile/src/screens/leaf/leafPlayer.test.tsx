@@ -183,6 +183,7 @@ function fakeApi(overrides: {
             payoffUnlocked: false,
             payoff: null,
             unlocked: [],
+            trackCompleted: false,
           }),
       ),
     completeLeaf:
@@ -202,6 +203,7 @@ function fakeApi(overrides: {
           capXp: 500,
         },
             unlocked: [],
+            trackCompleted: false,
           }),
       ),
     // WP5b. Awards nothing by default, so the existing gate tests are unaffected.
@@ -344,6 +346,7 @@ describe('completion', () => {
         // A replay awards nothing, so it announces nothing. The server decides this;
         // the empty list here is the shape that decision arrives in.
         unlocked: [],
+        trackCompleted: false,
       })),
     });
     const { result } = await renderSession(api);
@@ -385,6 +388,7 @@ describe('completion', () => {
           capXp: 500,
         },
       unlocked: [],
+      trackCompleted: false,
     });
 
     await flush(() => {
@@ -515,6 +519,7 @@ describe('the session cap', () => {
             capXp: 500,
           },
           unlocked: [],
+          trackCompleted: false,
         }),
       ),
     });
@@ -565,6 +570,7 @@ describe('achievements', () => {
             capXp: 500,
           },
           unlocked: [BADGE],
+          trackCompleted: false,
         }),
       ),
     });

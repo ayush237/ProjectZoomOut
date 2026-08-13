@@ -1,8 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { DeliveredLeaf, UnlockedAchievement } from '@zoomout/shared';
+import type { DeliveredLeaf, Track, UnlockedAchievement } from '@zoomout/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useApi } from '../../auth/AuthProvider';
@@ -13,6 +13,7 @@ import {
   Icon,
   StatusMessage,
   Text,
+  TrackLegal,
 } from '../../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../../design';
 import type { AppStackParamList } from '../../navigation/types';
@@ -23,6 +24,7 @@ import { ScenarioSlide } from './ScenarioSlide';
 import { StickyNotesSlide } from './StickyNotesSlide';
 import { SummarySlide } from './SummarySlide';
 import { TakeawaySlide } from './TakeawaySlide';
+import { ReportErrorSheet } from './ReportErrorSheet';
 import { SLIDES, useLeafSession } from './useLeafSession';
 
 type PlayerRoute = RouteProp<AppStackParamList, 'LeafPlayer'>;
@@ -101,6 +103,22 @@ function LeafSessionView({
   }, [navigation]);
 
   /**
+   * The correction channel, available from every slide (WP10).
+   *
+   * `LEGAL.md` requires a report action on every Leaf, and "every Leaf" in practice
+   * means every moment the reader is looking at one — a claim they doubt is on the
+   * slide in front of them, not on a screen they have to navigate back to.
+   */
+  const [reporting, setReporting] = useState(false);
+
+  const fileReport = useCallback(
+    async (reason: Parameters<typeof api.reportError>[1], detail: string): Promise<void> => {
+      await api.reportError(leafId, reason, detail);
+    },
+    [api, leafId],
+  );
+
+  /**
    * A withdrawn Leaf takes over the screen.
    *
    * The takedown cascade can land mid-session: unpublishing a Track withdraws its
@@ -139,6 +157,8 @@ function LeafSessionView({
           xpAwarded={session.xpAwarded}
           firstTryCorrect={session.firstTryCorrect}
           capReached={session.capReached}
+          trackCompleted={session.trackCompleted}
+          trackId={leaf.trackId}
           unlocked={session.unlocked}
           onDone={leave}
           onWrapUp={() => {
@@ -229,6 +249,38 @@ function LeafSessionView({
       {session.slide === 'takeaway' ? (
         <TakeawaySlide data={leaf.takeaway} onOpenDinnerTable={session.reportDinnerTableOpen} />
       ) : null}
+
+      {/**
+       * Quiet, present on every slide, and below the content rather than in the header.
+       *
+       * The header holds the way out and the progress counter; putting a third control
+       * there would compete with them. Down here it is findable without being an
+       * invitation — most readers should never need it.
+       */}
+      <View style={{ paddingTop: theme.spacing.xxl, alignItems: 'center' }}>
+        <Pressable
+          testID="leaf-report"
+          onPress={() => {
+            setReporting(true);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Report an error in this Leaf"
+          hitSlop={theme.spacing.md}
+          style={{ minHeight: MIN_TOUCH_TARGET, justifyContent: 'center' }}
+        >
+          <Text variant="small" tone="textMuted">
+            Something wrong here? Report it
+          </Text>
+        </Pressable>
+      </View>
+
+      <ReportErrorSheet
+        visible={reporting}
+        onClose={() => {
+          setReporting(false);
+        }}
+        onSubmit={fileReport}
+      />
     </PlayerFrame>
   );
 }
@@ -243,6 +295,8 @@ function CompletionSummary({
   xpAwarded,
   firstTryCorrect,
   capReached,
+  trackCompleted,
+  trackId,
   unlocked,
   onDone,
   onWrapUp,
@@ -251,6 +305,8 @@ function CompletionSummary({
   readonly xpAwarded: number;
   readonly firstTryCorrect: boolean;
   readonly capReached: boolean;
+  readonly trackCompleted: boolean;
+  readonly trackId: string;
   readonly unlocked: readonly UnlockedAchievement[];
   readonly onDone: () => void;
   readonly onWrapUp: () => void;
@@ -328,6 +384,16 @@ function CompletionSummary({
        * finished something — the sentence should sound like the natural close of a
        * session, which is the only reason a wellbeing feature ever works.
        */}
+      {/**
+       * The purchase-forward link, at Track completion.
+       *
+       * `PRODUCT.md` requires it at this moment specifically, and until WP10 the app
+       * showed it nowhere at all. Fetched here rather than passed down because finishing
+       * a book is rare — one extra request on the rarest event in the app is cheaper
+       * than carrying a Track through the player for every Leaf that is not the last.
+       */}
+      {trackCompleted ? <TrackCompletedPanel trackId={trackId} /> : null}
+
       {capReached ? (
         <View
           testID="leaf-cap-reached"
@@ -374,6 +440,38 @@ function CompletionSummary({
         )}
         <Button label="Done" onPress={onDone} testID="leaf-done" />
       </View>
+    </View>
+  );
+}
+
+/**
+ * Finishing the book: congratulations, and the two obligations that come with it.
+ *
+ * Renders `TrackLegal`, so the non-endorsement disclaimer and the purchase links appear
+ * together — `PRODUCT.md` asks for the link at completion, and `LEGAL.md` never wants
+ * one without the other.
+ *
+ * Failure is silent. The reader has just finished a book; an error box about a Track
+ * fetch would be a poor reward, and the same links remain one tap away on the book's
+ * detail page.
+ */
+function TrackCompletedPanel({ trackId }: { readonly trackId: string }): React.JSX.Element | null {
+  const api = useApi();
+  const theme = useTheme();
+
+  const load = useCallback(async (): Promise<Track> => api.getTrack(trackId), [api, trackId]);
+  const track = useAsyncResource<Track>(load);
+
+  if (track.status !== 'ready' || track.data === null) {
+    return null;
+  }
+
+  return (
+    <View style={{ alignSelf: 'stretch', gap: theme.spacing.lg, paddingTop: theme.spacing.lg }}>
+      <Text variant="h3" align="center" testID="leaf-track-complete">
+        That is the whole book.
+      </Text>
+      <TrackLegal track={track.data} testID="leaf-track-legal" />
     </View>
   );
 }

@@ -48,6 +48,13 @@ export interface LeafSessionState {
   readonly firstTryCorrect: boolean;
   /** The server's verdict that today's session is over. Never computed here. */
   readonly capReached: boolean;
+  /**
+   * True when this completion finished the whole book (WP10).
+   *
+   * Server-decided. The client knows its own Leaf, not how many remain, and this is
+   * what triggers the purchase-forward link `PRODUCT.md` requires at that moment.
+   */
+  readonly trackCompleted: boolean;
   /** True only on the transition that earned the payoff, so re-entry does not replay it. */
   readonly justUnlocked: boolean;
   /**
@@ -112,6 +119,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
   const [xpAwarded, setXpAwarded] = useState<number | null>(null);
   const [firstTryCorrect, setFirstTryCorrect] = useState(false);
   const [capReached, setCapReached] = useState(false);
+  const [trackCompleted, setTrackCompleted] = useState(false);
   const [justUnlocked, setJustUnlocked] = useState(false);
   const [unlocked, setUnlocked] = useState<readonly UnlockedAchievement[]>([]);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -196,6 +204,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
 
           setXpAwarded(outcome.xpAwarded);
           setCapReached(outcome.session.capReached);
+          setTrackCompleted(outcome.trackCompleted);
           setUnlocked((current) => [...current, ...outcome.unlocked]);
           play('leafComplete');
           onFinished();
@@ -274,6 +283,7 @@ export function useLeafSession({ api, leafId, leaf, play }: LeafSessionOptions):
     xpAwarded,
     firstTryCorrect,
     capReached,
+    trackCompleted,
     justUnlocked,
     unlocked,
     fatalError,

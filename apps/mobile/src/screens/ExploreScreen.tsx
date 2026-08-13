@@ -1,8 +1,11 @@
 import type { Track, UnlockedAchievement } from '@zoomout/shared';
 import { useCallback, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 
 import type { TrackPage } from '../api/client';
+import type { AppStackParamList } from '../navigation/types';
 import { useApi } from '../auth/AuthProvider';
 import {
   AchievementUnlock,
@@ -27,7 +30,10 @@ import { useRefreshOnFocus } from './useRefreshOnFocus';
  * filter would be a second opinion about which content is real, and the two would
  * disagree the first time one of them changed.
  */
+type AppNavigation = NativeStackNavigationProp<AppStackParamList>;
+
 export function ExploreScreen(): React.JSX.Element {
+  const navigation = useNavigation<AppNavigation>();
   const theme = useTheme();
   const api = useApi();
 
@@ -239,6 +245,9 @@ export function ExploreScreen(): React.JSX.Element {
             <TrackCard
               track={item}
               testID={`explore-track-${item.id}`}
+              onPress={() => {
+                navigation.navigate('TrackDetail', { trackId: item.id });
+              }}
               action={
                 <Button
                   testID={`explore-toggle-${item.id}`}

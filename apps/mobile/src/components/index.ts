@@ -13,6 +13,7 @@ export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorState, type ErrorStateProps } from './ErrorState';
 export { ProgressBar, type ProgressBarProps } from './ProgressBar';
 export { TrackCard, type TrackCardProps } from './TrackCard';
+export { TrackLegal } from './TrackLegal';
 export { Icon, type IconName, type IconProps } from './Icon';
 export { Screen, type ScreenProps } from './Screen';
 export { StatusMessage, type StatusMessageProps, type StatusTone } from './StatusMessage';

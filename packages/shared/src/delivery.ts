@@ -76,6 +76,18 @@ export interface CompletionOutcome {
    * so it announces nothing.
    */
   readonly unlocked: readonly UnlockedAchievement[];
+  /**
+   * True on the completion that finished the **book**, not just the Leaf. Added in WP10.
+   *
+   * The client cannot infer this — it knows its own Leaf, not how many remain — and the
+   * server already decides it while closing `user_tracks.status`. It exists because
+   * `PRODUCT.md` requires the purchase-forward link to be shown on Track completion
+   * specifically, and that obligation needs a moment to appear at.
+   *
+   * Re-derived on a replay rather than reported as false: a reader re-entering the Leaf
+   * that finished the book should still be offered the link.
+   */
+  readonly trackCompleted: boolean;
 }
 
 /**
