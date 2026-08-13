@@ -114,6 +114,8 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 **A timezone test proves nothing unless the two timezones disagree at the instant it picks.** WP9 replaced an `at time zone` conversion with a naive `::date` cast and all nine tests still passed — the chosen instant was one where the server's date and Auckland's happened to agree, so no assertion could tell them apart. This is a different mistake from not writing the test, and it looks identical in a green run. Pick the instant deliberately, and mutation-check it.
 
+**Metro dies silently, and it has cost time in three packages.** A stale bundle re-attaches to a dead packager and serves its last download, which is indistinguishable from a feature that does not work. `open_url` does not fix it. `xcrun simctl terminate <udid> host.exp.Exponent` then re-opening forces a fresh bundle. Suspect this before suspecting your code.
+
 **Some assertions cannot be mutation-checked, and should say so.** "Wrapping up does not lock the reader out" asserts the *absence* of a mechanism — there is no line to break. Such a test guards a future regression rather than proving present behaviour. Note which of your tests are in this category; it is real information for WP14.
 
 **Two rules survive the change:**

@@ -1,56 +1,21 @@
 # Project Plan — Active Feature
 
-> **Active: WP10 — report an error, the fix queue, and the legal surfaces.** Handed off 2026-08-13; handoff in `collaboration-log.md`. **This is the last package before the app is complete end to end.**
->
-> WP9 signed off 2026-08-13, 10/10. WP5b signed off and merged.
-
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Feature
-**WP5b — Environment fix, achievements, total XP**
+## 🏁 Phase 1 is complete — 2026-08-13
 
-✅ **Signed off 2026-08-12, 9 of 9.** Part A resolved and verified by query. Branch `wp5b-achievements-xp` — six commits, **not yet pushed**.
+**No package is in flight.** Fourteen packages, WP0 through WP10, all signed off.
 
-Goal for the milestone: **an end-to-end working app** — every Phase 1 feature working against seeded content on a device. Remaining after WP5b: the device gate, WP9, WP10. Launch blockers are parked in `launch-blockers.md`.
+Every Phase 1 mechanic works end to end on a device: sign up and pass the age gate, browse Explore, add a book, play a Leaf through all five slides, answer wrong and retry without penalty, unlock the payoff on a correct answer, earn XP with a first-try bonus, keep a streak, hit a graceful daily cap that reads as an ending, wrap up and share a summary, unlock achievements, report an error, and see the non-endorsement disclaimer and purchase link the legal position depends on.
 
-## Status
-**`Signed off`** (2026-08-12)
+## What was true at the end that was not obvious at the start
 
-## Part A — resolved
-
-Was: `apps/backend/.env` named `zoomout_cms`, so the backend talked to Payload's database and `daily_session`/`streak` never existed where the real readers live. Now fixed and verified **by query, not exit code** — `zoomout` holds all nine tables and records migrations 0000–0005 with six readers intact; `zoomout_cms` is cleared of backend tables, the drizzle schema and enum types, with Payload's 20 tables and all 28 Tracks / 22 Leaves untouched.
-
-Payload's `there is no parameter $1` boot failure is explained: it was our tables in their database, not an upstream drizzle-kit bug.
-
-## Original diagnosis
-`apps/backend/.env`'s `DATABASE_URL` points at **`zoomout_cms`**, Payload's database, not `zoomout`.
-
-- `zoomout` holds the real readers — 6 users, 10 `leaf_progress`, 5 `user_tracks` — and only migrations 0000–0003.
-- `zoomout_cms` holds Payload's content plus an empty duplicate of the backend's tables.
-- So `daily_session` and `streak` never existed in the database holding real data. **That, not the missing `--env-file`, is why WP5a's device check failed.**
-- `db:migrate` then reported success while writing 0004 and 0005 into Payload's database, and `apps/admin` now fails to boot at Payload's schema-pull.
-
-Part A fixed how the env file is *loaded* and never checked where it *points* — the exact failure the acceptance commit for that same package had just generalised. Third instance of the shape, which is why it is now an acceptance criterion rather than a written rule.
-
-## Reopened Part A — acceptance criteria, phrased as observable state
-- [ ] `zoomout` contains `daily_session` and `streak`, and records migrations 0000–0005
-- [ ] `zoomout_cms` contains **no** backend tables and no drizzle migration bookkeeping
-- [ ] `apps/backend` boots and `GET /progress/today` returns 200
-- [ ] `apps/admin` boots and serves the seeded content
-- [ ] Both databases backed up before any destructive step
-
-Not "the command ran". The state, checked.
-
-## Accepted in Parts B and C
-Nineteen achievements as a code registry with slug identity; idempotent awarding proven at the repository level; total XP derived on read; `POST /events` carrying `dinner_table_open` and `session_wrap`; `ReaderStanding` and `unlocked` added to `delivery.ts`; `DayStatus` deduplicated into shared.
-
-## Open questions
-None. Three rulings closed 2026-08-12 — `first-wrap` keeps its event, the `gamification.ts` rewrite including its removals, and the additive `delivery.ts` changes.
+- **The mechanics that carry the product are server-decided.** Grading, the payoff gate, XP, the cap, streaks — none of it is client-trusted, which is why the active-recall thesis is a real gate rather than a UI convention.
+- **Manual device verification found what tests could not**, repeatedly: a flagship Track invisible behind pagination, an app pinned to light mode for six packages, icons shrinking as text grew, a re-armed Check button spending an attempt, a book title unreadable at thumbnail size, and Profile showing stale everything.
+- **The legal surfaces were the last thing to actually reach a reader.** Enforced in the schema from WP0 and rendered nowhere until WP10.
 
 ## Next
-**WP9 — shareable session wrap-up and achievement screens.** The device gate is closed: seven items verified, including that the cap screen reads as an ending rather than a refusal — `daily-cap` unlocks *above* the notice, so the reader is congratulated for stopping in the same breath they are told they are finished.
 
-Then **WP10**, and the app is complete end to end.
+**No feature work is queued.** `project/launch-blockers.md` is now the active plan and needs sequencing rather than appending — that is the next Architect session, not a handoff.
 
-## Handoff prompt
-See `project/collaboration-log.md` — Handoffs, 2026-08-12 (WP5b).
+The three that will dominate it: **Payload's public reachability** (a security hole, not a task — an exposed CMS makes the payoff gate and the answer key bypassable), **password reset** (email/password is the only way in), and **the content pipeline** (longest lead time, not yet designed, and its own planning cycle).

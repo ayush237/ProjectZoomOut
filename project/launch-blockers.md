@@ -2,7 +2,7 @@
 
 **Purpose:** everything that stands between a *working app* and a *shippable product*, kept out of `projectRoadmap.md` so it stops competing for attention with the build.
 
-**Nothing in this file blocks the current work.** Split out 2026-08-12 at the founder's direction: finish the end-to-end app first, then work this list.
+**Phase 1 closed 2026-08-13.** The end-to-end app is done, so **this file is now the active plan** and needs sequencing rather than appending.
 
 **Definition in use:** an *end-to-end working app* means every Phase 1 feature works against seeded content on a device. That is **WP5b → WP9 → WP10**. Everything below is after that.
 
@@ -20,6 +20,7 @@
 | **Rate limit on answer submission** | Unbounded authenticated write path. `attempt_count` is an unbounded `integer`, so sustained abuse eventually overflows into a permanent 500 on that Leaf | Manager |
 | **A real session-activity signal** | Session time is currently elapsed-time-per-Leaf clamped to five minutes. Under-counts a slow reader, erring toward letting them continue — acceptable, but an approximation | Manager |
 | **N+1 progress rollup** | One Track fetch and one Leaf list per library entry. Fine at a few books; thirty is thirty requests per Library open. Ruled approach: batch with `where[id][in]`, cache the ordered Leaf-id list on a longer TTL | Manager |
+| **The achievement share screen has never been walked end to end** | Verified by construction across WP9 and WP10 — same `ShareCard`, same capture path as the wrap-up screen, both verified — but its own route has never been exercised, because reaching it needs a badge to unlock on a completion screen and the test account has earned none. **Three deferrals now; it needs a deliberate fixture rather than waiting for it to happen naturally** | Manager |
 | **Android is entirely unverified** | Every device check has been iOS. Includes the `collapsable={false}` guard in the share capture, which exists specifically because Android flattens container views and would otherwise leave nothing to photograph | Manager |
 | **Push notifications** | Not scoped anywhere. A streak mechanic without reminders is much weaker — a reader who forgets loses it with no prompt | Unscoped |
 | **Extra-large text clips, app-wide** | `design/typography.ts` sets an absolute `lineHeight`; React Native scales `fontSize` but not `lineHeight`, so glyphs are cut by their own line box at the top accessibility steps. Pre-existing in WP6's design system. **The honest framing is "XXXL renders broken", not "XXXL unsupported"** — the app still honours the OS setting and then clips, which is the worse of the two states to ship, because a reader who needs large text gets a broken screen rather than a plain one. Founder ruled 2026-08-12 not to fix it now and to drop it as a per-package check; that ruling is about *sequencing*, and it does not make the defect go away. Likely a one-line fix (relative line heights or `allowFontScaling` strategy), but app-wide to verify | Manager |
