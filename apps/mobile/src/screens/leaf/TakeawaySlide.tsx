@@ -44,6 +44,43 @@ export function TakeawaySlide({
         <Text variant="h2">{data.body}</Text>
       </View>
 
+      {/**
+       * Apply in life — **always visible, not collapsed** (WP15; the handoff left this
+       * to me, so the reasoning is here).
+       *
+       * Dinner Table Knowledge is deliberately a discovery: optional, present on maybe a
+       * third of Leaves, and valuable *because* the reader chooses to open it. Apply-in-
+       * life is the opposite kind of thing — it is the point of the takeaway, the step
+       * from "I understood that" to "I did something with it". Hiding a call to action
+       * behind a tap means most readers never see it, and the ones who need it most are
+       * the least likely to go looking.
+       *
+       * It also sits above the DTK control rather than below: two collapsed "Show"
+       * affordances on one slide read as a settings screen, and the action should come
+       * before the curiosity.
+       */}
+      {data.applyInLife === undefined ? null : (
+        <View
+          testID="takeaway-apply-in-life"
+          style={{
+            gap: theme.spacing.sm,
+            padding: theme.spacing.lg,
+            borderRadius: theme.radius.lg,
+            backgroundColor: theme.surfaceFor('card'),
+            borderLeftWidth: theme.borderWidth.focus * 2,
+            borderLeftColor: theme.palette.primary,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+            <Icon name="journey" size={18} color={theme.palette.primary} />
+            <Text variant="caption" tone="primary">
+              Try this
+            </Text>
+          </View>
+          <Text variant="body">{data.applyInLife}</Text>
+        </View>
+      )}
+
       {fact === undefined ? null : (
         <View
           style={{

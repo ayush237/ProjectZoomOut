@@ -5,6 +5,7 @@ import {
   hasText,
   PASSED,
   type LeafDocumentInput,
+  type ImageAssetInput,
   type RuleResult,
 } from './types';
 
@@ -193,6 +194,64 @@ export function checkSourceReferencesHaveLocators(leaf: LeafDocumentInput): Rule
 /* Composition                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* Leaf v2 assets (WP15)                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * An asset is "present" when it has a URL. Anything else is an empty group.
+ *
+ * Payload sends a group whose fields are all blank as an object of nulls, not as
+ * `undefined` — so "no image" and "an image with nothing filled in" arrive looking
+ * almost identical. Keying presence off the URL is what separates them, and it is also
+ * the honest definition: an asset with no URL is not an asset.
+ */
+function assetIsPresent(asset: ImageAssetInput | null | undefined): boolean {
+  return hasText(asset?.url);
+}
+
+/**
+ * An asset that will be shown to readers must describe itself.
+ *
+ * Enforced **at publish**, not on every save, so a half-authored Leaf stays saveable —
+ * the same asymmetry the other publish rules use. Enforced here **independently of
+ * `imageAssetSchema`** rather than by importing it: WP1 established that a shared
+ * predicate means one bug defeats both gates, and this is the gate that stops bad
+ * content being published rather than the one that stops it being served.
+ */
+export function checkAssetsHaveAltText(leaf: LeafDocumentInput): RuleResult {
+  const violations = [
+    { asset: leaf.scenario?.image, path: 'scenario.image.alt', label: 'scenario illustration' },
+    { asset: leaf.stickyNotes?.diagram, path: 'stickyNotes.diagram.alt', label: 'diagram' },
+  ]
+    .filter(({ asset }) => assetIsPresent(asset) && !hasText(asset?.alt))
+    .map(({ path, label }) => ({
+      path,
+      message: `The ${label} needs alt text before this Leaf can be published. Describe what the image shows, for a reader who cannot see it.`,
+    }));
+
+  return violations.length === 0 ? PASSED : { ok: false, violations };
+}
+
+/**
+ * A diagram spec is useless without knowing what language it is written in.
+ *
+ * The spec exists so a wrong label can be fixed by editing text and re-rendering
+ * (content-pipeline R4). A spec nobody can re-render is a string taking up space.
+ */
+export function checkDiagramSpecHasFormat(leaf: LeafDocumentInput): RuleResult {
+  const diagram = leaf.stickyNotes?.diagram;
+
+  if (!hasText(diagram?.spec) || hasText(diagram?.specFormat)) {
+    return PASSED;
+  }
+
+  return failed(
+    'stickyNotes.diagram.specFormat',
+    'Choose the format the diagram spec is written in, so the diagram can be re-rendered later.',
+  );
+}
+
 /** Rules enforced on every save, draft or published. */
 export const LEAF_ALWAYS_RULES = [
   checkExactlyOneCorrectOption,
@@ -203,6 +262,8 @@ export const LEAF_ALWAYS_RULES = [
 export const LEAF_PUBLISH_RULES = [
   checkAllSlidesPopulated,
   checkSourceReferencesHaveLocators,
+  checkAssetsHaveAltText,
+  checkDiagramSpecHasFormat,
 ] as const;
 
 export function validateLeaf(leaf: LeafDocumentInput, isPublishing: boolean): RuleResult {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   checkAllSlidesPopulated,
+  checkAssetsHaveAltText,
+  checkDiagramSpecHasFormat,
   checkDinnerTableKnowledgeIsSourced,
   checkExactlyOneCorrectOption,
   checkSourceReferencesHaveLocators,
@@ -401,5 +403,142 @@ describe('validateLeaf', () => {
     });
 
     expect(validateLeaf(leaf, true).ok).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Leaf v2 assets — WP15                                                       */
+/* -------------------------------------------------------------------------- */
+
+describe('checkAssetsHaveAltText', () => {
+  /**
+   * **The Tier A case.** An asset that reaches a reader without alt text is invisible
+   * to anyone using VoiceOver, and these are the first images in the product.
+   */
+  it('rejects a scenario image with no alt text', () => {
+    const leaf = completeLeaf({
+      scenario: {
+        prompt: 'p',
+        options: [option('A', true), option('B', false), option('C', false)],
+        image: { url: 'https://cdn.test/x.png' },
+      },
+    });
+
+    const result = checkAssetsHaveAltText(leaf);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.violations[0]?.path).toBe('scenario.image.alt');
+  });
+
+  it('rejects a diagram with whitespace-only alt text', () => {
+    // Trimming runs before validation, so `"  "` is stored blank — it must read as
+    // absent rather than satisfying the rule on a technicality.
+    const leaf = completeLeaf({
+      stickyNotes: {
+        notes: [{ note: 'n' }],
+        diagram: { url: 'https://cdn.test/d.png', alt: '   ' },
+      },
+    });
+
+    expect(checkAssetsHaveAltText(leaf).ok).toBe(false);
+  });
+
+  it('reports both assets when neither has alt text', () => {
+    const leaf = completeLeaf({
+      scenario: {
+        prompt: 'p',
+        options: [option('A', true), option('B', false), option('C', false)],
+        image: { url: 'https://cdn.test/x.png' },
+      },
+      stickyNotes: { notes: [{ note: 'n' }], diagram: { url: 'https://cdn.test/d.png' } },
+    });
+
+    const result = checkAssetsHaveAltText(leaf);
+
+    expect(result.ok === false && result.violations).toHaveLength(2);
+  });
+
+  it('passes when an asset has alt text', () => {
+    const leaf = completeLeaf({
+      scenario: {
+        prompt: 'p',
+        options: [option('A', true), option('B', false), option('C', false)],
+        image: { url: 'https://cdn.test/x.png', alt: 'An illustration' },
+      },
+    });
+
+    expect(checkAssetsHaveAltText(leaf).ok).toBe(true);
+  });
+
+  it('passes when there is no asset at all', () => {
+    /**
+     * **This is the state of all 22 existing Leaves**, and the reason the rule keys
+     * presence off the URL: Payload sends an untouched group as an object of nulls, so
+     * "no image" must not be mistaken for "an image missing its alt text".
+     */
+    expect(checkAssetsHaveAltText(completeLeaf()).ok).toBe(true);
+  });
+
+  it('passes when the group exists but is entirely empty', () => {
+    const leaf = completeLeaf({
+      scenario: {
+        prompt: 'p',
+        options: [option('A', true), option('B', false), option('C', false)],
+        image: { url: null, alt: null, width: null, height: null },
+      },
+    });
+
+    expect(checkAssetsHaveAltText(leaf).ok).toBe(true);
+  });
+});
+
+describe('checkDiagramSpecHasFormat', () => {
+  it('rejects a spec with no format', () => {
+    const leaf = completeLeaf({
+      stickyNotes: {
+        notes: [{ note: 'n' }],
+        diagram: { url: 'https://cdn.test/d.png', alt: 'A diagram', spec: 'graph TD; A-->B;' },
+      },
+    });
+
+    expect(checkDiagramSpecHasFormat(leaf).ok).toBe(false);
+  });
+
+  it('passes with both, and with neither', () => {
+    const withBoth = completeLeaf({
+      stickyNotes: {
+        notes: [{ note: 'n' }],
+        diagram: {
+          url: 'https://cdn.test/d.png',
+          alt: 'A diagram',
+          spec: 'graph TD; A-->B;',
+          specFormat: 'mermaid',
+        },
+      },
+    });
+
+    expect(checkDiagramSpecHasFormat(withBoth).ok).toBe(true);
+    expect(checkDiagramSpecHasFormat(completeLeaf()).ok).toBe(true);
+  });
+});
+
+describe('the publish gate as a whole', () => {
+  it('lets a draft save with an asset missing alt, but refuses to publish it', () => {
+    /**
+     * The asymmetry every publish rule here follows: a half-authored Leaf stays
+     * saveable, and the gate is publication. Marking `alt` required at the field level
+     * would have made an in-progress Leaf unsaveable instead.
+     */
+    const leaf = completeLeaf({
+      scenario: {
+        prompt: 'p',
+        options: [option('A', true), option('B', false), option('C', false)],
+        image: { url: 'https://cdn.test/x.png' },
+      },
+      sourceReferences: [{ slideKey: 'summary', chapter: 'Ch 1', note: 'A note.' }],
+    });
+
+    expect(validateLeaf(leaf, false).ok).toBe(true);
+    expect(validateLeaf(leaf, true).ok).toBe(false);
   });
 });

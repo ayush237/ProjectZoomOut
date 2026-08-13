@@ -1086,6 +1086,72 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP15 — Leaf v2: assets and apply-in-life — 2026-08-13
+
+**Status:** 9 of 10 acceptance criteria verified by execution. **The device check is not done** — the reason is environmental and is stated below, not buried. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **932 tests** (71 shared, 170 admin, 459 backend, 232 mobile), lint, typecheck and build all exit 0.
+
+**Branch:** `wp15-leaf-v2`, from `main` at `bb7abc0`.
+
+#### Where the time went
+
+Roughly: a fifth on the schema and its re-freeze; a fifth on the CMS collection, rules and codegen; a fifth on the player; a fifth on tests including a mutation check; **the last fifth entirely on tooling** — a stale Metro cache after `npm ci`, and the cold gate deleting `.next` under the running CMS. Neither was a code problem and both are recorded below so the next package does not spend that time again.
+
+#### The thaw, and why the migration plan is "there isn't one"
+
+`content.ts` is re-frozen with the date updated and WP15 named, per the criterion. The header now records what was added and — more usefully — **why no backfill exists**: all three fields are optional, so the change is purely additive and content authored before Leaf v2 stays valid untouched. Nothing was removed, narrowed or renamed.
+
+**One thing the schema already had that made this safe:** `toPublicLeaf` is deliberately total and type-checked, with a comment from WP0 saying that adding a field to `scenario` must break compilation until it is handled. It did exactly that. That tripwire is the only reason the illustration is not silently stripped on its way to the client — worth knowing it earned its keep.
+
+Two decisions inside the schema:
+
+- **`alt` lives inside the asset and is required there.** "An asset without alt text" is therefore unrepresentable rather than discouraged; the optionality is on the asset, not on its description.
+- **`specFormat` is required whenever `spec` is present.** A spec whose language is unknown cannot be re-rendered, which is the entire reason R4 wants the spec kept.
+
+#### Tier A, proven by query rather than by reasoning
+
+**All 27 published Tracks and 21 published Leaves in the live CMS map and validate under Leaf v2** — run through `mapTrack`/`mapLeaf`, the real mapper the backend serves with, not a hand-rolled approximation.
+
+The count is worth stating precisely because it differs from the handoff's: the database holds **28 Tracks and 22 Leaves**, of which 27 and 21 are published. Payload serves published-only to anonymous callers, so 27/27 and 21/21 is complete coverage of everything servable. The two unpublished are drafts, which are permitted to be incomplete by design — and being optional fields, nothing added here can invalidate them.
+
+**My first attempt at this proof was wrong and worth recording.** I hand-rolled the CMS→domain mapping in a throwaway script and got 0/21 passing, on `summary.audio.url` being `null`. That is not a content problem — it is Payload emitting empty groups as nulls, which the real mapper already handles. **A verification script that reimplements the thing under test proves the reimplementation.** Using the shipped mapper gave the true answer.
+
+The alt rule is mutation-checked: making `assetIsPresent` always return false reddens exactly four tests, all of them the new ones, and moves nothing pre-existing.
+
+#### The CMS
+
+`Media` is a real Payload upload collection, set up now because the pipeline writes into it later. `alt` is required at the collection level — a third gate alongside the shared schema and the publish rule, deliberately not sharing a predicate with either, for the reason WP1 recorded: one bug must not defeat every gate. MIME types are restricted to PNG/JPEG/WebP rather than `image/*`, because SVG can carry script and this collection will be written to by an automated pipeline.
+
+**`alt` is *not* marked required on the Leaf's own asset fields.** Payload enforces field-level `required` even on drafts, which would make a half-authored Leaf unsaveable. It is a publish rule instead, matching the existing asymmetry — and there is a test asserting exactly that: the same Leaf saves as a draft and is refused at publish.
+
+Payload's dev push created the `media` table and eleven new columns on `leaves` cleanly against the existing database.
+
+#### The player, and one decision the handoff left to me
+
+`SlideImage` handles three states — loading, loaded, failed — and **the failed state renders the alt text as visible copy**. That is the substantive reason `alt` is mandatory: a reader who cannot see the image and a reader whose image did not load need the same thing. WP11 found a seeded cover pointing at a web page, and Phase 2 fills these fields from a generation pipeline, so a URL that is not an image is a normal input here.
+
+**Apply-in-life is always visible, not collapsed.** The handoff left this open, so: Dinner Table Knowledge is a *discovery* — optional, on roughly a third of Leaves, and valuable because the reader chooses to open it. Apply-in-life is the opposite kind of thing; it is the step from "I understood that" to "I did something with it", and a call to action behind a tap is one most readers never see. It renders above the DTK control, because two collapsed "Show" affordances on one slide read as a settings screen.
+
+Both slides render nothing at all when the field is absent — no reserved box — which is the state of every existing Leaf.
+
+#### Not done: the device check
+
+**The app builds and runs, but the session was lost and signing back in needs the founder.** Terminating Expo Go — which is what actually forces a fresh bundle, per WP10 — cleared the stored session, and entering a password is not something I do.
+
+What that leaves unverified is the only thing manual verification was for here: **whether an illustration and a diagram actually look right on a slide, in both themes.** The fixture is ready and waiting: Leaf 2 of Track 29 now carries a working scenario image, a deliberately broken diagram URL, and apply-in-life text, so one pass through that Leaf exercises the loaded state, the failure state and the new takeaway block together. The CMS serves all three fields — verified over the API.
+
+#### Two tooling traps, both of which cost real time
+
+1. **`npm ci` invalidates Metro's cache, and Metro does not notice.** After the cold gate the bundler failed with `Unable to resolve module ./plugins/DOMCollection from pretty-format` — a Jest dependency, in an app bundle, which makes no sense until you realise the cache is pointing at paths that no longer exist. `npm run dev:mobile -- --clear` fixes it. **Run the cold gate before the device check, never between reloads.**
+2. **The cold gate deletes `.next` out from under a running CMS.** `apps/admin` was serving happily and then 000'd mid-check. Restarting it is enough, but the failure looks like the CMS breaking rather than like a directory being removed underneath it.
+
+#### Deferred — Tier C
+
+1. **The device check**, above.
+2. No render tests for the scenario or sticky-notes slides *with* an asset — `SlideImage` is tested directly, but its integration into those two slides is not.
+3. Nothing tests that a `width`/`height` pair actually influences layout; they are accepted and passed through, unexercised.
+4. The `Media` collection has no test — no upload is exercised, and the MIME restriction is unverified.
+5. The diagram `spec` is stored and never rendered. That is WP16's job, but it means the field is currently write-only in the product.
+
 ### Completed: WP10 — Report an error, the fix queue, and the legal surfaces — 2026-08-13
 
 **Status:** 9 of 10 acceptance criteria verified by execution; the tenth is half-done and named below rather than counted. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **913 tests** (64 shared, 161 admin, 459 backend, 229 mobile), lint, typecheck and build all exit 0.

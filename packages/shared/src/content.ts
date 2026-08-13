@@ -5,19 +5,31 @@ import type { PublishStatus } from './primitives.js';
 
 /**
  * ============================================================================
- * FROZEN — content model, 2026-08-08
+ * FROZEN — content model, re-frozen 2026-08-13 (Leaf v2, WP15)
  * ============================================================================
- * `Track`, `Leaf`, the five slide schemas and `SourceReference` were frozen after
- * the schema-freeze gate (plan §5), where one structurally complete Leaf was
- * authored through the real editor. That exercise produced four corrections, all
- * ruled and applied here: text is trimmed on save, source references require a
- * locator alongside the note, sticky notes are bounded 2–6, and `publisher` and
- * `coverUrl` are required to publish a Track.
+ * `Track`, `Leaf`, the five slide schemas and `SourceReference` were first frozen on
+ * 2026-08-08 after the schema-freeze gate (plan §5), where one structurally complete
+ * Leaf was authored through the real editor. That exercise produced four corrections,
+ * all still in force: text is trimmed on save, source references require a locator
+ * alongside the note, sticky notes are bounded 2–6, and `publisher` and `coverUrl`
+ * are required to publish a Track.
  *
- * Downstream code may now depend on these shapes. A change here is no longer
- * expected — it requires an Architect ruling and a migration plan for content that
- * already exists, because the CMS enforces the same constraints independently and
- * the two must not drift apart.
+ * **Thawed once, deliberately, for WP15 (Leaf v2)** — the ruling and its reasoning are
+ * in `project/proposals/content-pipeline.md` R1. Phase 2's pipeline generates three
+ * things a Leaf could not previously hold, so the app had to be able to store and
+ * render them before the pipeline could produce them:
+ *
+ *   - `scenario.image` — an illustration
+ *   - `stickyNotes.diagram` — a diagram, plus the spec it was rendered from (R4)
+ *   - `takeaway.applyInLife` — one concrete thing to do
+ *
+ * **All three are optional, and that is the migration plan.** The change is purely
+ * additive: the 28 Tracks and 22 Leaves that already exist stay valid untouched, and
+ * there is no backfill. Nothing here was removed, narrowed or renamed.
+ *
+ * Downstream code may depend on these shapes. A further change requires an Architect
+ * ruling and a migration plan for content that already exists, because the CMS
+ * enforces the same constraints independently and the two must not drift apart.
  * ============================================================================
  */
 
@@ -42,6 +54,61 @@ export const audioRefSchema = z.object({
   url: z.url(),
   durationSeconds: z.number().positive().optional(),
 });
+
+/**
+ * An illustration attached to a slide. Added in WP15 (Leaf v2).
+ *
+ * Shaped after `audioRefSchema` above — a URL plus optional metadata — because that
+ * is the established precedent here for a reserved asset reference, and two asset
+ * shapes that differ for no reason are two things to remember.
+ *
+ * **`alt` is required, and that is the whole point of it being inside this object.**
+ * These are the first images in the product; the app honours OS accessibility settings
+ * throughout, and an image without a text alternative is invisible to a reader using
+ * one. Making it required *within* the asset means "an asset without alt" is
+ * unrepresentable rather than merely discouraged — the optionality lives on the asset,
+ * not on its description.
+ *
+ * `width`/`height` are optional and advisory: they let a renderer reserve space before
+ * the image loads, and their absence must never stop it rendering.
+ */
+export const imageAssetSchema = z.object({
+  url: z.url(),
+  alt: z.string().min(1),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+});
+
+/** How a diagram's source spec is written. See `diagramAssetSchema`. */
+export const DIAGRAM_SPEC_FORMATS = ['mermaid', 'json'] as const;
+
+export const diagramSpecFormatSchema = z.enum(DIAGRAM_SPEC_FORMATS);
+
+/**
+ * A diagram on the sticky-notes slide, and the source it was rendered from.
+ *
+ * **`spec` is the reason this is not just an image** (content-pipeline R4). A flowchart
+ * or Venn diagram produced by an image model has unreliable text and cannot be edited,
+ * re-themed or corrected — so the pipeline emits a constrained spec, we render it, and
+ * the spec travels with the result. A writer fixing a wrong label edits text and
+ * re-renders instead of regenerating an image and hoping.
+ *
+ * Both the rendered `url` and the `spec` are kept because they answer different
+ * questions: the app needs something to display today, and the editor needs something
+ * to correct tomorrow.
+ *
+ * `specFormat` is required whenever `spec` is present — a spec whose language is
+ * unknown cannot be re-rendered, which defeats the reason for storing it.
+ */
+export const diagramAssetSchema = imageAssetSchema
+  .extend({
+    spec: z.string().min(1).optional(),
+    specFormat: diagramSpecFormatSchema.optional(),
+  })
+  .refine(
+    (diagram) => diagram.spec === undefined || diagram.specFormat !== undefined,
+    { message: 'A diagram spec needs a specFormat so it can be re-rendered', path: ['specFormat'] },
+  );
 
 /* -------------------------------------------------------------------------- */
 /* Slides                                                                      */
@@ -82,6 +149,8 @@ export const scenarioOptionsSchema = z
 export const scenarioSlideSchema = z.object({
   prompt: z.string().min(1),
   options: scenarioOptionsSchema,
+  /** WP15. Optional: every Leaf authored before Leaf v2 has none, and stays valid. */
+  image: imageAssetSchema.optional(),
   audio: audioRefSchema.optional(),
 });
 
@@ -102,6 +171,12 @@ export const stickyNotesSlideSchema = z.object({
    * A single note is not a recap, which is why the floor is 2 rather than 1.
    */
   notes: z.array(z.string().min(1)).min(2).max(6),
+  /**
+   * WP15. The board can carry a diagram alongside the notes, never instead of them —
+   * `notes` stays required, so a diagram that fails to load leaves a slide that still
+   * says something.
+   */
+  diagram: diagramAssetSchema.optional(),
   audio: audioRefSchema.optional(),
 });
 
@@ -112,6 +187,15 @@ export const takeawaySlideSchema = z.object({
    * — enforced by `leafSchema` below, not left to author discipline (LEGAL.md).
    */
   dinnerTableKnowledge: z.string().min(1).optional(),
+  /**
+   * WP15. One concrete thing to do with what was just learnt.
+   *
+   * A field on the takeaway rather than a sixth slide, ruled in content-pipeline R1:
+   * the five-slide structure is a compile-time guarantee in these types, a `group` per
+   * slide in Payload and the spine of the player. A sixth slide is a redesign; a field
+   * is a migration.
+   */
+  applyInLife: z.string().min(1).optional(),
   audio: audioRefSchema.optional(),
 });
 
@@ -302,6 +386,12 @@ export const publicScenarioSlideSchema = z.object({
     publicScenarioOptionSchema,
     publicScenarioOptionSchema,
   ]),
+  /**
+   * Carried through to the client. Unlike `isCorrect`, the illustration is exactly
+   * what the reader is meant to see — this projection strips the answer key, not
+   * everything that was added after it was written.
+   */
+  image: imageAssetSchema.optional(),
   audio: audioRefSchema.optional(),
 });
 
@@ -324,6 +414,7 @@ export function toPublicLeaf(leaf: Leaf): PublicLeaf {
     scenario: {
       prompt: scenario.prompt,
       options: [stripAnswerKey(first), stripAnswerKey(second), stripAnswerKey(third)],
+      ...(scenario.image === undefined ? {} : { image: scenario.image }),
       ...(scenario.audio === undefined ? {} : { audio: scenario.audio }),
     },
   };
@@ -360,6 +451,9 @@ export function isProductionPublishable(content: {
 
 export type SlideKey = z.infer<typeof slideKeySchema>;
 export type AudioRef = z.infer<typeof audioRefSchema>;
+export type ImageAsset = z.infer<typeof imageAssetSchema>;
+export type DiagramAsset = z.infer<typeof diagramAssetSchema>;
+export type DiagramSpecFormat = z.infer<typeof diagramSpecFormatSchema>;
 export type SummarySlide = z.infer<typeof summarySlideSchema>;
 export type ScenarioOption = z.infer<typeof scenarioOptionSchema>;
 export type ScenarioOptions = z.infer<typeof scenarioOptionsSchema>;
