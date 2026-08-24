@@ -203,6 +203,24 @@ This finally requires the **role-based permissions** deferred since WP1 — writ
 
 ---
 
+## 4a. Cost and the free tier — verified 2026-08-13
+
+Checked against Google's own pricing pages rather than estimated. Three findings change the plan.
+
+**Gemini's free tier includes Pro-tier models**, not only Flash — so analysis, breakdown, drafting, grounding and editorial review can all run on real models at zero cost. Rate limits are not published on the docs page any more (they are per-account in the AI Studio dashboard), but this pipeline's throughput is a handful of requests between long human gates, so they are unlikely to bind. Verify once an account exists.
+
+**The free tier uses submitted content to improve Google's products; the paid tier does not.** Stated plainly on the pricing page. **This rules the free tier out for real book text** — it would feed a copyrighted work into a corpus that may be used for training, which is a worse version of the ingestion problem R6 already names and one no disclaimer fixes afterwards. The line is therefore clean and non-negotiable:
+
+> **Free tier for building and tuning against public-domain books. Paid tier the moment a real book goes through.**
+
+**Image generation has no free tier at all** — every Imagen and Gemini image model is unavailable on it. Two consequences: the asset generator is the only node that costs money from day one, and **R4 gains a cost argument on top of its quality one**, since a diagram emitted as a Mermaid spec is a text call and therefore free while an image model is not. Deferring scenario illustrations entirely is a cheap and reasonable MVP choice.
+
+**Claude has no free tier** on the direct API or through Vertex. Cross-family editorial review (R3) therefore costs money by construction. Note this affects only the *editorial* reviewer — **grounding verification is mechanical and does not need a different model family**, so the legally load-bearing gate survives a free-tier design intact.
+
+**Hosting:** a $300 welcome credit over 90 days, with no auto-charge — an un-upgraded account closes rather than billing, with a 30-day grace period. Cloud Run's always-free allowance (2M requests, 360k GB-seconds, 180k vCPU-seconds per month) comfortably covers promotional-scale traffic. **Cloud SQL has no always-free allowance**, only a 30-day trial instance — the database is the recurring floor.
+
+**Net: WP16 through WP19 cost nothing** if built against public-domain books with images deferred. Payment starts when real books go through and when the app deploys, and the credit absorbs a lot of both.
+
 ## 5. Suggested sequencing
 
 | # | Package | Scope |
