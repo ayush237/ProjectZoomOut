@@ -9,6 +9,105 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-25 — WP16: Pipeline skeleton — ingest, analyze, breakdown, gate 1
+
+*Goes to the **Pipeline Manager** session, not Manager. First package of `apps/pipeline`.*
+
+### Task: WP16 — Pipeline skeleton: ingest → analyze → breakdown → human gate 1
+
+**Context:** This is the first package of the content pipeline — the Python service that turns a book into a Track of Leaves. Phase 1 is complete and the app renders everything a Leaf can hold (WP15 landed the v2 fields), but **the product has nothing to teach**: 28 placeholder books. This package does not generate a single slide. It builds the spine — the graph, its durable state, and the one review that determines everything downstream.
+
+Your specification is `project/proposals/content-pipeline.md`. Read it in full, plus `project/LEGAL.md`. The seven recommendations there are ruled, not proposed.
+
+**Objective:** A LangGraph run takes a public-domain EPUB, understands it whole, proposes an ordered list of 15–30 Leaves, and stops at a human gate. The founder approves or edits the plan; the run resumes from durable state, possibly days later, in a different process. **Done means: an approved Leaf plan for one real book, and a run that survives being killed.**
+
+**Scope:** `apps/pipeline/` — new, and nothing else. Python 3.12+.
+
+---
+
+**Requirements**
+
+*The package*
+- `apps/pipeline` is a **standalone Python project** — `pyproject.toml`, its own virtualenv, its own test/lint/type gate. **Do not add it to the npm workspaces array.** It is not a Node package and root `npm run build` must not try to build it. Say in its README how to run its gate, because the root gate does not cover it.
+- `ruff` for lint and format, `mypy --strict`, `pytest`. Fully type-annotated.
+- **Prompts live in version-controlled files**, not inline strings. They are the logic of this service and they need diffs.
+- **Which model each node uses comes from config**, not from a literal at the call site. Nodes will move between models as we tune, and §4a already forces a split (grounding can stay free-tier, editorial cannot).
+
+*Its database — read this twice*
+- pgvector lives in the **pipeline's own Postgres database**. Not Payload's (`zoomout_cms`), not the backend's. Create it, and put its URL in its own environment variable with a name that cannot be confused with the other two.
+- **WP5b lost real time to exactly this**: `apps/backend/.env` pointed at Payload's database, migrations ran against the wrong one, and the CMS broke. Before you run any migration, connect and confirm which database you are in by listing its tables. Verify the effect, not the exit code.
+- The LangGraph checkpointer tables live here too.
+
+*`ingest`*
+- **EPUB primary, PDF fallback** (ruled 2026-08-13). EPUB is structured HTML with chapters and paragraphs marked up; PDF is a layout format whose reading order has to be reconstructed. Build the EPUB path properly and the PDF path as a fallback that is honest about its limits.
+- Chunk and embed into pgvector. Preserve **chapter and position metadata on every chunk** — grounding in WP17 needs to cite a location, and a chunk that has lost where it came from is useless then and unrecoverable now.
+- **Record provenance**: title, author, edition/source, file hash, ingested-at, and an explicit **`acquisition` status** — `public-domain` · `licensed` · `purchased` · `undocumented`. Never ingest without one. This is retroactively impossible to reconstruct, which is the whole reason it is built now rather than when it matters.
+
+*Retention — note the deliberate wrinkle*
+- The rule is: **retain embeddings and cited passages, delete the raw full text when a Track completes.** A WP16 run stops at gate 1, and WP17 still needs the text — so the natural end-of-run has not arrived yet.
+- **Build the mechanism anyway and test it now**: an explicit `purge_raw_text(run_id)` that deletes the raw text and leaves embeddings and provenance intact, invocable on demand, wired to the terminal node WP20 will eventually reach. Deferring the mechanism is how it never gets built.
+
+*`analyze`*
+- Whole-book understanding — themes, arguments, structure. **Long context, not RAG.** Thematic structure is a whole-book judgement and retrieval fragments it. Retrieval is for grounding in WP17.
+
+*`breakdown`*
+- Propose 15–30 Leaves: title, order, and the concept each one teaches. **No branches** — ruled twice. It may group thematically while reasoning; that grouping does not appear in the output, the schema, or the product.
+- **Leaves must not mirror the book's chapter structure 1:1, and this must be a check that fires — not a line in a prompt.** It is load-bearing for the fair-use position in `LEGAL.md`. Define the check explicitly: some combination of how many Leaves draw from a single chapter, whether Leaf order is monotonic in chapter order, and how close the Leaf count sits to the chapter count. **Pick the thresholds yourself, make them named constants with a comment explaining the reasoning, and state in your report what you chose.** I am deliberately not specifying numbers you will have better information about than I do.
+- On failure: back to `breakdown` with the finding as feedback, **capped**, then escalate to the human. Never loop unbounded.
+
+*Gate 1 — a ruling that changes the proposal*
+- §5 of the proposal says "gate 1 in Payload". **Overruled for WP16.** Two reasons: a Payload custom admin view is `apps/admin`, which you do not own, and building CMS review UI before the pipeline has produced anything worth reviewing is backwards.
+- **Gate 1 is file-based.** The pipeline writes the Leaf plan to a human-readable, human-editable file, interrupts via LangGraph's `interrupt`, and resumes from that file when the founder approves. Edits made in the file are the approved plan — the human is editing, not just accepting.
+- The Payload review surface arrives with gate 2 in WP19, built once for both.
+
+*Durability*
+- LangGraph `interrupt` + `langgraph-checkpoint-postgres`. Runs span days because the gate is human.
+- **Every node idempotent and resumable.** Re-entering a node must not re-embed the book or re-spend money.
+
+*Cost*
+- Log token spend per node, per run, structured, from the first commit. Report the cost of one full ingest+analyze+breakdown in your completion report.
+
+---
+
+**Out of scope — all of it deliberately**
+
+- Any Payload contact whatsoever. No REST client, no token, no writes. WP17 opens that boundary.
+- `draft_leaf`, `extra_content`, `ground_check`, `editorial_review`, `revise` — WP17 and WP19.
+- Assets, images, diagram rendering — WP18.
+- Deployment, CI, Docker.
+- Any book that is not public domain.
+
+---
+
+**Constraints**
+
+- **Public-domain books only in this package, and this is not a preference.** §4a verified that Gemini's free tier *uses submitted content to improve Google's products* while the paid tier does not. Putting a real copyrighted book through the free tier feeds it into a corpus that may be used for training — a worse version of the ingestion problem R6 already names, and one no disclaimer undoes. Free tier for public-domain books; paid tier the moment a real book goes through.
+- **Suggested first book: *The Science of Getting Rich*, Wallace Wattles (1910).** Public domain, unambiguously; genuinely the self-help genre we are building for; 17 real chapters, so the 1:1 check has something to bite on; short enough that a full run is cheap. Gutenberg serves EPUB, which exercises the primary path. Pick a different one if you have a better reason — say which and why.
+- Secrets from the environment only. **You cannot read `.env` files — a deny rule blocks it, deliberately.** Do not work around it. Tell the founder which variables to set and let them do it.
+- `packages/shared/src/content.ts` is frozen. WP16 does not touch it, but read it — it is the shape everything downstream must fit.
+
+---
+
+**Read-it-yourself gate:** *Read the Leaf plan the pipeline produced, as a person, and say whether it is any good.* Does it read like a **course** — concepts building on each other, each Leaf teaching one thing — or like a **table of contents with the chapter numbers filed off**? No assertion in this repo can tell the difference, and if the answer is the second one, the package is not done regardless of what the tests say. Say so plainly if it is bad; an optimistic report about output nobody read is worse than no report.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline`'s own lint, `mypy --strict` and `pytest` pass; the **root** `npm run build` and `npm test` are unaffected
+- [ ] A full run against the chosen public-domain EPUB reaches gate 1 and produces a plan of 15–30 Leaves
+- [ ] **The run resumes after the process is killed** — start it, reach gate 1, kill it, restart, approve, and watch it continue from checkpointed state. This is the checkpointer's entire purpose and the only criterion that proves it
+- [ ] **Founder edits to the plan file are what the run resumes with** — change a title in the file, confirm the changed title is in the resumed state
+- [ ] **The 1:1 check fires** — a deliberately chapter-mirroring plan is rejected, and mutation-check it: break the check and confirm that test, and only that test, goes red
+- [ ] The revision cap terminates — a `breakdown` that never satisfies the check escalates rather than looping
+- [ ] Provenance is recorded with an `acquisition` status, and ingest **refuses to run without one**
+- [ ] `purge_raw_text` deletes raw text while embeddings and provenance survive — **verified by querying the database**, not by observing the call
+- [ ] pgvector and the checkpointer are in the pipeline's own database — verified by connecting and listing tables in all three
+- [ ] Token spend is logged per node
+- [ ] **No Payload credential, client, or import exists anywhere in `apps/pipeline`**
+- [ ] The Leaf plan has been read by a human being and judged
+
+**Testing expectations:** Tier A on the pipeline list in your persona — the 1:1 check firing, raw-text deletion, the revision cap terminating, and refusing to ingest without provenance. Tier B one happy path for ingest, analyze and breakdown wiring. Test LLM nodes on their **contract** — output parses, required fields present — never on their prose. Use recorded fixtures for the normal gate; keep live-model runs to a small explicit suite outside it. List what you deferred.
+
+---
+
 ### Handoff: 2026-08-13 — WP15: Leaf v2 — assets and apply-in-life
 
 ### Task: WP15 — Leaf v2: assets and apply-in-life
