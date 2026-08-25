@@ -1,0 +1,74 @@
+[project]
+name = "zoomout-pipeline"
+version = "0.1.0"
+description = "ZoomOut content pipeline — turns a book into a Track of Leaves with a human in the loop."
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2.60",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "psycopg[binary,pool]>=3.2",
+    "pgvector>=0.3.6",
+    "google-genai>=0.8.0",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.3",
+    "pymupdf>=1.25",
+    "pyyaml>=6.0",
+    "structlog>=24.4",
+    "typer>=0.15",
+]
+
+[project.scripts]
+zoomout-pipeline = "zoomout_pipeline.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "mypy>=1.14",
+    "ruff>=0.9",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/zoomout_pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF", "ANN", "TID"]
+# RUF001-003 flag en and em dashes as "ambiguous unicode". The comments in this package
+# are prose and use them deliberately; rewriting them to hyphens would be the linter
+# editing the writing.
+ignore = ["ANN401", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN201", "ANN001"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["zoomout_pipeline", "tests"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+# Neither ships type information.
+module = ["ebooklib.*", "pymupdf.*", "pgvector.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "live: hits a real model or a real database; excluded from the normal gate",
+]
+addopts = "-m 'not live'"

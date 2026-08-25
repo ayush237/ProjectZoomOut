@@ -1,0 +1,14 @@
+# Raw book files and anything derived from them never enter git.
+# LEGAL.md: ingesting a full work is a reproduction; we do not also archive it.
+.data/
+runs/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/

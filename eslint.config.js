@@ -19,6 +19,10 @@ export default tseslint.config(
       '**/.expo/**',
       '**/.next/**',
       'apps/backend/drizzle/**',
+      // The content pipeline is a standalone Python project with its own ruff/mypy gate
+      // (WP16). Nothing in it is JavaScript — but its virtualenv contains Python packages
+      // that ship .js assets, and eslint was linting those and failing the root gate.
+      'apps/pipeline/**',
       // Emitted by `payload generate:types`. It ships its own eslint-disable banner,
       // but the file is build output either way and has no business being linted.
       'packages/shared/src/cms-generated.ts',
