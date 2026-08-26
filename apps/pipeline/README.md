@@ -46,7 +46,11 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | Variable | Required | What it is |
 |---|---|---|
 | `ZOOMOUT_PIPELINE_DATABASE_URL` | yes | The pipeline's own Postgres. Refuses a URL ending in `/zoomout` or `/zoomout_cms`. |
-| `ZOOMOUT_PIPELINE_GEMINI_API_KEY` | yes, for a real run | Gemini API key. |
+| `ZOOMOUT_PIPELINE_GEMINI_API_KEY` | one of the two | AI Studio Developer API key. Unused when `USE_VERTEX` is set. |
+| `ZOOMOUT_PIPELINE_USE_VERTEX` | one of the two | `true` to use Vertex AI with Application Default Credentials instead of an API key. |
+| `ZOOMOUT_PIPELINE_VERTEX_PROJECT` | with Vertex | GCP project id. Required when `USE_VERTEX` is set — it is what calls bill to. |
+| `ZOOMOUT_PIPELINE_VERTEX_LOCATION` | no | Default `us-central1`. |
+| `ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE` | no | Default 60, sized for the AI Studio free tier. Raise it on Vertex. |
 | `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-3.6-flash`. |
 | `ZOOMOUT_PIPELINE_BREAKDOWN_MODEL` | no | Default `gemini-3.6-flash`. |
 | `ZOOMOUT_PIPELINE_EMBEDDING_MODEL` | no | Default `gemini-embedding-001`, truncated to 768 dimensions. |
@@ -55,8 +59,31 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 
 ```bash
 export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline"
+
+# Either the Developer API...
 export ZOOMOUT_PIPELINE_GEMINI_API_KEY="..."
+
+# ...or Vertex AI, with no key on disk:
+export ZOOMOUT_PIPELINE_USE_VERTEX=true
+export ZOOMOUT_PIPELINE_VERTEX_PROJECT="your-project-id"
+export ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE=600
 ```
+
+### Vertex AI, and why it is the better target
+
+The proposal's §4 specified Vertex from the start ("one GCP DPA rather than a second
+provider's"). WP16 was built against the AI Studio Developer API because §4a's free-tier
+analysis pointed there. Two things have since changed that argument:
+
+- **Google excluded the Developer API from the $300 Cloud credit in March 2026.** Credit can
+  pay for Vertex; it cannot pay for Gemini API in AI Studio.
+- **Vertex does not use submitted prompts to improve Google's models.** That is the entire
+  reason development is confined to public-domain books, so Vertex is what makes real books
+  possible.
+
+Vertex authenticates with Application Default Credentials — `gcloud auth
+application-default login` — so there is no key file for this package to read or leak. Same
+SDK, same model names; only the transport and the billing change.
 
 ### Free tier is for public-domain books only
 

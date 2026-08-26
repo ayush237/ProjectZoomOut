@@ -19,6 +19,7 @@ from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS
 from zoomout_pipeline.llm.ratelimit import (
@@ -73,15 +74,42 @@ class GeminiClient:
     it. `config.paid_tier` records which side of that line a run is on.
     """
 
-    def __init__(self, api_key: str, *, limiter: RateLimiter | None = None) -> None:
-        if not api_key:
-            raise LLMError(
-                "No Gemini API key. Set ZOOMOUT_PIPELINE_GEMINI_API_KEY in the environment."
-            )
+    def __init__(
+        self,
+        api_key: str = "",
+        *,
+        use_vertex: bool = False,
+        project: str = "",
+        location: str = "us-central1",
+        limiter: RateLimiter | None = None,
+    ) -> None:
         from google import genai
 
-        self._client = genai.Client(api_key=api_key)
+        if use_vertex:
+            if not project:
+                raise LLMError("Vertex AI needs a project id; set ZOOMOUT_PIPELINE_VERTEX_PROJECT.")
+            # Credentials come from Application Default Credentials, so nothing secret is
+            # passed here or stored on disk by this package.
+            self._client = genai.Client(vertexai=True, project=project, location=location)
+        else:
+            if not api_key:
+                raise LLMError(
+                    "No Gemini API key. Set ZOOMOUT_PIPELINE_GEMINI_API_KEY, or use Vertex."
+                )
+            self._client = genai.Client(api_key=api_key)
+
         self._limiter = limiter or RateLimiter()
+
+    @classmethod
+    def from_settings(cls, settings: PipelineSettings) -> GeminiClient:
+        """Build the client the configuration asks for — Vertex or the Developer API."""
+        return cls(
+            settings.gemini_api_key,
+            use_vertex=settings.use_vertex,
+            project=settings.vertex_project,
+            location=settings.vertex_location,
+            limiter=RateLimiter(max_per_minute=settings.embed_requests_per_minute),
+        )
 
     def generate_structured(
         self,

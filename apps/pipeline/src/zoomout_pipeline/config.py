@@ -18,7 +18,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Free tier only for public-domain books (proposal §4a): Google's free tier uses
@@ -56,7 +56,27 @@ class PipelineSettings(BaseSettings):
         description="Postgres URL for the pipeline's OWN database. Not the backend's, "
         "not Payload's. Holds pgvector chunks, provenance and LangGraph checkpoints.",
     )
-    gemini_api_key: str = Field(default="", description="Gemini API key.")
+    gemini_api_key: str = Field(
+        default="", description="AI Studio Developer API key. Unused when `use_vertex`."
+    )
+
+    # Vertex AI, which is what the proposal's §4 specified all along ("Gemini via Vertex
+    # AI… one GCP DPA rather than a second provider's"). WP16 was built against the AI
+    # Studio Developer API because §4a's free-tier analysis pointed there; the economics
+    # since changed — Google excluded the Developer API from the $300 Cloud credit in March
+    # 2026, and Vertex does not use submitted prompts to improve its models, which is the
+    # constraint that confines development to public-domain books.
+    #
+    # Same SDK, same model names, different transport and different auth: Vertex uses
+    # Application Default Credentials, so there is no key on disk.
+    use_vertex: bool = False
+    vertex_project: str = Field(default="", description="GCP project id. Required for Vertex.")
+    vertex_location: str = "us-central1"
+
+    # The AI Studio free tier allows 100 embed requests per minute and counts each *text* as
+    # a request. Vertex's quotas are far higher, so this is configuration rather than a
+    # constant — pacing a Vertex run at free-tier speed would waste minutes per book.
+    embed_requests_per_minute: int = 60
 
     analyze_model: str = DEFAULT_ANALYZE_MODEL
     breakdown_model: str = DEFAULT_BREAKDOWN_MODEL
@@ -84,6 +104,20 @@ class PipelineSettings(BaseSettings):
                     "to the backend or the CMS. The pipeline needs its own database."
                 )
         return value
+
+    @model_validator(mode="after")
+    def _require_vertex_project(self) -> PipelineSettings:
+        if self.use_vertex and not self.vertex_project:
+            raise ValueError(
+                "ZOOMOUT_PIPELINE_USE_VERTEX is set but ZOOMOUT_PIPELINE_VERTEX_PROJECT is "
+                "empty. Vertex needs a project id — it is what the call is billed to."
+            )
+        if not self.use_vertex and not self.gemini_api_key:
+            raise ValueError(
+                "Set ZOOMOUT_PIPELINE_GEMINI_API_KEY, or set ZOOMOUT_PIPELINE_USE_VERTEX=true "
+                "with ZOOMOUT_PIPELINE_VERTEX_PROJECT to use Vertex AI and ADC instead."
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

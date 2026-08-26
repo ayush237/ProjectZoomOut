@@ -16,9 +16,9 @@ _log = get_logger(__name__)
 
 
 def build_dependencies(settings: PipelineSettings | None = None) -> NodeDependencies:
-    """Real dependencies: Gemini, and the pipeline's own database."""
+    """Real dependencies: Gemini (Vertex or Developer API), and the pipeline's own database."""
     resolved = settings or get_settings()
-    client = GeminiClient(resolved.gemini_api_key)
+    client = GeminiClient.from_settings(resolved)
     return NodeDependencies(
         settings=resolved,
         llm=client,
