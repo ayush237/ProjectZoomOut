@@ -1182,6 +1182,107 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Addendum: WP16 — Vertex AI, and the Pro-vs-Flash experiment — 2026-08-26
+
+Run after the WP16 completion report above, at the founder's request. Two questions:
+should the pipeline use Vertex rather than the AI Studio Developer API, and should the
+reasoning nodes use a Pro model. **The answers are yes and no**, and the second one is the
+more useful finding.
+
+#### Vertex is now supported and is the right target
+
+`§4` specified Vertex from the start; WP16 was built against the Developer API because
+`§4a`'s free-tier analysis pointed there. Two things have since changed that argument:
+
+- **Google excluded the Developer API from the $300 Cloud credit in March 2026.** Credit
+  pays for Vertex; it explicitly cannot pay for "Gemini API in AI Studio". Verified against
+  Google's own documentation, not a blog.
+- **Vertex does not use submitted prompts to improve Google's models.** That is the single
+  constraint confining development to public-domain books, so Vertex is what makes real
+  books possible at all.
+
+Implemented as configuration, not a rewrite: `use_vertex` + `vertex_project` select
+`genai.Client(vertexai=True, ...)`, credentials come from Application Default Credentials,
+and **no key touches disk** — which also closes the credential-handling hole recorded above.
+Settings refuse a half-configured backend at construction rather than on the first billed
+call.
+
+**One trap worth recording: the Vertex location must be `global`, not a region.**
+`models.list()` reports the Gemini 3.x models everywhere, but `us-central1`, `us-east5` and
+`europe-west4` all 404 on `gemini-3.6-flash` and `gemini-3.1-pro-preview`. Only the global
+endpoint serves them. A regional endpoint is a data-residency decision to take deliberately;
+inheriting one as a default silently costs the entire 3.x line.
+
+Credit confirmed before any Vertex call was made: **₹28,710 (~$300), 100% remaining,
+expiring ~17 September 2026**. That 22-day window is a real constraint on WP17–WP19.
+
+#### The experiment: Pro is not better here, it is worse
+
+Same book, same prompt, same checkpointed analysis. Three runs:
+
+| Run | Model | Single-chapter Leaves | Follows book order | Structure check |
+|---|---|---|---|---|
+| AI Studio | `gemini-3.6-flash` | 24% | 81% | **PASS** |
+| Vertex | `gemini-3.6-flash` | 78% | 100% | **FAIL** |
+| Vertex | `gemini-3.1-pro-preview` | **89%** | 88% | **FAIL** |
+
+**The Pro model produced the most chapter-mirroring plan of the three.** 18 Leaves against
+18 chapters, and **10 of its 18 Leaf titles substantially reuse a chapter title** — several
+verbatim: "The Right to be Rich", "Thinking in the Certain Way", "Acting in the Certain
+Way", "Efficient Action", "The Impression of Increase".
+
+That is exactly what `LEGAL.md` forbids, produced by the strongest model available.
+
+**The interpretation, which is worth more than the numbers.** A stronger model follows the
+source's structure *more* faithfully — and this requirement demands departure from it. The
+task is adversarial to the instinct a better model has. So model capability is not the lever
+here; the prompt is. Two consequences:
+
+1. **Do not spend on Pro for `breakdown`.** It costs more and performs worse at the one
+   thing that matters. Revisit only after the prompt is doing its job.
+2. **The variance across identical configurations is the real signal.** The same model and
+   prompt scored 24% and 78% on consecutive runs. The prompt is not steering the outcome —
+   it is influencing a distribution whose spread straddles the legal threshold. The passing
+   AI Studio run recorded in the completion report above was, in part, luck.
+
+**`breakdown.md` is now the highest-value file in this package.** It needs the
+original-structure requirement moved from a bullet among several into the primary framing of
+the task, and probably a worked example of a synthesised Leaf. That is WP17's first job and
+it costs nothing to iterate.
+
+#### What this says about the structure check
+
+The check earned its place today. It caught a genuine table-of-contents plan from a
+production model on a real book, twice, and refused to pass it — including from the model we
+were about to upgrade to on the assumption it would be better.
+
+**Its thresholds are also now better evidenced.** The completion report above flagged
+discomfort that the passing run scored 81% sequential against an 85% limit. With three data
+points the picture is different: the failures scored 88% and 100%, well clear of the limit,
+and the single-chapter signal separated them cleanly (24% pass versus 78% and 89% fail). The
+thresholds are discriminating between real plans, not just synthetic ones. **No change
+recommended.**
+
+#### One defect the experiment exposed
+
+The first Vertex run died instead of escalating. Attempt 2 produced a valid but
+chapter-mirroring plan; attempt 3 returned unparseable JSON; the cap was reached and the node
+raised — **discarding the attempt-2 plan a human could have edited into shape**.
+
+Escalation now prefers the last valid plan: if any attempt produced one, the run stops at
+gate 1 with that plan and the failure attached, and only raises when nothing valid was ever
+produced. A plan that fails the structure check is still a plan a human can work with;
+throwing it away costs the whole run for nothing. Regression test named for the incident.
+
+#### Cost
+
+Both full runs reported **$0.00** with the model listed as unpriced — the 3.x rates were
+never verified, and naming the model beats inventing a number. The real figures: `wattles-05`
+32,419 tokens, `vertex-pro` 35,355 tokens. Ingest was reused in both, so neither re-embedded
+the book. Actual spend against the trial credit is immaterial at this volume; the credit's
+**expiry date matters far more than its balance**.
+
+
 ### Completed: WP16 — Pipeline skeleton: ingest, analyze, breakdown, human gate 1 — 2026-08-26
 
 First package of `apps/pipeline`, by the Pipeline Manager session. Branch

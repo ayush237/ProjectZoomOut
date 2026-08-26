@@ -49,7 +49,7 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_GEMINI_API_KEY` | one of the two | AI Studio Developer API key. Unused when `USE_VERTEX` is set. |
 | `ZOOMOUT_PIPELINE_USE_VERTEX` | one of the two | `true` to use Vertex AI with Application Default Credentials instead of an API key. |
 | `ZOOMOUT_PIPELINE_VERTEX_PROJECT` | with Vertex | GCP project id. Required when `USE_VERTEX` is set — it is what calls bill to. |
-| `ZOOMOUT_PIPELINE_VERTEX_LOCATION` | no | Default `us-central1`. |
+| `ZOOMOUT_PIPELINE_VERTEX_LOCATION` | no | Default `global`. Gemini 3.x is **only** served there — regional endpoints 404. |
 | `ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE` | no | Default 60, sized for the AI Studio free tier. Raise it on Vertex. |
 | `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-3.6-flash`. |
 | `ZOOMOUT_PIPELINE_BREAKDOWN_MODEL` | no | Default `gemini-3.6-flash`. |

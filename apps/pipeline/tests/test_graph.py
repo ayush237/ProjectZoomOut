@@ -234,3 +234,34 @@ def test_repeated_malformed_output_stops_at_the_cap(
         _run(replace(deps, llm=llm), sample_epub)
 
     assert len([c for c in llm.calls if c["node"] == "breakdown"]) == MAX_BREAKDOWN_ATTEMPTS
+
+
+def test_a_late_parse_failure_escalates_the_last_good_plan(
+    deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
+) -> None:
+    """A plan that failed the structure check still beats no plan at all.
+
+    Seen on the first Vertex run: attempt 2 produced a valid but chapter-mirroring plan,
+    attempt 3 returned unparseable JSON, and the run died — discarding work a human could
+    have edited into shape. Escalation exists so the human gets something to act on.
+    """
+
+    class MirrorThenGarbage(ScriptedLLM):
+        def __init__(self) -> None:
+            super().__init__([analysis, make_plan(leaves=17, mirror=True, chapter_count=17)])
+
+        def generate_structured(self, **kwargs: Any) -> Any:
+            if kwargs["node"] == "breakdown" and not self._responses:
+                self.calls.append({"node": "breakdown", "prompt": kwargs["prompt"]})
+                raise LLMError("breakdown: not a valid LeafPlan")
+            return super().generate_structured(**kwargs)
+
+    llm = MirrorThenGarbage()
+    graph, config, result = _run(replace(deps, llm=llm), sample_epub)
+
+    assert "__interrupt__" in result, "the human must get the plan, not a stack trace"
+
+    state = PipelineState.model_validate(graph.get_state(config).values)
+    assert state.plan is not None, "the last valid plan must survive"
+    assert state.escalation is not None
+    assert state.structure_check is not None and not state.structure_check.passed

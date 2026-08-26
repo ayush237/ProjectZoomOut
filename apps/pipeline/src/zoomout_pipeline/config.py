@@ -71,7 +71,12 @@ class PipelineSettings(BaseSettings):
     # Application Default Credentials, so there is no key on disk.
     use_vertex: bool = False
     vertex_project: str = Field(default="", description="GCP project id. Required for Vertex.")
-    vertex_location: str = "us-central1"
+    # `global`, not a region. Verified 2026-08-26: the Gemini 3.x models are listed by
+    # `models.list()` everywhere but only *served* on the global endpoint — us-central1,
+    # us-east5 and europe-west4 all 404 on both gemini-3.6-flash and gemini-3.1-pro-preview.
+    # A regional endpoint is a data-residency decision to make deliberately, not a default
+    # to inherit, and it currently costs you the 3.x line entirely.
+    vertex_location: str = "global"
 
     # The AI Studio free tier allows 100 embed requests per minute and counts each *text* as
     # a request. Vertex's quotas are far higher, so this is configuration rather than a

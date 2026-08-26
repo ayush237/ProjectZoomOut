@@ -367,10 +367,30 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
             # by the same cap as a failed structure check, and the failure text is fed back
             # so the next attempt is told what was wrong rather than simply asked again.
             if attempt >= MAX_BREAKDOWN_ATTEMPTS:
-                raise LLMError(
-                    f"breakdown produced no valid plan in {attempt} attempts "
-                    f"(cap {MAX_BREAKDOWN_ATTEMPTS}). Last failure: {error}"
-                ) from error
+                if state.plan is None:
+                    # Nothing was ever produced, so there is nothing for a human to edit.
+                    raise LLMError(
+                        f"breakdown produced no valid plan in {attempt} attempts "
+                        f"(cap {MAX_BREAKDOWN_ATTEMPTS}). Last failure: {error}"
+                    ) from error
+
+                # An earlier attempt did produce a plan; only the last one failed to parse.
+                # Escalating with that plan is strictly better than discarding it — a plan
+                # that fails the structure check is still a plan a human can edit until it
+                # passes, and throwing it away costs the whole run's work for nothing.
+                log.warning(
+                    "breakdown.escalating_earlier_plan", attempt=attempt, error=str(error)[:200]
+                )
+                return {
+                    "breakdown_attempts": attempt,
+                    "last_error": None,
+                    "escalation": (
+                        f"Breakdown failed to produce valid output on its final attempt "
+                        f"({attempt} of {MAX_BREAKDOWN_ATTEMPTS}). The plan below is the last "
+                        f"valid one, and it did not pass the structure check. It has to be "
+                        f"edited until it does. Last failure: {error}"
+                    ),
+                }
 
             log.warning("breakdown.invalid_output", attempt=attempt, error=str(error)[:200])
             return {"breakdown_attempts": attempt, "last_error": str(error)}
