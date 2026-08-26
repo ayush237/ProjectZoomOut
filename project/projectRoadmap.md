@@ -40,7 +40,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP16.1 | Breakdown prompt + model measurement with n≥3 | **Pipeline Manager** | 📤 **Handed off 2026-08-26** | — |
 | WP17 | Leaf generation, grounding, and the Payload draft boundary | **Pipeline Manager** | 📤 **Handed off 2026-08-26** | The `acquisition` field on Payload's Track (Manager — see debt) |
 | WP18–WP20 | Assets · review loop and gate 2 · one book end to end | **Pipeline Manager** | ⬜ queued | WP17 |
-| — | **Fix `npm run typecheck` on `main`** — red since WP15's `cf3e286` | Manager | 🔴 **open** | Not a one-character fix — see debt |
+| WP15.1 | Track `acquisition` field + the red typecheck on `main` | Manager | 📤 **Handed off 2026-08-26** | Nothing — **blocks WP17** |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 
 ### Blocked on the founder

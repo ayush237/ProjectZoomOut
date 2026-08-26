@@ -9,6 +9,49 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-26 — WP15.1: Track `acquisition` field, and the red typecheck
+
+*Manager, not Pipeline Manager. Small — two items — but the first one blocks WP17.*
+
+### Task: WP15.1 — Add `acquisition` to Track; fix `npm run typecheck` on `main`
+
+**Context:** The content pipeline starts writing Tracks into Payload in WP17. Every Track must record where its source text came from, because the book-acquisition question is unresolved and "which Tracks must be regenerated once it resolves" has to stay a **query**, not an act of memory. It is retroactively impossible to reconstruct. Separately, `main` has not typechecked since WP15.
+
+**Objective:** A Track carries an acquisition status, and `npm run typecheck` is green from the repo root.
+
+**Scope:** `apps/admin/` collections and validation, `packages/shared/src/content.ts` if the Track shape lives there, `apps/backend/src/content/content.mapper.test.ts`.
+
+**Requirements**
+
+*1 — `acquisition` on Track*
+- Values: `public-domain` · `licensed` · `purchased` · `undocumented`. Exactly these four.
+- **Required**, defaulting to `undocumented`. A Track with no status is the record we specifically said we would never create — but defaulting rather than failing keeps the 28 existing Tracks valid without a backfill, and `undocumented` is an honest description of every one of them.
+- Authorable in the CMS and readable over the REST API, because the pipeline sets it on write.
+- **It does not gate publishing.** Not yet — the acquisition policy is a launch decision that has not been made, and wiring an enforcement rule to a policy that does not exist yet would block content on a rule nobody has written. Record it now; enforce it when there is something to enforce.
+- `content.ts` is frozen. If the Track shape lives there, this is the ruling that unfreezes it — re-freeze with the date updated and WP15.1 named.
+
+*2 — the red typecheck*
+- `apps/backend/src/content/content.mapper.test.ts:285` — `Type '"dot"' is not assignable to type '"json" | "mermaid" | null | undefined'`, from WP15's `cf3e286`.
+- **Read the test before you fix it.** Line 279 is a deliberate negative test — *"rejects a diagram whose spec format is not one the renderer knows"* — so `'dot'` is invalid **on purpose**; that invalid value *is* the assertion. Changing it to a valid format makes the file typecheck and the test assert nothing.
+- Fix it at the fixture: let it hold a deliberately-invalid value via a cast through `unknown`, with a comment saying why. **Confirm the test still fails when the mapper's validation is removed** — if it passes either way, the fix was wrong.
+
+**Out of scope:** enforcing acquisition at publish time, the pipeline, backfilling the 28 Tracks to anything other than the default, WP12/WP13/WP14.
+
+**Device gate:** *open a Track in the Payload admin UI and see the acquisition field, set it, save, and see it come back over the REST API.* Both halves — the CMS write and the API read — because the pipeline uses the second and only a human uses the first.
+
+**Acceptance criteria**
+- [ ] Root `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` all pass
+- [ ] Track carries `acquisition`, restricted to the four values
+- [ ] **All 28 existing Tracks still validate and still serve**, defaulted to `undocumented` — verified by query
+- [ ] The value set in the CMS is readable over the REST API
+- [ ] Publishing is **not** blocked by the field's value
+- [ ] The `'dot'` test still fails when the mapper's `specFormat` validation is removed — mutation-checked
+- [ ] Migration applies cleanly to an empty database
+
+**Testing expectations:** Tier B for the field — one happy path through CMS write and API read. The mutation check on the `'dot'` test is mandatory, not optional; it is the entire point of touching that file.
+
+---
+
 ### Handoff: 2026-08-26 — WP17: Leaf generation, grounding, and the Payload boundary
 
 *Pipeline Manager. Run **WP16.1 first** — it is small, it is free, and everything here inherits the plan it fixes.*
