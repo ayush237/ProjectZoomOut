@@ -9,6 +9,139 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-26 — WP15.1: Track `acquisition` field, and the red typecheck
+
+*Manager, not Pipeline Manager. Small — two items — but the first one blocks WP17.*
+
+### Task: WP15.1 — Add `acquisition` to Track; fix `npm run typecheck` on `main`
+
+**Context:** The content pipeline starts writing Tracks into Payload in WP17. Every Track must record where its source text came from, because the book-acquisition question is unresolved and "which Tracks must be regenerated once it resolves" has to stay a **query**, not an act of memory. It is retroactively impossible to reconstruct. Separately, `main` has not typechecked since WP15.
+
+**Objective:** A Track carries an acquisition status, and `npm run typecheck` is green from the repo root.
+
+**Scope:** `apps/admin/` collections and validation, `packages/shared/src/content.ts` if the Track shape lives there, `apps/backend/src/content/content.mapper.test.ts`.
+
+**Requirements**
+
+*1 — `acquisition` on Track*
+- Values: `public-domain` · `licensed` · `purchased` · `undocumented`. Exactly these four.
+- **Required**, defaulting to `undocumented`. A Track with no status is the record we specifically said we would never create — but defaulting rather than failing keeps the 28 existing Tracks valid without a backfill, and `undocumented` is an honest description of every one of them.
+- Authorable in the CMS and readable over the REST API, because the pipeline sets it on write.
+- **It does not gate publishing.** Not yet — the acquisition policy is a launch decision that has not been made, and wiring an enforcement rule to a policy that does not exist yet would block content on a rule nobody has written. Record it now; enforce it when there is something to enforce.
+- `content.ts` is frozen. If the Track shape lives there, this is the ruling that unfreezes it — re-freeze with the date updated and WP15.1 named.
+
+*2 — the red typecheck*
+- `apps/backend/src/content/content.mapper.test.ts:285` — `Type '"dot"' is not assignable to type '"json" | "mermaid" | null | undefined'`, from WP15's `cf3e286`.
+- **Read the test before you fix it.** Line 279 is a deliberate negative test — *"rejects a diagram whose spec format is not one the renderer knows"* — so `'dot'` is invalid **on purpose**; that invalid value *is* the assertion. Changing it to a valid format makes the file typecheck and the test assert nothing.
+- Fix it at the fixture: let it hold a deliberately-invalid value via a cast through `unknown`, with a comment saying why. **Confirm the test still fails when the mapper's validation is removed** — if it passes either way, the fix was wrong.
+
+**Out of scope:** enforcing acquisition at publish time, the pipeline, backfilling the 28 Tracks to anything other than the default, WP12/WP13/WP14.
+
+**Device gate:** *open a Track in the Payload admin UI and see the acquisition field, set it, save, and see it come back over the REST API.* Both halves — the CMS write and the API read — because the pipeline uses the second and only a human uses the first.
+
+**Acceptance criteria**
+- [ ] Root `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` all pass
+- [ ] Track carries `acquisition`, restricted to the four values
+- [ ] **All 28 existing Tracks still validate and still serve**, defaulted to `undocumented` — verified by query
+- [ ] The value set in the CMS is readable over the REST API
+- [ ] Publishing is **not** blocked by the field's value
+- [ ] The `'dot'` test still fails when the mapper's `specFormat` validation is removed — mutation-checked
+- [ ] Migration applies cleanly to an empty database
+
+**Testing expectations:** Tier B for the field — one happy path through CMS write and API read. The mutation check on the `'dot'` test is mandatory, not optional; it is the entire point of touching that file.
+
+---
+
+### Handoff: 2026-08-26 — WP17: Leaf generation, grounding, and the Payload boundary
+
+*Pipeline Manager. Run **WP16.1 first** — it is small, it is free, and everything here inherits the plan it fixes.*
+
+### Task: WP17 — draft_leaf, extra_content, ground_check, and writing drafts to Payload
+
+**Context:** WP16 produces an approved Leaf plan. This package turns each planned Leaf into five real slides with a retrieved passage behind every claim, and lands them in the CMS as drafts. It is where `LEGAL.md` stops being a document and becomes a mechanism: **zero fabrication is enforced here or it is not enforced anywhere.**
+
+**Objective:** For each Leaf in an approved plan, generate the five slides plus Dinner Table Knowledge and apply-in-life, attach a retrieved source passage to every factual claim, reject anything unsupported, and write the result into Payload as a **draft**. Done means a human can open a generated Leaf in the CMS and read it.
+
+**Scope:** `apps/pipeline/`. **Blocked on** the `acquisition` field existing on Payload's Track collection — see the debt register; that is Manager's, not yours. Say so and stop if it is not there when you reach the CMS writer.
+
+**Requirements**
+
+*`draft_leaf`*
+- The five slides, matching `packages/shared/src/content.ts` exactly. It is frozen — read it, do not assume its shape, do not change it.
+- **Exactly one correct scenario option**, and the two wrong ones plausible. A scenario whose wrong answers are obviously wrong is a gate that does not gate.
+- Every factual claim carries the retrieved chunk that supports it. The 136 chunks already hold chapter index, title and position — the locator is available, use it.
+
+*`extra_content`*
+- Dinner Table Knowledge and apply-in-life.
+- **DTK cannot be emitted without a takeaway-slide source reference.** The schema enforces this in two places already; make it three. Tier A.
+
+*`ground_check` — the legal gate*
+- Every claim, quote and DTK fact maps to a retrieved passage, or it does not proceed. **Pass/fail, not advisory, not a score with a threshold you can nudge.**
+- Keep it mechanically separate from anything editorial. R3's whole point is that this verdict cannot be argued down on quality grounds — and per WP16's ruling on the structure check, the same principle holds: **the thresholds are negotiable, the verdict is not.**
+- A quote must match the source text, not paraphrase it. Verbatim or it is not a quote.
+
+*The Payload boundary — opens here*
+- Write **drafts** via the REST API with an authoring token. Never publish. Never touch Payload's tables — WP16 already built the database guard that refuses this; keep it.
+- **A maximal-fixture round-trip test is mandatory, against real Payload rather than a stand-in.** Author a Leaf with *every* optional field populated, read it back, assert every field survives. WP15 shipped a mapper that silently dropped all three new fields with 932 tests green, because a dropped optional field is indistinguishable from an absent one. Your source references are optional fields. This is the reason this test exists.
+- Record the Track's `acquisition` status on write.
+
+*Why the CMS write lives here rather than in WP19:* the package that produces a field should be the package that proves the field survives the boundary. Splitting them is how WP15's defect happened. It also makes gate 2 in WP19 a review of drafts already in Payload — which is where §3.5 always wanted the human to work — rather than a custom view built from nothing.
+
+**Out of scope:** images and diagrams (WP18), editorial review and the revision loop (WP19), publishing, gate 2's UI, anything that is not a public-domain book.
+
+**Read-it-yourself gate:** *Play a generated Leaf as a reader would.* Does the scenario present a real dilemma, or a right answer with two obviously wrong ones beside it? Does the payoff feel earned? Does the DTK fact sound like something a person would actually repeat? Report honestly — a Leaf that passes every assertion and reads like nonsense is a failed package, and no test here will tell you.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `npm test`/`build` unaffected
+- [ ] Every Leaf in an approved plan generates five schema-valid slides
+- [ ] **A claim with no supporting passage is rejected** — mutation-checked
+- [ ] **DTK without a takeaway source reference is rejected** — mutation-checked
+- [ ] A quote that paraphrases rather than matches the source is rejected
+- [ ] Drafts appear in Payload and are readable in the admin UI
+- [ ] **The maximal-fixture round-trip passes against real Payload** — every optional field survives
+- [ ] Nothing the pipeline writes is ever in a published state
+- [ ] Token spend logged per node and per Leaf; **the cost of one full Track reported**
+- [ ] A generated Leaf has been read, as a reader, and judged
+
+**Testing expectations:** Tier A on grounding rejection, DTK sourcing, quote fidelity, and never-publishes. Tier B one happy path per node. Contract-test the CMS boundary against real Payload, not the stand-in — the stand-in inherits the same blind spot as the code under test. List what you deferred.
+
+---
+
+### Handoff: 2026-08-26 — WP16.1: The breakdown prompt, and the model question answered properly
+
+*Pipeline Manager. Small, free, and it comes before WP17.*
+
+### Task: WP16.1 — Fix the breakdown prompt; measure the model choice with enough runs to mean something
+
+**Context:** WP16's own finding is that the prompt, not the model, is the bottleneck — three runs scored 24%, 78% and 89% on the structure check. That is the most useful thing the package produced and it deserves its own package rather than being absorbed into WP17's first hour.
+
+**It also means the model comparison cannot yet support its conclusion.** The two `gemini-3.6-flash` runs differ by 54 points on the single-chapter ratio; the gap between Flash and Pro is 11. **The spread within one model is five times the gap between models**, and every cell is n=1. "Capability isn't the lever" may well be true — Pro reusing 10 of 18 chapter titles verbatim is a striking observation — but this data cannot distinguish it from noise. Settle it.
+
+**Objective:** A breakdown prompt that passes the structure check reliably rather than occasionally, and a model recommendation backed by enough runs to separate signal from variance.
+
+**Scope:** `apps/pipeline/src/zoomout_pipeline/prompts/`, the attempt cap, and a measurement harness. No new nodes.
+
+**Requirements**
+- **Move the original-structure requirement from a bullet into the framing of the task.** A constraint buried in a list reads as one consideration among many; this one is the task. Add a worked example — a good plan and a mirroring plan for a *different* book, so nothing leaks into the run you are measuring.
+- **Raise `MAX_BREAKDOWN_ATTEMPTS` from 3 to 5.** R7 chose its cap on cost grounds that assumed a Pro-tier call; on Flash against credit a round is effectively free, and losing a plan to a cap guarding money we no longer spend is pure waste. The loop stays bounded, which was the actual requirement.
+- **Measure ≥3 runs per config**, same book, same prompt: Flash on Vertex, Pro on Vertex. AI Studio drops out — we are on Vertex now. Report **mean and spread** for all three ratios, not a single number per cell.
+- Report per-run cost.
+
+**Constraints — one that matters more than the rest**
+- **Do not tune the thresholds to make runs pass.** The prompt is the variable under test; the check is the instrument. Moving both at once measures nothing, and adjusting the instrument until the result is acceptable is marking your own homework on the one check `LEGAL.md` rests on. If your honest conclusion is that a threshold is wrong, **bring the numbers to Architect** — tuning it is a legitimate design change with a record, and it is mine to rule on.
+
+**Acceptance criteria**
+- [ ] The structure requirement is in the task framing, with a worked example from a different book
+- [ ] `MAX_BREAKDOWN_ATTEMPTS` is 5; the cap still terminates, still escalates, still tested
+- [ ] **≥3 runs per config recorded, with mean and spread** — a single number per cell does not close this
+- [ ] A model recommendation stated **with its variance attached**, or an explicit "still indistinguishable" if that is what the data says
+- [ ] `MAX_SINGLE_CHAPTER_LEAF_RATIO`, `MAX_SEQUENTIAL_PAIR_RATIO` and `CHAPTER_COUNT_PARITY_BAND` are **unchanged**
+- [ ] Existing tests pass
+
+**Testing expectations:** the cap and escalation tests from WP16 still pass. The measurement runs are live-model and belong in the explicit suite outside the normal gate.
+
+---
+
 ### Handoff: 2026-08-25 — WP16: Pipeline skeleton — ingest, analyze, breakdown, gate 1
 
 *Goes to the **Pipeline Manager** session, not Manager. First package of `apps/pipeline`.*
@@ -1181,6 +1314,503 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 **Testing expectations:** Unit tests for the `packages/shared` Zod schemas, with the scenario-option constraints covered exhaustively (they encode the product's core unlock rule). An integration test for `GET /health` against a real Postgres instance — testcontainers or a CI service container, not a mock. A build smoke test for the Expo app. No end-to-end tests in this package.
 
 ## Completions (Manager → Architect)
+
+### Note for WP18 — asset generation: founder rulings and the style problem — 2026-08-26
+
+Recorded by the Pipeline Manager during WP16, from a founder conversation about the two
+asset fields WP15 added. **Not a completion report** — WP18 has not started. Written here so
+the rulings are not lost between sessions, and because two of them constrain the design more
+than they look.
+
+#### What the schema already forces
+
+`imageAssetSchema` requires `url` **and** `alt`; `diagramAssetSchema` adds optional `spec` +
+`specFormat` (`mermaid` | `json`). Because `url` is required on both, **a diagram cannot be a
+spec the app draws at runtime** — WP18 must render it server-side to an image and store the
+spec beside it for re-rendering. That is the bulk of the diagram work.
+
+#### Founder rulings, 2026-08-26
+
+| Question | Ruling |
+|---|---|
+| Ship scenario images, or defer them as §4a suggested? | **Ship them.** "We need to give as real an experience as possible." This overrides the Pipeline Manager's recommendation to defer; recorded as a deliberate choice to carry the only per-Leaf recurring cost in the pipeline |
+| Content guardrail on generated illustrations | **Apply it** |
+| Where `alt` comes from | Delegated to the Pipeline Manager |
+| Visual consistency | **New requirement, founder-initiated** — see below |
+
+#### The guardrail, as it should be implemented
+
+Generated illustrations must never depict **the author, any real person, or anything
+resembling the book's cover, title treatment or branding**. A scenario illustration is
+fiction and carries no zero-fabrication risk in itself — but an image implying the author
+endorses ZoomOut walks directly into the non-endorsement problem `LEGAL.md` is built around,
+and does so in the most shareable medium in the product.
+
+Two implementation notes. It belongs **in the asset prompt as a hard constraint and in a
+check**, the same reasoning that made the 1:1 structure requirement a measurement rather than
+a prompt line. And **no rendered text inside images at all** — image models render text
+unreliably, WP9 established that legibility beats fidelity, and any text in an illustration
+is untranslatable and unfixable without regenerating.
+
+#### `alt` — decided by the Pipeline Manager
+
+**For diagrams: generated deterministically from the JSON spec.** We own the renderer, so we
+know exactly what is in the picture — nodes, edges, labels, order. A description derived from
+the structure is accurate by construction, costs nothing, and cannot hallucinate. This is a
+concrete argument for the JSON spec format over Mermaid that R4 did not anticipate.
+
+**For scenario images: written by the same LLM call that writes the image prompt, describing
+what was asked for — not what came back.** Rationale: an image model cannot reliably report
+what it drew, and a second vision call to caption the result costs money and can invent
+detail. The prompt is the ground truth of intent, and the human at gate 2 sees the image and
+its `alt` side by side and can correct it — which is the real check, in a system that is
+human-in-the-loop by design.
+
+Two rules for the text itself: describe **the scene**, not the medium ("a commuter checking
+a phone on a crowded train", never "an illustration of…"), and **do not restate the scenario
+prompt**, which a screen reader has already read out.
+
+#### Visual consistency — the founder's requirement, and how to actually get it
+
+> "It should not be the case that every next image is very different. An app should have the
+> same themed illustrations being followed… instead of AI slop."
+
+This is the hardest part of WP18 and it will not be achieved by asking nicely in a prompt.
+Five mechanisms, in descending order of how much they actually buy:
+
+1. **Reference-image conditioning — the strongest lever by far.** The Gemini image models
+   accept image input. Keep a small set of committed **style anchors** in the repository and
+   pass them with every generation call. Text alone does not hold a look together across
+   twenty different subjects; anchors do.
+2. **A version-controlled style contract** (`prompts/asset_style.md`), appended to every image
+   prompt: medium, palette, lighting, composition, how people are treated. Same reasoning as
+   every other prompt in this service — it is the logic and it needs diffs.
+3. **A fixed seed per Track.** Buys reproducibility rather than cross-subject consistency, but
+   makes regeneration deterministic, which matters when debugging why one Leaf looks wrong.
+4. **A mechanical consistency check, advisory rather than blocking.** Compare each candidate's
+   dominant-colour histogram against the anchors and **order the candidates by closeness**
+   rather than rejecting outliers. This project is already comfortable with mechanical checks;
+   this one should inform the human, not overrule them — taste is the one thing gate 2 exists
+   for.
+5. **The human picks from N candidates at gate 2** (R5). The final gate, and the only one that
+   can judge whether a picture is any good.
+
+**The style contract must derive from `design-direction.md`, not be invented.** Surfaces
+`#0B0F12`–`#1C242A`, teal `#3DDCC8` as the accent, depth from surface lightness rather than
+shadow (§2). **Amber `#FFB020` must not appear in illustrations** — §3 reserves it for reward
+moments exclusively, and an illustration using it would compete with the XP and streak
+language for the same attention.
+
+**There is a bootstrapping step, and it is a human one.** The first Track has no anchors. The
+sequence is: generate a spread of candidates for two or three Leaves, the founder picks the
+images that define the look, those become the committed anchor set, and everything afterwards
+is conditioned on them. That single act sets the product's visual identity, so it should be
+treated as a design decision rather than a pipeline run.
+
+**Keep the anchors versioned and swappable.** §9 reserves a mascot slot for later; if a mascot
+ever lands, a swappable anchor set makes that a re-render rather than a redesign — the same
+logic §9 already applies to four screens.
+
+#### Available models, verified 2026-08-26
+
+On the Vertex `global` endpoint: `gemini-3-pro-image`, `gemini-3.1-flash-image` (plus preview
+and lite variants). **No Imagen models are served at `global`** — Imagen would require a
+regional endpoint and therefore a deliberate data-residency decision.
+
+Images are **the only per-Leaf recurring cost in the pipeline**, so this is the number that
+decides whether the library can grow. Diagrams, being a text call producing a spec, are
+effectively free — R4's cost argument survives intact.
+
+#### Sequencing
+
+WP18 needs Payload's media collection to store what it renders, and **the Payload boundary
+does not open until WP17**. Assets cannot land before then regardless.
+
+
+### Addendum: WP16 — Vertex AI, and the Pro-vs-Flash experiment — 2026-08-26
+
+Run after the WP16 completion report above, at the founder's request. Two questions:
+should the pipeline use Vertex rather than the AI Studio Developer API, and should the
+reasoning nodes use a Pro model. **The answers are yes and no**, and the second one is the
+more useful finding.
+
+#### Vertex is now supported and is the right target
+
+`§4` specified Vertex from the start; WP16 was built against the Developer API because
+`§4a`'s free-tier analysis pointed there. Two things have since changed that argument:
+
+- **Google excluded the Developer API from the $300 Cloud credit in March 2026.** Credit
+  pays for Vertex; it explicitly cannot pay for "Gemini API in AI Studio". Verified against
+  Google's own documentation, not a blog.
+- **Vertex does not use submitted prompts to improve Google's models.** That is the single
+  constraint confining development to public-domain books, so Vertex is what makes real
+  books possible at all.
+
+Implemented as configuration, not a rewrite: `use_vertex` + `vertex_project` select
+`genai.Client(vertexai=True, ...)`, credentials come from Application Default Credentials,
+and **no key touches disk** — which also closes the credential-handling hole recorded above.
+Settings refuse a half-configured backend at construction rather than on the first billed
+call.
+
+**One trap worth recording: the Vertex location must be `global`, not a region.**
+`models.list()` reports the Gemini 3.x models everywhere, but `us-central1`, `us-east5` and
+`europe-west4` all 404 on `gemini-3.6-flash` and `gemini-3.1-pro-preview`. Only the global
+endpoint serves them. A regional endpoint is a data-residency decision to take deliberately;
+inheriting one as a default silently costs the entire 3.x line.
+
+Credit confirmed before any Vertex call was made: **₹28,710 (~$300), 100% remaining,
+expiring ~17 September 2026**. That 22-day window is a real constraint on WP17–WP19.
+
+#### The experiment: Pro is not better here, it is worse
+
+Same book, same prompt, same checkpointed analysis. Three runs:
+
+| Run | Model | Single-chapter Leaves | Follows book order | Structure check |
+|---|---|---|---|---|
+| AI Studio | `gemini-3.6-flash` | 24% | 81% | **PASS** |
+| Vertex | `gemini-3.6-flash` | 78% | 100% | **FAIL** |
+| Vertex | `gemini-3.1-pro-preview` | **89%** | 88% | **FAIL** |
+
+**The Pro model produced the most chapter-mirroring plan of the three.** 18 Leaves against
+18 chapters, and **10 of its 18 Leaf titles substantially reuse a chapter title** — several
+verbatim: "The Right to be Rich", "Thinking in the Certain Way", "Acting in the Certain
+Way", "Efficient Action", "The Impression of Increase".
+
+That is exactly what `LEGAL.md` forbids, produced by the strongest model available.
+
+**The interpretation, which is worth more than the numbers.** A stronger model follows the
+source's structure *more* faithfully — and this requirement demands departure from it. The
+task is adversarial to the instinct a better model has. So model capability is not the lever
+here; the prompt is. Two consequences:
+
+1. **Do not spend on Pro for `breakdown`.** It costs more and performs worse at the one
+   thing that matters. Revisit only after the prompt is doing its job.
+2. **The variance across identical configurations is the real signal.** The same model and
+   prompt scored 24% and 78% on consecutive runs. The prompt is not steering the outcome —
+   it is influencing a distribution whose spread straddles the legal threshold. The passing
+   AI Studio run recorded in the completion report above was, in part, luck.
+
+**`breakdown.md` is now the highest-value file in this package.** It needs the
+original-structure requirement moved from a bullet among several into the primary framing of
+the task, and probably a worked example of a synthesised Leaf. That is WP17's first job and
+it costs nothing to iterate.
+
+#### What this says about the structure check
+
+The check earned its place today. It caught a genuine table-of-contents plan from a
+production model on a real book, twice, and refused to pass it — including from the model we
+were about to upgrade to on the assumption it would be better.
+
+**Its thresholds are also now better evidenced.** The completion report above flagged
+discomfort that the passing run scored 81% sequential against an 85% limit. With three data
+points the picture is different: the failures scored 88% and 100%, well clear of the limit,
+and the single-chapter signal separated them cleanly (24% pass versus 78% and 89% fail). The
+thresholds are discriminating between real plans, not just synthetic ones. **No change
+recommended.**
+
+#### One defect the experiment exposed
+
+The first Vertex run died instead of escalating. Attempt 2 produced a valid but
+chapter-mirroring plan; attempt 3 returned unparseable JSON; the cap was reached and the node
+raised — **discarding the attempt-2 plan a human could have edited into shape**.
+
+Escalation now prefers the last valid plan: if any attempt produced one, the run stops at
+gate 1 with that plan and the failure attached, and only raises when nothing valid was ever
+produced. A plan that fails the structure check is still a plan a human can work with;
+throwing it away costs the whole run for nothing. Regression test named for the incident.
+
+#### Cost
+
+Both full runs reported **$0.00** with the model listed as unpriced — the 3.x rates were
+never verified, and naming the model beats inventing a number. The real figures: `wattles-05`
+32,419 tokens, `vertex-pro` 35,355 tokens. Ingest was reused in both, so neither re-embedded
+the book. Actual spend against the trial credit is immaterial at this volume; the credit's
+**expiry date matters far more than its balance**.
+
+
+### Completed: WP16 — Pipeline skeleton: ingest, analyze, breakdown, human gate 1 — 2026-08-26
+
+First package of `apps/pipeline`, by the Pipeline Manager session. Branch
+`wp16-pipeline-skeleton`. **11 of 12 acceptance criteria verified; the twelfth — the
+read-it-yourself quality judgement — is done and the answer is qualified. See "Is the plan
+any good?" below, which is the part worth reading if you read nothing else.**
+
+A run against *The Science of Getting Rich* (Gutenberg #59844, Wattles 1910, public domain)
+goes ingest → analyze → breakdown → gate 1, writes a plan of 17 Leaves, survives being
+killed, and resumes from a hand-edited file. Total cost of the successful run: **32,419
+tokens, $0.00** on the free tier.
+
+#### The proposal's §4a is out of date, and this is the most transferable finding
+
+§4a was verified against pricing pages on 2026-08-13. Checked against a live API key on
+2026-08-26, four of its assumptions are now wrong. None of this was discoverable by reading
+documentation — every one of them surfaced as a failed run.
+
+| §4a said | Actually |
+|---|---|
+| "The free tier includes Pro-tier models" | **Every Pro model reports `limit: 0`** for free-tier requests. Pro is paid-only |
+| `gemini-2.5-pro` costed at $1.25/$10.00 | **Closed to new API keys.** 404s with a pointer to the 3.x line. `gemini-2.5-flash` too |
+| `text-embedding-004` as the embedding model | **Retired.** 404s. The current family is `gemini-embedding-001` |
+| "Rate limits… unlikely to bind" | **They bind at ingest.** The embed endpoint counts each *text* as a request against 100/minute; one 22,000-word book is ~140 |
+
+**What this changes:** the free tier still covers WP16–WP19 as §4a concluded, but only on
+the **Flash** line. Anything wanting Pro-tier reasoning costs money from now on, not just
+the cross-family editorial reviewer in R3. The defaults are now `gemini-3.6-flash` for
+analyze and breakdown; model choice is config, so a paid Pro model is one env var away when
+output quality justifies it.
+
+`gemini-embedding-001` is natively 3072-wide and is truncated to 768 to match the schema,
+**then re-normalised** — Matryoshka truncation leaves a vector off the unit sphere, and
+pgvector's cosine distance assumes unit length. Skipping that degrades retrieval silently,
+which is the worst way for a grounding pipeline to be wrong.
+
+#### The 1:1 chapter-structure check — thresholds, and what the real plan scored
+
+Two signals, either one fails the plan. Both are named constants in
+`graph/structure_check.py` with the reasoning inline.
+
+| Signal | Threshold | Reasoning |
+|---|---|---|
+| Leaves drawing on exactly one chapter | **> 75%** | The plan is slicing the book, not teaching across it. Not tighter, because genuinely atomic concepts do live in one chapter |
+| Follows the book's order **and** ~one Leaf per chapter | **> 85% of steps**, with leaf count within **±15%** of chapter count | Either alone is defensible — a 30-Leaf sequential plan over 17 chapters is not a 1:1 reproduction. Together they are the table of contents |
+
+**Thresholds lean strict deliberately.** A false positive costs one bounded revision round
+and, at the cap, a human decision. A false negative is a legal exposure that reaches
+readers. Those are not comparable costs.
+
+Mutation-checked as the handoff asked: neutering the single-chapter threshold turns 2 tests
+red, both in `test_structure_check.py`. Making `check_structure` never reject turns **7**
+red across 3 files — the check's own tests plus the revision cap, the feedback loop, the
+gate refusal and the plan-file header. Nothing outside the structure surface moves.
+
+**The real plan scored 24% single-chapter and 81% sequential, against limits of 75% and
+85%.** It passed. The ordering number is uncomfortably close to its limit, and my own
+reading of the plan (below) agrees with that discomfort — the plan *is* substantially in the
+book's order. **This is worth an Architect eye**: either 85% is slightly loose, or — more
+likely — sequential-ratio is the wrong instrument for "did this get ordered by what a
+learner needs", and that judgement belongs to gate 1 rather than to a mechanical check.
+I did not change the threshold on the strength of one book.
+
+#### Is the plan any good? — the read-it-yourself gate
+
+**Answer: it is a decent scaffold and not yet a course. It is clearly not a table of
+contents with the numbers filed off, but it is not what WP20 should ship either.**
+
+What is genuinely good:
+
+- **The concepts are crisp and each Leaf teaches one thing.** "Every business transaction
+  must deliver more in practical use value to the buyer than the monetary cash value
+  received" is a real, teachable, testable idea — you can write a scenario for it.
+- **It is grounded in Wattles**, not in generic modern self-help. Nothing was imported from
+  the standard treatment of the topic, which was an explicit prompt instruction and the
+  thing most likely to go wrong.
+- **The synthesis is real in about two-thirds of it.** "Creation Over Competition" draws on
+  chapters 3, 5 and 6; "Leveraging the Law of Universal Growth" connects chapter 5's
+  *Increasing Life* with chapter 14's *Impression of Increase*. Those are links the book
+  spreads out and a teacher would pull together.
+
+What is wrong with it:
+
+- **The order is the book's order, lightly shuffled — not a dependency order.** The clearest
+  symptom: "Formless Substance and Human Thought", the metaphysical claim the whole book
+  rests on, lands at position 5, *after* four Leaves that only make sense if you already
+  accept it. A course would open there.
+- **Two pairs are near-duplicates.** Leaves 10 and 11 both teach acting fully on today's
+  work (chapters 11–12 and 12). Leaves 12 and 13 both teach the impression of increase
+  (both cite chapter 14).
+- **17 Leaves against 18 sections is too close to one-per-chapter** to feel like a
+  restructure, even though the sourcing underneath it genuinely is one.
+
+**My read on why:** this is a free-tier Flash model doing a job §4a assumed a Pro model
+would do, against a first draft of a prompt nobody has tuned. Both are WP17 problems and
+both are cheap to fix — the prompt is a file, the model is an env var. I would not conclude
+anything about the architecture from this output.
+
+#### Three defects that only running it could find
+
+All three were found by checking effect rather than exit code, and all three now have
+regression tests.
+
+1. **A half-embedded book read as fully ingested.** `ingest` reused any book with "more than
+   zero chunks". A run that died partway through embedding left 64 of 136 chunks; the next
+   run declared the book ingested and moved on. Nothing failed, nothing logged. **WP17 would
+   have grounded against half a book with no signal.** Now reuse requires the stored chunk
+   count to match what the parser produces.
+2. **The node-level skip trusted a stale checkpoint.** Same shape one layer up: `ingest` also
+   short-circuited on `state.chunk_count > 0`, which a checkpoint can hold from a dead run.
+   Removed entirely — `ingest_book` compares the database against the parsed file, which is
+   the only answer that cannot go stale, and re-parsing locally costs nothing.
+3. **A malformed plan killed the run instead of being revised.** Breakdown returned 10 Leaves
+   against the 15–30 range; the schema correctly rejected it and the run died. Now a
+   validation failure is a bounded retry carrying the failure text as feedback — a model
+   asked again with no explanation produces the same output. Same cap as the structure
+   check; past it, the run stops with a clear message rather than looping.
+
+#### Decisions taken, with reasoning
+
+- **The book's text is deliberately kept out of graph state.** State is checkpointed to
+  Postgres, so text placed there is copied into the checkpoint tables — where
+  `purge_raw_text` cannot reach it, and where it would survive exactly the deletion R6
+  requires. Nodes read it from the repository by `book_id` and let it go.
+- **The gate writes its plan file only when absent.** LangGraph re-executes a node on resume,
+  so an unconditional write would overwrite the founder's edits with the model's original
+  plan moments before reading them back. The run would have looked like it worked. There is
+  a test named for this.
+- **An approved plan that still mirrors the book is refused.** Gate 1 exists to improve the
+  plan, not to waive a `LEGAL.md` requirement — the same logic that keeps the grounding gate
+  separate from editorial review. **This needs a ruling**: it means the founder cannot
+  override the structure check from the file, and the escape hatch is editing until it
+  passes. Defensible, but it is a policy choice I made, not one the handoff specified.
+- **Checkpoint deserialization is restricted to an explicit allowlist** of this package's
+  types. LangGraph's default accepts any type and warns it will stop; naming them survives
+  that change rather than breaking every in-flight run when it lands.
+- **Embeddings are stored per batch**, and a re-entered ingest skips chunks it already has.
+  Embedding is the only place in WP16 that spends money per unit of book.
+- **The 3.x models are deliberately absent from the cost rate table.** Their rates were not
+  verified here, and `unpriced_models` naming a model is more useful than a confident number
+  that is wrong. The successful run reports `$0.0000` with `unpriced: gemini-3.6-flash`,
+  which is honest; the token counts are the real signal.
+
+#### Infrastructure
+
+The pipeline's Postgres is **its own container on port 5433** (`pgvector/pgvector:pg16`),
+not a third database inside `zoomout-postgres`. That container is `postgres:16-alpine` with
+no pgvector available, and it is the one Payload and the backend depend on. Verified by
+listing tables in all three:
+
+| Database | Contents |
+|---|---|
+| `zoomout_pipeline` (5433) | `books`, `book_chunks`, `book_raw_text`, 4 checkpoint tables, pgvector 0.8.6 |
+| `zoomout` (5432) | 10 backend tables, **0** pipeline or checkpoint tables |
+| `zoomout_cms` (5432) | 21 Payload tables, **0** pipeline or checkpoint tables |
+
+Every variable is prefixed `ZOOMOUT_PIPELINE_`, and `db/engine.py` refuses any database
+showing the backend's or Payload's tables — a live check, not a naming convention.
+`zoomout-pipeline doctor` prints which database it is actually in, which is the WP5b lesson
+turned into a command.
+
+**The host had neither prerequisite.** Only Python 3.9.6 (Xcode's) and a stopped Docker
+daemon. `uv` was installed from PyPI into the user directory and fetched CPython 3.12.14 —
+no admin rights, nothing outside `~`. Recorded because the next session on a fresh machine
+will hit the same wall.
+
+#### A credential handling finding, learned the hard way
+
+Setting up the API key, **two Gemini keys were leaked into the session transcript by my own
+diagnostic commands** — both times by trying to print a redacted fragment of a line that
+contained the secret. Both were rotated and deleted.
+
+Two things follow, and they are worth more than the embarrassment:
+
+- **The deny rule on `.env` files does not protect the environment itself.** It blocks the
+  obvious path while a credential in an env var remains one careless `grep` away from a log.
+  The only safe diagnostics are `${#VAR}` and match *counts*.
+- **`~/.zshrc` is the wrong file for anything a tool needs.** Zsh reads it for interactive
+  shells only, so an agent's non-interactive shell never sees it. `~/.zshenv` is read by
+  every invocation. This cost two round trips before it was diagnosed.
+
+**Before anything deploys, this key belongs in GCP Secret Manager.** Hosting is already
+decided as GCP; a key in a dotfile is a local-development affordance that should not become
+the pattern.
+
+#### The root `typecheck` is red on `main`, and it is not WP16
+
+`npm run typecheck` fails at `apps/backend`, on `main`, independently of this package:
+
+```
+src/content/content.mapper.test.ts(285,78): error TS2322:
+  Type '"dot"' is not assignable to type '"json" | "mermaid" | null | undefined'.
+```
+
+The test passes `specFormat: 'dot'` while `DIAGRAM_SPEC_FORMATS` in
+`packages/shared/src/content.ts` is `['mermaid', 'json']`. It arrived with `cf3e286`
+(*WP15: carry the Leaf v2 fields through the backend mapper*). Confirmed pre-existing by
+checking `main` out into a separate worktree and finding the same line against the same
+enum; `apps/backend` and `packages/shared` are byte-identical between this branch and
+`main`.
+
+**Left unfixed deliberately** — `apps/backend` is Manager's, and a one-character fix in
+someone else's package is still a change nobody asked for. It is a one-character fix
+(`'dot'` → `'mermaid'`), or the enum is wrong and Graphviz was meant to be supported.
+
+Everything else in the root gate is green, verified by running the phases separately since
+the failing `typecheck` aborts the chain: **lint passes, `npm test` passes (706 tests across
+four workspaces), `npm run build` passes.** WP16's criterion — that root `build` and `test`
+are unaffected — holds.
+
+**How this was nearly missed, which is the part worth keeping.** The gate was run in the
+background as `{ npm run lint && ... ; echo "EXIT=$?" ; }`. The harness reported the
+*compound command* exiting 0, because the trailing `echo` always succeeds, and the run was
+twice reported in chat as green before anyone read the log. The project's own rule —
+**verify the effect, not the exit code** — applies to the gate itself, and a background
+task's reported status is an exit code like any other.
+
+#### One change outside the package's declared scope
+
+`eslint.config.js` gained one ignore entry for `apps/pipeline/**`. The root gate went red
+because eslint was linting `.js` assets shipped inside Python dependencies in
+`apps/pipeline/.venv`. Written in the style of the two entries already there. Flagged rather
+than buried: the handoff scoped this session to `apps/pipeline/` and nothing else, and
+leaving the root gate red was the worse option.
+
+`apps/pipeline` has **no `package.json`**, so npm's `apps/*` workspace glob does not pick it
+up and `npm run build` / `npm test` never see it — which is what the handoff asked for, by a
+mechanism worth knowing about since the glob looks like it would include it.
+
+#### Testing
+
+48 tests. Tier A: the structure check firing (plus the mutation check), raw-text deletion
+verified by querying the database, the revision cap terminating, ingest refusing to run
+without an acquisition status, and the foreign-database guard. Tier B: one happy path
+through ingest, analyze and breakdown wiring, and the gate file round-trip.
+
+**Durability is tested by actually killing a process.** `test_durability.py` runs a real
+checkpointed run to gate 1 in a child process, `SIGKILL`s it, edits the plan file, and
+resumes in a *separate* process sharing nothing but Postgres. It comes back with the chunk
+count intact and the hand-edited title in state.
+
+The DB-backed tests create and drop a scratch database and **skip loudly** if Postgres is
+unreachable, rather than passing quietly. A green gate that silently skipped the Tier A
+retention tests would be worse than a red one.
+
+LLM nodes are tested on their contract — output parses, required fields present, a bad plan
+is rejected — never on prose, via a scripted fake. The normal gate touches no network.
+
+#### Tier C — deferred, by name
+
+- **No test exercises the PDF fallback against a real PDF.** The code path exists and is
+  honest about its limits, but no fixture PDF is committed and no run has used it. EPUB is
+  the primary path and the first book was EPUB.
+- **The `live` pytest marker exists but no test uses it.** Live-model runs were done by hand
+  through the CLI. A small explicit live suite is still owed.
+- **`purge_raw_text` is a command, not a terminal node.** Wiring it to the end of a run is
+  WP20's, as the handoff anticipated. **The Wattles text was deliberately not purged** —
+  WP17 needs it, and re-ingesting costs another ~140 embedding requests.
+- **No retry or backoff on the text-generation calls.** Only embeddings are paced. Analyze
+  and breakdown are one call each between long human gates, so this has not bitten, but a
+  transient 503 currently fails the run.
+- **The rate limiter is per-process.** Two concurrent runs would each think they had the
+  full quota.
+- **LangSmith tracing is not wired**, though §4 lists it. Nothing to trace until WP17 has
+  cycles worth debugging.
+- **`book_chunks.is_cited` is unused** until WP17 sets it. The purge already honours it.
+- Four abandoned run ids (`wattles-01` … `wattles-04`) have checkpoints in the pipeline
+  database from the debugging above. Harmless, and left as evidence.
+
+#### What WP17 inherits
+
+- A book in `zoomout_pipeline`: 136 chunks, 768-dimensional, **every chunk carrying its
+  chapter index, chapter title and position** — the location a source reference needs.
+  Retrieval is unwritten; the data it needs is there.
+- An approved 17-Leaf plan under run id `wattles-05`, resumable from its checkpoint.
+- `BookRepository.purge_raw_text` already distinguishes cited from uncited chunks, so
+  marking `is_cited` when a passage becomes a source reference is the only wiring left for
+  retention to be correct.
+- **No Payload contact of any kind** — asserted against the parsed source in
+  `test_boundaries.py`, which fails on an import rather than on a mention in prose. WP17
+  opens that boundary; the door is the REST API.
+- The prompt files are where the quality work happens. `breakdown.md` is a first draft that
+  produced a mediocre course, and improving it needs no code change.
 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->

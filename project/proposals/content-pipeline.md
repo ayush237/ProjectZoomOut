@@ -203,23 +203,59 @@ This finally requires the **role-based permissions** deferred since WP1 — writ
 
 ---
 
-## 4a. Cost and the free tier — verified 2026-08-13
+## 4a. Cost and the free tier
 
-Checked against Google's own pricing pages rather than estimated. Three findings change the plan.
+> **⚠️ The 2026-08-13 version of this section was wrong in four places.** It was written from Google's public pricing pages; WP16 then checked it against a live key and found otherwise. The corrected version follows. The original is kept below, struck through, because being wrong about this shaped a ruling and the record should show that.
 
-**Gemini's free tier includes Pro-tier models**, not only Flash — so analysis, breakdown, drafting, grounding and editorial review can all run on real models at zero cost. Rate limits are not published on the docs page any more (they are per-account in the AI Studio dashboard), but this pipeline's throughput is a handful of requests between long human gates, so they are unlikely to bind. Verify once an account exists.
+### Verified 2026-08-26, against a live key
 
-**The free tier uses submitted content to improve Google's products; the paid tier does not.** Stated plainly on the pricing page. **This rules the free tier out for real book text** — it would feed a copyrighted work into a corpus that may be used for training, which is a worse version of the ingestion problem R6 already names and one no disclaimer fixes afterwards. The line is therefore clean and non-negotiable:
+| Claim | Verified state |
+|---|---|
+| Pro-tier models on the free tier | **False — `limit: 0`.** The free tier is the **Flash line only** |
+| `gemini-2.5-pro` / `gemini-2.5-flash` | **Closed to new API keys** — both 404 |
+| `text-embedding-004` | **Retired.** `gemini-embedding-001` replaces it |
+| Embedding rate limits won't bind | **False.** Each *text* counts as a request against 100/min — one book is ~140, so it binds on the first run |
+| The $300 credit covers Gemini | **False since March 2026.** Google excluded the AI Studio Developer API from Cloud credit. **The credit pays for Vertex, not for the Gemini API** |
 
-> **Free tier for building and tuning against public-domain books. Paid tier the moment a real book goes through.**
+**We are on Vertex AI**, which §4 specified all along. ADC rather than a key on disk, the credit applies, and **Vertex does not train on submitted prompts**.
 
-**Image generation has no free tier at all** — every Imagen and Gemini image model is unavailable on it. Two consequences: the asset generator is the only node that costs money from day one, and **R4 gains a cost argument on top of its quality one**, since a diagram emitted as a Mermaid spec is a text call and therefore free while an image model is not. Deferring scenario illustrations entirely is a cheap and reasonable MVP choice.
+**One trap, recorded because it costs an hour to rediscover:** the Vertex location must be `global`. Regional endpoints 404 on the entire Gemini 3.x line.
 
-**Claude has no free tier** on the direct API or through Vertex. Cross-family editorial review (R3) therefore costs money by construction. Note this affects only the *editorial* reviewer — **grounding verification is mechanical and does not need a different model family**, so the legally load-bearing gate survives a free-tier design intact.
+### What this does to the public-domain rule
 
-**Hosting:** a $300 welcome credit over 90 days, with no auto-charge — an un-upgraded account closes rather than billing, with a 30-day grace period. Cloud Run's always-free allowance (2M requests, 360k GB-seconds, 180k vCPU-seconds per month) comfortably covers promotional-scale traffic. **Cloud SQL has no always-free allowance**, only a 30-day trial instance — the database is the recurring floor.
+**The rule stands, but one of its two legs is gone — and knowing which matters.**
 
-**Net: WP16 through WP19 cost nothing** if built against public-domain books with images deferred. Payment starts when real books go through and when the app deploys, and the credit absorbs a lot of both.
+The 2026-08-13 ruling rested on two reasons. **The training-corpus reason has evaporated:** Vertex does not train on submitted prompts, so the specific hazard of feeding a copyrighted work into a training corpus no longer applies.
+
+**R6's reason is untouched.** Ingesting a full copyrighted work into a vector store is a reproduction, and `LEGAL.md` argues about *output* only. That was never about which tier processed the text.
+
+So the line is no longer "free tier versus paid tier." It is:
+
+> **Public-domain books until the acquisition question is resolved — because of ingestion, not because of training.** The tier is now an operational detail; the acquisition status is the thing that gates real books.
+
+### Still true
+
+**Image generation has no free tier**, and on Vertex it spends credit. It remains the only node that costs money from day one, and **R4 keeps its cost argument**: a Mermaid spec is a text call, an image model is not.
+
+**Claude has no free tier** anywhere, so cross-family editorial review (R3) costs money by construction. This affects only the *editorial* reviewer — grounding verification is mechanical and needs no second family, so the legally load-bearing gate survives intact.
+
+**Cloud Run's always-free allowance** covers promotional traffic. **Cloud SQL has no always-free allowance** — the database is the recurring floor.
+
+### The credit clock
+
+**₹28,710 (~$300), 100% unspent, expiring ~17 September 2026.** At the current burn rate calendar runs out long before money does, which inverts the usual constraint: **the risk is leaving the credit unspent, not overspending it.**
+
+The credit binds hardest on **images**, which have no free fallback. Text work has one — the Flash free tier is adequate for public-domain material — so if anything gets pulled forward to land inside the window, it is asset work, not generation work.
+
+<details><summary>Original section, 2026-08-13 — superseded, kept for the record</summary>
+
+~~**Gemini's free tier includes Pro-tier models**, not only Flash — so analysis, breakdown, drafting, grounding and editorial review can all run on real models at zero cost. Rate limits are not published on the docs page any more (they are per-account in the AI Studio dashboard), but this pipeline's throughput is a handful of requests between long human gates, so they are unlikely to bind. Verify once an account exists.~~
+
+~~**The free tier uses submitted content to improve Google's products; the paid tier does not.** This rules the free tier out for real book text. Free tier for building and tuning against public-domain books. Paid tier the moment a real book goes through.~~
+
+~~**Net: WP16 through WP19 cost nothing** if built against public-domain books with images deferred.~~
+
+</details>
 
 ## 5. Suggested sequencing
 
