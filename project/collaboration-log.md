@@ -9,6 +9,96 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-26 — WP17: Leaf generation, grounding, and the Payload boundary
+
+*Pipeline Manager. Run **WP16.1 first** — it is small, it is free, and everything here inherits the plan it fixes.*
+
+### Task: WP17 — draft_leaf, extra_content, ground_check, and writing drafts to Payload
+
+**Context:** WP16 produces an approved Leaf plan. This package turns each planned Leaf into five real slides with a retrieved passage behind every claim, and lands them in the CMS as drafts. It is where `LEGAL.md` stops being a document and becomes a mechanism: **zero fabrication is enforced here or it is not enforced anywhere.**
+
+**Objective:** For each Leaf in an approved plan, generate the five slides plus Dinner Table Knowledge and apply-in-life, attach a retrieved source passage to every factual claim, reject anything unsupported, and write the result into Payload as a **draft**. Done means a human can open a generated Leaf in the CMS and read it.
+
+**Scope:** `apps/pipeline/`. **Blocked on** the `acquisition` field existing on Payload's Track collection — see the debt register; that is Manager's, not yours. Say so and stop if it is not there when you reach the CMS writer.
+
+**Requirements**
+
+*`draft_leaf`*
+- The five slides, matching `packages/shared/src/content.ts` exactly. It is frozen — read it, do not assume its shape, do not change it.
+- **Exactly one correct scenario option**, and the two wrong ones plausible. A scenario whose wrong answers are obviously wrong is a gate that does not gate.
+- Every factual claim carries the retrieved chunk that supports it. The 136 chunks already hold chapter index, title and position — the locator is available, use it.
+
+*`extra_content`*
+- Dinner Table Knowledge and apply-in-life.
+- **DTK cannot be emitted without a takeaway-slide source reference.** The schema enforces this in two places already; make it three. Tier A.
+
+*`ground_check` — the legal gate*
+- Every claim, quote and DTK fact maps to a retrieved passage, or it does not proceed. **Pass/fail, not advisory, not a score with a threshold you can nudge.**
+- Keep it mechanically separate from anything editorial. R3's whole point is that this verdict cannot be argued down on quality grounds — and per WP16's ruling on the structure check, the same principle holds: **the thresholds are negotiable, the verdict is not.**
+- A quote must match the source text, not paraphrase it. Verbatim or it is not a quote.
+
+*The Payload boundary — opens here*
+- Write **drafts** via the REST API with an authoring token. Never publish. Never touch Payload's tables — WP16 already built the database guard that refuses this; keep it.
+- **A maximal-fixture round-trip test is mandatory, against real Payload rather than a stand-in.** Author a Leaf with *every* optional field populated, read it back, assert every field survives. WP15 shipped a mapper that silently dropped all three new fields with 932 tests green, because a dropped optional field is indistinguishable from an absent one. Your source references are optional fields. This is the reason this test exists.
+- Record the Track's `acquisition` status on write.
+
+*Why the CMS write lives here rather than in WP19:* the package that produces a field should be the package that proves the field survives the boundary. Splitting them is how WP15's defect happened. It also makes gate 2 in WP19 a review of drafts already in Payload — which is where §3.5 always wanted the human to work — rather than a custom view built from nothing.
+
+**Out of scope:** images and diagrams (WP18), editorial review and the revision loop (WP19), publishing, gate 2's UI, anything that is not a public-domain book.
+
+**Read-it-yourself gate:** *Play a generated Leaf as a reader would.* Does the scenario present a real dilemma, or a right answer with two obviously wrong ones beside it? Does the payoff feel earned? Does the DTK fact sound like something a person would actually repeat? Report honestly — a Leaf that passes every assertion and reads like nonsense is a failed package, and no test here will tell you.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `npm test`/`build` unaffected
+- [ ] Every Leaf in an approved plan generates five schema-valid slides
+- [ ] **A claim with no supporting passage is rejected** — mutation-checked
+- [ ] **DTK without a takeaway source reference is rejected** — mutation-checked
+- [ ] A quote that paraphrases rather than matches the source is rejected
+- [ ] Drafts appear in Payload and are readable in the admin UI
+- [ ] **The maximal-fixture round-trip passes against real Payload** — every optional field survives
+- [ ] Nothing the pipeline writes is ever in a published state
+- [ ] Token spend logged per node and per Leaf; **the cost of one full Track reported**
+- [ ] A generated Leaf has been read, as a reader, and judged
+
+**Testing expectations:** Tier A on grounding rejection, DTK sourcing, quote fidelity, and never-publishes. Tier B one happy path per node. Contract-test the CMS boundary against real Payload, not the stand-in — the stand-in inherits the same blind spot as the code under test. List what you deferred.
+
+---
+
+### Handoff: 2026-08-26 — WP16.1: The breakdown prompt, and the model question answered properly
+
+*Pipeline Manager. Small, free, and it comes before WP17.*
+
+### Task: WP16.1 — Fix the breakdown prompt; measure the model choice with enough runs to mean something
+
+**Context:** WP16's own finding is that the prompt, not the model, is the bottleneck — three runs scored 24%, 78% and 89% on the structure check. That is the most useful thing the package produced and it deserves its own package rather than being absorbed into WP17's first hour.
+
+**It also means the model comparison cannot yet support its conclusion.** The two `gemini-3.6-flash` runs differ by 54 points on the single-chapter ratio; the gap between Flash and Pro is 11. **The spread within one model is five times the gap between models**, and every cell is n=1. "Capability isn't the lever" may well be true — Pro reusing 10 of 18 chapter titles verbatim is a striking observation — but this data cannot distinguish it from noise. Settle it.
+
+**Objective:** A breakdown prompt that passes the structure check reliably rather than occasionally, and a model recommendation backed by enough runs to separate signal from variance.
+
+**Scope:** `apps/pipeline/src/zoomout_pipeline/prompts/`, the attempt cap, and a measurement harness. No new nodes.
+
+**Requirements**
+- **Move the original-structure requirement from a bullet into the framing of the task.** A constraint buried in a list reads as one consideration among many; this one is the task. Add a worked example — a good plan and a mirroring plan for a *different* book, so nothing leaks into the run you are measuring.
+- **Raise `MAX_BREAKDOWN_ATTEMPTS` from 3 to 5.** R7 chose its cap on cost grounds that assumed a Pro-tier call; on Flash against credit a round is effectively free, and losing a plan to a cap guarding money we no longer spend is pure waste. The loop stays bounded, which was the actual requirement.
+- **Measure ≥3 runs per config**, same book, same prompt: Flash on Vertex, Pro on Vertex. AI Studio drops out — we are on Vertex now. Report **mean and spread** for all three ratios, not a single number per cell.
+- Report per-run cost.
+
+**Constraints — one that matters more than the rest**
+- **Do not tune the thresholds to make runs pass.** The prompt is the variable under test; the check is the instrument. Moving both at once measures nothing, and adjusting the instrument until the result is acceptable is marking your own homework on the one check `LEGAL.md` rests on. If your honest conclusion is that a threshold is wrong, **bring the numbers to Architect** — tuning it is a legitimate design change with a record, and it is mine to rule on.
+
+**Acceptance criteria**
+- [ ] The structure requirement is in the task framing, with a worked example from a different book
+- [ ] `MAX_BREAKDOWN_ATTEMPTS` is 5; the cap still terminates, still escalates, still tested
+- [ ] **≥3 runs per config recorded, with mean and spread** — a single number per cell does not close this
+- [ ] A model recommendation stated **with its variance attached**, or an explicit "still indistinguishable" if that is what the data says
+- [ ] `MAX_SINGLE_CHAPTER_LEAF_RATIO`, `MAX_SEQUENTIAL_PAIR_RATIO` and `CHAPTER_COUNT_PARITY_BAND` are **unchanged**
+- [ ] Existing tests pass
+
+**Testing expectations:** the cap and escalation tests from WP16 still pass. The measurement runs are live-model and belong in the explicit suite outside the normal gate.
+
+---
+
 ### Handoff: 2026-08-25 — WP16: Pipeline skeleton — ingest, analyze, breakdown, gate 1
 
 *Goes to the **Pipeline Manager** session, not Manager. First package of `apps/pipeline`.*
