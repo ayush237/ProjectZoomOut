@@ -23,6 +23,7 @@ from zoomout_pipeline.db.repository import BookRepository
 from zoomout_pipeline.db.schema import apply_schema
 from zoomout_pipeline.graph.state import PipelineState
 from zoomout_pipeline.logging import configure_logging, get_logger
+from zoomout_pipeline.measure import run_samples, summarise
 from zoomout_pipeline.models import Acquisition
 from zoomout_pipeline.runner import run_context
 
@@ -142,6 +143,66 @@ def cost(run_id: Annotated[str, typer.Option()]) -> None:
         typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
         raise typer.Exit(1)
     _echo_cost(PipelineState.model_validate(snapshot.values), verbose=True)
+
+
+@app.command("measure-breakdown")
+def measure_breakdown(
+    run_id: Annotated[str, typer.Option(help="Existing run whose analysis is reused.")],
+    model: Annotated[list[str], typer.Option(help="Model to sample. Repeat for several.")],
+    repeat: Annotated[int, typer.Option(help="Samples per model.")] = 3,
+) -> None:
+    """Sample the first breakdown attempt N times per model and report mean and spread.
+
+    Live-model, deliberately outside the normal test gate. One analysis is reused across
+    every sample so `analyze` cannot confound the comparison.
+    """
+    with run_context() as (graph, deps):
+        snapshot = graph.get_state({"configurable": {"thread_id": run_id}})  # type: ignore[attr-defined]
+
+    if not snapshot.values:
+        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    state = PipelineState.model_validate(snapshot.values)
+    if state.analysis is None or state.provenance is None:
+        typer.secho(f"run {run_id} has no analysis to reuse", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    typer.echo(f"book      : {state.provenance.title} ({state.chapter_count} chapters)")
+    typer.echo(f"analysis  : reused from {run_id}, held constant across every sample")
+    typer.echo("sampling  : first breakdown attempt only, no revision loop")
+    typer.echo("")
+
+    summaries = []
+    for name in model:
+        samples = run_samples(
+            llm=deps.llm,
+            model=name,
+            repeat=repeat,
+            title=state.provenance.title,
+            author=state.provenance.author,
+            chapter_titles=state.chapter_titles,
+            analysis=state.analysis,
+        )
+        summaries.append(summarise(name, samples))
+
+    header = (
+        f"{'model':26s} {'n':>3s} {'429':>4s} {'bad':>4s} {'pass':>5s} "
+        f"{'single (mean/min-max/sd)':>30s} {'sequential (mean/min-max/sd)':>32s} {'leaves':>7s}"
+    )
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for s in summaries:
+        typer.echo(
+            f"{s.model:26s} {s.samples:3d} {s.transport_failures:4d} "
+            f"{s.parse_failures:4d} {s.pass_rate:5.0%} "
+            f"{s.single_mean:8.2f} {s.single_min:.2f}-{s.single_max:.2f} sd{s.single_stdev:5.3f}   "
+            f"{s.sequential_mean:8.2f} {s.sequential_min:.2f}-{s.sequential_max:.2f} "
+            f"sd{s.sequential_stdev:5.3f}   {s.leaves_mean:6.1f}"
+        )
+    typer.echo("")
+    for s in summaries:
+        typer.echo(f"{s.model:26s} tokens {s.total_tokens:8,d}   usd {s.total_usd:.4f}")
 
 
 @app.command("purge-raw-text")

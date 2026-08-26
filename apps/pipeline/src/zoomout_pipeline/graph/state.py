@@ -19,10 +19,17 @@ from zoomout_pipeline.cost import RunCost
 from zoomout_pipeline.graph.structure_check import StructureCheckResult
 from zoomout_pipeline.models import Acquisition, BookAnalysis, BookProvenance, LeafPlan
 
-# Initial attempt plus two revisions (proposal R7). Cycles between a generator and a checker
-# are the classic place a graph runs away — cost explosion or two nodes oscillating between
-# defensible positions — so the cap is hard and the escape is a human, not another round.
-MAX_BREAKDOWN_ATTEMPTS = 3
+# Initial attempt plus four revisions.
+#
+# R7 recommended two revision rounds, and its reasoning was cost: a runaway generator/checker
+# cycle is where a graph burns money. That reasoning assumed a Pro-tier call. On Flash against
+# credit a revision round is effectively free, and WP16's first Vertex run lost a whole plan to
+# the cap while the check was still converging — waste in service of guarding a cost we no
+# longer pay.
+#
+# Raised to 5 by Architect ruling, WP16.1. What R7 actually required is that the cycle is
+# *bounded* and escapes to a human rather than looping, and that is unchanged.
+MAX_BREAKDOWN_ATTEMPTS = 5
 
 
 class PipelineState(BaseModel):

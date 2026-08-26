@@ -14,6 +14,7 @@ outside the gate.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
@@ -23,7 +24,10 @@ from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS
 from zoomout_pipeline.llm.ratelimit import (
+    MAX_RETRIES,
     RateLimiter,
+    is_rate_limited,
+    retry_delay_seconds,
 )
 from zoomout_pipeline.logging import get_logger
 
@@ -34,6 +38,16 @@ T = TypeVar("T", bound=BaseModel)
 
 class LLMError(RuntimeError):
     """A model call failed, or returned something that is not the requested shape."""
+
+
+class LLMTransportError(LLMError):
+    """The call never produced an answer — rate limit, timeout, network.
+
+    Distinct from a response that came back in the wrong shape, because the two mean
+    different things. A malformed response says something about the prompt; a 429 says
+    only that we asked too quickly, and counting it against the prompt would be measuring
+    our own quota.
+    """
 
 
 @dataclass(frozen=True)
@@ -111,6 +125,45 @@ class GeminiClient:
             limiter=RateLimiter(max_per_minute=settings.embed_requests_per_minute),
         )
 
+    def _call_with_retry[R](
+        self, *, node: str, model: str, units: int, what: str, call: Callable[[], R]
+    ) -> R:
+        """Pace, call, and retry a rate limit — bounded, like every other cycle here.
+
+        Written once and shared by both call sites on purpose. It existed twice before, and
+        a refactor deleted one copy without any test noticing, which is exactly the failure
+        mode duplicated logic has.
+
+        `units` is what the endpoint counts: one request for generation, one *per text* for
+        embeddings.
+        """
+        for attempt in range(MAX_RETRIES):
+            self._limiter.acquire(units)
+            try:
+                return call()
+            except Exception as error:
+                if not is_rate_limited(error):
+                    raise LLMError(f"{node}: {what} to {model} failed: {error}") from error
+                if attempt == MAX_RETRIES - 1:
+                    raise LLMTransportError(
+                        f"{node}: {what} to {model} rate-limited after {MAX_RETRIES} "
+                        f"attempts: {error}"
+                    ) from error
+                delay = retry_delay_seconds(error, attempt=attempt)
+                _log.warning(
+                    "llm.rate_limited",
+                    node=node,
+                    model=model,
+                    what=what,
+                    attempt=attempt + 1,
+                    retry_in=round(delay, 1),
+                )
+                # The server says the window is full; our own bookkeeping is optimistic.
+                self._limiter.penalise()
+                self._limiter.sleep(delay)
+
+        raise LLMError(f"{node}: {what} to {model} produced no response")  # pragma: no cover
+
     def generate_structured(
         self,
         *,
@@ -128,12 +181,15 @@ class GeminiClient:
             system_instruction=system_instruction,
         )
 
-        try:
-            response = self._client.models.generate_content(
+        response = self._call_with_retry(
+            node=node,
+            model=model,
+            units=1,
+            what="model call",
+            call=lambda: self._client.models.generate_content(
                 model=model, contents=prompt, config=config
-            )
-        except Exception as error:
-            raise LLMError(f"{node}: model call to {model} failed: {error}") from error
+            ),
+        )
 
         spend = _spend_from(response, node=node, model=model)
         _log.info(
@@ -174,10 +230,15 @@ class GeminiClient:
             output_dimensionality=EMBEDDING_DIMENSIONS,
         )
 
-        try:
-            response = self._client.models.embed_content(model=model, contents=texts, config=config)
-        except Exception as error:
-            raise LLMError(f"{node}: embedding call to {model} failed: {error}") from error
+        response = self._call_with_retry(
+            node=node,
+            model=model,
+            units=len(texts),
+            what="embedding call",
+            call=lambda: self._client.models.embed_content(
+                model=model, contents=texts, config=config
+            ),
+        )
 
         embeddings = list(response.embeddings or [])
         # Truncating a Matryoshka embedding below its native width leaves it un-normalised,

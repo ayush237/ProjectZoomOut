@@ -1315,6 +1315,153 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP16.1 — The breakdown prompt, and the model question answered properly — 2026-08-26
+
+**All acceptance criteria met.** The prompt rewrite worked, decisively. The model question
+now has an answer, and **it is not the answer WP16 reported** — see the correction below.
+
+#### The headline
+
+| | Old prompt (WP16) | New prompt (WP16.1) |
+|---|---|---|
+| Samples | 3, one per config | 8, four per model |
+| Structure check pass rate | 1 of 3 | **8 of 8** |
+| Single-chapter ratio | 0.24 / 0.78 / 0.89 | **0.00–0.17** (limit 0.75) |
+| Leaves drawing on 2+ chapters | ~11–76% | **100%** in the end-to-end run |
+| Leaf titles reusing a chapter title | 10 of 18 (Pro) | **0 of 18** |
+
+The measured ratios moved from straddling the legal threshold to sitting four to nineteen
+times below it. **Thresholds were not touched** — `MAX_SINGLE_CHAPTER_LEAF_RATIO`,
+`MAX_SEQUENTIAL_PAIR_RATIO` and `CHAPTER_COUNT_PARITY_BAND` are byte-for-byte unchanged, as
+the handoff required.
+
+#### What changed in the prompt
+
+The old prompt described the task ("design a course") and then listed the structure
+requirement as one rule among several. The rewrite makes the requirement **the task**: the
+opening line says the job is not to divide the book into lessons, because dividing it
+produces its table of contents, and that output is rejected.
+
+Three additions did the work:
+
+- **A procedural method.** List the *ideas*, find every place the book develops each one,
+  order by dependency, split and drop, and only then write titles. The old prompt asked for
+  an outcome; this one gives a route to it.
+- **A worked example from a fictional book** (*The Patient Gardener*), showing a rejected
+  plan and an accepted one side by side with the reasoning per Leaf. Fictional so nothing
+  leaks into the book under measurement, as the handoff required.
+- **A self-check before answering** — count your single-chapter Leaves, check whether your
+  chapter numbers ascend. Models comply with an explicit verification step far better than
+  with an instruction not to do something.
+
+#### A defect I introduced, and the harness caught
+
+The first measurement run scored **0 of 6** — every sample failed to parse with "Leaf order
+must be contiguous from 0". The cause was mine: the worked example's tables numbered rows
+from 1, and the model copied that numbering. The old prompt had no numbered example and so
+never provoked it.
+
+Worth recording because it is the entire argument for measuring: **a prompt change that
+looked like a clear improvement was, for one iteration, a 100% failure rate.** Reading it
+would not have revealed that. The fix was to make every index in the example 0-based and say
+so explicitly.
+
+#### The model comparison, done properly
+
+**Design.** One analysis, taken from `wattles-05` and reused for every sample of both models
+— `analyze` is not the variable and letting each configuration produce its own would
+confound the nodes. Sampled the **first breakdown attempt only**, no revision loop: the loop
+is a correction mechanism, and measuring after it conflates prompt quality with loop rescue.
+
+| Model | n | 429 | parse fail | pass | single-chapter mean (min–max, sd) | sequential mean (min–max, sd) | Leaves |
+|---|---|---|---|---|---|---|---|
+| `gemini-3.6-flash` | 4 | 0 | 0 | **100%** | 0.04 (0.00–0.11, sd 0.053) | 0.62 (0.53–0.72, sd 0.082) | 18.2 |
+| `gemini-3.1-pro-preview` | 4 | 0 | 0 | **100%** | 0.06 (0.00–0.17, sd 0.079) | 0.72 (0.65–0.82, sd 0.088) | 18.0 |
+
+**Conclusion: on the tuned prompt the two models are indistinguishable.** The single-chapter
+difference is 0.02 against standard deviations of 0.05 and 0.08 — comfortably inside the
+noise. Pro runs about 0.10 higher on the sequential ratio, which would mean it follows the
+book's order slightly more, but the ranges overlap heavily and n=4 cannot establish it.
+
+**Recommendation: Flash.** Not because it is better — because it is indistinguishable while
+using roughly 20% fewer tokens and running two to three times faster. There is no measured
+quality reason to pay for Pro at this node.
+
+#### Correcting WP16
+
+WP16's addendum concluded that **"Pro is worse, not better"** and that a stronger model
+follows the source structure more faithfully. **That conclusion is not supported and should
+not be carried forward.** Architect was right in the handoff: the spread within one model
+was five times the gap between models, and every cell was n=1.
+
+What actually happened is that the old prompt was so weak that outcomes were close to
+random, and three samples from a wide distribution produced an ordering that looked like a
+finding. The striking observation underneath it — Pro reusing ten chapter titles verbatim —
+was real, but it was one draw, not a property of the model.
+
+**The directional claim survives; the mechanism does not.** The prompt was the lever, which
+is why fixing it moved every configuration to a 100% pass rate. "Capability is anti-helpful
+here" was a story fitted to noise.
+
+#### A regression found along the way
+
+`generate_structured` had no rate-limit retry at all, and — worse — **the retry loop in
+`embed` had been silently deleted** by one of WP16's own Vertex refactors. Every test still
+passed, because they exercised `RateLimiter` directly and never checked that the client used
+it. Testing a unit and not its wiring is exactly how a regression ships green.
+
+Both call sites now share **one** `_call_with_retry`, and `tests/test_client_retry.py`
+asserts the wiring: that a 429 is retried and paced, that a persistent one becomes a typed
+`LLMTransportError`, that a 404 is *not* retried, and that embedding is paced per text rather
+than per call.
+
+The new `LLMTransportError` also fixed a measurement bug: the harness was counting rate
+limits as parse failures, which dragged the reported pass rate down by two samples in the
+first valid run. A 429 says nothing about a prompt.
+
+#### The cap
+
+`MAX_BREAKDOWN_ATTEMPTS` is **5**, per the ruling. The cap still terminates, still escalates
+to the human gate, and both WP16 tests still assert it. Worth noting the new prompt makes it
+largely academic — the end-to-end run passed on **attempt 1**.
+
+#### Read it yourself
+
+**It reads like a course.** Eighteen Leaves, every one drawing on two or more chapters, no
+title reusing a chapter heading. The arc is coherent: why wealth matters, then that it is
+learnable, then create-don't-compete, then the mental practice, then action, then career,
+then consolidation. Titles are teaching statements — "Give every person more in usefulness
+than you take in cash", "Starve negative concepts by refusing to study poverty" — rather than
+chapter names.
+
+**Two honest reservations.**
+
+The middle sags. Leaves 9, 10 and 15 (*combine action with vision*, *make every action
+efficient*, *fulfil your current role beyond its requirements*) are three shades of the same
+instruction, and 12 and 13 are both about choosing and changing occupation. Some of that is
+Wattles, who repeats heavily — but a good editor would merge at least one pair.
+
+**The opening Leaf is still the book's most abstract claim**, not something a learner can act
+on. My own prompt's step 3 warns against exactly this, so the ordering guidance is only
+partly landing. The legal problem is solved; the pedagogical ordering is better but not yet
+right, and it is the obvious next thing to tune.
+
+#### Cost
+
+Eight samples plus one end-to-end run: 26,150 tokens on Flash and 32,987 on Pro for the
+measurement, plus 34,568 for the run. Reported as $0.00 with the models listed unpriced —
+the 3.x rates remain unverified and naming the model beats inventing a number. Everything
+ran against the trial credit.
+
+#### Deferred
+
+- More samples. n=4 per model meets the bar and settles the practical question; it does not
+  establish the small sequential-ratio difference either way.
+- Only one book. Every measurement here is *The Science of Getting Rich*, whose heavy
+  repetition may flatter a prompt built around synthesising across chapters. A second book
+  would test that.
+
+
 ### Note for WP18 — asset generation: founder rulings and the style problem — 2026-08-26
 
 Recorded by the Pipeline Manager during WP16, from a founder conversation about the two
