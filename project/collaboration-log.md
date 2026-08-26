@@ -1182,6 +1182,118 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Note for WP18 — asset generation: founder rulings and the style problem — 2026-08-26
+
+Recorded by the Pipeline Manager during WP16, from a founder conversation about the two
+asset fields WP15 added. **Not a completion report** — WP18 has not started. Written here so
+the rulings are not lost between sessions, and because two of them constrain the design more
+than they look.
+
+#### What the schema already forces
+
+`imageAssetSchema` requires `url` **and** `alt`; `diagramAssetSchema` adds optional `spec` +
+`specFormat` (`mermaid` | `json`). Because `url` is required on both, **a diagram cannot be a
+spec the app draws at runtime** — WP18 must render it server-side to an image and store the
+spec beside it for re-rendering. That is the bulk of the diagram work.
+
+#### Founder rulings, 2026-08-26
+
+| Question | Ruling |
+|---|---|
+| Ship scenario images, or defer them as §4a suggested? | **Ship them.** "We need to give as real an experience as possible." This overrides the Pipeline Manager's recommendation to defer; recorded as a deliberate choice to carry the only per-Leaf recurring cost in the pipeline |
+| Content guardrail on generated illustrations | **Apply it** |
+| Where `alt` comes from | Delegated to the Pipeline Manager |
+| Visual consistency | **New requirement, founder-initiated** — see below |
+
+#### The guardrail, as it should be implemented
+
+Generated illustrations must never depict **the author, any real person, or anything
+resembling the book's cover, title treatment or branding**. A scenario illustration is
+fiction and carries no zero-fabrication risk in itself — but an image implying the author
+endorses ZoomOut walks directly into the non-endorsement problem `LEGAL.md` is built around,
+and does so in the most shareable medium in the product.
+
+Two implementation notes. It belongs **in the asset prompt as a hard constraint and in a
+check**, the same reasoning that made the 1:1 structure requirement a measurement rather than
+a prompt line. And **no rendered text inside images at all** — image models render text
+unreliably, WP9 established that legibility beats fidelity, and any text in an illustration
+is untranslatable and unfixable without regenerating.
+
+#### `alt` — decided by the Pipeline Manager
+
+**For diagrams: generated deterministically from the JSON spec.** We own the renderer, so we
+know exactly what is in the picture — nodes, edges, labels, order. A description derived from
+the structure is accurate by construction, costs nothing, and cannot hallucinate. This is a
+concrete argument for the JSON spec format over Mermaid that R4 did not anticipate.
+
+**For scenario images: written by the same LLM call that writes the image prompt, describing
+what was asked for — not what came back.** Rationale: an image model cannot reliably report
+what it drew, and a second vision call to caption the result costs money and can invent
+detail. The prompt is the ground truth of intent, and the human at gate 2 sees the image and
+its `alt` side by side and can correct it — which is the real check, in a system that is
+human-in-the-loop by design.
+
+Two rules for the text itself: describe **the scene**, not the medium ("a commuter checking
+a phone on a crowded train", never "an illustration of…"), and **do not restate the scenario
+prompt**, which a screen reader has already read out.
+
+#### Visual consistency — the founder's requirement, and how to actually get it
+
+> "It should not be the case that every next image is very different. An app should have the
+> same themed illustrations being followed… instead of AI slop."
+
+This is the hardest part of WP18 and it will not be achieved by asking nicely in a prompt.
+Five mechanisms, in descending order of how much they actually buy:
+
+1. **Reference-image conditioning — the strongest lever by far.** The Gemini image models
+   accept image input. Keep a small set of committed **style anchors** in the repository and
+   pass them with every generation call. Text alone does not hold a look together across
+   twenty different subjects; anchors do.
+2. **A version-controlled style contract** (`prompts/asset_style.md`), appended to every image
+   prompt: medium, palette, lighting, composition, how people are treated. Same reasoning as
+   every other prompt in this service — it is the logic and it needs diffs.
+3. **A fixed seed per Track.** Buys reproducibility rather than cross-subject consistency, but
+   makes regeneration deterministic, which matters when debugging why one Leaf looks wrong.
+4. **A mechanical consistency check, advisory rather than blocking.** Compare each candidate's
+   dominant-colour histogram against the anchors and **order the candidates by closeness**
+   rather than rejecting outliers. This project is already comfortable with mechanical checks;
+   this one should inform the human, not overrule them — taste is the one thing gate 2 exists
+   for.
+5. **The human picks from N candidates at gate 2** (R5). The final gate, and the only one that
+   can judge whether a picture is any good.
+
+**The style contract must derive from `design-direction.md`, not be invented.** Surfaces
+`#0B0F12`–`#1C242A`, teal `#3DDCC8` as the accent, depth from surface lightness rather than
+shadow (§2). **Amber `#FFB020` must not appear in illustrations** — §3 reserves it for reward
+moments exclusively, and an illustration using it would compete with the XP and streak
+language for the same attention.
+
+**There is a bootstrapping step, and it is a human one.** The first Track has no anchors. The
+sequence is: generate a spread of candidates for two or three Leaves, the founder picks the
+images that define the look, those become the committed anchor set, and everything afterwards
+is conditioned on them. That single act sets the product's visual identity, so it should be
+treated as a design decision rather than a pipeline run.
+
+**Keep the anchors versioned and swappable.** §9 reserves a mascot slot for later; if a mascot
+ever lands, a swappable anchor set makes that a re-render rather than a redesign — the same
+logic §9 already applies to four screens.
+
+#### Available models, verified 2026-08-26
+
+On the Vertex `global` endpoint: `gemini-3-pro-image`, `gemini-3.1-flash-image` (plus preview
+and lite variants). **No Imagen models are served at `global`** — Imagen would require a
+regional endpoint and therefore a deliberate data-residency decision.
+
+Images are **the only per-Leaf recurring cost in the pipeline**, so this is the number that
+decides whether the library can grow. Diagrams, being a text call producing a spec, are
+effectively free — R4's cost argument survives intact.
+
+#### Sequencing
+
+WP18 needs Payload's media collection to store what it renders, and **the Payload boundary
+does not open until WP17**. Assets cannot land before then regardless.
+
+
 ### Addendum: WP16 — Vertex AI, and the Pro-vs-Flash experiment — 2026-08-26
 
 Run after the WP16 completion report above, at the founder's request. Two questions:
