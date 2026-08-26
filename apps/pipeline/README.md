@@ -47,9 +47,9 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 |---|---|---|
 | `ZOOMOUT_PIPELINE_DATABASE_URL` | yes | The pipeline's own Postgres. Refuses a URL ending in `/zoomout` or `/zoomout_cms`. |
 | `ZOOMOUT_PIPELINE_GEMINI_API_KEY` | yes, for a real run | Gemini API key. |
-| `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-2.5-pro`. |
-| `ZOOMOUT_PIPELINE_BREAKDOWN_MODEL` | no | Default `gemini-2.5-pro`. |
-| `ZOOMOUT_PIPELINE_EMBEDDING_MODEL` | no | Default `text-embedding-004`. |
+| `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-3.6-flash`. |
+| `ZOOMOUT_PIPELINE_BREAKDOWN_MODEL` | no | Default `gemini-3.6-flash`. |
+| `ZOOMOUT_PIPELINE_EMBEDDING_MODEL` | no | Default `gemini-embedding-001`, truncated to 768 dimensions. |
 | `ZOOMOUT_PIPELINE_PAID_TIER` | no | Set `true` before any book that is not public domain. See below. |
 | `ZOOMOUT_PIPELINE_RUNS_DIR` | no | Where plan files are written. Default `runs/`. |
 
@@ -67,6 +67,17 @@ and one no disclaimer undoes.
 
 > Free tier for building and tuning against public-domain books. Paid tier the moment a
 > real book goes through.
+
+**What the free tier actually gives you** (verified against a live key, 2026-08-26 — §4a of
+the proposal is out of date on this):
+
+| | |
+|---|---|
+| Pro models | **No free quota at all** — `limit: 0`. Paid only. |
+| `gemini-2.5-pro` / `gemini-2.5-flash` | Closed to new API keys; both 404. |
+| 3.x Flash line | Works. `gemini-3.6-flash` is the default. |
+| `text-embedding-004` | Retired; 404s. Use `gemini-embedding-001`. |
+| Embeddings | 100 requests/minute, and **each text counts as a request** — one book is ~140. The client paces and retries; a first ingest takes a couple of minutes. |
 
 ## Running
 

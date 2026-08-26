@@ -160,6 +160,23 @@ class BookRepository:
         _log.info("chunks.stored", book_id=str(book_id), chunk_count=count)
         return count
 
+    def existing_chunk_keys(self, book_id: UUID) -> set[tuple[int, int]]:
+        """(chapter, position) pairs already embedded for this book.
+
+        Lets a re-entered ingest skip work it has already paid for. Embedding is the only
+        place in WP16 that spends money per unit of book, so this is where an interrupted
+        run either resumes cheaply or starts again from zero.
+        """
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT chapter_index, position_in_chapter FROM book_chunks WHERE book_id = %s",
+                (book_id,),
+            )
+            return {
+                (int(str(row["chapter_index"])), int(str(row["position_in_chapter"])))
+                for row in cur.fetchall()
+            }
+
     def count_chunks(self, book_id: UUID) -> int:
         with self._conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM book_chunks WHERE book_id = %s", (book_id,))

@@ -24,9 +24,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Free tier only for public-domain books (proposal §4a): Google's free tier uses
 # submitted content to improve its products, so a copyrighted work must never go
 # through it. `require_paid_tier` below turns that from a memory into a check.
-DEFAULT_ANALYZE_MODEL = "gemini-2.5-pro"
-DEFAULT_BREAKDOWN_MODEL = "gemini-2.5-pro"
-DEFAULT_EMBEDDING_MODEL = "text-embedding-004"
+# Verified against a live key on 2026-08-26, and it contradicts the proposal's §4a.
+#
+# §4a says "Gemini's free tier includes Pro-tier models". It no longer does: every Pro model
+# reports `limit: 0` for free-tier requests, and the 2.5 line (which §4a costed) is closed
+# to new API keys entirely — both 2.5-pro and 2.5-flash 404. What answers on the free tier
+# is the 3.x Flash line.
+#
+# So the free-tier default is Flash. That is enough for analysis and breakdown on a 22,000
+# word book, and model choice is configuration precisely so a paid Pro model is an env var
+# away when output quality justifies it.
+DEFAULT_ANALYZE_MODEL = "gemini-3.6-flash"
+DEFAULT_BREAKDOWN_MODEL = "gemini-3.6-flash"
+# `text-embedding-004` (named in the proposal's §4a) is retired and returns 404. The
+# current family is `gemini-embedding-001`, whose native width is 3072; we ask for 768 via
+# Matryoshka truncation to match `schema.EMBEDDING_DIMENSIONS`. 768 is ample at this scale
+# — one book is ~140 chunks — and a wider vector would cost storage and index time for
+# recall nobody would notice.
+DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
 
 
 class PipelineSettings(BaseSettings):

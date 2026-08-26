@@ -13,12 +13,17 @@ outside the gate.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from zoomout_pipeline.cost import TokenSpend
+from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS
+from zoomout_pipeline.llm.ratelimit import (
+    RateLimiter,
+)
 from zoomout_pipeline.logging import get_logger
 
 _log = get_logger(__name__)
@@ -68,7 +73,7 @@ class GeminiClient:
     it. `config.paid_tier` records which side of that line a run is on.
     """
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, *, limiter: RateLimiter | None = None) -> None:
         if not api_key:
             raise LLMError(
                 "No Gemini API key. Set ZOOMOUT_PIPELINE_GEMINI_API_KEY in the environment."
@@ -76,6 +81,7 @@ class GeminiClient:
         from google import genai
 
         self._client = genai.Client(api_key=api_key)
+        self._limiter = limiter or RateLimiter()
 
     def generate_structured(
         self,
@@ -130,16 +136,27 @@ class GeminiClient:
     def embed(
         self, *, texts: list[str], model: str, node: str
     ) -> tuple[list[list[float]], TokenSpend]:
+        from google.genai import types
+
         if not texts:
             return [], TokenSpend(node=node, model=model)
 
+        config = types.EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT",
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+        )
+
         try:
-            response = self._client.models.embed_content(model=model, contents=texts)
+            response = self._client.models.embed_content(model=model, contents=texts, config=config)
         except Exception as error:
             raise LLMError(f"{node}: embedding call to {model} failed: {error}") from error
 
         embeddings = list(response.embeddings or [])
-        vectors = [list(item.values or []) for item in embeddings]
+        # Truncating a Matryoshka embedding below its native width leaves it un-normalised,
+        # and cosine distance in pgvector assumes unit length. Google documents
+        # re-normalising after truncation; skipping it degrades retrieval quietly, which is
+        # the worst way for a grounding pipeline to be wrong.
+        vectors = [_normalise(list(item.values or [])) for item in embeddings]
         if len(vectors) != len(texts):
             raise LLMError(
                 f"{node}: asked {model} for {len(texts)} embeddings and got {len(vectors)}"
@@ -151,6 +168,14 @@ class GeminiClient:
         spend = TokenSpend(node=node, model=model, input_tokens=approx_tokens)
         _log.info("llm.embed", node=node, model=model, count=len(vectors), tokens=approx_tokens)
         return vectors, spend
+
+
+def _normalise(vector: list[float]) -> list[float]:
+    """Scale to unit length. A zero vector is returned unchanged rather than dividing by 0."""
+    magnitude = math.sqrt(sum(value * value for value in vector))
+    if magnitude == 0.0:
+        return vector
+    return [value / magnitude for value in vector]
 
 
 def _spend_from(response: object, *, node: str, model: str) -> TokenSpend:

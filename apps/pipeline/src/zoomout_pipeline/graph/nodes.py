@@ -26,6 +26,7 @@ from zoomout_pipeline.graph.structure_check import (
 )
 from zoomout_pipeline.ingest.chunking import chunk_book
 from zoomout_pipeline.ingest.parser import file_hash, parse_book
+from zoomout_pipeline.llm.client import LLMError
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import (
     MAX_LEAVES,
@@ -51,8 +52,11 @@ class Node(Protocol):
     def __call__(self, state: PipelineState) -> dict[str, Any]: ...
 
 
-# The embedding endpoint takes batches; this keeps requests well inside its limit.
-EMBED_BATCH_SIZE = 64
+# The embedding endpoint counts each *text* as a request against a 100/minute free-tier
+# quota, not each batch. Keeping a batch well under the per-minute budget means one call can
+# never exceed the window on its own, which is what turns a rate limit into a pause rather
+# than a failure.
+EMBED_BATCH_SIZE = 25
 
 
 class ProvenanceError(RuntimeError):
@@ -110,12 +114,17 @@ def ingest_book(
     parsed, source_format = parse_book(source_path)
     digest = file_hash(source_path)
     chapter_titles = [chapter.title for chapter in parsed.chapters]
+    chunks = chunk_book(parsed)
 
     with deps.connect() as conn:
         repo = BookRepository(conn)
         existing = repo.find_by_hash(digest)
 
-        if existing is not None and existing.chunk_count > 0:
+        # Reuse only a book that is *fully* embedded. Comparing against the parser's own
+        # chunk count rather than "more than zero" is the difference between resuming an
+        # interrupted ingest and silently accepting a half-embedded book — which would
+        # leave WP17 grounding against a fraction of the text with nothing to signal it.
+        if existing is not None and existing.chunk_count >= len(chunks):
             # Idempotent re-entry: this file is already embedded. Re-embedding a whole book
             # is the most expensive accidental repeat available to this pipeline.
             _log.info(
@@ -151,21 +160,34 @@ def ingest_book(
             )
         )
 
-        chunks = chunk_book(parsed)
-        vectors: list[list[float]] = []
-        input_tokens = 0
+        # Skip anything a previous attempt already embedded. An ingest that dies partway —
+        # a rate limit, a dropped connection — resumes from where it stopped rather than
+        # paying for the whole book again.
+        already = repo.existing_chunk_keys(book_id)
+        pending = [
+            chunk
+            for chunk in chunks
+            if (chunk.chapter_index, chunk.position_in_chapter) not in already
+        ]
+        if already:
+            _log.info(
+                "ingest.resuming", book_id=str(book_id), done=len(already), pending=len(pending)
+            )
 
-        for start in range(0, len(chunks), EMBED_BATCH_SIZE):
-            batch = chunks[start : start + EMBED_BATCH_SIZE]
+        input_tokens = 0
+        for start in range(0, len(pending), EMBED_BATCH_SIZE):
+            batch = pending[start : start + EMBED_BATCH_SIZE]
             batch_vectors, spend = deps.embedder.embed(
                 texts=[chunk.text for chunk in batch],
                 model=deps.settings.embedding_model,
                 node="ingest",
             )
-            vectors.extend(batch_vectors)
             input_tokens += spend.input_tokens
+            # Stored per batch, so a failure in a later batch does not discard the
+            # embeddings this one already paid for.
+            repo.store_chunks(book_id=book_id, chunks=batch, embeddings=batch_vectors)
 
-        chunk_count = repo.store_chunks(book_id=book_id, chunks=chunks, embeddings=vectors)
+        chunk_count = repo.count_chunks(book_id)
 
     return IngestResult(
         book_id=book_id,
@@ -184,10 +206,10 @@ def make_ingest_node(deps: NodeDependencies) -> Node:
     def ingest(state: PipelineState) -> dict[str, Any]:
         log = _log.bind(run_id=state.run_id, node="ingest")
 
-        if state.book_id is not None and state.chunk_count > 0:
-            log.info("ingest.skipped", reason="already complete in state")
-            return {}
-
+        # No shortcut on `state.chunk_count`. A checkpoint can hold the count from an ingest
+        # that died partway, and trusting it would skip the work still outstanding.
+        # `ingest_book` decides by comparing the database against the parsed file, which is
+        # the only answer that cannot go stale. Parsing again is local and costs nothing.
         result = ingest_book(
             deps=deps,
             run_id=state.run_id,
@@ -296,6 +318,7 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
 
         attempt = state.breakdown_attempts + 1
         is_revision = state.plan is not None and state.structure_check is not None
+        is_retry = state.last_error is not None
 
         common = {
             "title": state.provenance.title,
@@ -304,7 +327,15 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
             "analysis": _analysis_block(state.analysis),
         }
 
-        if is_revision:
+        if is_retry:
+            prompt = render_prompt(
+                "breakdown_retry",
+                error=state.last_error,
+                min_leaves=MIN_LEAVES,
+                max_leaves=MAX_LEAVES,
+                **common,
+            )
+        elif is_revision:
             assert state.structure_check is not None  # narrowed by is_revision
             assert state.plan is not None
             prompt = render_prompt(
@@ -324,9 +355,26 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
                 "breakdown", min_leaves=MIN_LEAVES, max_leaves=MAX_LEAVES, **common
             )
 
-        result = deps.llm.generate_structured(
-            prompt=prompt, schema=LeafPlan, model=deps.settings.breakdown_model, node="breakdown"
-        )
+        try:
+            result = deps.llm.generate_structured(
+                prompt=prompt,
+                schema=LeafPlan,
+                model=deps.settings.breakdown_model,
+                node="breakdown",
+            )
+        except LLMError as error:
+            # Output that is not a valid plan is a revision case, not a crash. It is bounded
+            # by the same cap as a failed structure check, and the failure text is fed back
+            # so the next attempt is told what was wrong rather than simply asked again.
+            if attempt >= MAX_BREAKDOWN_ATTEMPTS:
+                raise LLMError(
+                    f"breakdown produced no valid plan in {attempt} attempts "
+                    f"(cap {MAX_BREAKDOWN_ATTEMPTS}). Last failure: {error}"
+                ) from error
+
+            log.warning("breakdown.invalid_output", attempt=attempt, error=str(error)[:200])
+            return {"breakdown_attempts": attempt, "last_error": str(error)}
+
         check = check_structure(result.value, chapter_count=state.chapter_count)
 
         escalation: str | None = None
@@ -354,6 +402,7 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
             "structure_check": check,
             "breakdown_attempts": attempt,
             "escalation": escalation,
+            "last_error": None,
             "cost": _with_cost(state, result.spend),
         }
 
@@ -366,6 +415,10 @@ def route_after_breakdown(state: PipelineState) -> str:
     R7: reviewer→generator cycles are the classic place a graph runs away. The cap is hard
     and the escape hatch is a human, not another round.
     """
+    if state.last_error is not None:
+        # No plan at all this time. The node itself raises once the cap is reached, so
+        # reaching here means there are attempts left.
+        return "breakdown"
     if state.structure_check is not None and state.structure_check.passed:
         return "human_gate"
     if state.breakdown_attempts >= MAX_BREAKDOWN_ATTEMPTS:

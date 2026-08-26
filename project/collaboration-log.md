@@ -1182,6 +1182,290 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP16 — Pipeline skeleton: ingest, analyze, breakdown, human gate 1 — 2026-08-26
+
+First package of `apps/pipeline`, by the Pipeline Manager session. Branch
+`wp16-pipeline-skeleton`. **11 of 12 acceptance criteria verified; the twelfth — the
+read-it-yourself quality judgement — is done and the answer is qualified. See "Is the plan
+any good?" below, which is the part worth reading if you read nothing else.**
+
+A run against *The Science of Getting Rich* (Gutenberg #59844, Wattles 1910, public domain)
+goes ingest → analyze → breakdown → gate 1, writes a plan of 17 Leaves, survives being
+killed, and resumes from a hand-edited file. Total cost of the successful run: **32,419
+tokens, $0.00** on the free tier.
+
+#### The proposal's §4a is out of date, and this is the most transferable finding
+
+§4a was verified against pricing pages on 2026-08-13. Checked against a live API key on
+2026-08-26, four of its assumptions are now wrong. None of this was discoverable by reading
+documentation — every one of them surfaced as a failed run.
+
+| §4a said | Actually |
+|---|---|
+| "The free tier includes Pro-tier models" | **Every Pro model reports `limit: 0`** for free-tier requests. Pro is paid-only |
+| `gemini-2.5-pro` costed at $1.25/$10.00 | **Closed to new API keys.** 404s with a pointer to the 3.x line. `gemini-2.5-flash` too |
+| `text-embedding-004` as the embedding model | **Retired.** 404s. The current family is `gemini-embedding-001` |
+| "Rate limits… unlikely to bind" | **They bind at ingest.** The embed endpoint counts each *text* as a request against 100/minute; one 22,000-word book is ~140 |
+
+**What this changes:** the free tier still covers WP16–WP19 as §4a concluded, but only on
+the **Flash** line. Anything wanting Pro-tier reasoning costs money from now on, not just
+the cross-family editorial reviewer in R3. The defaults are now `gemini-3.6-flash` for
+analyze and breakdown; model choice is config, so a paid Pro model is one env var away when
+output quality justifies it.
+
+`gemini-embedding-001` is natively 3072-wide and is truncated to 768 to match the schema,
+**then re-normalised** — Matryoshka truncation leaves a vector off the unit sphere, and
+pgvector's cosine distance assumes unit length. Skipping that degrades retrieval silently,
+which is the worst way for a grounding pipeline to be wrong.
+
+#### The 1:1 chapter-structure check — thresholds, and what the real plan scored
+
+Two signals, either one fails the plan. Both are named constants in
+`graph/structure_check.py` with the reasoning inline.
+
+| Signal | Threshold | Reasoning |
+|---|---|---|
+| Leaves drawing on exactly one chapter | **> 75%** | The plan is slicing the book, not teaching across it. Not tighter, because genuinely atomic concepts do live in one chapter |
+| Follows the book's order **and** ~one Leaf per chapter | **> 85% of steps**, with leaf count within **±15%** of chapter count | Either alone is defensible — a 30-Leaf sequential plan over 17 chapters is not a 1:1 reproduction. Together they are the table of contents |
+
+**Thresholds lean strict deliberately.** A false positive costs one bounded revision round
+and, at the cap, a human decision. A false negative is a legal exposure that reaches
+readers. Those are not comparable costs.
+
+Mutation-checked as the handoff asked: neutering the single-chapter threshold turns 2 tests
+red, both in `test_structure_check.py`. Making `check_structure` never reject turns **7**
+red across 3 files — the check's own tests plus the revision cap, the feedback loop, the
+gate refusal and the plan-file header. Nothing outside the structure surface moves.
+
+**The real plan scored 24% single-chapter and 81% sequential, against limits of 75% and
+85%.** It passed. The ordering number is uncomfortably close to its limit, and my own
+reading of the plan (below) agrees with that discomfort — the plan *is* substantially in the
+book's order. **This is worth an Architect eye**: either 85% is slightly loose, or — more
+likely — sequential-ratio is the wrong instrument for "did this get ordered by what a
+learner needs", and that judgement belongs to gate 1 rather than to a mechanical check.
+I did not change the threshold on the strength of one book.
+
+#### Is the plan any good? — the read-it-yourself gate
+
+**Answer: it is a decent scaffold and not yet a course. It is clearly not a table of
+contents with the numbers filed off, but it is not what WP20 should ship either.**
+
+What is genuinely good:
+
+- **The concepts are crisp and each Leaf teaches one thing.** "Every business transaction
+  must deliver more in practical use value to the buyer than the monetary cash value
+  received" is a real, teachable, testable idea — you can write a scenario for it.
+- **It is grounded in Wattles**, not in generic modern self-help. Nothing was imported from
+  the standard treatment of the topic, which was an explicit prompt instruction and the
+  thing most likely to go wrong.
+- **The synthesis is real in about two-thirds of it.** "Creation Over Competition" draws on
+  chapters 3, 5 and 6; "Leveraging the Law of Universal Growth" connects chapter 5's
+  *Increasing Life* with chapter 14's *Impression of Increase*. Those are links the book
+  spreads out and a teacher would pull together.
+
+What is wrong with it:
+
+- **The order is the book's order, lightly shuffled — not a dependency order.** The clearest
+  symptom: "Formless Substance and Human Thought", the metaphysical claim the whole book
+  rests on, lands at position 5, *after* four Leaves that only make sense if you already
+  accept it. A course would open there.
+- **Two pairs are near-duplicates.** Leaves 10 and 11 both teach acting fully on today's
+  work (chapters 11–12 and 12). Leaves 12 and 13 both teach the impression of increase
+  (both cite chapter 14).
+- **17 Leaves against 18 sections is too close to one-per-chapter** to feel like a
+  restructure, even though the sourcing underneath it genuinely is one.
+
+**My read on why:** this is a free-tier Flash model doing a job §4a assumed a Pro model
+would do, against a first draft of a prompt nobody has tuned. Both are WP17 problems and
+both are cheap to fix — the prompt is a file, the model is an env var. I would not conclude
+anything about the architecture from this output.
+
+#### Three defects that only running it could find
+
+All three were found by checking effect rather than exit code, and all three now have
+regression tests.
+
+1. **A half-embedded book read as fully ingested.** `ingest` reused any book with "more than
+   zero chunks". A run that died partway through embedding left 64 of 136 chunks; the next
+   run declared the book ingested and moved on. Nothing failed, nothing logged. **WP17 would
+   have grounded against half a book with no signal.** Now reuse requires the stored chunk
+   count to match what the parser produces.
+2. **The node-level skip trusted a stale checkpoint.** Same shape one layer up: `ingest` also
+   short-circuited on `state.chunk_count > 0`, which a checkpoint can hold from a dead run.
+   Removed entirely — `ingest_book` compares the database against the parsed file, which is
+   the only answer that cannot go stale, and re-parsing locally costs nothing.
+3. **A malformed plan killed the run instead of being revised.** Breakdown returned 10 Leaves
+   against the 15–30 range; the schema correctly rejected it and the run died. Now a
+   validation failure is a bounded retry carrying the failure text as feedback — a model
+   asked again with no explanation produces the same output. Same cap as the structure
+   check; past it, the run stops with a clear message rather than looping.
+
+#### Decisions taken, with reasoning
+
+- **The book's text is deliberately kept out of graph state.** State is checkpointed to
+  Postgres, so text placed there is copied into the checkpoint tables — where
+  `purge_raw_text` cannot reach it, and where it would survive exactly the deletion R6
+  requires. Nodes read it from the repository by `book_id` and let it go.
+- **The gate writes its plan file only when absent.** LangGraph re-executes a node on resume,
+  so an unconditional write would overwrite the founder's edits with the model's original
+  plan moments before reading them back. The run would have looked like it worked. There is
+  a test named for this.
+- **An approved plan that still mirrors the book is refused.** Gate 1 exists to improve the
+  plan, not to waive a `LEGAL.md` requirement — the same logic that keeps the grounding gate
+  separate from editorial review. **This needs a ruling**: it means the founder cannot
+  override the structure check from the file, and the escape hatch is editing until it
+  passes. Defensible, but it is a policy choice I made, not one the handoff specified.
+- **Checkpoint deserialization is restricted to an explicit allowlist** of this package's
+  types. LangGraph's default accepts any type and warns it will stop; naming them survives
+  that change rather than breaking every in-flight run when it lands.
+- **Embeddings are stored per batch**, and a re-entered ingest skips chunks it already has.
+  Embedding is the only place in WP16 that spends money per unit of book.
+- **The 3.x models are deliberately absent from the cost rate table.** Their rates were not
+  verified here, and `unpriced_models` naming a model is more useful than a confident number
+  that is wrong. The successful run reports `$0.0000` with `unpriced: gemini-3.6-flash`,
+  which is honest; the token counts are the real signal.
+
+#### Infrastructure
+
+The pipeline's Postgres is **its own container on port 5433** (`pgvector/pgvector:pg16`),
+not a third database inside `zoomout-postgres`. That container is `postgres:16-alpine` with
+no pgvector available, and it is the one Payload and the backend depend on. Verified by
+listing tables in all three:
+
+| Database | Contents |
+|---|---|
+| `zoomout_pipeline` (5433) | `books`, `book_chunks`, `book_raw_text`, 4 checkpoint tables, pgvector 0.8.6 |
+| `zoomout` (5432) | 10 backend tables, **0** pipeline or checkpoint tables |
+| `zoomout_cms` (5432) | 21 Payload tables, **0** pipeline or checkpoint tables |
+
+Every variable is prefixed `ZOOMOUT_PIPELINE_`, and `db/engine.py` refuses any database
+showing the backend's or Payload's tables — a live check, not a naming convention.
+`zoomout-pipeline doctor` prints which database it is actually in, which is the WP5b lesson
+turned into a command.
+
+**The host had neither prerequisite.** Only Python 3.9.6 (Xcode's) and a stopped Docker
+daemon. `uv` was installed from PyPI into the user directory and fetched CPython 3.12.14 —
+no admin rights, nothing outside `~`. Recorded because the next session on a fresh machine
+will hit the same wall.
+
+#### A credential handling finding, learned the hard way
+
+Setting up the API key, **two Gemini keys were leaked into the session transcript by my own
+diagnostic commands** — both times by trying to print a redacted fragment of a line that
+contained the secret. Both were rotated and deleted.
+
+Two things follow, and they are worth more than the embarrassment:
+
+- **The deny rule on `.env` files does not protect the environment itself.** It blocks the
+  obvious path while a credential in an env var remains one careless `grep` away from a log.
+  The only safe diagnostics are `${#VAR}` and match *counts*.
+- **`~/.zshrc` is the wrong file for anything a tool needs.** Zsh reads it for interactive
+  shells only, so an agent's non-interactive shell never sees it. `~/.zshenv` is read by
+  every invocation. This cost two round trips before it was diagnosed.
+
+**Before anything deploys, this key belongs in GCP Secret Manager.** Hosting is already
+decided as GCP; a key in a dotfile is a local-development affordance that should not become
+the pattern.
+
+#### The root `typecheck` is red on `main`, and it is not WP16
+
+`npm run typecheck` fails at `apps/backend`, on `main`, independently of this package:
+
+```
+src/content/content.mapper.test.ts(285,78): error TS2322:
+  Type '"dot"' is not assignable to type '"json" | "mermaid" | null | undefined'.
+```
+
+The test passes `specFormat: 'dot'` while `DIAGRAM_SPEC_FORMATS` in
+`packages/shared/src/content.ts` is `['mermaid', 'json']`. It arrived with `cf3e286`
+(*WP15: carry the Leaf v2 fields through the backend mapper*). Confirmed pre-existing by
+checking `main` out into a separate worktree and finding the same line against the same
+enum; `apps/backend` and `packages/shared` are byte-identical between this branch and
+`main`.
+
+**Left unfixed deliberately** — `apps/backend` is Manager's, and a one-character fix in
+someone else's package is still a change nobody asked for. It is a one-character fix
+(`'dot'` → `'mermaid'`), or the enum is wrong and Graphviz was meant to be supported.
+
+Everything else in the root gate is green, verified by running the phases separately since
+the failing `typecheck` aborts the chain: **lint passes, `npm test` passes (706 tests across
+four workspaces), `npm run build` passes.** WP16's criterion — that root `build` and `test`
+are unaffected — holds.
+
+**How this was nearly missed, which is the part worth keeping.** The gate was run in the
+background as `{ npm run lint && ... ; echo "EXIT=$?" ; }`. The harness reported the
+*compound command* exiting 0, because the trailing `echo` always succeeds, and the run was
+twice reported in chat as green before anyone read the log. The project's own rule —
+**verify the effect, not the exit code** — applies to the gate itself, and a background
+task's reported status is an exit code like any other.
+
+#### One change outside the package's declared scope
+
+`eslint.config.js` gained one ignore entry for `apps/pipeline/**`. The root gate went red
+because eslint was linting `.js` assets shipped inside Python dependencies in
+`apps/pipeline/.venv`. Written in the style of the two entries already there. Flagged rather
+than buried: the handoff scoped this session to `apps/pipeline/` and nothing else, and
+leaving the root gate red was the worse option.
+
+`apps/pipeline` has **no `package.json`**, so npm's `apps/*` workspace glob does not pick it
+up and `npm run build` / `npm test` never see it — which is what the handoff asked for, by a
+mechanism worth knowing about since the glob looks like it would include it.
+
+#### Testing
+
+48 tests. Tier A: the structure check firing (plus the mutation check), raw-text deletion
+verified by querying the database, the revision cap terminating, ingest refusing to run
+without an acquisition status, and the foreign-database guard. Tier B: one happy path
+through ingest, analyze and breakdown wiring, and the gate file round-trip.
+
+**Durability is tested by actually killing a process.** `test_durability.py` runs a real
+checkpointed run to gate 1 in a child process, `SIGKILL`s it, edits the plan file, and
+resumes in a *separate* process sharing nothing but Postgres. It comes back with the chunk
+count intact and the hand-edited title in state.
+
+The DB-backed tests create and drop a scratch database and **skip loudly** if Postgres is
+unreachable, rather than passing quietly. A green gate that silently skipped the Tier A
+retention tests would be worse than a red one.
+
+LLM nodes are tested on their contract — output parses, required fields present, a bad plan
+is rejected — never on prose, via a scripted fake. The normal gate touches no network.
+
+#### Tier C — deferred, by name
+
+- **No test exercises the PDF fallback against a real PDF.** The code path exists and is
+  honest about its limits, but no fixture PDF is committed and no run has used it. EPUB is
+  the primary path and the first book was EPUB.
+- **The `live` pytest marker exists but no test uses it.** Live-model runs were done by hand
+  through the CLI. A small explicit live suite is still owed.
+- **`purge_raw_text` is a command, not a terminal node.** Wiring it to the end of a run is
+  WP20's, as the handoff anticipated. **The Wattles text was deliberately not purged** —
+  WP17 needs it, and re-ingesting costs another ~140 embedding requests.
+- **No retry or backoff on the text-generation calls.** Only embeddings are paced. Analyze
+  and breakdown are one call each between long human gates, so this has not bitten, but a
+  transient 503 currently fails the run.
+- **The rate limiter is per-process.** Two concurrent runs would each think they had the
+  full quota.
+- **LangSmith tracing is not wired**, though §4 lists it. Nothing to trace until WP17 has
+  cycles worth debugging.
+- **`book_chunks.is_cited` is unused** until WP17 sets it. The purge already honours it.
+- Four abandoned run ids (`wattles-01` … `wattles-04`) have checkpoints in the pipeline
+  database from the debugging above. Harmless, and left as evidence.
+
+#### What WP17 inherits
+
+- A book in `zoomout_pipeline`: 136 chunks, 768-dimensional, **every chunk carrying its
+  chapter index, chapter title and position** — the location a source reference needs.
+  Retrieval is unwritten; the data it needs is there.
+- An approved 17-Leaf plan under run id `wattles-05`, resumable from its checkpoint.
+- `BookRepository.purge_raw_text` already distinguishes cited from uncited chunks, so
+  marking `is_cited` when a passage becomes a source reference is the only wiring left for
+  retention to be correct.
+- **No Payload contact of any kind** — asserted against the parsed source in
+  `test_boundaries.py`, which fails on an import rather than on a mention in prose. WP17
+  opens that boundary; the door is the REST API.
+- The prompt files are where the quality work happens. `breakdown.md` is a first draft that
+  produced a mediocre course, and improving it needs no code change.
+
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 

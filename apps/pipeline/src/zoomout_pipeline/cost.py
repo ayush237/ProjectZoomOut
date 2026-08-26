@@ -24,7 +24,10 @@ _RATES_PER_MTOK: dict[str, tuple[float, float]] = {
     "gemini-2.5-pro": (1.25, 10.00),
     "gemini-2.5-flash": (0.30, 2.50),
     "gemini-2.0-flash": (0.10, 0.40),
-    "text-embedding-004": (0.00, 0.00),
+    "gemini-embedding-001": (0.15, 0.00),
+    # The 3.x models are deliberately absent. Their published rates were not verified
+    # here, and `unpriced_models` naming a model is more useful than a confident number
+    # that is wrong — a silent zero is indistinguishable from a free call.
 }
 
 

@@ -47,6 +47,12 @@ class PipelineState(BaseModel):
     structure_check: StructureCheckResult | None = None
     breakdown_attempts: int = 0
 
+    # Set when breakdown returned something that is not a valid LeafPlan at all — too few
+    # Leaves, a gap in `order`, a missing field. Fed back into the next attempt, because a
+    # model that produced malformed output and is simply asked again usually produces the
+    # same malformed output.
+    last_error: str | None = None
+
     # Set when the revision cap is reached with the check still failing. The run does not
     # stop — it goes to the human with the failure attached, which is what "escalate"
     # means here.

@@ -16,6 +16,7 @@ from zoomout_pipeline.graph.build import compile_graph
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.nodes import StructureRejectedError
 from zoomout_pipeline.graph.state import MAX_BREAKDOWN_ATTEMPTS, PipelineState
+from zoomout_pipeline.llm.client import LLMError
 from zoomout_pipeline.models import Acquisition, BookAnalysis
 
 from .conftest import ScriptedLLM, make_plan
@@ -177,3 +178,59 @@ def test_resuming_does_not_overwrite_the_edited_file(
     graph.invoke(Command(resume=True), config)
 
     assert yaml.safe_load(path.read_text())["leaves"][1]["concept"] == "edited concept"
+
+
+def test_a_malformed_plan_is_retried_with_the_error_as_feedback(
+    deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
+) -> None:
+    """Output that is not a valid plan is a revision case, not a crash.
+
+    Seen on the first live run: the model returned 10 Leaves against a 15-30 range, the
+    schema correctly rejected it, and the whole run died. A model asked again with no
+    explanation tends to produce the same output.
+    """
+
+    class BadThenGood(ScriptedLLM):
+        def __init__(self) -> None:
+            super().__init__([analysis, make_plan(leaves=22, chapters_per_leaf=3)])
+            self._failed = False
+
+        def generate_structured(self, **kwargs: Any) -> Any:
+            if kwargs["node"] == "breakdown" and not self._failed:
+                self._failed = True
+                self.calls.append({"node": "breakdown", "prompt": kwargs["prompt"]})
+                raise LLMError("breakdown: returned JSON that is not a valid LeafPlan: got 10")
+            return super().generate_structured(**kwargs)
+
+    llm = BadThenGood()
+    graph, config, result = _run(replace(deps, llm=llm), sample_epub)
+
+    assert "__interrupt__" in result, "the run should recover and reach the gate"
+
+    retry = [call for call in llm.calls if call["node"] == "breakdown"][1]
+    assert "did not parse into a valid plan" in retry["prompt"]
+    assert "got 10" in retry["prompt"], "the retry must be told what was actually wrong"
+
+    state = PipelineState.model_validate(graph.get_state(config).values)
+    assert state.last_error is None, "a recovered run should not carry the stale error"
+    assert state.plan is not None
+
+
+def test_repeated_malformed_output_stops_at_the_cap(
+    deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
+) -> None:
+    """No valid plan after the cap stops with a clear error rather than looping."""
+
+    class AlwaysBad(ScriptedLLM):
+        def generate_structured(self, **kwargs: Any) -> Any:
+            if kwargs["node"] == "breakdown":
+                self.calls.append({"node": "breakdown", "prompt": kwargs["prompt"]})
+                raise LLMError("breakdown: not a valid LeafPlan")
+            return super().generate_structured(**kwargs)
+
+    llm = AlwaysBad([analysis])
+
+    with pytest.raises(LLMError, match="no valid plan"):
+        _run(replace(deps, llm=llm), sample_epub)
+
+    assert len([c for c in llm.calls if c["node"] == "breakdown"]) == MAX_BREAKDOWN_ATTEMPTS

@@ -94,3 +94,45 @@ def test_an_unsupported_format_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(ParserError):
         parse_book(path)
+
+
+def test_a_partially_embedded_book_is_finished_not_reused(
+    deps: NodeDependencies, sample_epub: Path, db_connection: psycopg.Connection[dict[str, object]]
+) -> None:
+    """A half-embedded book must not read as done.
+
+    This is the shape of a real defect found on the first live run: an ingest that died
+    partway through embedding left 64 of 136 chunks, and the next run saw "more than zero
+    chunks", declared the book ingested and moved on. Nothing failed. WP17 would have
+    grounded against half a book.
+    """
+    first = ingest_book(
+        deps=deps, run_id="run-1", source_path=sample_epub, acquisition=Acquisition.PUBLIC_DOMAIN
+    )
+    full_count = first.chunk_count
+    assert full_count > 4
+
+    # Simulate the interrupted run: drop most of the chunks, keep the book and its raw text.
+    with db_connection.cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM book_chunks
+            WHERE book_id = %s AND id NOT IN (
+                SELECT id FROM book_chunks WHERE book_id = %s ORDER BY id LIMIT 4
+            )
+            """,
+            (first.book_id, first.book_id),
+        )
+    db_connection.commit()
+
+    fresh_embedder = FakeEmbedder()
+    second = ingest_book(
+        deps=replace(deps, embedder=fresh_embedder),
+        run_id="run-2",
+        source_path=sample_epub,
+        acquisition=Acquisition.PUBLIC_DOMAIN,
+    )
+
+    assert second.reused is False, "a partial ingest must not be reported as reused"
+    assert second.chunk_count == full_count, "the missing chunks must be embedded"
+    assert sum(fresh_embedder.batches) == full_count - 4, "only the missing chunks are re-paid for"

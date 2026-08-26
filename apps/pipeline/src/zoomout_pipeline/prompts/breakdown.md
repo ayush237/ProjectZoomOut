@@ -11,7 +11,10 @@ a real-life scenario with three options, a payoff that unlocks on a correct answ
 sticky-note recap and a takeaway. You are not writing any of that here — you are deciding
 what each Leaf is about.
 
-Propose **{min_leaves}–{max_leaves} Leaves**. For each one:
+Propose **between {min_leaves} and {max_leaves} Leaves** — this range is fixed by the
+product spec and a plan outside it is rejected without being read. A book this size supports
+it: most chapters carry more than one teachable idea, and splitting them is the point. For
+each Leaf:
 
 - **title** — what the learner sees. Concrete and inviting; not a chapter name.
 - **concept** — the single thing this Leaf teaches, in one sentence. If you need "and", it
