@@ -188,6 +188,10 @@ export interface Track {
    */
   leafCount?: number | null;
   /**
+   * Where this book’s text came from. Defaults to "undocumented", which is the honest answer for every Track authored before this field existed. Set by the content pipeline on write, and editable here. It does not affect publishing — recording the answer is the point, because "which Tracks need regenerating?" cannot be reconstructed later.
+   */
+  acquisition: 'public-domain' | 'licensed' | 'purchased' | 'undocumented';
+  /**
    * Mock content. Defaults to ON so nothing reaches production by accident — untick only for real, fact-checked content.
    */
   isPlaceholder?: boolean | null;
@@ -533,6 +537,7 @@ export interface TracksSelect<T extends boolean = true> {
         id?: T;
       };
   leafCount?: T;
+  acquisition?: T;
   isPlaceholder?: T;
   updatedAt?: T;
   createdAt?: T;

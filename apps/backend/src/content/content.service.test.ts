@@ -37,6 +37,7 @@ const track = (overrides: Partial<Track> = {}): Track => ({
   purchaseLinks: [{ retailer: 'R', url: 'https://example.test/b', isAffiliate: false }],
   status: 'published',
   leafCount: 1,
+  acquisition: 'undocumented',
   isPlaceholder: true,
   createdAt: '2026-08-08T12:00:00.000Z',
   updatedAt: '2026-08-08T12:00:00.000Z',

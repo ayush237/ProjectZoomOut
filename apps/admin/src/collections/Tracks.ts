@@ -1,3 +1,4 @@
+import { TRACK_ACQUISITION_STATUSES } from '@zoomout/shared';
 import type { CollectionConfig } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
@@ -98,6 +99,20 @@ export const Tracks: CollectionConfig = {
       admin: {
         description:
           'How many Leaves this Track is intended to have. Target is 15–30; ~20 is the Phase 1 planning figure.',
+      },
+    },
+    {
+      name: 'acquisition',
+      type: 'select',
+      required: true,
+      defaultValue: 'undocumented',
+      // Built from the shared list rather than retyped: the four values exist once, so
+      // the CMS cannot come to offer a status the domain model rejects.
+      options: TRACK_ACQUISITION_STATUSES.map((status) => ({ label: status, value: status })),
+      admin: {
+        position: 'sidebar',
+        description:
+          'Where this book’s text came from. Defaults to "undocumented", which is the honest answer for every Track authored before this field existed. Set by the content pipeline on write, and editable here. It does not affect publishing — recording the answer is the point, because "which Tracks need regenerating?" cannot be reconstructed later.',
       },
     },
     {

@@ -5,7 +5,7 @@ import type { PublishStatus } from './primitives.js';
 
 /**
  * ============================================================================
- * FROZEN — content model, re-frozen 2026-08-13 (Leaf v2, WP15)
+ * FROZEN — content model, re-frozen 2026-08-27 (Track acquisition, WP15.1)
  * ============================================================================
  * `Track`, `Leaf`, the five slide schemas and `SourceReference` were first frozen on
  * 2026-08-08 after the schema-freeze gate (plan §5), where one structurally complete
@@ -26,6 +26,18 @@ import type { PublishStatus } from './primitives.js';
  * **All three are optional, and that is the migration plan.** The change is purely
  * additive: the 28 Tracks and 22 Leaves that already exist stay valid untouched, and
  * there is no backfill. Nothing here was removed, narrowed or renamed.
+ *
+ * **Thawed a second time for WP15.1** — `Track.acquisition`, recording where a Track's
+ * source text came from. The book-acquisition question is unresolved, and once it
+ * resolves someone has to answer "which Tracks must be regenerated?". That answer is
+ * retroactively impossible to reconstruct, so it has to be a **query** rather than an
+ * act of memory — which means the field has to exist before the pipeline writes its
+ * first Track in WP17, not after.
+ *
+ * **It defaults rather than failing, and that is again the migration plan.** The 28
+ * existing Tracks stay valid untouched and need no backfill, because `undocumented` is
+ * an honest description of every one of them. The field is required in the sense that
+ * every Track has one; it is not a gate. Nothing here was removed, narrowed or renamed.
  *
  * Downstream code may depend on these shapes. A further change requires an Architect
  * ruling and a migration plan for content that already exists, because the CMS
@@ -328,6 +340,26 @@ export const leafSchema = baseLeafSchema.superRefine(requireSourceForDinnerTable
 /* Track                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Where a Track's source text came from.
+ *
+ * Exported as a value as well as a type because the CMS builds its select options from
+ * this list at runtime — the four values exist in one place, so the CMS and the domain
+ * model cannot drift into offering different sets.
+ *
+ * `undocumented` is deliberately one of the four rather than a missing value. "We do
+ * not know" is a real answer and belongs in the data; modelling it as absence would
+ * make an unanswered Track indistinguishable from one nobody has looked at yet.
+ */
+export const TRACK_ACQUISITION_STATUSES = [
+  'public-domain',
+  'licensed',
+  'purchased',
+  'undocumented',
+] as const;
+
+export const trackAcquisitionSchema = z.enum(TRACK_ACQUISITION_STATUSES);
+
 export const purchaseLinkSchema = z.object({
   retailer: z.string().min(1),
   url: z.url(),
@@ -357,6 +389,17 @@ export const trackSchema = z.object({
 
   /** See the note on `Leaf.isPlaceholder` — same safe default, same reason. */
   isPlaceholder: z.boolean().default(true),
+
+  /**
+   * Where the source text came from (WP15.1).
+   *
+   * Defaulted rather than required-on-parse so the 28 Tracks that predate the field
+   * stay valid without a backfill. **It does not gate publishing** — the acquisition
+   * policy is an unmade launch decision, and enforcing a rule nobody has written yet
+   * would block content on nothing. Recorded now, enforceable when there is something
+   * to enforce.
+   */
+  acquisition: trackAcquisitionSchema.default('undocumented'),
 
   createdAt: isoTimestampSchema,
   updatedAt: isoTimestampSchema,
@@ -465,6 +508,7 @@ export type LeafSourceReference = z.infer<typeof leafSourceReferenceSchema>;
 export type SourceReference = z.infer<typeof sourceReferenceSchema>;
 export type Leaf = z.infer<typeof leafSchema>;
 export type PurchaseLink = z.infer<typeof purchaseLinkSchema>;
+export type TrackAcquisition = z.infer<typeof trackAcquisitionSchema>;
 export type Track = z.infer<typeof trackSchema>;
 export type PublicScenarioOption = z.infer<typeof publicScenarioOptionSchema>;
 export type PublicScenarioSlide = z.infer<typeof publicScenarioSlideSchema>;
