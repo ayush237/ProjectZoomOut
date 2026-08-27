@@ -257,4 +257,16 @@ class GeneratedLeafRecord(BaseModel):
     leaf: GeneratedLeaf
     extras: GeneratedExtras
     cited_chunk_ids: list[int] = Field(default_factory=list)
+
+    # Which passage handle meant which chunk, as the model saw them.
+    #
+    # **Not reconstructible from `cited_chunk_ids`, and assuming otherwise corrupts the audit
+    # trail.** Handles are positional over the *retrieved* list (P1..P12); the cited ids are a
+    # sorted subset. Rebuilding handles from that subset renumbers them, so a Leaf citing P7
+    # and P9 came back with P1..P6: two references silently dropped, and the ones that
+    # survived pointed at different chapters than the model cited. Payload caught the drop
+    # because a Dinner Table fact lost its takeaway reference; nothing would have caught the
+    # mis-attribution.
+    passage_refs: dict[str, int] = Field(default_factory=dict)
+
     attempts: int = 1

@@ -115,6 +115,14 @@ class PipelineState(BaseModel):
     # Set when grounding rejects the in-flight Leaf; consumed by the next draft attempt.
     grounding_feedback: str | None = None
 
+    # --- WP17: the CMS boundary
+    #
+    # Recorded so a re-entered write does not create a second Track or duplicate Leaves.
+    # Payload has no natural idempotency key for a create, so the run's own memory of what
+    # it already wrote is the only thing standing between a retry and a duplicated Track.
+    cms_track_id: int | None = None
+    cms_leaf_ids: dict[str, int] = Field(default_factory=dict)
+
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)
 

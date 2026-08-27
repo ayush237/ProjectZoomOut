@@ -277,6 +277,8 @@ def make_ground_check_node(deps: NodeDependencies) -> Node:
                 leaf=state.current_draft,
                 extras=state.current_extras,
                 cited_chunk_ids=verdict.cited_chunk_ids,
+                # Recorded here, where the handles are still the ones the model was shown.
+                passage_refs={p.ref: p.chunk_id for p in passages},
                 attempts=attempt,
             )
             return {
