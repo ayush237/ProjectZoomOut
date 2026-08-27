@@ -1436,6 +1436,149 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP18 — assets: image candidates, rendered diagrams, one visual identity — 2026-08-28
+
+**Anchor set approved by the founder and committed. Generation, rendering, guardrails, budget
+and upload all built and green.** The full 18-Leaf illustration run was still in flight when
+this was written — see *Status of the illustrated Track* below, which is the one thing not yet
+finished rather than not yet built.
+
+#### The anchor set went first, and it earned that ordering
+
+Five committed reference images plus a style contract derived from `design-direction.md`. It
+needed no Payload contact and no WP17 output, so it could land inside the credit window
+regardless of how the rest went — and it is the input everything else depends on.
+
+**Bringing it to the founder before generating at scale was the right call, because two of the
+first five were wrong** in ways no assertion would have caught. One came back as outlined line
+art; another rendered a lamp as a volumetric light cone. Neither is a bad picture. Both read
+as *a different illustrator*, which is precisely the failure the founder's requirement is
+about.
+
+Founder ruled: keep three, drop two, tighten the contract, regenerate. The contract gained two
+prohibitions **from evidence rather than anticipation** — no outlines or line art, no lighting
+effects — and a cap on teal after a third candidate used it as a background field rather than
+an accent.
+
+**The regenerated pair was conditioned on the three survivors, which is the mechanism the rest
+of the package rests on, and it worked**: the glow disappeared and the line art collapsed to
+faint residual contours. That is the first direct evidence that reference-image conditioning
+does what the founder asked for.
+
+#### An alignment worth recording
+
+**Requiring stylised, non-identifiable figures satisfies the legal guardrail and the
+consistency requirement with one rule.** Faces turned away or reduced to minimal marks make an
+identifiable person off-*style* before it is off-policy, and simultaneously remove the single
+biggest source of visual drift between images. The guardrail is enforced by construction
+rather than by hoping the model behaves.
+
+#### Diagrams: the constrained-JSON path, and a benefit R4 did not anticipate
+
+Rendered by us, from a spec, per R4. Four things follow, and the fourth was a surprise:
+
+1. Palette control — diagrams inherit `design-direction.md` and re-theme rather than needing
+   regeneration.
+2. **Legibility enforced by the schema**: 2–5 nodes, labels capped at 42 characters. An
+   unreadable diagram is unrepresentable rather than merely discouraged. WP9 learned this at
+   thumbnail size.
+3. Correctly spelled text. The no-text rule exists because *image models* cannot spell; it does
+   not apply when we draw the glyphs.
+4. **`alt` accurate by construction.** We know what is in the picture because we put it there.
+   A description derived from structure cannot hallucinate — strictly better than asking a
+   model to describe its own output, and a concrete argument for JSON over Mermaid that R4 did
+   not make.
+
+The spec is stored beside the render (`specFormat: json`), which is what WP15 added those
+fields for.
+
+#### The budget halts
+
+Charged **before** each call, not after — charging afterwards means the run has already spent
+what it was not allowed to spend, which makes a cap a report. Counted in images rather than
+currency, because the price is a published rate we do not control and the count is what the
+pipeline decides. Tier A tested by setting the cap low and asserting the refusal is not
+counted.
+
+#### Guardrails: be precise about which are actually checked
+
+| Guardrail | Enforcement |
+|---|---|
+| No reward amber `#FFB020` | **Mechanically, in code** — including against the committed anchors, since every image inherits them |
+| No rendered text | Style contract, plus a human looking |
+| No identifiable person | **By construction** — the contract requires figures with no distinguishing features |
+
+**Only amber is asserted in code, and the module says so.** Claiming the other two are
+"checked" because a prompt forbids them would be the same mistake as calling the 1:1 structure
+requirement enforced because `breakdown.md` asks for it.
+
+#### Two things the first live run taught
+
+**Payload wants a multipart upload's document fields as one JSON `_payload` part.** Sending
+them as separate form fields is silently ignored, and the upload then fails on `alt` being
+required — which reads as a bug in the alt text rather than in the encoding.
+
+**A draft patch lands in `_leaves_v`, not `leaves`.** Exactly the property WP15.1 recorded. My
+first verification query checked the published table, found empty fields, and looked like a
+dropped write. It was the versioning working as designed: what the pipeline writes stays
+invisible until a human publishes.
+
+#### A defect in my own process, not the code
+
+I reported adding a rate-limit retry to the image client, and **the patch had not applied** —
+the anchor run succeeded only because the quota had cleared. Caught later by inspection, not by
+the report. The lesson is the one this project keeps relearning: a patch that reports success
+is not a change that happened. I now grep for the thing I claim to have added.
+
+#### Read it yourself
+
+Three Leaves' candidates side by side. **They do look like one product** — same medium,
+palette, figure treatment and compositional language. A reader moving between Leaves would
+recognise them as coming from the same place, which is the founder's actual requirement and it
+is met.
+
+**But the no-lighting-effects rule is not holding under pressure.** Where a subject implies a
+light source — a shop at night, a laptop in a dark room — the model reaches for a glow anyway:
+mild on Leaf 1, pronounced on Leaf 2. The written prohibition is weaker than the anchor
+conditioning, and the anchors contain no lit-lamp example to contradict it.
+
+**This is style drift, not a guardrail breach** — no amber, no text, no identifiable people.
+Worth fixing by adding a sixth anchor that deliberately depicts a lit lamp *without* a glow,
+which teaches the exception rather than merely forbidding it. Recommended, not urgent.
+
+#### Cost
+
+| | |
+|---|---|
+| Per image (verified) | **$0.039** |
+| Per Leaf | 3 candidates = **$0.117** |
+| **A fully illustrated Track** | **~$2.11** for 18 Leaves |
+| Diagrams | **$0** — a text call and a local render |
+| Anchor set (one-off) | $0.31, 8 images including the two discarded |
+
+**Everything drawn from the trial credit — confirmed against the console, not assumed.** The
+whole project has consumed ₹184 of ₹28,710, still 99% remaining.
+
+**The number that matters for the roadmap:** a Track costs roughly **$2 of text plus $2 of
+images**, so about **$4 fully illustrated**. Images are the only per-Leaf recurring cost, but
+they are not the dominant one — text is level with them.
+
+#### Status of the illustrated Track
+
+Running at roughly six minutes per Leaf, four complete and zero failures at the time of
+writing. It resumes safely: a Leaf that already carries assets is skipped, so re-running costs
+nothing for work already done.
+
+#### Deferred, named
+
+- **A sixth anchor for lit interiors**, to teach the no-glow exception rather than assert it.
+- **OCR for the no-text guardrail.** Rejected for now: a dependency and its own false positives
+  to catch what the style contract already prevents, and a human sees every image at gate 2.
+- **Candidate selection is WP19's.** Candidates are uploaded and none is attached — picking one
+  here would present a decision as though it had been taken.
+- **`scenario.image` stays empty** until a human picks. That is the intended state, not a gap.
+
+
 ### Completed: WP17 (second half) — the Payload boundary — 2026-08-27
 
 **All acceptance criteria met.** A Track of *The Science of Getting Rich* is in Payload as
