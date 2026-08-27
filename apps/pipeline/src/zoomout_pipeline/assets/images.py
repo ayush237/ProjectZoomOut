@@ -14,9 +14,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 
 from zoomout_pipeline.llm.ratelimit import (
+    MAX_RETRIES,
     RateLimiter,
+    is_rate_limited,
+    retry_delay_seconds,
 )
 from zoomout_pipeline.logging import get_logger
 
@@ -137,12 +141,37 @@ class ImageClient:
             image_config=types.ImageConfig(aspect_ratio=aspect_ratio),
         )
 
-        try:
-            response = self._client.models.generate_content(
-                model=model, contents=[types.Content(role="user", parts=parts)], config=config
-            )
-        except Exception as error:
-            raise ImageGenerationError(f"{node}: image call to {model} failed: {error}") from error
+        response = None
+        for attempt in range(MAX_RETRIES):
+            # Image quotas are far tighter than text quotas and bind on a burst of candidate
+            # generation. Same bounded retry as the text client rather than a second,
+            # subtly different one.
+            self._limiter.acquire(1)
+            try:
+                # `list` is invariant, so `list[Part]` does not satisfy the SDK's declared
+                # union even though it accepts exactly this. Cast at the boundary.
+                response = self._client.models.generate_content(
+                    model=model, contents=cast("Any", parts), config=config
+                )
+                break
+            except Exception as error:
+                if not is_rate_limited(error) or attempt == MAX_RETRIES - 1:
+                    raise ImageGenerationError(
+                        f"{node}: image call to {model} failed: {error}"
+                    ) from error
+                delay = retry_delay_seconds(error, attempt=attempt)
+                _log.warning(
+                    "image.rate_limited",
+                    node=node,
+                    model=model,
+                    attempt=attempt + 1,
+                    retry_in=round(delay, 1),
+                )
+                self._limiter.penalise()
+                self._limiter.sleep(delay)
+
+        if response is None:  # pragma: no cover - the loop either breaks or raises
+            raise ImageGenerationError(f"{node}: {model} produced no response")
 
         image_bytes, mime = _first_image(response)
         if image_bytes is None:

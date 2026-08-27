@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -245,8 +245,11 @@ class GeminiClient:
             model=model,
             units=len(texts),
             what="embedding call",
+            # `list` is invariant, so `list[str]` does not satisfy the SDK's declared union
+            # even though it accepts exactly this. Cast at the boundary rather than widening
+            # our own signature to match a stub.
             call=lambda: self._client.models.embed_content(
-                model=model, contents=texts, config=config
+                model=model, contents=cast("Any", texts), config=config
             ),
         )
 
