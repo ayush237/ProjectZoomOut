@@ -122,7 +122,9 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 1. **GDPR-K is not a single number.** The EU digital-consent age is set per member state between 13 and 16 — Ireland and the Netherlands at 16, France at 15. A flat 13 is sufficient for a US-first launch and **is not automatically sufficient in the EU.** A counsel question when EU distribution is real, logged so it is not discovered during App Store review.
 2. **This is not the App Store age rating**, which comes from Apple's content questionnaire and describes what the app *contains*, not who may sign up. Both are required at Stage 5, independently.
 
-**To verify:** WP2 shipped an age gate with a threshold already in it. Confirm the implemented value is 13 and the check is server-side. If it disagrees, that is a bug, not a reopened decision.
+**Verified 2026-08-28 — the code already agrees, no change needed.** `AUTH_MINIMUM_AGE_YEARS` defaults to **13** in `apps/backend/src/config/env.ts:69`, and the check runs server-side in `auth.service.ts:282` — in the service layer, not the handler. WP2 chose 13 as its default and the founder's ruling ratifies it rather than changing it.
+
+**One deployment consequence:** the threshold is an environment variable, not a constant. That is the right design — the GDPR-K rider above means a future EU deployment may genuinely need a different number — but it also means **the production value is whatever the deployed environment says.** Pin it explicitly at deploy time rather than relying on the default, and treat it as a deployment-verified setting alongside the Payload private-networking requirement.
 
 ### Newly possible, not yet blocking
 
