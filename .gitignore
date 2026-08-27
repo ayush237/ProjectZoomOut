@@ -28,6 +28,21 @@ web-build/
 *.key
 *.mobileprovision
 
+# Python (apps/pipeline) — the pipeline is a standalone Python project.
+# These are unanchored so they hold on every branch regardless of eslint config:
+# an untracked .venv already produced 26 phantom lint errors and sits one
+# `git add .` away from committing a virtualenv.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Pipeline run artefacts — book text, embeddings scratch, per-run output
+apps/pipeline/.data/
+apps/pipeline/runs/
+
 # Editors and OS
 .DS_Store
 .idea/
