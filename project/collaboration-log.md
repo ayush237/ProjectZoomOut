@@ -108,19 +108,25 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 - Reproduced precisely by the Pipeline Manager: same request with `Referer` → 200, with `Origin` → 403.
 - One line. Worth doing because the failure is undiagnosable from the browser — a blank page with nothing in the console that points at the cause.
 
-**Out of scope:** human role-based permissions (ruled not needed until a second person touches the CMS), anything in `apps/pipeline`.
+**Out of scope:** human role-based permissions (ruled not needed until a second person touches the CMS), **and the pipeline-side switch to the new key** — see the seam note below.
 
-**Device gate:** *load the admin UI at `http://127.0.0.1:3001/admin` and see it render*, then confirm the pipeline's key can create a draft and **cannot** publish one.
+> **Corrected 2026-08-28, before dispatch.** The first draft of this handoff carried the criterion *"the pipeline authenticates with an API key, not a password"* while scoping the work to `apps/admin`. **That criterion is not satisfiable inside that scope** — the client that authenticates lives in `apps/pipeline`, which Manager does not own. It is the same mistake that sent WP4 into WP3's module and WP6 into the backend, so it is corrected here rather than discovered by whoever picks this up.
+>
+> **The seam:** Manager provisions a publish-incapable key and proves it *is* publish-incapable. **Pipeline Manager switches the client to use it**, as a small follow-on once this lands. Until then the pipeline keeps working on its existing login — nothing breaks, and the two halves land in the right sessions.
+
+**Device gate:** *load the admin UI at `http://127.0.0.1:3001/admin` and see it render.* Then, using the new key directly (curl is fine — the pipeline is not switched over yet), confirm it **can create a draft and cannot publish one**.
 
 **Acceptance criteria**
 - [ ] Root `lint`, `typecheck`, `test`, `build` pass
-- [ ] The pipeline authenticates with an API key, not a password
-- [ ] **The key cannot publish** — verified by trying it and getting refused, not by reading config
+- [ ] A publish-incapable API key can be provisioned on `Admins`, and its creation is documented for the founder
+- [ ] **The key cannot publish** — verified by calling the API with it and being refused, not by reading config
+- [ ] The key **can** create and update a draft — otherwise it is scoped too tightly to be useful
 - [ ] The key is revocable independently of any human account
 - [ ] The admin UI renders at `127.0.0.1:3001` as well as `localhost:3001`
 - [ ] No credential is committed
+- [ ] The follow-on for `apps/pipeline` is written into `collaboration-log.md` so it is not lost at the seam
 
-**Testing expectations:** Tier B. The "cannot publish" check is the one that matters — verify the effect, not the config.
+**Testing expectations:** Tier B. The two that matter are behavioural and belong together: **the key is refused on publish and accepted on draft.** A key that cannot publish because it cannot do anything passes half of that and is useless. Verify the effect, not the config.
 
 ---
 
