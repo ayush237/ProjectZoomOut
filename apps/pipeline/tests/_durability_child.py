@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import psycopg
 from langchain_core.runnables import RunnableConfig
@@ -26,10 +27,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tests.conftest import (
     FakeEmbedder,
+    RefusingPayloadClient,
     ScriptedLLM,
     leaf_generation_defaults,
     make_plan,
 )
+from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.graph.build import compile_graph, pipeline_serializer
 from zoomout_pipeline.graph.dependencies import NodeDependencies
@@ -64,6 +67,10 @@ def _dependencies(database_url: str, runs_dir: str) -> NodeDependencies:
         embedder=FakeEmbedder(),
         connect=connect,
         now=lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+        # This runs in a *subprocess*, so the conftest fixture does not reach it. That is
+        # exactly how it wrote two "A Test Book" Tracks into the real CMS before anyone
+        # noticed: the guard has to be repeated wherever dependencies are built by hand.
+        payload_client=cast("PayloadClient", RefusingPayloadClient()),
     )
 
 

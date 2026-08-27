@@ -1315,6 +1315,127 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP17 (second half) — the Payload boundary — 2026-08-27
+
+**All acceptance criteria met.** A Track of *The Science of Getting Rich* is in Payload as
+**18 draft Leaves with 201 source references**, and the mandatory round-trip passes against
+real Payload.
+
+**The headline is not the boundary code. It is that Payload rejected content my own
+grounding gate had passed** — and it was right to. Detail below; it is the most important
+thing in this package.
+
+#### What landed
+
+| | |
+|---|---|
+| Track 42 | `draft`, `acquisition: public-domain`, `isPlaceholder: false`, 18 Leaves |
+| Leaves | orders 0–17, all `draft`, none published |
+| Source references | 201, **0 missing a note or a locator** |
+| DTK without a takeaway reference | **0** |
+
+`cms/client.py` is a deliberately small REST client — create, find, read. It has **no publish
+method at all**, and refuses any payload whose `_status` is not `draft` *before* the request
+is made. The boundary test that WP16 wrote as "no HTTP anywhere" was tightened rather than
+deleted: HTTP now lives in `cms/client.py` and is asserted to live nowhere else.
+
+**The draft Track deliberately omits `publisher`, `coverUrl`, `purchaseLinks` and
+`disclaimer`.** Payload relaxes required fields on drafts precisely so an incomplete record
+can exist, and the pipeline cannot know a retailer link or a cover image — inventing them
+would be fabrication of a different kind. A human supplies them at the publish gate, which is
+where the purchase-forward and non-endorsement requirements are actually enforced.
+
+#### The defect Payload caught, which grounding could not
+
+`POST /api/leaves` failed on Leaf 11 with *"Dinner Table Knowledge must be traceable to the
+book. Add a Source Reference with slide 'takeaway'."* But `ground_check` **had** verified a
+sourced takeaway claim. Both were correct; the corruption happened between them.
+
+Passage handles (`P1`…`P12`) are positional over the *retrieved* list. `GeneratedLeafRecord`
+stored only `cited_chunk_ids` — a **sorted set** of the ids actually cited. Rebuilding handles
+from that subset renumbers them. Leaf 11 cited P1, P2, P3, P4, **P7, P9**; the rebuild
+produced P1…P6. So:
+
+- **P7 and P9 resolved to nothing** — two references silently dropped, including the takeaway
+  one the Dinner Table fact depended on. *This* is what Payload caught.
+- **P5 and P6 pointed at different chunks than the model cited** — references carrying the
+  wrong chapter. **Nothing was catching this**, and it is precisely the mis-attribution
+  `LEGAL.md` exists to prevent: a citation naming the wrong chapter is worse than no citation,
+  because it looks checkable.
+
+Fixed by storing `passage_refs: dict[str, int]` on the record at the moment the handles are
+still the ones the model saw. Mutation-checked by restoring positional resolution: exactly
+the two tests named for it go red, nothing else.
+
+**The lesson worth carrying:** the CMS being an independent gate is not ceremony. Two
+enforcements of the same rule, written from different understandings, and the second caught a
+bug in the first's downstream. Had the pipeline owned both, this ships.
+
+#### Three more defects, all found by running it rather than by testing it
+
+**1. Unit tests were writing to the real CMS.** The moment `write_drafts_to_cms` joined the
+graph, a resume test ran to completion and created a 22-Leaf "A Test Book" Track in Payload —
+twice, because `test_durability` builds its dependencies in a **subprocess** where the conftest
+fixture does not reach. Nothing was wrong with the node; nothing stopped the test calling it.
+The CMS client is now injected through `NodeDependencies` and tests supply a stub that records
+instead of writing. Verified by counting CMS rows before and after a full suite run.
+
+**2. A graph whose shape changes cannot reach threads that already finished.** The run had
+reached `END` before the CMS node existed, so `resume` did nothing and reported success. Added
+`write-drafts --run-id`, a deliberate invocation of the same node, mirroring `purge-raw-text`.
+**WP19 will hit this again** when it adds gate 2 and the revise loop to runs that already exist.
+
+**3. An interrupted write duplicated nothing only by luck.** The node returns its record of
+what it wrote *on success*, so a write that died at Leaf 11 of 18 left eleven Leaves that state
+knew nothing about — a retry would have created eleven more. Idempotency is now asked of the
+CMS (`find_leaf` by track and order) rather than of local memory, which cannot go stale the
+same way.
+
+#### An environment trap worth recording
+
+The admin UI rendered **blank** at `127.0.0.1:3001` — no error on screen. Next 16's dev server
+rejects `/_next/*` requests carrying an `Origin` it does not allow, and its allowlist covers
+`localhost` but not the IP form. Payload loads its chunks `crossorigin`, so the app was
+**403-ing exactly one of its own JavaScript chunks**, which was enough to stop React mounting.
+Reproduced precisely: identical request with `Referer` → 200, with `Origin` → 403.
+
+`localhost:3001` works with no change. The real fix is `allowedDevOrigins` in
+`apps/admin/next.config` — **Manager's**, and worth doing because the failure presents as a
+blank page with nothing to diagnose from.
+
+The pipeline's `payload_url` now defaults to `localhost` so it never inherits the same trap.
+
+#### Read it yourself
+
+Read Leaf 6 back **through the CMS**, as the admin renders it. It holds up. The scenario is a
+real dilemma — two months into consulting, no clients, balance dropping — and the wrong options
+are built from the material rather than strawmanned: one is "focus on the shortfall and budget
+carefully", which is what a sensible person does and is wrong by the book's logic. The Dinner
+Table fact (Wattles dismissing scheduled prayer and "occult stunts") is a genuine deep cut, and
+13 references carry real chapter locators.
+
+**But this Track is a demonstration of the boundary, not launch content.** It was generated
+before WP17's shuffle fix, and both tells are measurably present in what is now in Payload:
+the correct option sits in position 2 in **15 of 18** Leaves and never in position 3, and it is
+also the longest option in **15 of 18**. A reader could score 83% without reading. It needs
+regenerating once WP19's editorial reviewer exists.
+
+#### Deferred, named
+
+- **Cleanup.** Fixture and mistake Tracks are sitting in the CMS as drafts: 30, 31, 37, 38, 39
+  (partial, with the wrong references), 40, 41. All `draft`, so invisible to readers. I did not
+  delete them — deletion is irreversible and not mine to decide.
+- **API keys instead of a password.** `Admins` has `auth: true` and no `useAPIKey`, so the
+  pipeline holds a login. An API key would be revocable per integration with no password in the
+  environment. `apps/admin` work.
+- **Least privilege still does not exist.** `pipeline@zoomout.local` was created as a dedicated
+  account, which buys attribution and revocability — but with no roles in Payload it can publish
+  exactly like a human can. The pipeline's never-publish guarantee is enforced entirely on the
+  pipeline's side. Same gap WP19 needs closed.
+- **`page` locators.** References carry `chapter` and `quote`; EPUBs have no page numbers, so
+  `page` is never populated. Honest rather than missing.
+
+
 ### Completed: WP17 — Leaf generation and grounding (CMS half blocked) — 2026-08-27
 
 **Generation and the grounding gate are done and verified against a real book. The Payload

@@ -12,13 +12,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import psycopg
 import pytest
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
+from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS, apply_schema
@@ -138,6 +139,31 @@ def make_plan(
     return LeafPlan(leaves=planned)
 
 
+class RefusingPayloadClient:
+    """A CMS client that fails loudly if a test ever reaches it.
+
+    Tests must not write to the real CMS. They did once — the moment `write_drafts_to_cms`
+    joined the graph, a resume test ran to the end and created a 22-Leaf "A Test Book" Track
+    in Payload. Nothing was wrong with the node; nothing had stopped the test from reaching
+    it. This is what stops it now.
+    """
+
+    def __init__(self) -> None:
+        self.created_tracks: list[dict[str, Any]] = []
+        self.created_leaves: list[dict[str, Any]] = []
+
+    def create_track(self, payload: dict[str, Any]) -> int:
+        self.created_tracks.append(payload)
+        return 9001
+
+    def create_leaf(self, payload: dict[str, Any]) -> int:
+        self.created_leaves.append(payload)
+        return 9100 + len(self.created_leaves)
+
+    def find_leaf(self, *, track_id: int, order_index: int) -> int | None:
+        return None
+
+
 @pytest.fixture
 def analysis() -> BookAnalysis:
     return BookAnalysis(
@@ -201,6 +227,8 @@ def deps(
         embedder=FakeEmbedder(),
         connect=connect,
         now=lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+        # Never a real client. See RefusingPayloadClient.
+        payload_client=cast("PayloadClient", RefusingPayloadClient()),
     )
 
 

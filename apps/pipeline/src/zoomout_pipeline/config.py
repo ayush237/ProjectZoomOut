@@ -105,6 +105,16 @@ class PipelineSettings(BaseSettings):
 
     runs_dir: Path = Path("runs")
 
+    # --- Payload, the CMS. The REST API is the only door (never its tables).
+    # `localhost`, deliberately not `127.0.0.1`. Next's dev server rejects requests to
+    # `/_next/*` carrying an `Origin` it does not allow, and its allowlist covers `localhost`
+    # but not the IP form — so the admin UI served from `127.0.0.1` 403s its own JavaScript
+    # and renders blank with nothing on screen to say why. The REST API is unaffected, but
+    # defaulting to the form that works everywhere avoids handing anyone that puzzle.
+    payload_url: str = "http://localhost:3001"
+    payload_email: str = ""
+    payload_password: str = ""
+
     @field_validator("database_url")
     @classmethod
     def _reject_known_foreign_databases(cls, value: str) -> str:

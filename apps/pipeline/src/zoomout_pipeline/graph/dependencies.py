@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 import psycopg
 
+from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.llm.client import EmbeddingClient, StructuredClient
 
@@ -33,6 +34,14 @@ class NodeDependencies:
     embedder: EmbeddingClient
     connect: ConnectionFactory
     now: Callable[[], datetime] = utc_now
+
+    # The CMS client, injected rather than constructed inside the node.
+    #
+    # Left None in production and built lazily on first use, so graph construction needs no
+    # credentials. **Tests must always supply one.** They previously did not, and the moment
+    # the CMS node joined the graph a unit test ran to completion and wrote a 22-Leaf Track
+    # into the real CMS — a test reaching a live system because nothing stopped it.
+    payload_client: PayloadClient | None = None
 
 
 __all__ = ["ConnectionFactory", "Iterator", "NodeDependencies", "utc_now"]

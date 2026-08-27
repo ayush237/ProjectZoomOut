@@ -3,15 +3,19 @@
     ingest ─> analyze ─> breakdown ─> [HUMAN GATE 1] ─> draft_leaf ─> extra_content
                              ▲   │                          ▲              │
                              └───┘                          │              ▼
-                    MAX_BREAKDOWN_ATTEMPTS                  └──────── ground_check ─> END
-                                                          MAX_LEAF_ATTEMPTS
+                    MAX_BREAKDOWN_ATTEMPTS                  └──────── ground_check
+                                                          MAX_LEAF_ATTEMPTS   │
+                                                                              ▼
+                                                              write_drafts_to_cms ─> END
 
 `ground_check` routes three ways: back to `draft_leaf` with its findings when a Leaf fails
 and the cap allows another attempt, on to the next Leaf when it passes, and to the end when
 the plan is exhausted.
 
-Still absent, deliberately: `publish_to_cms` (WP17, blocked on Payload's `acquisition`
-field), assets (WP18) and `editorial_review` (WP19).
+`write_drafts_to_cms` is §3.3's `publish_to_cms`, renamed: it writes drafts and must never
+publish, and a node named for publishing is a name that eventually gets believed.
+
+Still absent, deliberately: assets (WP18) and `editorial_review` (WP19).
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
+from zoomout_pipeline.graph.cms_node import make_write_drafts_node
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.leaf_nodes import (
     make_draft_leaf_node,
@@ -114,6 +119,7 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_node("draft_leaf", make_draft_leaf_node(deps))
     graph.add_node("extra_content", make_extra_content_node(deps))
     graph.add_node("ground_check", make_ground_check_node(deps))
+    graph.add_node("write_drafts_to_cms", make_write_drafts_node(deps))
 
     graph.add_edge(START, "ingest")
     graph.add_edge("ingest", "analyze")
@@ -129,8 +135,9 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_conditional_edges(
         "ground_check",
         route_after_ground_check,
-        {"draft_leaf": "draft_leaf", "done": END},
+        {"draft_leaf": "draft_leaf", "done": "write_drafts_to_cms"},
     )
+    graph.add_edge("write_drafts_to_cms", END)
 
     return graph
 

@@ -230,6 +230,42 @@ def measure_breakdown(
         typer.echo(f"{s.model:26s} tokens {s.total_tokens:8,d}   usd {s.total_usd:.4f}")
 
 
+@app.command("write-drafts")
+def write_drafts(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be written.")],
+) -> None:
+    """Write a finished run's Leaves into Payload as drafts.
+
+    The same node the graph runs, invoked deliberately. It exists because a graph whose
+    shape changes cannot reach threads that already terminated: a run that reached `END`
+    before this node was added stays complete, and resuming it does nothing. Re-running is
+    safe — the Track and Leaf ids are recorded in state, so a second invocation writes only
+    what is missing.
+    """
+    from zoomout_pipeline.graph.cms_node import make_write_drafts_node
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        if not state.generated:
+            typer.secho(f"run {run_id} has no generated Leaves to write", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        result = make_write_drafts_node(deps)(state)
+        graph.update_state(config, result)  # type: ignore[attr-defined]
+
+    typer.secho(
+        f"wrote Track {result['cms_track_id']} with {len(result['cms_leaf_ids'])} draft Leaves",
+        fg=typer.colors.GREEN,
+    )
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
