@@ -43,6 +43,12 @@ DEFAULT_BREAKDOWN_MODEL = "gemini-3.6-flash"
 # recall nobody would notice.
 DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
 
+# WP17 nodes. Separate settings rather than one shared "text model" because §4a already
+# forces a split — grounding can stay on a cheap model while editorial review (WP19) cannot
+# — and nodes move between models as they are tuned.
+DEFAULT_DRAFT_MODEL = "gemini-3.6-flash"
+DEFAULT_EXTRAS_MODEL = "gemini-3.6-flash"
+
 
 class PipelineSettings(BaseSettings):
     """Everything the pipeline needs from its environment."""
@@ -86,6 +92,8 @@ class PipelineSettings(BaseSettings):
     analyze_model: str = DEFAULT_ANALYZE_MODEL
     breakdown_model: str = DEFAULT_BREAKDOWN_MODEL
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    draft_model: str = DEFAULT_DRAFT_MODEL
+    extras_model: str = DEFAULT_EXTRAS_MODEL
 
     # Set true once a book that is not public domain goes through. §4a: paid tier only,
     # because the free tier trains on submitted content.

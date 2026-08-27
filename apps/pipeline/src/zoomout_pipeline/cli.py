@@ -99,10 +99,28 @@ def run(
 def resume(
     run_id: Annotated[str, typer.Option(help="The run to continue.")],
 ) -> None:
-    """Continue a run after the plan file has been edited and approved."""
+    """Continue a run — from a human gate, or from wherever it was killed.
+
+    Those are two different continuations and the difference matters. A run paused at
+    `interrupt` is waiting for an answer and resumes with one; a run killed mid-node has no
+    question outstanding and simply picks up from its last checkpoint. Sending a resume
+    value to the second does nothing, which looks exactly like a run that will not restart.
+    """
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": run_id}}
-        result: dict[str, Any] = graph.invoke(Command(resume=True), config)  # type: ignore[attr-defined]
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        waiting = any(getattr(task, "interrupts", None) for task in snapshot.tasks)
+        if waiting:
+            typer.echo("resuming from a human gate")
+            result: dict[str, Any] = graph.invoke(Command(resume=True), config)  # type: ignore[attr-defined]
+        else:
+            typer.echo(f"continuing from the last checkpoint (next: {snapshot.next or 'end'})")
+            result = graph.invoke(None, config)  # type: ignore[attr-defined]
 
     _report(result, run_id=run_id)
 
@@ -130,6 +148,13 @@ def status(run_id: Annotated[str, typer.Option()]) -> None:
     if state.structure_check:
         typer.echo(f"structure  : {'PASS' if state.structure_check.passed else 'FAIL'}")
     typer.echo(f"approved   : {state.approved}")
+    if state.approved and state.plan is not None:
+        typer.echo(
+            f"leaves done: {len(state.generated)} of {len(state.plan.leaves)} "
+            f"(cursor {state.leaf_cursor})"
+        )
+        if state.leaf_escalations:
+            typer.echo(f"escalated  : {sorted(state.leaf_escalations)}")
     typer.echo(f"plan file  : {state.plan_file or '(not written)'}")
     _echo_cost(state)
 

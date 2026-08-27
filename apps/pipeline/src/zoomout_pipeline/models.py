@@ -150,3 +150,111 @@ class LeafPlan(BaseModel):
         if orders != list(range(len(value))):
             raise ValueError(f"Leaf order must be contiguous from 0; got {orders}")
         return value
+
+
+# ---------------------------------------------------------------------------- WP17
+# Generated Leaf content.
+#
+# These mirror `packages/shared/src/content.ts`, which is frozen. They are not a second
+# definition of the content model — they are what the pipeline must produce so that Payload
+# and the backend, which enforce the same shapes independently, accept it. Where the two
+# could drift, the TypeScript is right.
+
+
+class SlideKey(StrEnum):
+    """The five slides, matching SLIDE_KEYS in content.ts exactly."""
+
+    SUMMARY = "summary"
+    SCENARIO = "scenario"
+    PAYOFF = "payoff"
+    STICKY_NOTES = "stickyNotes"
+    TAKEAWAY = "takeaway"
+
+
+class Citation(BaseModel):
+    """A claim's link to the passage that supports it.
+
+    `passage_ref` is the handle the model was shown (`P1`, `P2` …). It can only cite what it
+    was given, so a ref that does not resolve is an invention rather than a mistake — which
+    is what makes the grounding check mechanical rather than a judgement.
+    """
+
+    passage_ref: str = Field(min_length=1)
+    note: str = Field(
+        min_length=1, description="What in the passage supports the claim, in your own words."
+    )
+    quote: str | None = Field(
+        default=None,
+        description="An exact span from the passage, or omitted. Never a paraphrase.",
+    )
+
+
+class Claim(BaseModel):
+    """One factual assertion made on a slide, with its support."""
+
+    slide_key: SlideKey
+    text: str = Field(min_length=1, description="The assertion, as it appears on the slide.")
+    citations: list[Citation] = Field(min_length=1)
+
+
+class ScenarioOptionDraft(BaseModel):
+    text: str = Field(min_length=1)
+    is_correct: bool
+
+
+class GeneratedLeaf(BaseModel):
+    """The five slides for one Leaf, before they become a Payload draft.
+
+    Slides are five named fields rather than a list, exactly as `content.ts` has them: the
+    structure is fixed for the life of the product, so a missing slide should be a type
+    error rather than a runtime surprise.
+    """
+
+    summary_body: str = Field(min_length=1)
+
+    scenario_prompt: str = Field(min_length=1)
+    scenario_options: list[ScenarioOptionDraft] = Field(min_length=3, max_length=3)
+
+    payoff_body: str = Field(min_length=1)
+
+    sticky_notes: list[str] = Field(min_length=2, max_length=6)
+
+    takeaway_body: str = Field(min_length=1)
+
+    claims: list[Claim] = Field(
+        default_factory=list,
+        description="Every factual assertion on any slide, with the passages supporting it.",
+    )
+
+    @field_validator("scenario_options")
+    @classmethod
+    def _exactly_one_correct(cls, value: list[ScenarioOptionDraft]) -> list[ScenarioOptionDraft]:
+        correct = sum(1 for option in value if option.is_correct)
+        if correct != 1:
+            raise ValueError(f"A scenario must have exactly one correct option; got {correct}")
+        return value
+
+
+class GeneratedExtras(BaseModel):
+    """Dinner Table Knowledge and apply-in-life, generated separately from the slides."""
+
+    dinner_table_knowledge: str | None = Field(default=None, min_length=1)
+    apply_in_life: str | None = Field(default=None, min_length=1)
+    claims: list[Claim] = Field(default_factory=list)
+
+
+class GeneratedLeafRecord(BaseModel):
+    """A finished, grounded Leaf, ready to be written to the CMS as a draft.
+
+    Holds the generated content and the source references derived from its citations — not
+    the passage text those citations point at. The audit trail lives in the database, where
+    the purge can reason about it; duplicating it into checkpointed state would put book text
+    somewhere retention cannot reach.
+    """
+
+    order: int = Field(ge=0)
+    title: str = Field(min_length=1)
+    leaf: GeneratedLeaf
+    extras: GeneratedExtras
+    cited_chunk_ids: list[int] = Field(default_factory=list)
+    attempts: int = 1
