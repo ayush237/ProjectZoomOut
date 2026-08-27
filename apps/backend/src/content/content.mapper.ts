@@ -81,6 +81,10 @@ export function mapTrack(document: CmsTrack): MappingResult<Track> {
     status: mapStatus(document._status),
     leafCount: document.leafCount ?? 0,
     isPlaceholder: document.isPlaceholder ?? true,
+    // Falls back to the same default the schema and the CMS use. A Track written before
+    // the field existed has no value at all here, and `undocumented` is the honest
+    // reading of that — not a repair, just the answer spelled out.
+    acquisition: document.acquisition ?? 'undocumented',
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
   };

@@ -1815,6 +1815,71 @@ is rejected — never on prose, via a scripted fake. The normal gate touches no 
 <!-- ### Completed: <title> — YYYY-MM-DD
 (paste the full completion report here) -->
 
+### Completed: WP15.1 — Track `acquisition` field, and the red typecheck — 2026-08-27
+
+**Status:** 6 of 7 acceptance criteria verified by execution. **The seventh — the admin-UI half of the device gate — needs the founder**, because it requires signing into Payload and I do not enter passwords. The REST half of that gate is verified. Branch `wp15.1-track-acquisition`, off `main` at `2560b8f`.
+
+**Gates:** `npm run typecheck` **green from the repo root** — the objective's second half. `npm test` 946 passing (71 shared, 170 admin, 473 backend, 232 mobile). `npm run build` exit 0. Lint exit 0 — see the note on `apps/pipeline` below, which is not mine.
+
+---
+
+#### 1 — `acquisition` on Track
+
+Four values, `undocumented` the default, in three places that check each other: `TRACK_ACQUISITION_STATUSES` in `packages/shared/src/content.ts`, a `select` in the Tracks collection whose options are **built from that same list** rather than retyped, and `mapTrack` defaulting on read.
+
+`content.ts` re-frozen 2026-08-27, WP15.1 named, with the reasoning recorded in the header — the field exists before WP17 writes its first Track precisely because the answer cannot be reconstructed afterwards.
+
+**Verified by query, not by exit code:**
+
+| Check | Result |
+|---|---|
+| Tracks carrying `undocumented` after the push | **28 of 28**, zero NULLs |
+| Published Tracks that still map and validate | **27 of 27** through the real `mapTrack` |
+| Leaves still mapping (no collateral damage) | **21 of 21** |
+| Round-trip: written via Payload → read anonymously over REST | `public-domain` in, `public-domain` out, DB agrees |
+| Unknown status `borrowed` | **rejected** — "The following field is invalid: Acquisition" |
+| Publishing blocked by the value? | **No.** 27 Tracks sit published on `undocumented`; the round-trip Track stayed `published` throughout |
+| Empty database | 21 tables, `acquisition` present with the right default, enum holding exactly the four values in order |
+
+The 28th Track is a draft, so it is not served — by design, not by failure. Track 29 was restored to `undocumented` afterwards; the database is back to 28/28.
+
+**The column is nullable with a default.** That is Payload's choice, and it makes `mapTrack`'s `?? 'undocumented'` reachable at runtime even though the generated type says the field is always present — the generated type describes documents written *since* the column existed, not rows that predate it.
+
+#### 2 — the red typecheck, and a test that was weaker than it looked
+
+Fixed at the fixture as instructed: `'dot'` stays, reaching the object through a cast against a named alias for the generated union, with a comment explaining that a `select` column will hold whatever a pipeline writes into it regardless of what TypeScript says.
+
+**Then the mandatory mutation check found the test was passing for the wrong reason.** Making the mapper silently drop an unknown format — a fair reading of "remove the validation" — left all 44 tests green. The Leaf was still rejected, but by a *different* rule: `diagramAssetSchema` separately refuses a `spec` with no `specFormat` to re-render it from. The enum was never what the assertion was resting on.
+
+So the test now has a second case: an unknown format with **no spec**, where the enum is the only thing left that can reject the Leaf. Both mutations now redden it —
+
+| Mutation | Before | After |
+|---|---|---|
+| `diagramSpecFormatSchema` → `z.string()` (the handoff's required check) | 1 red | **2 red** |
+| Mapper launders an unknown format away | **0 red — survived** | **1 red** |
+
+`mapLeaf` is unchanged. The gap was in the test, and it would have hidden a real regression: a mapper that dropped unknown formats would serve a diagram with no format at all rather than refusing it.
+
+#### Fixtures
+
+`acquisition` is required on the domain `Track` (a `.default()` makes the *output* type non-optional, same as `isPlaceholder`), so eight Track fixtures needed the field. Four of the errors TypeScript reported as `TS2719 "two different types with this name exist"` were this same missing property wearing a confusing hat.
+
+---
+
+#### Not mine, but it will bite CI: `apps/pipeline/.venv`
+
+`npm run lint` from the repo root **fails on a vendored Python virtualenv** — `apps/pipeline/.venv/.../emscripten_fetch_worker.js`, dozens of `prefer-const` and `no-undef` errors in third-party code.
+
+It is not from this branch. `apps/pipeline` has **zero tracked files on `main`**; the directory is an untracked leftover from the WP16/WP17 work that sits in the working tree across checkouts. `wp16-pipeline-skeleton` already ignores `apps/pipeline/**` in `eslint.config.js`, so this resolves itself when that branch merges. Excluding the untracked directory, lint on this branch is exit 0.
+
+**I did not add the ignore here**, deliberately — duplicating it would conflict with the branch that already has it. But `.venv` is **neither gitignored nor eslint-ignored on `main`**, which is worth a ruling of its own: right now nothing stops a virtualenv being committed.
+
+#### What needs the founder
+
+**The admin-UI half of the device gate.** Payload's dev server is running on `http://localhost:3001` (use `localhost`, not `127.0.0.1` — Next 16 blocks the latter as a cross-origin dev host). Open any Track, confirm **Acquisition** appears in the right-hand sidebar with the four options, change it, save.
+
+Everything that half would prove short of the rendering itself is already verified: the admin app **builds** with the field, the collection route returns 200, the value written through Payload's own hooks round-trips to the REST API, and an invalid value is refused.
+
 ### Completed: WP15 — Leaf v2: assets and apply-in-life — 2026-08-13
 
 **Status:** All 10 acceptance criteria verified by execution. Cold gate green with `dist` and `.next` deleted, then `npm ci`: **932 tests** (71 shared, 170 admin, 459 backend, 232 mobile), lint, typecheck and build all exit 0 — plus **6 backend mapper tests added afterwards**, taking backend to 465 and the total to 938.

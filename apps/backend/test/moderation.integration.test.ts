@@ -43,6 +43,7 @@ const TRACK: CmsTrack = {
     { retailer: 'Example Books', url: 'https://example.test/book', isAffiliate: false, id: 'r1' },
   ],
   leafCount: 1,
+  acquisition: 'undocumented',
   isPlaceholder: true,
   createdAt: '2026-08-08T12:00:00.000Z',
   updatedAt: '2026-08-08T12:00:00.000Z',

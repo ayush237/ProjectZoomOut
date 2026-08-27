@@ -1,3 +1,4 @@
+import type { TrackAcquisition } from '@zoomout/shared';
 import type { Leaf as CmsLeaf, Track as CmsTrack } from '@zoomout/shared/cms';
 import { describe, expect, it } from 'vitest';
 
@@ -23,6 +24,7 @@ function cmsTrack(overrides: Partial<CmsTrack> = {}): CmsTrack {
       { retailer: 'Example Books', url: 'https://example.test/book', isAffiliate: null, id: 'r1' },
     ],
     leafCount: 20,
+    acquisition: 'undocumented',
     isPlaceholder: true,
     createdAt: '2026-08-08T12:00:00.000Z',
     updatedAt: '2026-08-08T12:00:00.000Z',
@@ -64,6 +66,11 @@ function cmsLeaf(overrides: Partial<CmsLeaf> = {}): CmsLeaf {
     ...overrides,
   };
 }
+
+/** The generated type of `stickyNotes.diagram.specFormat` — the union a negative test has to escape. */
+type CmsSpecFormat = NonNullable<
+  NonNullable<NonNullable<CmsLeaf['stickyNotes']>['diagram']>['specFormat']
+>;
 
 const expectOk = <T>(result: { ok: boolean; value?: T; reasons?: readonly string[] }): T => {
   expect(result.ok, `expected mapping to succeed, got: ${(result.reasons ?? []).join(' | ')}`).toBe(
@@ -124,6 +131,51 @@ describe('mapTrack', () => {
 
   it('rejects a non-URL cover', () => {
     expect(mapTrack(cmsTrack({ coverUrl: 'not-a-url' })).ok).toBe(false);
+  });
+
+  /**
+   * `acquisition` (WP15.1). Records where a Track's source text came from, so that
+   * "which Tracks must be regenerated once the acquisition question resolves?" stays a
+   * query rather than an act of memory.
+   */
+  describe('acquisition', () => {
+    it.each(['public-domain', 'licensed', 'purchased', 'undocumented'] as const)(
+      'carries %s through',
+      (status) => {
+        const track = expectOk(mapTrack(cmsTrack({ acquisition: status })));
+
+        expect(track.acquisition).toBe(status);
+      },
+    );
+
+    it('defaults to undocumented when the CMS document has no value', () => {
+      // The 28 Tracks that predate the field. Payload's generated type says the field is
+      // always present because the collection marks it required — but that describes
+      // documents written *since* the column existed, and the cast is how a row written
+      // before it is expressed. `undocumented` is not a repair here; it is the honest
+      // reading of a Track nobody has answered the question for.
+      const legacy = { ...cmsTrack(), acquisition: undefined } as unknown as CmsTrack;
+
+      expect(expectOk(mapTrack(legacy)).acquisition).toBe('undocumented');
+    });
+
+    it('rejects a status outside the four', () => {
+      const result = mapTrack(cmsTrack({ acquisition: 'borrowed' as unknown as TrackAcquisition }));
+
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reasons.join(' ')).toContain('acquisition');
+    });
+
+    it('does not gate publishing', () => {
+      // Deliberate, and the thing most likely to be "helpfully" tightened later: the
+      // acquisition policy is an unmade launch decision, so enforcing one here would
+      // block content on a rule nobody has written.
+      const track = expectOk(
+        mapTrack(cmsTrack({ acquisition: 'undocumented', _status: 'published' })),
+      );
+
+      expect(track.status).toBe('published');
+    });
   });
 
   it('names the Track in its rejection reasons', () => {
@@ -277,12 +329,59 @@ describe('mapLeaf', () => {
       expect(result.ok === false && result.reasons.join(' ')).toContain('scenario.image.alt');
     });
 
+    /**
+     * Two cases, and the second is the one that bites.
+     *
+     * With a `spec` present, a Leaf carrying an unknown format is rejected even if the
+     * mapper quietly drops the format — because `diagramAssetSchema` separately refuses
+     * a spec with no format to re-render it from. That makes the first case pass for a
+     * reason that has nothing to do with the enum. The second case removes the spec, so
+     * the *only* thing left that can reject the Leaf is the format not being one of the
+     * two the renderer knows.
+     */
     it('rejects a diagram whose spec format is not one the renderer knows', () => {
       const result = mapLeaf(
         cmsLeaf({
           stickyNotes: {
             ...cmsLeaf().stickyNotes,
-            diagram: { url: image.url, alt: 'A diagram', spec: 'digraph {}', specFormat: 'dot' },
+            diagram: {
+              url: image.url,
+              alt: 'A diagram',
+              spec: 'digraph {}',
+              // Invalid on purpose — the invalid value *is* the assertion, so replacing
+              // it with a real format would make this file typecheck and this test
+              // prove nothing. It has to arrive through a cast because Payload's
+              // generated union admits only the two formats the renderer knows.
+              //
+              // The cast is not the test cheating. `specFormat` is a `select` column,
+              // and Postgres holds whatever is written into it — a pipeline, a hand-run
+              // UPDATE, or a Payload version predating a format's removal can all put a
+              // string there that the generated type says is impossible. This asserts
+              // the mapper rejects that row rather than serving it.
+              specFormat: 'dot' as unknown as CmsSpecFormat,
+            },
+          },
+        }),
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.reasons.join(' ')).toContain(
+        'stickyNotes.diagram.specFormat',
+      );
+    });
+
+    it('rejects an unknown spec format even with no spec to re-render', () => {
+      const result = mapLeaf(
+        cmsLeaf({
+          stickyNotes: {
+            ...cmsLeaf().stickyNotes,
+            // No `spec`, so the "a spec needs a format" refinement cannot fire and the
+            // enum is the only thing standing between `'dot'` and a served Leaf.
+            diagram: {
+              url: image.url,
+              alt: 'A diagram',
+              specFormat: 'dot' as unknown as CmsSpecFormat,
+            },
           },
         }),
       );

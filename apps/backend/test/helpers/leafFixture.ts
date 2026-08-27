@@ -55,6 +55,7 @@ export function buildTrack(overrides: Partial<Track> = {}): Track {
     purchaseLinks: [{ retailer: 'Example', url: 'https://example.test/b', isAffiliate: false }],
     status: 'published',
     leafCount: 1,
+    acquisition: 'undocumented',
     isPlaceholder: false,
     createdAt: '2026-08-08T12:00:00.000Z',
     updatedAt: '2026-08-08T12:00:00.000Z',
