@@ -134,3 +134,37 @@ def test_embedding_is_paced_per_text_not_per_call() -> None:
     client.embed(texts=["x"] * 40, model="m", node="ingest")
 
     assert clock.slept, "80 texts against a 60/minute budget must have waited"
+
+
+def test_a_timeout_is_retried_like_a_rate_limit() -> None:
+    """A hung call is 'no answer yet', not 'a bad answer'.
+
+    Before a request timeout existed, one wedged call held a Track run for 83 minutes and
+    looked exactly like progress. The timeout makes it an error; this makes it a recoverable
+    one.
+    """
+    clock = FakeClock()
+    sdk = FakeSDK(failures=2, error=RuntimeError("504 Deadline Exceeded"))
+
+    result = _client(sdk, clock).generate_structured(
+        prompt="p", schema=Answer, model="m", node="draft_leaf"
+    )
+
+    assert result.value.answer == "ok"
+    assert sdk.calls == 3
+
+
+def test_a_request_timeout_is_configured_on_the_client() -> None:
+    """The SDK defaults to waiting forever, which is the whole problem."""
+    from zoomout_pipeline.config import PipelineSettings
+    from zoomout_pipeline.llm.client import GeminiClient as _Client
+
+    settings = PipelineSettings(
+        database_url="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline",
+        gemini_api_key="k",
+        request_timeout_seconds=12.0,
+    )
+    client = _Client.from_settings(settings)
+
+    options = client._client._api_client._http_options
+    assert int(getattr(options, "timeout", 0) or 0) == 12_000

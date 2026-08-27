@@ -1315,6 +1315,152 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP17 — Leaf generation and grounding (CMS half blocked) — 2026-08-27
+
+**Generation and the grounding gate are done and verified against a real book. The Payload
+writer is not built — it is blocked exactly as the handoff anticipated.**
+
+A full Track of *The Science of Getting Rich*: **18 of 18 Leaves generated and grounded on
+the first attempt, zero escalations, 310,736 tokens.**
+
+#### The grounding gate
+
+Mechanical, pass/fail, and separate from anything editorial. It works because the model is
+shown a numbered set of retrieved passages and may cite **only** those handles, which turns
+three questions into matters of fact rather than judgement:
+
+- a citation naming a handle that was never retrieved is an **invention**, not a mistake;
+- a `quote` must appear **verbatim** in the passage it cites — typographic noise (curly
+  quotes, dashes, wrapping) is normalised, words are not;
+- every claim carries a citation, and Dinner Table Knowledge requires a sourced claim on the
+  takeaway slide — a third independent enforcement alongside the shared schema and Payload.
+
+A failing Leaf is redrafted **with the findings attached**, capped at `MAX_LEAF_ATTEMPTS`,
+then escalated. It is never emitted with a warning.
+
+Both Tier A criteria are mutation-checked. Neutering the "citation must resolve" rule turns
+**2** tests red, both about invented citations; removing the DTK rule turns exactly **1**
+red. Nothing else moves in either case.
+
+**Retrieval is confined to the chapters a Leaf's plan declared**, so a Leaf cannot cite a
+chapter its own plan never claimed. That keeps the approved plan load-bearing rather than
+decorative — gate 1 decides what a Leaf may draw on, not merely what it is called.
+
+Passages a Leaf cites are marked `is_cited`, which is what makes `purge-raw-text` safe: they
+survive as the audit trail proving the claim after the book is deleted (R6). Across the
+Track, **79 of 136 chunks** were cited.
+
+#### Two defects the read-it-yourself gate found, which no test would have
+
+**1. The scenario gate was answerable without reading. Fixed.**
+
+Across 18 Leaves the correct option landed in position **B in 15 of them, and in C never**.
+"Always pick B" scored 83%. `PRODUCT.md` calls active recall the entire product thesis, and
+it was decorative.
+
+Fixed mechanically rather than by argument with a prompt: options are now shuffled with a
+seed derived from the run id and Leaf order, so it is deterministic — a regenerated Leaf
+shuffles identically and diffs stay meaningful.
+
+**2. The correct option is the longest in 15 of 18. Not fixed — flagged.**
+
+Chance is about 6. A reader who always picks the longest option scores 83% without
+understanding anything, which is the same failure by a different route. The prompt already
+says not to signal the answer through length and the model ignored it.
+
+I have **not** attempted a mechanical fix. Length is an editorial property, not a legal one,
+and rejecting on it would spend grounding revisions on style. **This is the strongest
+argument yet for WP19's editorial reviewer**, and I would give it this as its first concrete
+job rather than inventing a check here.
+
+**Note:** the measured Track predates the shuffle, so those 18 Leaves still carry the
+position bias. The fix is verified by test and applies to every future run; regenerating
+this Track is a 25-minute rerun whenever it is wanted.
+
+#### A defect found by running it, not by testing it
+
+**A model call hung for 83 minutes and looked exactly like progress.** The SDK defaults to
+no request timeout at all, so one wedged HTTP call held the Track run indefinitely while the
+process stayed alive and the log simply stopped.
+
+For a batch pipeline whose runs span days across human gates, that is the difference between
+slow and silently dead. There is now a `request_timeout_seconds` setting (default 180), and
+timeouts join rate limits as **retryable** — a 404 will still be a 404 in five seconds, a
+timeout might not be.
+
+`resume` also gained a distinction it should always have had: **answering a human gate and
+continuing a run that was killed mid-node are different continuations.** Sending a resume
+value to the second does nothing, which looks exactly like a run that will not restart.
+Found when the real Track was killed at Leaf 1.
+
+#### Read it yourself
+
+I read Leaf 6, *"Hold unwavering belief without waiting for visible proof"*, as a reader.
+
+**It is good.** The scenario is concrete and genuinely uncomfortable — two months into
+consulting, no clients, balance dropping. The wrong options are the strong part: one is
+*focus on the shortfall and budget carefully*, which is what a sensible person would do and
+is wrong by the book's logic; the other schedules a prayer hour and then worries the rest of
+the day, which the payoff specifically dismantles. That is a distractor built from the
+material rather than a strawman.
+
+The Dinner Table fact earns its name: Wattles explicitly dismissing concentration exercises,
+scheduled prayer and "occult stunts" is genuinely surprising for a New Thought book, and it
+is the kind of thing a person repeats. Apply-in-life is a real action with a time attached.
+
+**The prose is flat in places** — "realizing a vision requires taking a mental attitude of
+immediate present ownership" is stiff in a way a human editor would fix. Another job for
+WP19.
+
+**One product question that is not mine to settle.** The Leaf teaches Wattles' 1910
+metaphysics *sincerely* — "impress your purpose upon the formless substance" is presented as
+operative. That is exactly what the prompt instructs, and correctly so: quietly modernising
+an author's claims is its own form of putting words in their mouth. But it means ZoomOut will
+ship pseudoscience in the author's voice. The non-endorsement disclaimer covers the legal
+position; whether it covers the **editorial** one is a founder call, and it will recur with
+every book in this genre. Flagging it now rather than at launch.
+
+#### Blocked: the CMS writer
+
+**Payload's Track collection has no `acquisition` field.** WP15.1 was handed to Manager on
+2026-08-26 and has not landed. Per the handoff I stopped rather than working around it.
+
+Creating a Track in Payload without an acquisition status is precisely the record R6 says
+must never exist — the entire point of recording it is that "which Tracks must be
+regenerated when the source question resolves" stays a query rather than an act of memory.
+
+So this remains unbuilt and unverified: the REST client, the draft write, the
+`acquisition` write, the never-publishes assertion **against real Payload**, and the
+maximal-fixture round-trip. That last one is not optional when it comes: WP15 shipped a
+mapper that silently dropped three optional fields with 932 tests green, and source
+references are optional fields.
+
+**Payload also was not running** on this machine, so even the round-trip harness could not
+have been exercised today.
+
+#### Cost — one full Track
+
+**310,736 tokens.** Reported as $0.0001 with `gemini-3.6-flash` listed unpriced; the 3.x
+rates remain unverified and naming the model beats inventing a number. Ingest was reused, so
+this excludes the one-off embedding of the book.
+
+Roughly 17,000 tokens per Leaf across `draft_leaf` and `extra_content`, plus one embedding
+per Leaf for retrieval. At Flash rates this is small; the number that will matter is WP18's
+images, which are per-Leaf and priced per image.
+
+#### Deferred, and named
+
+- **Everything CMS-side** (above).
+- **A semantic entailment check.** Grounding proves a claim is *anchored* to a real passage,
+  not that the passage *argues* for it. A model could cite a genuine but irrelevant passage
+  and pass. Closing that needs an LLM judge, which is a different instrument — and it should
+  not be folded into the mechanical gate, because the value of that gate is that it cannot
+  be argued with.
+- **Sticky notes cluster at 3–4** of an allowed 2–6. Not wrong, just unexplored.
+- **One book.** Every measurement is Wattles.
+- **The length tell** (above) — WP19.
+
+
 ### Completed: WP16.1 — The breakdown prompt, and the model question answered properly — 2026-08-26
 
 **All acceptance criteria met.** The prompt rewrite worked, decisively. The model question

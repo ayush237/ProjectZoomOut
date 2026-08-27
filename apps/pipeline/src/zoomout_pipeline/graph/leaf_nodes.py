@@ -15,6 +15,8 @@ revised, and at the cap it escalates to a human. It is never emitted with a warn
 
 from __future__ import annotations
 
+import hashlib
+import random
 from typing import Any
 from uuid import UUID
 
@@ -119,6 +121,23 @@ def retrieve_for_leaf(
     return passages, spend
 
 
+def shuffle_options(leaf: GeneratedLeaf, *, seed: str) -> GeneratedLeaf:
+    """Reorder the scenario options deterministically.
+
+    Measured across a real 18-Leaf Track: the model placed the correct option second in
+    **15 of 18** Leaves and never third. "Always pick B" scored 83% without reading anything,
+    which makes the unlock gate decorative — and `PRODUCT.md` calls active recall the entire
+    product thesis.
+
+    Position bias is not worth arguing with a prompt about when we control the ordering. The
+    seed is derived from the run and the Leaf so a regenerated Leaf shuffles identically,
+    which keeps runs reproducible and diffs meaningful.
+    """
+    options = list(leaf.scenario_options)
+    random.Random(hashlib.sha256(seed.encode()).hexdigest()).shuffle(options)
+    return leaf.model_copy(update={"scenario_options": options})
+
+
 def _with_cost(state: PipelineState, *spends: TokenSpend) -> RunCost:
     ledger = RunCost(entries=list(state.cost.entries))
     for spend in spends:
@@ -168,6 +187,8 @@ def make_draft_leaf_node(deps: NodeDependencies) -> Node:
             node="draft_leaf",
         )
 
+        drafted = shuffle_options(result.value, seed=f"{state.run_id}:{planned.order}")
+
         log.info(
             "draft_leaf.complete",
             claims=len(result.value.claims),
@@ -176,7 +197,7 @@ def make_draft_leaf_node(deps: NodeDependencies) -> Node:
         )
         return {
             "current_passage_ids": [p.chunk_id for p in passages],
-            "current_draft": result.value,
+            "current_draft": drafted,
             "cost": _with_cost(state, embed_spend, result.spend),
         }
 

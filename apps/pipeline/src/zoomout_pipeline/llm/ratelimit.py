@@ -36,6 +36,33 @@ def is_rate_limited(error: Exception) -> bool:
     return "429" in text or "RESOURCE_EXHAUSTED" in text
 
 
+# Anything that means "no answer yet", as opposed to "here is a bad answer".
+_TRANSIENT_MARKERS = (
+    "timeout",
+    "timed out",
+    "deadline exceeded",
+    "connection reset",
+    "connection aborted",
+    "temporarily unavailable",
+    "503",
+    "504",
+)
+
+
+def is_retryable(error: Exception) -> bool:
+    """Whether asking again could plausibly help.
+
+    A 404 will still be a 404 in five seconds; a timeout might not be. The distinction
+    matters because retrying the first only wastes a run, while not retrying the second
+    ends one — this pipeline had a call hang for 83 minutes with no timeout configured,
+    and a batch job that spans days cannot tell a hung request from work in progress.
+    """
+    if is_rate_limited(error):
+        return True
+    text = str(error).lower()
+    return any(marker in text for marker in _TRANSIENT_MARKERS)
+
+
 def retry_delay_seconds(error: Exception, *, attempt: int) -> float:
     """Prefer the delay the API asked for; fall back to exponential backoff."""
     match = _RETRY_DELAY_PATTERN.search(str(error))

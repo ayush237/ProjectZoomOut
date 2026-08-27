@@ -26,7 +26,7 @@ from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS
 from zoomout_pipeline.llm.ratelimit import (
     MAX_RETRIES,
     RateLimiter,
-    is_rate_limited,
+    is_retryable,
     retry_delay_seconds,
 )
 from zoomout_pipeline.logging import get_logger
@@ -96,21 +96,30 @@ class GeminiClient:
         project: str = "",
         location: str = "us-central1",
         limiter: RateLimiter | None = None,
+        request_timeout_seconds: float = 180.0,
     ) -> None:
         from google import genai
+        from google.genai import types
+
+        # Without this the SDK waits forever. A batch pipeline whose runs span days cannot
+        # distinguish a hung request from a slow one, so a call that will never answer looks
+        # exactly like progress — it did, for 83 minutes, before this was added.
+        http_options = types.HttpOptions(timeout=int(request_timeout_seconds * 1000))
 
         if use_vertex:
             if not project:
                 raise LLMError("Vertex AI needs a project id; set ZOOMOUT_PIPELINE_VERTEX_PROJECT.")
             # Credentials come from Application Default Credentials, so nothing secret is
             # passed here or stored on disk by this package.
-            self._client = genai.Client(vertexai=True, project=project, location=location)
+            self._client = genai.Client(
+                vertexai=True, project=project, location=location, http_options=http_options
+            )
         else:
             if not api_key:
                 raise LLMError(
                     "No Gemini API key. Set ZOOMOUT_PIPELINE_GEMINI_API_KEY, or use Vertex."
                 )
-            self._client = genai.Client(api_key=api_key)
+            self._client = genai.Client(api_key=api_key, http_options=http_options)
 
         self._limiter = limiter or RateLimiter()
 
@@ -123,6 +132,7 @@ class GeminiClient:
             project=settings.vertex_project,
             location=settings.vertex_location,
             limiter=RateLimiter(max_per_minute=settings.embed_requests_per_minute),
+            request_timeout_seconds=settings.request_timeout_seconds,
         )
 
     def _call_with_retry[R](
@@ -142,16 +152,16 @@ class GeminiClient:
             try:
                 return call()
             except Exception as error:
-                if not is_rate_limited(error):
+                if not is_retryable(error):
                     raise LLMError(f"{node}: {what} to {model} failed: {error}") from error
                 if attempt == MAX_RETRIES - 1:
                     raise LLMTransportError(
-                        f"{node}: {what} to {model} rate-limited after {MAX_RETRIES} "
+                        f"{node}: {what} to {model} never answered after {MAX_RETRIES} "
                         f"attempts: {error}"
                     ) from error
                 delay = retry_delay_seconds(error, attempt=attempt)
                 _log.warning(
-                    "llm.rate_limited",
+                    "llm.retrying",
                     node=node,
                     model=model,
                     what=what,

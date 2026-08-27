@@ -318,3 +318,41 @@ def test_a_resumed_track_does_not_regenerate_finished_leaves(
     assert len([c for c in llm.calls if c["node"] == "draft_leaf"]) == calls_after_two + 1, (
         "resuming should draft the third Leaf, not redo the first two"
     )
+
+
+def test_scenario_options_are_shuffled_away_from_the_model_s_position_bias() -> None:
+    """The unlock gate must not be answerable by position.
+
+    A real 18-Leaf Track put the correct option second in 15 of 18 Leaves and never third —
+    "always pick B" scored 83% without reading. That makes active recall, which PRODUCT.md
+    calls the product thesis, decorative.
+    """
+    from zoomout_pipeline.graph.leaf_nodes import shuffle_options
+
+    positions: list[int] = []
+    for order in range(24):
+        leaf = make_generated_leaf()  # correct option is always first as generated
+        shuffled = shuffle_options(leaf, seed=f"run:{order}")
+        positions.append(next(i for i, o in enumerate(shuffled.scenario_options) if o.is_correct))
+
+    assert len(set(positions)) == 3, f"the correct answer must move around; got {set(positions)}"
+    assert max(positions.count(p) for p in {0, 1, 2}) < 20, "and not pile up in one slot"
+
+
+def test_shuffling_is_deterministic_for_the_same_leaf() -> None:
+    """A regenerated Leaf must shuffle identically, or diffs become noise."""
+    from zoomout_pipeline.graph.leaf_nodes import shuffle_options
+
+    first = shuffle_options(make_generated_leaf(), seed="run-a:3")
+    second = shuffle_options(make_generated_leaf(), seed="run-a:3")
+
+    assert [o.text for o in first.scenario_options] == [o.text for o in second.scenario_options]
+
+
+def test_shuffling_preserves_exactly_one_correct_option() -> None:
+    from zoomout_pipeline.graph.leaf_nodes import shuffle_options
+
+    shuffled = shuffle_options(make_generated_leaf(), seed="run-b:1")
+
+    assert sum(1 for o in shuffled.scenario_options if o.is_correct) == 1
+    assert len(shuffled.scenario_options) == 3

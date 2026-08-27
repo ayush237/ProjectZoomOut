@@ -89,6 +89,10 @@ class PipelineSettings(BaseSettings):
     # constant — pacing a Vertex run at free-tier speed would waste minutes per book.
     embed_requests_per_minute: int = 60
 
+    # Per-request ceiling. The SDK's default is no timeout at all, which turns one wedged
+    # HTTP call into a run that never finishes and never says why.
+    request_timeout_seconds: float = 180.0
+
     analyze_model: str = DEFAULT_ANALYZE_MODEL
     breakdown_model: str = DEFAULT_BREAKDOWN_MODEL
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
