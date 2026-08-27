@@ -1,11 +1,17 @@
 """Graph assembly and the durable checkpointer.
 
-    ingest ─> analyze ─> breakdown ─> [HUMAN GATE 1] ─> END
-                             ▲   │
-                             └───┘  capped at MAX_BREAKDOWN_ATTEMPTS
+    ingest ─> analyze ─> breakdown ─> [HUMAN GATE 1] ─> draft_leaf ─> extra_content
+                             ▲   │                          ▲              │
+                             └───┘                          │              ▼
+                    MAX_BREAKDOWN_ATTEMPTS                  └──────── ground_check ─> END
+                                                          MAX_LEAF_ATTEMPTS
 
-WP16 stops at gate 1. Everything downstream of it — `draft_leaf`, `extra_content`,
-`ground_check`, assets, `editorial_review` — is WP17 onwards and deliberately absent.
+`ground_check` routes three ways: back to `draft_leaf` with its findings when a Leaf fails
+and the cap allows another attempt, on to the next Leaf when it passes, and to the end when
+the plan is exhausted.
+
+Still absent, deliberately: `publish_to_cms` (WP17, blocked on Payload's `acquisition`
+field), assets (WP18) and `editorial_review` (WP19).
 """
 
 from __future__ import annotations
@@ -22,6 +28,12 @@ from langgraph.graph.state import CompiledStateGraph
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
 from zoomout_pipeline.graph.dependencies import NodeDependencies
+from zoomout_pipeline.graph.leaf_nodes import (
+    make_draft_leaf_node,
+    make_extra_content_node,
+    make_ground_check_node,
+    route_after_ground_check,
+)
 from zoomout_pipeline.graph.nodes import (
     make_analyze_node,
     make_breakdown_node,
@@ -36,8 +48,15 @@ from zoomout_pipeline.models import (
     Acquisition,
     BookAnalysis,
     BookProvenance,
+    Citation,
+    Claim,
+    GeneratedExtras,
+    GeneratedLeaf,
+    GeneratedLeafRecord,
     LeafPlan,
     PlannedLeaf,
+    ScenarioOptionDraft,
+    SlideKey,
     SourceFormat,
 )
 
@@ -61,6 +80,14 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     TokenSpend,
     Acquisition,
     SourceFormat,
+    # WP17 — everything a per-Leaf record puts into a checkpoint.
+    GeneratedLeafRecord,
+    GeneratedLeaf,
+    GeneratedExtras,
+    Claim,
+    Citation,
+    ScenarioOptionDraft,
+    SlideKey,
 )
 
 
@@ -84,6 +111,9 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_node("analyze", make_analyze_node(deps))
     graph.add_node("breakdown", make_breakdown_node(deps))
     graph.add_node("human_gate", make_human_gate_node(deps))
+    graph.add_node("draft_leaf", make_draft_leaf_node(deps))
+    graph.add_node("extra_content", make_extra_content_node(deps))
+    graph.add_node("ground_check", make_ground_check_node(deps))
 
     graph.add_edge(START, "ingest")
     graph.add_edge("ingest", "analyze")
@@ -93,7 +123,14 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
         route_after_breakdown,
         {"breakdown": "breakdown", "human_gate": "human_gate"},
     )
-    graph.add_edge("human_gate", END)
+    graph.add_edge("human_gate", "draft_leaf")
+    graph.add_edge("draft_leaf", "extra_content")
+    graph.add_edge("extra_content", "ground_check")
+    graph.add_conditional_edges(
+        "ground_check",
+        route_after_ground_check,
+        {"draft_leaf": "draft_leaf", "done": END},
+    )
 
     return graph
 

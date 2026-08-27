@@ -5,6 +5,7 @@ from zoomout_pipeline.llm.client import (
     GeminiClient,
     GenerationResult,
     LLMError,
+    LLMTransportError,
     StructuredClient,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "GeminiClient",
     "GenerationResult",
     "LLMError",
+    "LLMTransportError",
     "StructuredClient",
 ]

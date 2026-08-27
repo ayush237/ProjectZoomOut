@@ -19,7 +19,7 @@ from zoomout_pipeline.graph.state import MAX_BREAKDOWN_ATTEMPTS, PipelineState
 from zoomout_pipeline.llm.client import LLMError
 from zoomout_pipeline.models import Acquisition, BookAnalysis
 
-from .conftest import ScriptedLLM, make_plan
+from .conftest import ScriptedLLM, leaf_generation_defaults, make_plan
 
 
 def _run(
@@ -112,7 +112,10 @@ def test_a_run_resumes_from_the_edited_file(
     deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
 ) -> None:
     """Tier A adjacent — founder edits are what the run continues with."""
-    llm = ScriptedLLM([analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)])
+    llm = ScriptedLLM(
+        [analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)],
+        defaults=leaf_generation_defaults(),
+    )
     scoped = replace(deps, llm=llm)
     graph, config, _ = _run(scoped, sample_epub)
 
@@ -165,7 +168,10 @@ def test_resuming_does_not_overwrite_the_edited_file(
     deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
 ) -> None:
     """LangGraph re-executes the node on resume; writing unconditionally would eat edits."""
-    llm = ScriptedLLM([analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)])
+    llm = ScriptedLLM(
+        [analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)],
+        defaults=leaf_generation_defaults(),
+    )
     scoped = replace(deps, llm=llm)
     graph, config, _ = _run(scoped, sample_epub)
 

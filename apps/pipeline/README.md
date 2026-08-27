@@ -2,8 +2,20 @@
 
 Turns a book into an ordered plan of Leaves, with a human deciding what that plan is.
 
-WP16 builds the spine: `ingest → analyze → breakdown → human gate 1`. It does not generate
-a single slide. Slide generation, grounding, assets and the editorial loop are WP17–WP19.
+The graph, as it stands:
+
+```
+ingest → analyze → breakdown → [HUMAN GATE 1] → draft_leaf → extra_content → ground_check
+              ▲        │                             ▲                            │
+              └────────┘                             └────────────────────────────┘
+        MAX_BREAKDOWN_ATTEMPTS                            MAX_LEAF_ATTEMPTS
+```
+
+WP16 built the spine through gate 1. WP17 adds per-Leaf generation and **the grounding
+gate**. Assets are WP18 and the editorial loop is WP19.
+
+**Writing drafts to Payload is not wired up yet** — it is blocked on the `acquisition` field
+existing on Payload's Track collection (WP15.1, Manager's). See "The CMS boundary" below.
 
 **This is a standalone Python project.** It is deliberately *not* in the npm workspaces
 array, and the root `npm run build` / `npm test` do not touch it. Its gate is below.
@@ -54,6 +66,8 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-3.6-flash`. |
 | `ZOOMOUT_PIPELINE_BREAKDOWN_MODEL` | no | Default `gemini-3.6-flash`. |
 | `ZOOMOUT_PIPELINE_EMBEDDING_MODEL` | no | Default `gemini-embedding-001`, truncated to 768 dimensions. |
+| `ZOOMOUT_PIPELINE_DRAFT_MODEL` | no | Default `gemini-3.6-flash`. The five slides. |
+| `ZOOMOUT_PIPELINE_EXTRAS_MODEL` | no | Default `gemini-3.6-flash`. Dinner Table Knowledge and apply-in-life. |
 | `ZOOMOUT_PIPELINE_PAID_TIER` | no | Set `true` before any book that is not public domain. See below. |
 | `ZOOMOUT_PIPELINE_RUNS_DIR` | no | Where plan files are written. Default `runs/`. |
 
@@ -136,6 +150,42 @@ continues with. Set `approved: true` and resume.
 The 1:1 chapter-structure check runs again on what you approved. That check is a `LEGAL.md`
 requirement rather than a style note, so it is not waived by approval: a plan that still
 mirrors the book's chapters is refused with the measurements attached.
+
+## The grounding gate
+
+`LEGAL.md` names fabricated content attributed to a real author as the highest-severity risk
+in the product — above the copyright question. `ground_check` is where that stops being a
+document.
+
+It is **pass/fail and mechanical**, not a score with a threshold anyone can nudge, and it is
+kept separate from anything editorial so the verdict cannot be argued down on quality
+grounds (R3). It works because the model is shown a numbered set of retrieved passages and
+may cite **only** those handles, which makes three things checkable by looking:
+
+- a citation naming a handle that was never retrieved is an invention;
+- a `quote` must appear **verbatim** in the passage it cites — typographic noise is
+  normalised, words are not;
+- every claim must carry a citation, and Dinner Table Knowledge must have a sourced claim on
+  the takeaway slide.
+
+A Leaf that fails is redrafted with the findings attached, up to `MAX_LEAF_ATTEMPTS`, then
+escalated to a human. **It is never emitted with a warning.**
+
+Passages a Leaf cites are marked `is_cited`, which is what makes `purge-raw-text` safe to
+run: cited passages survive as the audit trail proving the claim after the book itself is
+deleted.
+
+## The CMS boundary — not yet open
+
+WP17 stops short of writing drafts to Payload. Payload's Track collection has **no
+`acquisition` field**, and creating a Track without one is precisely the record R6 says must
+never exist — the whole point of recording it is that "which Tracks must be regenerated when
+the source question resolves" stays a query rather than an act of memory.
+
+That is `apps/admin` work (WP15.1) and belongs to Manager. When it lands, the writer goes in
+here, writes **drafts only**, and gets a maximal-fixture round-trip test against real Payload
+— because WP15 shipped a mapper that silently dropped three optional fields with 932 tests
+green, and source references are optional fields.
 
 ## Retention
 

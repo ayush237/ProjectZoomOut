@@ -17,12 +17,32 @@ from pydantic import BaseModel, Field
 
 from zoomout_pipeline.cost import RunCost
 from zoomout_pipeline.graph.structure_check import StructureCheckResult
-from zoomout_pipeline.models import Acquisition, BookAnalysis, BookProvenance, LeafPlan
+from zoomout_pipeline.models import (
+    Acquisition,
+    BookAnalysis,
+    BookProvenance,
+    GeneratedExtras,
+    GeneratedLeaf,
+    GeneratedLeafRecord,
+    LeafPlan,
+)
 
-# Initial attempt plus two revisions (proposal R7). Cycles between a generator and a checker
-# are the classic place a graph runs away — cost explosion or two nodes oscillating between
-# defensible positions — so the cap is hard and the escape is a human, not another round.
-MAX_BREAKDOWN_ATTEMPTS = 3
+# Initial attempt plus four revisions.
+#
+# R7 recommended two revision rounds, and its reasoning was cost: a runaway generator/checker
+# cycle is where a graph burns money. That reasoning assumed a Pro-tier call. On Flash against
+# credit a revision round is effectively free, and WP16's first Vertex run lost a whole plan to
+# the cap while the check was still converging — waste in service of guarding a cost we no
+# longer pay.
+#
+# Raised to 5 by Architect ruling, WP16.1. What R7 actually required is that the cycle is
+# *bounded* and escapes to a human rather than looping, and that is unchanged.
+MAX_BREAKDOWN_ATTEMPTS = 5
+
+# Per-Leaf grounding revisions. Same principle as the breakdown cap: bounded, with a human
+# at the end rather than another round. A Leaf that cannot be grounded in three attempts is
+# telling you something about the plan, not about the generator.
+MAX_LEAF_ATTEMPTS = 3
 
 
 class PipelineState(BaseModel):
@@ -61,6 +81,39 @@ class PipelineState(BaseModel):
     # --- gate 1
     plan_file: str | None = None
     approved: bool = False
+
+    # --- WP17: per-Leaf generation
+    #
+    # `leaf_cursor` is the index into the approved plan currently being generated. Advancing
+    # it is what makes the per-Leaf loop resumable: a run killed mid-Track restarts at the
+    # Leaf it was on, not at the beginning.
+    leaf_cursor: int = 0
+
+    # Keyed by str(order) because checkpoint serialisation prefers string keys. Holds only
+    # finished, grounded Leaves — a Leaf appears here once it has passed the gate, so
+    # re-entry never regenerates one that is already done.
+    generated: dict[str, GeneratedLeafRecord] = Field(default_factory=dict)
+
+    # Chunk ids of the passages retrieved for the Leaf being worked on, in P1..Pn order.
+    #
+    # **Ids, not text.** State is checkpointed, so passage text placed here would be copied
+    # into the checkpoint tables where `purge_raw_text` cannot reach it — the same trap the
+    # raw book text avoids. Nodes reload the text by id when they need it.
+    current_passage_ids: list[int] = Field(default_factory=list)
+
+    leaf_attempts: int = 0
+    leaf_escalations: dict[str, str] = Field(default_factory=dict)
+
+    # The Leaf currently in flight. Cleared once it is grounded and filed into `generated`.
+    #
+    # These do carry short quoted spans, which is deliberate and within R6: cited passages
+    # are exactly what retention keeps, because they are the audit trail that proves a claim
+    # after the book itself is deleted. Whole retrieved passages still never come here.
+    current_draft: GeneratedLeaf | None = None
+    current_extras: GeneratedExtras | None = None
+
+    # Set when grounding rejects the in-flight Leaf; consumed by the next draft attempt.
+    grounding_feedback: str | None = None
 
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)

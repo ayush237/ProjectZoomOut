@@ -286,11 +286,11 @@ def make_analyze_node(deps: NodeDependencies) -> Node:
 # ------------------------------------------------------------------------ breakdown
 
 
-def _chapter_list(titles: list[str]) -> str:
+def chapter_list_block(titles: list[str]) -> str:
     return "\n".join(f"{index}. {title}" for index, title in enumerate(titles))
 
 
-def _analysis_block(analysis: BookAnalysis) -> str:
+def analysis_block(analysis: BookAnalysis) -> str:
     return (
         f"Central argument: {analysis.central_argument}\n\n"
         f"Themes:\n" + "\n".join(f"- {theme}" for theme in analysis.themes) + "\n\n"
@@ -300,10 +300,30 @@ def _analysis_block(analysis: BookAnalysis) -> str:
     )
 
 
-def _previous_plan_block(plan: LeafPlan) -> str:
+def previous_plan_block(plan: LeafPlan) -> str:
     return "\n".join(
         f"{leaf.order}. {leaf.title} — {leaf.concept} (chapters {leaf.source_chapters})"
         for leaf in sorted(plan.leaves, key=lambda item: item.order)
+    )
+
+
+def build_breakdown_prompt(
+    *, title: str, author: str, chapter_titles: list[str], analysis: BookAnalysis
+) -> str:
+    """The first-attempt breakdown prompt.
+
+    Factored out so the measurement harness renders exactly what the node renders. A harness
+    that built its own prompt would be measuring a different prompt, and the whole point of
+    WP16.1 is to measure this one.
+    """
+    return render_prompt(
+        "breakdown",
+        min_leaves=MIN_LEAVES,
+        max_leaves=MAX_LEAVES,
+        title=title,
+        author=author,
+        chapter_list=chapter_list_block(chapter_titles),
+        analysis=analysis_block(analysis),
     )
 
 
@@ -323,8 +343,8 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
         common = {
             "title": state.provenance.title,
             "author": state.provenance.author,
-            "chapter_list": _chapter_list(state.chapter_titles),
-            "analysis": _analysis_block(state.analysis),
+            "chapter_list": chapter_list_block(state.chapter_titles),
+            "analysis": analysis_block(state.analysis),
         }
 
         if is_retry:
@@ -347,12 +367,15 @@ def make_breakdown_node(deps: NodeDependencies) -> Node:
                 max_sequential_ratio=MAX_SEQUENTIAL_PAIR_RATIO,
                 leaf_count=state.structure_check.leaf_count,
                 chapter_count=state.structure_check.chapter_count,
-                previous_plan=_previous_plan_block(state.plan),
+                previous_plan=previous_plan_block(state.plan),
                 **common,
             )
         else:
-            prompt = render_prompt(
-                "breakdown", min_leaves=MIN_LEAVES, max_leaves=MAX_LEAVES, **common
+            prompt = build_breakdown_prompt(
+                title=state.provenance.title,
+                author=state.provenance.author,
+                chapter_titles=state.chapter_titles,
+                analysis=state.analysis,
             )
 
         try:

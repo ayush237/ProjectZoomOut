@@ -24,7 +24,12 @@ from psycopg.rows import dict_row
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tests.conftest import FakeEmbedder, ScriptedLLM, make_plan
+from tests.conftest import (
+    FakeEmbedder,
+    ScriptedLLM,
+    leaf_generation_defaults,
+    make_plan,
+)
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.graph.build import compile_graph, pipeline_serializer
 from zoomout_pipeline.graph.dependencies import NodeDependencies
@@ -52,7 +57,10 @@ def _dependencies(database_url: str, runs_dir: str) -> NodeDependencies:
 
     return NodeDependencies(
         settings=settings,
-        llm=ScriptedLLM([ANALYSIS, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)]),
+        llm=ScriptedLLM(
+            [ANALYSIS, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)],
+            defaults=leaf_generation_defaults(),
+        ),
         embedder=FakeEmbedder(),
         connect=connect,
         now=lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),

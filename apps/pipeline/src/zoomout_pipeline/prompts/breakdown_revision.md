@@ -18,13 +18,19 @@ structure, and a plan that fails it cannot proceed regardless of how good the ti
 
 ## What to do
 
-Do not renumber the same plan or rename its Leaves. The check does not read titles — it
+Do not renumber the same plan or rename its Leaves. **The check does not read titles** — it
 reads which chapters each Leaf draws on and what order they run in. A plan that is the same
-walk through the book with better titles fails again identically.
+walk through the book with better titles fails again identically, and you will have spent an
+attempt learning nothing.
 
-Rebuild the path around **what a learner needs first**, and make Leaves that genuinely draw
-on several places in the book. Concepts the author returns to repeatedly are the ones that
-should become single, well-sourced Leaves.
+Go back to the ideas. For each one, find **every** place the book develops it, and let a Leaf
+draw on all of them at once — an idea the author returns to repeatedly is usually the most
+important one in the book. Then order the Leaves by what a learner needs first rather than by
+where the material appears.
+
+Before you answer, count it yourself: how many of your Leaves draw on exactly one chapter, and
+do your chapter numbers mostly ascend as you read down the plan? If either answer is yes, you
+have not changed anything that the measurement looks at.
 
 ## Your previous plan
 

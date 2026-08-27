@@ -14,6 +14,7 @@ outside the gate.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, TypeVar
 
@@ -23,7 +24,10 @@ from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS
 from zoomout_pipeline.llm.ratelimit import (
+    MAX_RETRIES,
     RateLimiter,
+    is_retryable,
+    retry_delay_seconds,
 )
 from zoomout_pipeline.logging import get_logger
 
@@ -34,6 +38,16 @@ T = TypeVar("T", bound=BaseModel)
 
 class LLMError(RuntimeError):
     """A model call failed, or returned something that is not the requested shape."""
+
+
+class LLMTransportError(LLMError):
+    """The call never produced an answer — rate limit, timeout, network.
+
+    Distinct from a response that came back in the wrong shape, because the two mean
+    different things. A malformed response says something about the prompt; a 429 says
+    only that we asked too quickly, and counting it against the prompt would be measuring
+    our own quota.
+    """
 
 
 @dataclass(frozen=True)
@@ -82,21 +96,30 @@ class GeminiClient:
         project: str = "",
         location: str = "us-central1",
         limiter: RateLimiter | None = None,
+        request_timeout_seconds: float = 180.0,
     ) -> None:
         from google import genai
+        from google.genai import types
+
+        # Without this the SDK waits forever. A batch pipeline whose runs span days cannot
+        # distinguish a hung request from a slow one, so a call that will never answer looks
+        # exactly like progress — it did, for 83 minutes, before this was added.
+        http_options = types.HttpOptions(timeout=int(request_timeout_seconds * 1000))
 
         if use_vertex:
             if not project:
                 raise LLMError("Vertex AI needs a project id; set ZOOMOUT_PIPELINE_VERTEX_PROJECT.")
             # Credentials come from Application Default Credentials, so nothing secret is
             # passed here or stored on disk by this package.
-            self._client = genai.Client(vertexai=True, project=project, location=location)
+            self._client = genai.Client(
+                vertexai=True, project=project, location=location, http_options=http_options
+            )
         else:
             if not api_key:
                 raise LLMError(
                     "No Gemini API key. Set ZOOMOUT_PIPELINE_GEMINI_API_KEY, or use Vertex."
                 )
-            self._client = genai.Client(api_key=api_key)
+            self._client = genai.Client(api_key=api_key, http_options=http_options)
 
         self._limiter = limiter or RateLimiter()
 
@@ -109,7 +132,47 @@ class GeminiClient:
             project=settings.vertex_project,
             location=settings.vertex_location,
             limiter=RateLimiter(max_per_minute=settings.embed_requests_per_minute),
+            request_timeout_seconds=settings.request_timeout_seconds,
         )
+
+    def _call_with_retry[R](
+        self, *, node: str, model: str, units: int, what: str, call: Callable[[], R]
+    ) -> R:
+        """Pace, call, and retry a rate limit — bounded, like every other cycle here.
+
+        Written once and shared by both call sites on purpose. It existed twice before, and
+        a refactor deleted one copy without any test noticing, which is exactly the failure
+        mode duplicated logic has.
+
+        `units` is what the endpoint counts: one request for generation, one *per text* for
+        embeddings.
+        """
+        for attempt in range(MAX_RETRIES):
+            self._limiter.acquire(units)
+            try:
+                return call()
+            except Exception as error:
+                if not is_retryable(error):
+                    raise LLMError(f"{node}: {what} to {model} failed: {error}") from error
+                if attempt == MAX_RETRIES - 1:
+                    raise LLMTransportError(
+                        f"{node}: {what} to {model} never answered after {MAX_RETRIES} "
+                        f"attempts: {error}"
+                    ) from error
+                delay = retry_delay_seconds(error, attempt=attempt)
+                _log.warning(
+                    "llm.retrying",
+                    node=node,
+                    model=model,
+                    what=what,
+                    attempt=attempt + 1,
+                    retry_in=round(delay, 1),
+                )
+                # The server says the window is full; our own bookkeeping is optimistic.
+                self._limiter.penalise()
+                self._limiter.sleep(delay)
+
+        raise LLMError(f"{node}: {what} to {model} produced no response")  # pragma: no cover
 
     def generate_structured(
         self,
@@ -128,12 +191,15 @@ class GeminiClient:
             system_instruction=system_instruction,
         )
 
-        try:
-            response = self._client.models.generate_content(
+        response = self._call_with_retry(
+            node=node,
+            model=model,
+            units=1,
+            what="model call",
+            call=lambda: self._client.models.generate_content(
                 model=model, contents=prompt, config=config
-            )
-        except Exception as error:
-            raise LLMError(f"{node}: model call to {model} failed: {error}") from error
+            ),
+        )
 
         spend = _spend_from(response, node=node, model=model)
         _log.info(
@@ -174,10 +240,15 @@ class GeminiClient:
             output_dimensionality=EMBEDDING_DIMENSIONS,
         )
 
-        try:
-            response = self._client.models.embed_content(model=model, contents=texts, config=config)
-        except Exception as error:
-            raise LLMError(f"{node}: embedding call to {model} failed: {error}") from error
+        response = self._call_with_retry(
+            node=node,
+            model=model,
+            units=len(texts),
+            what="embedding call",
+            call=lambda: self._client.models.embed_content(
+                model=model, contents=texts, config=config
+            ),
+        )
 
         embeddings = list(response.embeddings or [])
         # Truncating a Matryoshka embedding below its native width leaves it un-normalised,

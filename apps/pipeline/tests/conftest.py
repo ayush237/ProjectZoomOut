@@ -24,7 +24,15 @@ from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS, apply_schema
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.llm.client import GenerationResult
-from zoomout_pipeline.models import BookAnalysis, LeafPlan, PlannedLeaf
+from zoomout_pipeline.models import (
+    BookAnalysis,
+    Claim,
+    GeneratedExtras,
+    GeneratedLeaf,
+    LeafPlan,
+    PlannedLeaf,
+    ScenarioOptionDraft,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -39,10 +47,19 @@ _TEST_DB_NAME = TEST_DATABASE_URL.rsplit("/", 1)[1]
 
 
 class ScriptedLLM:
-    """Returns pre-built objects in order, and records what it was asked."""
+    """Returns pre-built objects in order, and records what it was asked.
 
-    def __init__(self, responses: list[BaseModel]) -> None:
+    `defaults` answers nodes the script does not care about. Tests about gate 1 should not
+    have to script every downstream generation call just to reach a resume — but an
+    unscripted call to a node the test *is* about must still be a loud failure, which is why
+    defaults are opt-in per node rather than a blanket fallback.
+    """
+
+    def __init__(
+        self, responses: list[BaseModel], defaults: dict[str, BaseModel] | None = None
+    ) -> None:
         self._responses = list(responses)
+        self._defaults = defaults or {}
         self.calls: list[dict[str, Any]] = []
 
     def generate_structured(
@@ -55,12 +72,22 @@ class ScriptedLLM:
         system_instruction: str | None = None,
     ) -> GenerationResult[T]:
         self.calls.append({"node": node, "model": model, "prompt": prompt})
-        if not self._responses:
-            raise AssertionError(f"{node} asked for a response but the script is exhausted")
 
-        value = self._responses.pop(0)
-        if not isinstance(value, schema):
-            raise AssertionError(f"{node} expected {schema.__name__}, script had {type(value)}")
+        # Serve the next scripted response only if it is the shape being asked for. A
+        # resumed run replays nodes that already completed, so a positional script would
+        # hand `draft_leaf` the analysis that `analyze` was meant to receive.
+        head = self._responses[0] if self._responses else None
+        if head is not None and isinstance(head, schema):
+            self._responses.pop(0)
+            value: T = head
+        else:
+            default = self._defaults.get(node)
+            if default is None or not isinstance(default, schema):
+                raise AssertionError(
+                    f"{node} asked for a {schema.__name__} and the script has "
+                    f"{type(head).__name__ if head is not None else 'nothing'}"
+                )
+            value = default
 
         return GenerationResult(
             value=value,
@@ -220,3 +247,25 @@ def build_epub(path: Path, *, chapters: int = 17, words_per_chapter: int = 300) 
 @pytest.fixture
 def sample_epub(tmp_path: Path) -> Path:
     return build_epub(tmp_path / "sample.epub")
+
+
+def make_generated_leaf(claims: list[Claim] | None = None) -> GeneratedLeaf:
+    """A schema-valid Leaf. No claims by default, so grounding has nothing to reject."""
+    return GeneratedLeaf(
+        summary_body="A short summary of the concept.",
+        scenario_prompt="You are deciding what to do next.",
+        scenario_options=[
+            ScenarioOptionDraft(text="The considered choice", is_correct=True),
+            ScenarioOptionDraft(text="The tempting shortcut", is_correct=False),
+            ScenarioOptionDraft(text="The comfortable delay", is_correct=False),
+        ],
+        payoff_body="Why the first option is the one that works.",
+        sticky_notes=["First note", "Second note"],
+        takeaway_body="The one thing to carry away.",
+        claims=claims or [],
+    )
+
+
+def leaf_generation_defaults() -> dict[str, BaseModel]:
+    """Fallbacks that let a test resume past gate 1 without scripting WP17."""
+    return {"draft_leaf": make_generated_leaf(), "extra_content": GeneratedExtras()}
