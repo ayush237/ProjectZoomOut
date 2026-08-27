@@ -96,14 +96,34 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 ## Part 3 — Blocked on the founder
 
+*Reviewed 2026-08-27. Ordered by when it bites, not by size.*
+
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **Age-gate threshold** — the legal answer, not the code | a decision | Stage 5, and COPPA/GDPR-K compliance | the original brief |
-| 2 | **Content Curation Policy owner** — the criteria excluding authors with companion apps and publishers in AI litigation | a decision | Which books can launch at all | the original brief |
-| 3 | **GCP account and billing** | ~30 min | **Stage 1 cannot start without it** | now |
-| 4 | **A domain** | ~15 min | Deployment and the email provider both need it | now |
+| 1 | **A domain** | ~15 min | **Deployment and the email provider both need it**, and it has the longest lead time of anything here — DNS and domain verification are waiting, not working | 2026-08-13 |
+| 2 | **What happens when the trial credit expires ~17 Sept** — enable billing, or stop at what the free tier allows | a decision | **WP18.** Images have no free tier and no fallback, so this decides whether illustrated scenarios happen at all | 2026-08-27 |
+| 3 | **Content Curation Policy owner** — the criteria excluding authors with companion apps and publishers in AI litigation | a decision | Which books can launch at all | the original brief |
+| ~~4~~ | ~~**Age-gate threshold**~~ | — | — | ✅ **Ruled 13+ on 2026-08-28.** Two riders below |
 | 5 | **Streak vs library size** — a product call | a decision | Stage 3 | 2026-08-09 |
-| 6 | **SFX assets** — sourcing and licensing | unknown | Stage 4 polish | 2026-08-06 |
-| 7 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
+| 6 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
+| 7 | **SFX assets** — sourcing and licensing | unknown | Stage 4 polish | 2026-08-06 |
+| ~~—~~ | ~~GCP account and billing~~ | — | — | ✅ **closed** — ₹28,710 credit active, pipeline running on Vertex |
 
-**Items 3 and 4 are the only ones blocking work right now.** Items 1 and 2 have been open since the beginning and are the ones most likely to surprise you late — a curation policy discovered in Stage 5 can invalidate content produced in Stage 3.
+**Nothing here blocks the work currently in flight.** WP17's remaining half needs none of it.
+
+**Item 1 is the one to do first** — not because it is urgent today, but because everything downstream of it is waiting rather than working, and it is fifteen minutes.
+
+**Items 3 and 4 have been open since the brief and are the ones most likely to surprise you late.** A curation policy discovered in Stage 5 can invalidate content produced in Stage 3. Item 3 now has a concrete case to reason from rather than being abstract — see the 2026-08-27 attributive-framing ruling, where a public-domain book turned out to teach 1910 metaphysics sincerely.
+
+### Riders on the 13+ ruling — flagged, not blocking
+
+**13+ puts the product outside COPPA rather than inside it with obligations.** Under-13 would require verifiable parental consent plus restrictions on exactly the mechanics this product is built on — streaks, XP and push notifications are what COPPA scrutinises. Two things the ruling does *not* settle:
+
+1. **GDPR-K is not a single number.** The EU digital-consent age is set per member state between 13 and 16 — Ireland and the Netherlands at 16, France at 15. A flat 13 is sufficient for a US-first launch and **is not automatically sufficient in the EU.** A counsel question when EU distribution is real, logged so it is not discovered during App Store review.
+2. **This is not the App Store age rating**, which comes from Apple's content questionnaire and describes what the app *contains*, not who may sign up. Both are required at Stage 5, independently.
+
+**To verify:** WP2 shipped an age gate with a threshold already in it. Confirm the implemented value is 13 and the check is server-side. If it disagrees, that is a bug, not a reopened decision.
+
+### Newly possible, not yet blocking
+
+**IP counsel review of generated output** — `LEGAL.md` requires review of *actual output*, and until WP17 there was none. There are now 18 grounded Leaves. **Be clear about what they can and cannot settle:** the source is public domain, so they say nothing about the copyright posture. What they *can* settle is the **fabrication and attribution** posture — whether per-claim grounding, verbatim quoting and non-endorsement framing add up to what counsel would want to see. That is the higher-severity risk of the two per `LEGAL.md`, so the review is worth having early even though it is partial.

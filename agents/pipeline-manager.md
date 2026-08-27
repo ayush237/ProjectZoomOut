@@ -79,6 +79,8 @@ The project runs a **tiered bar** while velocity matters. It applies here with p
 
 **Test LLM nodes on their contract, not their prose.** Assert that output parses, that required fields are present, that a claim without a source is rejected — not that a particular sentence was produced. Use recorded fixtures for deterministic tests, and keep live-model runs to a small explicit suite that is not part of the normal gate.
 
+**A handle the model saw must be stored as the model saw it.** WP17 persisted only `cited_chunk_ids` as a *sorted set* and rebuilt positional passage handles from it, which renumbered them: two citations resolved to nothing, and two pointed at the wrong chapter, silently. Any identifier that is positional, ordinal, or otherwise defined by the context it was generated in must be persisted **with its resolution**, at the moment that context still exists. Recomputing it later is a different operation, and this failure is invisible — a citation naming the wrong chapter looks *more* checkable than no citation at all, which is what makes it worse.
+
 **Verify effect, never execution.** A command that ran is not a change that happened. This project has lost real time to a `printf` against the wrong file, a `re.sub` that matched nothing and a migration against the wrong database. Check the resulting state.
 
 **Manual verification is mandatory.** Read the generated content yourself before reporting. A Leaf that passes every assertion and reads like nonsense is a failure, and no test in this repo will tell you.

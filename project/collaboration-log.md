@@ -9,6 +9,121 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-28 — WP18: Assets — scenario images and sticky-note diagrams
+
+*Pipeline Manager.*
+
+### Task: WP18 — the assets node: image candidates, diagram specs, and one visual identity
+
+**Context:** The last generation package. WP17 produces five slides of grounded text; this makes them look like a product rather than a document. **Founder ruled that scenario images ship** — overriding the recommendation to defer — because the launch experience needs to be as real as possible.
+
+**This is the only node that costs money per Leaf, and the GCP trial credit expires ~17 September.** Sequence accordingly: see the anchor-set note below.
+
+**Objective:** Every Leaf can carry a scenario illustration chosen from N candidates and a sticky-notes diagram rendered from a spec, both uploaded to Payload, both carrying `alt` text, and all of them looking like they came from the same product.
+
+**Scope:** `apps/pipeline/`. WP15 already added `scenario.image` and `stickyNotes.diagram` to the schema and the player — read them rather than assuming their shape, and do not change `content.ts`.
+
+---
+
+**Requirements**
+
+*Do this first, before the rest of the package*
+- **Generate and commit the style anchor set.** It needs no Payload contact, no WP17 output, and nothing else in this package — so it can land inside the credit window regardless of how the rest goes. It is also the input everything else depends on, so building it first is the natural order anyway.
+- The anchor set is a small committed collection of reference images defining the house style, with a written **style contract** derived from `proposals/design-direction.md` — palette, rendering style, composition, subject treatment.
+- **Bring the anchor set to the founder before generating 18 Leaves against it.** It is the one artefact where a wrong call is expensive to discover late: every image in the product inherits it.
+
+*Scenario images*
+- N candidates per Leaf. The human picks at gate 2 (WP19) — do not pick for them, and do not generate one and call it done.
+- **Reference-image conditioning against the anchor set**, so the library shares one visual identity rather than looking like eighteen unrelated stock illustrations. This is the founder's explicit requirement and the difference between "illustrated" and "AI slop".
+- **Content guardrails, ruled and non-negotiable:** no author likeness, no real or identifiable people, no book cover or publisher branding, **no rendered text in images**. The first three are legal exposure; the fourth is because image models cannot spell.
+- **`#FFB020` is excluded from illustrations.** `design-direction.md` §3 reserves amber for reward moments, and an illustration using it steals the signal from the unlock.
+- **`alt` is required.** WP15 made an asset without `alt` unpublishable, so an image with no `alt` is not a degraded asset — it is a Leaf that cannot ship. Generate it, do not leave it to the human.
+
+*Sticky-notes diagrams*
+- **A Mermaid or constrained-JSON spec, rendered server-side — not an image model** (R4). Editable by correcting text, re-themeable when the design changes, legible at any size, and a text call rather than a priced image.
+- Store the **spec alongside the rendered asset**. WP15 added `spec` and `specFormat` precisely so a writer can fix a diagram by editing text; an asset with no spec silently removes that.
+- Validate the spec parses and renders **before** upload. A spec that fails to render is a broken slide, and WP11 already found a cover URL pointing at a web page.
+
+*Payload*
+- Upload through Payload's upload collection, which WP15 set up for this.
+- Same boundary rules as WP17: REST only, drafts only, never Payload's tables.
+
+*The graph-shape problem — WP17 named this and it lands here*
+- **Adding a node cannot reach threads that already finished.** WP17 hit exactly this and solved it with an explicit `write-drafts --run-id` invocation. Track 42's run has already reached `END`; WP18 adds a node behind it. Do the same thing deliberately rather than rediscovering it.
+
+*Cost — this is the package where it is real*
+- Log **per image, per Leaf, per run**, separately from token spend.
+- **A hard per-Track image budget that stops the run rather than a warning that annotates it.** N candidates × 18 Leaves × retries is where a pipeline quietly spends a credit.
+- **Report the cost of a full illustrated Track.** That number decides whether the library can grow, and nothing else in the project can tell us.
+
+---
+
+**Out of scope:** gate 2 and the per-Leaf approval UI (WP19), the editorial reviewer (WP19), the answer-length check (WP19), publishing, regenerating Track 42's text.
+
+**Constraints**
+- Public-domain books only — unchanged, and now on R6's ingestion ground rather than the training-corpus one.
+- Vertex, location `global`.
+- Images have no free tier and no free fallback. If the credit lapses before this lands, the package becomes diagrams-only — which is why the anchor set goes first.
+
+**Read-it-yourself gate:** *Put the candidates for three different Leaves side by side and ask whether they look like one product.* Not whether each is individually good — whether a reader moving between Leaves would notice they came from the same place. That is the founder's actual requirement and no assertion can measure it. Then look at one diagram at the size it renders on a phone: **legibility beats fidelity**, which WP9 learned the hard way at thumbnail size.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `lint`/`test`/`build` unaffected
+- [ ] The anchor set and style contract are committed, and the founder has seen them
+- [ ] N scenario candidates generate per Leaf and upload to Payload with `alt` populated
+- [ ] A diagram spec renders, validates, and uploads **with its spec stored alongside**
+- [ ] A spec that fails to render is rejected before upload, not after
+- [ ] **No image contains rendered text, an identifiable person, or `#FFB020`** — checked, and say how
+- [ ] Assets attach to Leaves that already exist from a finished run — the graph-shape problem handled deliberately
+- [ ] The per-Track image budget **halts** a run that exceeds it — tested by setting it low
+- [ ] Image spend logged per image and per Leaf; **the cost of one fully illustrated Track reported**
+- [ ] Three Leaves' candidates have been looked at side by side and judged
+
+**Testing expectations:** Tier A on the budget halt and on never-publishes. Tier B one happy path for generation, render and upload. Image generation itself is live-model — keep it in the explicit suite outside the normal gate, and use recorded fixtures for the deterministic tests. List what you deferred.
+
+---
+
+### Handoff: 2026-08-28 — WP15.2: Pipeline API key, and the admin UI blank-page bug
+
+*Manager. Two small items, unrelated to each other, both from WP17's findings.*
+
+### Task: WP15.2 — a revocable API key for the pipeline; fix `allowedDevOrigins`
+
+**Context:** Both found by the Pipeline Manager while building WP17. Neither is pipeline work.
+
+**Objective:** The pipeline authenticates with a scoped, revocable key instead of an admin login, and the admin UI stops rendering blank at `127.0.0.1`.
+
+**Scope:** `apps/admin/` — the `Admins` collection and `next.config`.
+
+**Requirements**
+
+*1 — an API key for the pipeline*
+- `Admins` has `auth: true` and no `useAPIKey`, so the pipeline currently holds a **login** — a password in an environment variable, with a human's full rights.
+- Enable Payload's API key support and provision a key the pipeline uses instead.
+- **Scope it so it cannot publish.** This is the point of the change, and it is larger than housekeeping: *"the pipeline never publishes"* is currently a promise the pipeline's own code makes about itself. A credential that cannot publish converts it into a permission the pipeline cannot exceed regardless of what its code does. Architect ruled 2026-08-27 that human RBAC is not needed at a team of one; **this is the machine half, and it is the half that matters.**
+- Revocable without rotating a human's password.
+
+*2 — the blank admin UI*
+- Next 16 rejects `/_next/*` requests whose `Origin` is not allowlisted. `allowedDevOrigins` covers `localhost` but not `127.0.0.1`, and Payload loads chunks `crossorigin` — so at the IP address the admin UI 403s **one of its own JavaScript chunks** and renders blank.
+- Reproduced precisely by the Pipeline Manager: same request with `Referer` → 200, with `Origin` → 403.
+- One line. Worth doing because the failure is undiagnosable from the browser — a blank page with nothing in the console that points at the cause.
+
+**Out of scope:** human role-based permissions (ruled not needed until a second person touches the CMS), anything in `apps/pipeline`.
+
+**Device gate:** *load the admin UI at `http://127.0.0.1:3001/admin` and see it render*, then confirm the pipeline's key can create a draft and **cannot** publish one.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] The pipeline authenticates with an API key, not a password
+- [ ] **The key cannot publish** — verified by trying it and getting refused, not by reading config
+- [ ] The key is revocable independently of any human account
+- [ ] The admin UI renders at `127.0.0.1:3001` as well as `localhost:3001`
+- [ ] No credential is committed
+
+**Testing expectations:** Tier B. The "cannot publish" check is the one that matters — verify the effect, not the config.
+
+---
+
 ### Handoff: 2026-08-26 — WP15.1: Track `acquisition` field, and the red typecheck
 
 *Manager, not Pipeline Manager. Small — two items — but the first one blocks WP17.*
