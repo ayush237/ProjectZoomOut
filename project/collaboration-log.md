@@ -716,6 +716,102 @@ Your specification is `project/proposals/content-pipeline.md`. Read it in full, 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP15.6 — thumbnails for gate 2's image candidates — 2026-08-29
+
+**All 6 acceptance criteria met and verified live, no automated test added — see
+below for why that's correct here, not an omission.** Root `lint`, `typecheck`, `test`
+(974, unchanged count) and `build` all pass, cold. `generate:types` produces zero
+diff, confirming `imageCandidates`'s shape is byte-for-byte unchanged.
+
+**What changed:** a new `admin.components.afterInput` on `imageCandidates[].url` in
+`Leaves.ts`, pointing at a new client component (`ImageCandidateThumbnail.tsx`) that
+renders a live thumbnail below the existing text input. `url`/`alt` stay ordinary text
+fields underneath — this only reads their live form values via Payload's `useField`/
+`useFieldPath` hooks, never touches the schema. The sibling `alt` field's live value
+becomes the thumbnail's own `alt` attribute, so a reviewer using a screen reader on
+this screen gets the same accessible image WP15's alt-text rule was written for.
+
+**This device gate earned its keep, twice, and I want the record to show why rather
+than just that it passed.** The handoff called the device gate "the real check here"
+for a visual change — both findings below were invisible to typecheck, lint, and the
+974-test suite, all green throughout, and would have shipped silently without opening
+a real browser:
+
+**1 — `onError` does not reliably fire, at all, in this render path.** First version
+detected a broken URL via the `<img>` element's standard `onError` prop. Live against
+a genuinely-failing URL (confirmed via direct DOM inspection: `complete: true`,
+`naturalWidth: 0` — the browser's own signal that the load failed), the handler never
+ran — checked three ways: a `console.error` inside the handler itself, a `errorCount`
+counter on a manually-`addEventListener`'d listener, and a bare non-React `<img>`
+appended straight to `document.body` (which caught its own failure correctly, ruling
+out a browser/environment-level explanation). Reworked to poll `img.complete`/
+`naturalWidth` on a short interval instead of trusting the event — verified live
+against both a DNS-failure URL and a same-server HTTP-404, both now show a clean
+"Image failed to load." fallback instead of the browser's broken-image icon. I did not
+chase the exact root cause inside Payload/Next's rendering pipeline once I had a
+verified, reliable alternative — flagging it here as a real open question rather than
+asserting an explanation I didn't confirm.
+
+**2 — the first fix had a stale-ref edge case, also only caught live.** That version
+conditionally unmounted the `<img>` element in favor of the fallback text once broken.
+Editing an already-broken URL straight to a *different* broken URL (no full remount)
+left the thumbnail stuck: the polling effect's dependency is `url`, and it re-ran
+before React had re-rendered the now-`<img>`-shaped tree, so `imgRef.current` was
+still `null` and the effect bailed without restarting the poll — reasoned through,
+then reproduced live before trusting the reasoning (dispatched a real input event on
+the actual field, not a page reload, to make sure a remount wasn't hiding it). Fixed
+by keeping the `<img>` element always mounted — hidden via `display: none` when
+broken rather than swapped out — so the ref never goes stale regardless of prior
+state. Re-verified the same live repro now resolves correctly.
+
+**Device gate, done as specified:** created a throwaway Leaf on Track 42 with three
+`imageCandidates` — a real media asset (loads), a same-server 404 (fails), an empty
+row (nothing to show) — and confirmed all three render correctly: a real thumbnail
+with correct `alt`, the clean fallback text, and nothing at all, respectively.
+Screenshot capture hit a tool-side pane-visibility issue this session (the Browser
+pane reported itself "hidden" partway through and stayed that way) — verified instead
+via the accessibility tree (`find`, matching exact `image` roles and their `alt` text)
+and direct DOM/property inspection (`naturalWidth`, `complete`, `display`, network
+requests), which is if anything more precise than eyeballing a screenshot, but is a
+different kind of evidence and I want that noted rather than implied to be a picture
+I actually looked at.
+
+**Why no new automated test:** the handoff was explicit that a test which only
+asserts the component-path string sits in the right place in field config would pass
+or fail independent of whether a human can see anything — exactly the shape of test
+this project's testing bar (`CLAUDE.md`) has already burned time on elsewhere. The 974
+existing tests continuing to pass unchanged confirms nothing about the field's shape,
+access control, or validation regressed, which is what they were already covering.
+
+**Files touched:** `apps/admin/src/collections/Leaves.ts` (the `afterInput`
+reference), `apps/admin/src/components/ImageCandidateThumbnail.tsx` (new),
+`apps/admin/src/app/(payload)/admin/importMap.js` (regenerated via
+`payload generate:importmap`, required for Payload to resolve the new component
+reference — not hand-edited).
+
+**Assumptions made:** did not build the "copy straight into `scenario.image`"
+automation the handoff hedged as optional ("or better if Payload makes it cheap").
+It's genuinely reachable now with the same `useField`/`useFieldPath` pattern (a
+`setValue` on `scenario.image.url`/`.alt` from a button here), but it crosses from
+purely presentational into cross-field mutation with its own edge cases (does
+`setValue` on a nested group path behave correctly before that group has any other
+data? — not verified), for a package framed as one field's admin config. Flagging
+rather than silently deciding either way — cheap to add as a fast follow if still
+wanted.
+
+**Follow-ups / tech debt for Architect:**
+- The `onError` non-firing behavior is unexplained, not just unfixed. Worth someone
+  with more Payload-internals context taking a look if it recurs elsewhere — I have a
+  verified workaround here, not a diagnosis.
+- The optional "copy to `scenario.image`" affordance, if still wanted (see above).
+
+**Time:** investigation of Payload's custom-component API (no bundled docs, read
+`payload`'s and `@payloadcms/ui`'s type declarations and import-map generator source
+directly) ~25 min, implementation ~15 min, the two live-debugging detours above ~35
+min combined, device gate ~15 min, cold gate ~10 min, this report ~15 min.
+
+---
+
 ### Completed: WP19 (finished) — gate 2's remaining three criteria — 2026-08-28
 
 *Pipeline Manager. Closes the 3 criteria WP19's original report left blocked on WP15.4's
