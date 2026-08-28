@@ -129,8 +129,10 @@ class PipelineSettings(BaseSettings):
     # and renders blank with nothing on screen to say why. The REST API is unaffected, but
     # defaulting to the form that works everywhere avoids handing anyone that puzzle.
     payload_url: str = "http://localhost:3001"
-    payload_email: str = ""
-    payload_password: str = ""
+    # WP15.2 provisioned a publish-incapable machine account (`pipeline-bot@zoomout.local`)
+    # authenticated by a static API key rather than a login. The founder holds the key; it
+    # is not in the repo.
+    payload_api_key: str = ""
 
     @field_validator("database_url")
     @classmethod

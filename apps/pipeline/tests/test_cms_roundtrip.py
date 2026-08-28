@@ -55,18 +55,15 @@ PASSAGE = Passage(
 
 @pytest.fixture
 def client() -> PayloadClient:
-    email = os.environ.get("ZOOMOUT_PIPELINE_PAYLOAD_EMAIL", "")
-    password = os.environ.get("ZOOMOUT_PIPELINE_PAYLOAD_PASSWORD", "")
-    if not email or not password:
+    api_key = os.environ.get("ZOOMOUT_PIPELINE_PAYLOAD_API_KEY", "")
+    if not api_key:
         pytest.skip(
-            "Set ZOOMOUT_PIPELINE_PAYLOAD_EMAIL and ZOOMOUT_PIPELINE_PAYLOAD_PASSWORD to run "
-            "the round-trip against real Payload."
+            "Set ZOOMOUT_PIPELINE_PAYLOAD_API_KEY to run the round-trip against real Payload."
         )
 
     built = PayloadClient(
         base_url=os.environ.get("ZOOMOUT_PIPELINE_PAYLOAD_URL", "http://localhost:3001"),
-        email=email,
-        password=password,
+        api_key=api_key,
     )
     try:
         built.get_track(1)

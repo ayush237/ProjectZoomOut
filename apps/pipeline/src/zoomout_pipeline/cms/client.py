@@ -56,22 +56,20 @@ class PayloadClient:
         self,
         *,
         base_url: str,
-        email: str,
-        password: str,
+        api_key: str,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         if not base_url:
             raise PayloadError("No Payload URL. Set ZOOMOUT_PIPELINE_PAYLOAD_URL.")
-        if not email or not password:
+        if not api_key:
             raise PayloadError(
-                "No Payload credentials. Set ZOOMOUT_PIPELINE_PAYLOAD_EMAIL and "
-                "ZOOMOUT_PIPELINE_PAYLOAD_PASSWORD."
+                "No Payload API key. Set ZOOMOUT_PIPELINE_PAYLOAD_API_KEY — provisioned by "
+                "`npm run create-pipeline-key --workspace=apps/admin` (WP15.2). The founder "
+                "holds it; it is not in the repo."
             )
         self._base = base_url.rstrip("/")
-        self._email = email
-        self._password = password
+        self._api_key = api_key
         self._timeout = timeout_seconds
-        self._token: str | None = None
 
     # ------------------------------------------------------------------ transport
 
@@ -87,7 +85,11 @@ class PayloadClient:
         data = json.dumps(body).encode() if body is not None else None
         headers = {"Content-Type": "application/json"}
         if authenticated:
-            headers["Authorization"] = f"JWT {self._authenticate()}"
+            # `admins API-Key` — the format Payload's useAPIKey auth expects, not JWT/Bearer.
+            # WP15.2 provisioned this as a machine account that can create and update drafts
+            # and is refused everything that would publish, unpublish or edit a live document
+            # (verified there against every vector, not just documented).
+            headers["Authorization"] = f"admins API-Key {self._api_key}"
 
         request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
@@ -100,27 +102,6 @@ class PayloadClient:
             raise PayloadError(
                 f"{method} {path} could not reach Payload at {self._base}: {error.reason}"
             ) from error
-
-    def _authenticate(self) -> str:
-        if self._token is not None:
-            return self._token
-
-        # `auth: true` on the Admins collection with no API key, so a login is the only way
-        # in. An API key would be better — revocable per integration and no password in the
-        # environment — but enabling it is an `apps/admin` change and out of this scope.
-        result = self._request(
-            "POST",
-            "/api/admins/login",
-            body={"email": self._email, "password": self._password},
-            authenticated=False,
-        )
-        token = result.get("token")
-        if not isinstance(token, str) or not token:
-            raise PayloadError("Payload login returned no token")
-
-        self._token = token
-        _log.info("payload.authenticated", user=self._email)
-        return token
 
     # --------------------------------------------------------------------- writes
 
@@ -191,7 +172,7 @@ class PayloadClient:
             data=body,
             headers={
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
-                "Authorization": f"JWT {self._authenticate()}",
+                "Authorization": f"admins API-Key {self._api_key}",
             },
             method="POST",
         )

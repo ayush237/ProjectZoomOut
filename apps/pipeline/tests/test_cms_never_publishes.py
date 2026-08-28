@@ -29,9 +29,7 @@ from zoomout_pipeline.models import (
 
 
 def client() -> PayloadClient:
-    return PayloadClient(
-        base_url="http://127.0.0.1:9", email="nobody@example.com", password="unused"
-    )
+    return PayloadClient(base_url="http://127.0.0.1:9", api_key="unused")
 
 
 @pytest.mark.parametrize("status", ["published", "PUBLISHED", None, "", "draft "])

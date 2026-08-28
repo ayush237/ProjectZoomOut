@@ -315,8 +315,7 @@ def generate_assets(
 
         client = deps.payload_client or PayloadClient(
             base_url=settings.payload_url,
-            email=settings.payload_email,
-            password=settings.payload_password,
+            api_key=settings.payload_api_key,
         )
         images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
         budget = ImageBudget(max_images=settings.max_images_per_track)
