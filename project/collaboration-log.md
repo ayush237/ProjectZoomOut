@@ -1539,6 +1539,237 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP19 — gate 2, editorial review, and the answer-length check — 2026-08-29
+
+**Partial. 8 of 11 acceptance criteria met and verified; 3 blocked on the same root cause —
+gate 2 has nowhere to render in Payload, and that is `apps/admin` work I do not own.** Full
+spec for it is below, precisely scoped per the handoff's own instruction to stop and say so
+rather than reach across.
+
+Everything that does not depend on that surface is built, tested, and — for the two pieces
+that matter most — verified against **real Track 42 content**, not just fixtures. That live
+verification found and fixed a real bug in the revision mechanism before it could ship.
+
+#### 1 — the answer-length check: confirmed against the real defect
+
+Mechanical, per-Track, separate from `ground_check` (ruled 2026-08-27). Threshold 0.5,
+comfortably above the roughly-1-in-3 chance rate, same reasoning as the structure check's
+thresholds: lean toward catching the real tell over never firing on noise.
+
+Run against Track 42's actual 18 Leaves: **15 of 18 (83%) have the longest option correct —
+fails, exactly reproducing WP17's manual finding.** Mutation-checked: neutering the threshold
+and disabling the fire both turn exactly the two tests named for the tell red, nothing in
+`ground_check`'s suite moves.
+
+One real bug surfaced building this: the first implementation filtered option lengths by
+*value* rather than by *position*, which crashes on an empty comparison whenever every option
+happens to be the same length — which the shared test fixture's three default options
+actually are (all 21 characters). Fixed by comparing the correct option against the other two
+by index.
+
+#### 2 — `editorial_review`: advisory in the code, not only the prompt
+
+`EditorialReviewResult` has no `passed` or `verdict` field at all — there is structurally
+nothing for a caller to gate on, which is R3's principle enforced as a type rather than as a
+convention. Findings are contract-tested (structure, categories, required fields), never
+tested on prose.
+
+**Cross-family review was investigated properly before defaulting away from it, not assumed
+too expensive to try.** Claude is reachable through this project's existing Vertex/ADC setup
+with no new credential — but every Anthropic base model on this project returns `429
+RESOURCE_EXHAUSTED`, a default-zero Vertex Model Garden quota. That is a console action for
+whoever holds the project (submit a quota increase), not a code problem, and the moment it
+lands the swap is one config value. Default until then: `gemini-3.1-pro-preview` — a
+different, stronger model than generation, even if not a different family. Its rate
+($2.00/$12.00 per Mtok) was verified against `ai.google.dev/gemini-api/docs/pricing` **and** a
+second independent source before being pinned into `cost.py` — this project has shipped a
+wrong, guessed price before, and that is the whole reason the `unpriced_models` mechanism
+exists.
+
+#### 3 — `revise`: bounded, and the mutation test caught two of my own mistakes before it was honest
+
+Cap is **2** — R7's original figure, kept rather than inherited from WP16.1's raised
+breakdown cap of 5. That raise was justified by generation moving to a free Flash call;
+editorial review may run cross-family per R3 and Claude has no free tier anywhere (§4a), so
+R7's original cost reasoning is the one that actually applies here.
+
+**The first mutation check passed cleanly with nothing mutated.** Two compounding reasons,
+both worth recording because both will recur elsewhere: the loop had two independent places
+enforcing the same cap (a `for`-loop bound and a separate inner "last attempt" check), so
+mutating either alone proved nothing — and separately, the test's own expected count was
+*read back from the same module constant it was supposed to be checking*, so the test and the
+system could never disagree regardless of what the constant said. Fixed both: the loop now
+has exactly one enforcement point (`while revise_attempts < max_attempts and ...`), and the
+test asserts a hard-coded call count with `max_attempts` passed explicitly, decoupled from
+the constant. Re-run: removing the bound and an off-by-one (`<=` for `<`) each fail exactly
+the one test named for the cap, nothing else moves.
+
+**Escalation is what reaching gate 2 with findings still attached means** — there is no
+separate escalation channel like `ground_check`'s, because gate 2 *is* the surface a human
+sees editorial findings on. The loop always re-reviews after its last revision (a few extra
+tokens) rather than reporting stale pre-revision findings, so what reaches gate 2 is the
+truth about the actual final state, not a guess.
+
+**Revision cannot spend grounding to buy prose, structurally.** A rewrite is accepted only if
+it still passes `check_grounding` against the same passages the original cited; a revision
+that cannot stay grounded is discarded and the original stands. Verified against **two real
+Track 42 Leaves before the fix below landed: both revisions were rejected**, 1 and 7 broken
+citations respectively.
+
+#### The bug those two real rejections exposed, and the fix
+
+Investigated rather than shrugged off as "the safety net worked, ship it." The prompt told
+the model *"if you did not change a claim's wording, keep its citation as it was"* — but
+never showed the model what its citations **were**. It had no way to comply except
+reconstructing every quote from memory for the whole Leaf, including slides it was not asked
+to touch — and re-typing a quote from memory is exactly how an exact span stops being exact.
+
+Fixed by rendering the Leaf's own existing claims (slide, text, ref, note, quote) into the
+revise prompt, so an untouched claim can be **copied verbatim** instead of reconstructed. Also
+tightened the rule for claims that *do* change: an attribution fix is exactly the case where
+wording changes, so its citation gets reconsidered, not carried over on the assumption it
+still fits.
+
+**Verified on the same Leaf that failed before the fix: both revision rounds now pass
+grounding** (`revise.accepted` where it was `revise.rejected`). Read against the original,
+word for word:
+
+| Slide | Original | Revised |
+|---|---|---|
+| Summary | "Looking at current appearances…" | "**According to Wattles**, looking at current appearances…" — rest unchanged, character for character |
+| Payoff | "…fails to impress your purpose upon **the formless substance**." | "…**Wattles argues that**… fails to impress your purpose upon **what he calls** the formless substance." |
+| Takeaway | "…refuse to let current physical appearances shake your **faith**." | "…refuse to let current physical appearances shake your **focus**." |
+
+**The read-it-yourself question the handoff asked directly: did the editorial pass make the
+prose less stiff, or just different?** Honestly: **more honest, not less stiff.** The
+attribution fix is precise and targeted — exactly the flagged sentences change, nothing else
+does. But a third review pass on this same Leaf still surfaced a `prose` finding at the cap,
+and that finding reaches gate 2 **unresolved** rather than being silently dropped or assumed
+fixed. Two bounded rounds fixed what they were built to fix; the standing stiffness complaint
+from WP17 is a harder problem than attribution and was correctly left open rather than
+declared solved.
+
+#### 4 — attributive framing: the ruling, as prompt text and as a checked behaviour
+
+`draft_leaf.md` carries the rule the ruling asked for: a claim about **how the world works**
+gets attributed ("Wattles argues that…"); an instruction about **what to do** does not, or
+every sentence acquires a stammer. `extra_content.md` carries the sharper case for
+`apply_in_life` — the behavioural residue ("write a specific, vivid description of what you
+want and read it daily"), not the metaphysical step itself — using the exact contrast pair
+from the ruling rather than inventing new language for it. `editorial_review.md` checks for
+violations of the same rule under its `attribution` category, and the live run above shows it
+firing correctly on real content.
+
+#### 5 — gate 2's surface: blocked, and here is the precise, small spec
+
+**Three field additions to `Leaves.ts`. No custom React components, no new collections —
+every field type is one already used elsewhere in the same file.**
+
+```ts
+// 1. Populated by the pipeline. Lets a human see the three candidates without leaving
+//    the Leaf to hunt through Media.
+{
+  name: 'imageCandidates',
+  type: 'array',
+  admin: { description: 'Pick one, then copy its url/alt into scenario.image below.' },
+  fields: [{ name: 'url', type: 'text' }, { name: 'alt', type: 'text' }],
+},
+
+// 2. Populated by editorial_review. Advisory only — R3's principle applies here too.
+{
+  name: 'editorialFindings',
+  type: 'array',
+  admin: { description: 'Advisory notes from the editorial reviewer. Does not block publishing.' },
+  fields: [
+    { name: 'slideKey', type: 'select', options: SLIDE_KEYS.map((k) => ({ label: k, value: k })) },
+    { name: 'category', type: 'text' },
+    { name: 'note', type: 'text' },
+    { name: 'suggestion', type: 'text' },
+  ],
+},
+
+// 3. Set by the human. The tri-state outcome of gate 2.
+{
+  name: 'gateTwoStatus',
+  type: 'select',
+  defaultValue: 'pending',
+  options: [
+    { label: 'Pending review', value: 'pending' },
+    { label: 'Approved', value: 'approved' },
+    { label: 'Changes requested', value: 'changes_requested' },
+    { label: 'Rejected', value: 'rejected' },
+  ],
+  admin: { position: 'sidebar' },
+},
+```
+
+Access: the machine account should be able to write `imageCandidates` and
+`editorialFindings` (both pipeline-populated) but not `gateTwoStatus` — that field is the
+human's decision alone. If field-level `access` is not worth the complexity, a documented
+convention (the machine's writes never include `gateTwoStatus`) is an acceptable substitute
+— `update_leaf_draft` already refuses anything that is not a draft-safe write, so this is
+defence in depth rather than the only guard.
+
+**The three criteria this blocks, precisely:**
+- A human reviewing a Leaf, picking a candidate, and approving / requesting changes / rejecting
+- An approved Leaf carrying its chosen image with the other two candidates unattached
+- One Leaf timed through gate 2 — there is nothing to time until there is a screen
+
+#### 6 — the graph-shape problem, third occurrence, handled the way it was asked to be
+
+`review-track --run-id`, matching `write-drafts` and `generate-assets` exactly: a deliberate
+CLI invocation over checkpointed state, not a graph edge, because a run that already reached
+`END` cannot be reached by adding a node behind it.
+
+**Its Payload-write step is unverified live** — `ZOOMOUT_PIPELINE_PAYLOAD_API_KEY` was never
+set this session despite two requests. What *is* verified live is the mechanism the write
+depends on: `review_and_revise` itself, called directly against real Track 42 records and
+real Vertex calls (§2–3 above). The write path (`get_leaf` → `revised_leaf_patch` →
+`update_leaf_draft`) is contract-tested including the safety property — a revision must
+never clobber a human's existing image pick or diagram, verified by explicit read-modify-write
+tests rather than trusting Payload's PATCH merge semantics for a field pairing WP18 never
+actually tested (`scenario.image` alongside a revised `scenario.prompt` is not the same
+pairing as `stickyNotes.diagram` alongside `notes`, which is the only case confirmed safe).
+
+#### WP15.2 follow-on and the queued sixth anchor — both done
+
+`cms/client.py` now sends `Authorization: admins API-Key <key>` on every request; the login
+round trip is gone. Every existing write already sent `?draft=true` where WP15.2's finding
+requires it — checked by reading each call site, not assumed. **Also unverified live**, same
+blocker as above.
+
+The sixth style anchor (a lit lamp with no glow) is generated, conditioned on the surviving
+five, and committed — solid flat shapes, hard-edged light, no gradient or bloom.
+
+#### Cost
+
+| | |
+|---|---|
+| Editorial review + revise, live verification (4 full cycles on real Leaves) | **~$0.55** |
+| Sixth anchor | $0.039 |
+| **Total this package** | **~$0.59**, entirely against the trial credit |
+
+Per-Leaf cost on the model actually used: roughly **$0.03–0.12** depending on how many
+revision rounds fire. At 18 Leaves and up to 2 rounds each, a fully-reviewed Track is
+**roughly $1–2** on top of the ~$4 WP18 already established — call it **$5–6 for a Track
+that is drafted, illustrated, and editorially reviewed.**
+
+#### Deferred, named
+
+- **Everything in §5** — blocked on the three fields, not deferred by choice.
+- **The Payload-write half of `review-track`**, unverified live — blocked on the API key.
+- **Claude-via-Vertex for `editorial_review`**, blocked on a Vertex Model Garden quota
+  increase — a console action, precise remedy known, not mine to submit.
+- **Track 42 itself was not bulk-revised.** It predates the answer-length shuffle fix and is
+  already slated for regeneration once this reviewer exists (WP17's own report). Spending
+  review budget polishing 18 Leaves already due for replacement was not a good use of the
+  remaining credit window; the mechanism was verified on a sample instead. A fresh WP20 run
+  should go through `editorial_review`/`revise` from the start rather than retrofitting.
+- **Wiring `editorial_review`/`revise` as live graph edges** for a fresh WP20 run, rather
+  than only as a retrofit CLI. The pure functions (`review_and_revise` et al.) are shaped to
+  support this without change — only the graph wiring itself is not yet done.
+
+
 ### Completed: WP18 — assets: image candidates, rendered diagrams, one visual identity — 2026-08-28
 
 **Anchor set approved by the founder and committed. Generation, rendering, guardrails, budget
