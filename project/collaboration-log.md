@@ -84,6 +84,47 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ---
 
+### Handoff: 2026-08-30 — WP15.4: Gate 2's three fields on Leaves
+
+*Manager. **Do this together with WP15.3**, immediately below — same file, same access control, one restart.*
+
+### Task: WP15.4 — add `imageCandidates`, `editorialFindings` and `gateTwoStatus` to Leaves
+
+**Context:** WP19 built the editorial reviewer, the revise loop and the answer-length check, and stopped at 8 of 11 criteria for one reason: **gate 2 has nowhere to render.** The human review screen is three fields on the existing Leaf, and `apps/admin` is not the Pipeline Manager's to touch. It stopped and specified rather than reaching across, which was right.
+
+**This is the last thing between the pipeline and a reviewable Leaf.** Three criteria unblock the moment it lands.
+
+**Objective:** A human opens a generated Leaf in Payload and sees the three image candidates, the editorial reviewer's advisory findings, and a control to approve, request changes, or reject.
+
+**Scope:** `apps/admin/collections/Leaves.ts`, and the same access control WP15.2 and WP15.3 touch.
+
+**The spec is already written** — full TypeScript in `collaboration-log.md` under WP19's completion report, three field definitions using types already present in that file. **No custom React components and no new collections.** Read it there rather than inventing an equivalent.
+
+**Requirements**
+- `imageCandidates` — array of `{url, alt}`, pipeline-populated, so a human can compare candidates without leaving the Leaf to hunt through Media.
+- `editorialFindings` — array of `{slideKey, category, note, suggestion}`, pipeline-populated. **Advisory. It must not gate publishing** — R3's separation applies here exactly as it does to `ground_check`, and a findings list that blocks is a second legal gate nobody designed.
+- `gateTwoStatus` — select, defaulting to `pending`, sidebar. The human's decision.
+- **The machine account writes the first two and never `gateTwoStatus`.** Field-level access is the better answer; the Pipeline Manager notes a documented convention is acceptable if that proves disproportionate, since `update_leaf_draft` already refuses non-draft-safe writes. **Prefer the enforced version** — WP15.2 is the standing lesson that a constraint believed applied and a constraint actually applied are different things.
+- Existing Leaves must stay valid. All three are additive and optional; there is no backfill.
+
+**Out of scope:** the pipeline's write path (WP19 finishes that), publishing rules, a custom review UI, human roles.
+
+**Device gate:** *open a generated Leaf from Track 42 in the admin UI and see all three fields render* — candidates listed, findings readable, the status control in the sidebar. Then set `gateTwoStatus` to Approved and confirm it saves as a **draft** without publishing anything.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All three fields exist, render in the admin UI, and are readable over REST
+- [ ] **`editorialFindings` does not block publishing** — a Leaf with findings outstanding still publishes
+- [ ] The machine key can write `imageCandidates` and `editorialFindings`
+- [ ] **The machine key cannot set `gateTwoStatus`** — verified by calling the API and being refused, or, if the documented-convention route is taken, the convention is written down and the reason recorded
+- [ ] All 21 existing Leaves still validate and still serve — verified by query
+- [ ] Migration applies cleanly to an empty database
+- [ ] Payload caches config at server start: **restart before verifying**, or the probe tests the old config
+
+**Testing expectations:** Tier B. The one that matters is behavioural and has two halves that belong in one test — the machine key is **accepted** on the two pipeline fields and **refused** on `gateTwoStatus`. A key that fails both passes half the check and is useless.
+
+---
+
 ### Handoff: 2026-08-29 — WP15.3: Remove `delete` from the machine account
 
 *Manager. Two lines, per your own WP15.2 report.*
