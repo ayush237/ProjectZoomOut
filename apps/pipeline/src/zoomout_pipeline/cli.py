@@ -379,17 +379,18 @@ def review_track(
 
     The answer-length check runs once, over every generated Leaf, before anything else —
     it is a Track-level measurement and does not care which Leaf is reviewed first. Editorial
-    review then runs per Leaf; an accepted revision is patched into Payload as a **draft**
-    text update (`?draft=true`, read-modify-write against the Leaf's current document so a
-    human's image pick or diagram survives). Editorial findings themselves are not yet
-    written to Payload — there is nowhere to put them until the three fields named in this
-    package's completion report exist. They are logged, reported here, and kept in
-    checkpointed state (`cms_reviews`) so nothing is lost while that lands.
+    review then runs per Leaf, and **one combined PATCH per Leaf** carries whatever this pass
+    produced: a revised-text update when `revise` accepted a rewrite, the reviewer's advisory
+    findings (WP15.4's `editorialFindings`), and — the first time this Leaf is reached, from
+    WP18's own upload — its unattached image candidates (WP15.4's `imageCandidates`). One
+    request rather than three separate draft-version writes for the same Leaf in the same
+    pass. Never `gateTwoStatus`: that field is the human's alone, and nothing here can
+    produce it — see `gate2_review_patch`.
 
     Re-running is safe: a Leaf already in `cms_reviews` is skipped.
     """
     from zoomout_pipeline.cms.client import PayloadClient
-    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+    from zoomout_pipeline.cms.mapper import gate2_review_patch, revised_leaf_patch
     from zoomout_pipeline.graph.answer_length_check import (
         MAX_LONGEST_CORRECT_RATIO,
         check_answer_length,
@@ -455,15 +456,29 @@ def review_track(
             }
 
             leaf_id = state.cms_leaf_ids.get(key)
-            if outcome.revised and leaf_id is not None:
-                existing = client.get_leaf(leaf_id, draft=True)
-                patch = revised_leaf_patch(leaf=outcome.record.leaf, existing=existing)
-                client.update_leaf_draft(leaf_id=leaf_id, patch=patch)
+            wrote: list[str] = []
+            if leaf_id is not None:
+                patch: dict[str, Any] = {}
+                if outcome.revised:
+                    existing = client.get_leaf(leaf_id, draft=True)
+                    patch.update(revised_leaf_patch(leaf=outcome.record.leaf, existing=existing))
+                    wrote.append("revised text")
+
+                candidates = (state.cms_assets.get(key) or {}).get("candidates")
+                patch.update(
+                    gate2_review_patch(findings=outcome.review.findings, candidates=candidates)
+                )
+                if "editorialFindings" in patch:
+                    wrote.append("findings")
+                if "imageCandidates" in patch:
+                    wrote.append("candidates")
+
+                if patch:
+                    client.update_leaf_draft(leaf_id=leaf_id, patch=patch)
 
             typer.echo(
                 f"  leaf {key}: {len(outcome.review.findings)} findings"
-                f"{', revised' if outcome.revised else ''}"
-                f"{', written to CMS' if outcome.revised and leaf_id else ''}"
+                f"{', ' + ', '.join(wrote) + ' written to CMS' if wrote else ''}"
             )
 
         graph.update_state(  # type: ignore[attr-defined]

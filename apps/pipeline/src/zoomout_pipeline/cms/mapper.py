@@ -18,6 +18,7 @@ from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.models import (
     Acquisition,
     BookProvenance,
+    EditorialFinding,
     GeneratedLeaf,
     GeneratedLeafRecord,
 )
@@ -205,3 +206,48 @@ def leaf_payload(
         "sourceReferences": source_references(record, passages),
         "_status": DRAFT_STATUS,
     }
+
+
+def gate2_review_patch(
+    *,
+    findings: list[EditorialFinding],
+    candidates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """A PATCH body for the two gate-2 fields the pipeline is allowed to write.
+
+    **Never `gateTwoStatus`.** That field is the human's decision alone — WP15.4 enforces
+    this on Payload's side with field-level `access`, and this function enforces it here too
+    by never having a parameter that could produce it. Two guards for one rule is deliberate:
+    WP15.2's own finding was that a constraint believed applied and a constraint actually
+    applied are different things.
+
+    No read-modify-write needed, unlike `revised_leaf_patch`. Both fields are pipeline-owned
+    top-level arrays with no sibling data a human edits — nothing else in Payload writes to
+    `editorialFindings` or `imageCandidates`, so replacing either wholesale cannot clobber
+    anything.
+
+    Only includes a key when there is something to say. A Leaf reviewed clean (zero
+    findings) omits `editorialFindings` from the patch rather than writing `[]` — Payload's
+    own default is already `[]`, and a PATCH that changes nothing is not evidence the Leaf
+    was reviewed. That evidence lives in the pipeline's own checkpointed state
+    (`cms_reviews`), not in this field.
+    """
+    patch: dict[str, Any] = {}
+
+    if findings:
+        patch["editorialFindings"] = [
+            {
+                "slideKey": finding.slide_key.value,
+                "category": finding.category.value,
+                "note": finding.note,
+                "suggestion": finding.suggestion,
+            }
+            for finding in findings
+        ]
+
+    if candidates:
+        patch["imageCandidates"] = [
+            {"url": candidate["url"], "alt": candidate["alt"]} for candidate in candidates
+        ]
+
+    return patch
