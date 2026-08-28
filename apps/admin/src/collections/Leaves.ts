@@ -321,7 +321,18 @@ export const Leaves: CollectionConfig = {
       // No field-level restriction: this is exactly what the pipeline's draft-only
       // write is for. See `humansOnlyField` below for the field that isn't.
       fields: [
-        { name: 'url', type: 'text' },
+        {
+          name: 'url',
+          type: 'text',
+          admin: {
+            // Purely presentational (WP15.6) — a live thumbnail after the URL input
+            // so a reviewer can compare candidates without opening each one. Does
+            // not touch this field's shape or the pipeline's write path.
+            components: {
+              afterInput: ['/components/ImageCandidateThumbnail#ImageCandidateThumbnail'],
+            },
+          },
+        },
         { name: 'alt', type: 'text' },
       ],
     },
