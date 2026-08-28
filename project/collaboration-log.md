@@ -1430,6 +1430,115 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP15.2 — pipeline API key, and the admin UI blank-page bug — 2026-08-28
+
+**Both items done. All 8 acceptance criteria met.** Root `lint`, `typecheck`, `test`
+(959 across four workspaces) and `build` all pass.
+
+#### 1 — a publish-incapable API key
+
+`Admins` now has `useAPIKey: true` and an `accountType` of `human` or `machine`,
+defaulting to `human`. `npm run create-pipeline-key --workspace=apps/admin` provisions
+`pipeline-bot@zoomout.local` as a machine account and prints its key once; Payload keeps
+only a hash. Creation, rotation and revocation are documented in the new
+`apps/admin/README.md`.
+
+**The key is a separate identity from the login the pipeline uses today.** The script's
+first run found the existing `pipeline@zoomout.local` and converted it, which would have
+changed the rights of a credential another session is actively using — the one thing this
+package was scoped not to do. It was restored to `human` with its key cleared, and the
+machine account was provisioned alongside it instead. The pipeline keeps working
+untouched; the old login can be deleted once it switches over.
+
+**What "cannot publish" was made to mean.** Three things change what the public is
+served, not one: publishing, unpublishing, and editing a document that is already live.
+A machine is refused all three. It may create drafts, and may update through Payload's
+draft mechanism (`?draft=true`), which writes to the versions table rather than the
+published row.
+
+**Verified by calling the API, not by reading config** — every vector, against a Track
+that was published *and* carried a pending draft:
+
+| Attempt with the machine key | Result |
+|---|---|
+| `POST` create with `_status: draft` — the pipeline's real call | **201** |
+| `PATCH ?draft=true` — a legitimate draft edit | **200**, published row untouched |
+| `POST` create with `_status: published` | **403** |
+| `POST` create omitting `_status` | **403** |
+| `PATCH` a live row with no flag | **403** |
+| `PATCH _status: draft` — unpublish | **403** |
+| `PATCH ?draft=false` | **403** |
+| `PATCH ?draft=true` with `_status: published` | **403** |
+| Same probes against Leaves | **403** |
+| A human publishing, `overrideAccess: false` | **published** |
+| Any call after revoking through Payload | **403** |
+
+#### The first implementation was wrong, and only the behavioural check caught it
+
+`machinesUpdateDraftsOnly` originally returned a query constraint —
+`_status not_equals published` — so a published document would not be in the set the
+credential could address. Thirteen unit tests passed. Payload does apply the constraint.
+**It still let the machine key unpublish a live Track**, because with drafts enabled
+`_status` resolves against the document's *latest version*: a Track that is published but
+carries a pending draft edit reads as a draft to the query and is updated as one.
+
+The hole was invisible on a clean fixture and open on real content — the demo Track had a
+pending draft from the WP15.1 device gate, so it was the realistic case that failed and
+the tidy one that passed. **A published Track was edited and unpublished during the
+probe; it was restored from its last published version and the probe's version rows were
+deleted.**
+
+What replaced it does not ask what state the document is in. Requiring `draft=true`
+changes the write's *destination* rather than its value, so the published row is not what
+is being written at all, and a machine that forgets the flag is refused rather than
+quietly writing live content.
+
+**Two process notes, because both cost time and both will recur:**
+
+- **Payload caches its config at server start.** The first re-probe still showed the old
+  behaviour because the dev server had booted before the rewrite. Access functions,
+  collection config and hooks all need a restart, not HMR — a code change that appears
+  not to have worked is more likely stale than wrong.
+- **Revoking by flipping `enable_a_p_i_key` in the database does not revoke anything.**
+  The key kept authenticating. Payload clears the key hash as part of its own update, so
+  revocation has to go through Payload — the UI, or the API. This is in the README as a
+  warning because the database column looks like the off switch and is not.
+
+#### 2 — the blank admin UI
+
+One line: `allowedDevOrigins: ['127.0.0.1']` in `next.config.ts`. Mutation-checked by
+removing it and restarting — the chunk request with `Origin: http://127.0.0.1:3001` goes
+403 without it and 200 with it, while a genuinely foreign origin is still refused. The
+admin UI renders fully at `127.0.0.1:3001` with no console errors.
+
+#### Follow-on for Pipeline Manager — the other half of the seam
+
+**`apps/pipeline` still authenticates with a login and should switch to the key.**
+Nothing is broken until it does; this is the half of the seam the WP15.2 handoff assigned
+to the Pipeline session.
+
+- `cms/client.py` `_authenticate()` posts to `/api/admins/login` and sends
+  `Authorization: JWT <token>`. The key replaces both: send
+  `Authorization: admins API-Key <key>` on every request and delete the login round trip.
+- Config moves from `ZOOMOUT_PIPELINE_PAYLOAD_EMAIL` / `_PASSWORD` to a single
+  `ZOOMOUT_PIPELINE_PAYLOAD_API_KEY`. The founder has the key; it is not in the repo.
+- **Keep `_assert_draft`.** It is no longer the only thing standing between the pipeline
+  and a publish, but a clear error at the call site still beats a 403 from the server.
+- Creates need no change — `POST /api/tracks` with `_status: "draft"` and no query
+  parameter is accepted as-is, which is why create was deliberately not made to require
+  the `draft` flag.
+- **If an update method is ever added, it must send `?draft=true`** or it will be refused.
+- Once the switch lands, `pipeline@zoomout.local` can be deleted.
+
+#### One thing left for Architect to rule on
+
+**A machine account can still delete content.** Scoping covered publishing, as the
+handoff specified; `delete` access was left alone rather than widened without a ruling. A
+credential that cannot publish but can delete a published Track is a smaller hole than
+the one just closed — the previous login could do both — but it is not nothing, and
+closing it is two lines in the same file.
+
+
 ### Completed: WP17 (second half) — the Payload boundary — 2026-08-27
 
 **All acceptance criteria met.** A Track of *The Science of Getting Rich* is in Payload as
