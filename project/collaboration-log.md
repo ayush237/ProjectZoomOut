@@ -609,6 +609,91 @@ Your specification is `project/proposals/content-pipeline.md`. Read it in full, 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP15.5 — the empty-options validation bug, and a comment that overclaims — 2026-08-28
+
+**All 6 acceptance criteria met and verified, both Tier A cases mutation-checked
+independently.** Root `lint`, `typecheck`, `test` (974 across four workspaces: shared
+71, admin 198, backend 473, mobile 232) and `build` all pass, cold.
+
+**What changed, in one line each:**
+- `checkExactlyOneCorrectOption`'s guard now treats `options.length === 0` the same as
+  `null`/`undefined` — a scenario-less Leaf's plain edits no longer fail on a field
+  they never touched.
+- `machinesUpdateDraftsOnly`'s comment no longer claims the Local API populates
+  `req.query.draft` — it doesn't; only real HTTP does.
+
+**The fix is deliberately narrow — I did not make `checkExactlyOneCorrectOption`
+publish-aware.** The handoff's "one line apart" framing left room to read this either
+way, so I want to be explicit about which I built and why, in case it's not the one
+intended. `checkExactlyOneCorrectOption` now passes unconditionally on empty options,
+draft or publish. **Publish-time safety comes from `checkAllSlidesPopulated`**, which
+was already publish-gated and already treats an empty `options` array as an incomplete
+scenario — nothing there needed to change. This keeps the separation of concerns the
+file already states in its own comments ("Row count is Payload's job... a rule that
+also policed it would produce two errors for one mistake") — correctness
+(`checkExactlyOneCorrectOption`) and completeness (`checkAllSlidesPopulated`) stay two
+different rules' jobs, same as they were before this package, just with the boundary
+between them drawn correctly now. If a ruling was actually wanted for
+`checkExactlyOneCorrectOption` itself to keep guarding publish independently, that's a
+bigger change (a signature change to make the rule publish-aware, plus touching
+`validateLeaf`'s composition), and I'd want to hear that before making it, since the
+handoff's "careful two-line change" framing reads as the fix I built rather than that
+one.
+
+**Both halves mutation-checked independently, not just the pair together** — this
+matters because a fix that makes everything pass satisfies half of a Tier A case and
+breaks the other:
+- Reverted the guard to null/undefined-only → exactly 4 tests went red: both new unit
+  tests, the new integration draft-edit-succeeds test, and — importantly — the
+  *existing* `'refuses to publish that incomplete Leaf'` test, whose newly-exact error
+  list caught the old code's extra `scenario.options` violation that `arrayContaining`
+  had been letting through. Nothing else moved.
+- Separately neutered `checkAllSlidesPopulated`'s scenario predicate (`=> true`) →
+  the published-still-fails half of the new cross-rule test went red, the
+  draft-passes half stayed green, plus four pre-existing tests that already covered
+  that predicate directly. Confirms the publish guarantee is genuinely anchored to
+  that rule, not assumed.
+
+**Files touched:**
+- `apps/admin/src/validation/leafRules.ts` — the guard, plus a comment explaining why
+  empty counts as absent and where publish-time safety now comes from
+- `apps/admin/src/validation/leafRules.test.ts` — unit test for the empty-array case;
+  a cross-rule test asserting both halves (draft passes / publish still fails) in one
+  place, each half tied to the rule that actually enforces it
+- `apps/admin/test/cms.integration.test.ts` — integration test proving the real bug
+  (Payload's `options: []` read-back on update, not just a synthetic unit fixture) is
+  fixed; the `arrayContaining` → exact-array tightening on the existing publish test
+- `apps/admin/src/access/publishing.ts` — the comment fix, no behaviour change
+
+**Device gate, done exactly as specified, against the real dev database:** created a
+throwaway Leaf on Track 42 with a title and nothing else (no scenario), saved as
+draft — clean. Retitled it and saved again — this second save is the one that
+exercises the bug, since Payload only reads the empty-array shape back on update, not
+on the original create — succeeded with no validation error, version count
+incremented normally. Then attempted to publish that same still-scenario-less Leaf:
+`PATCH /api/leaves/242 {_status: 'published'}` → **400**, with exactly five
+violations (`summary`, `scenario`, `payoff`, `stickyNotes`, `takeaway`) and critically
+**no** `scenario.options` entry among them — confirms live, not just in the suite,
+that the old rule is gone and the completeness rule still catches it. Deleted the
+throwaway Leaf and the throwaway verification admin account afterward; queried
+`totalDocs` back to 21 to confirm the dev database is exactly as I found it.
+
+**Assumptions made:** the scope interpretation above (narrow fix, `checkAllSlidesPopulated`
+carries publish-time safety) is the one assumption in this package worth a second look —
+everything else was unambiguous.
+
+**Time:** diagnosis was already done in the handoff; implementation ~10 min, tests
+~25 min, both mutation checks ~10 min, device gate ~15 min (mostly re-establishing a
+throwaway admin account, same as WP15.4 — I still have no `.env` read access and no
+standing login), cold gate ~10 min, this report ~15 min.
+
+**Follow-ups / tech debt for Architect:** none new. The `.claude/settings.json` diff
+flagged in WP15.4's report is no longer showing as modified in my working tree as of
+this package — resolved elsewhere, not by me; worth confirming with the founder
+directly that it's actually settled rather than just no longer visible to this branch.
+
+---
+
 ### Completed: WP15.4 — gate 2's three fields on Leaves — 2026-08-28
 
 **All 8 acceptance criteria met and verified.** Root `lint`, `typecheck`, `test` (971
