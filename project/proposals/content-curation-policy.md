@@ -1,12 +1,49 @@
 # Content Curation Policy — which books ZoomOut will and will not cover
 
-**Status:** Proposed — awaiting founder approval
+**Status:** **Deferred by founder ruling 2026-08-28** — not adopted, not rejected. Collecting data points until it is decided.
 **Author:** Architect, 2026-08-29
+
+> ## Founder ruling — 2026-08-28
+>
+> **MVP is ~5 famous self-help books. Copyrighted titles are acceptable for now; the legal question is revisited later. The priority is that recognisable books are on the app so users are attracted.**
+>
+> This is a decision, not the absence of one, and the thing that makes it survivable is already built: **every Track records an `acquisition` status** (WP15.1), so when the question is revisited, "which content must be regenerated" is a query rather than an act of memory. MVP-phase Tracks are `undocumented` and should be **treated as replaceable** — that was the standing assumption from R6 and it still holds.
+>
+> **The distinction that matters is building versus shipping.** Generating from a copyrighted EPUB to develop the pipeline was ruled acceptable on 2026-08-13 and nothing here changes it. Exposure begins when that content reaches real users, so the decision genuinely deferred is *what ships at launch*, not *what we build with*.
+>
+> **The rest of this document stands as a draft and is not in force.** One part of it, however, has turned out to be an immediate practical problem rather than a future policy question — see §0.
 **Open since:** the original brief. Named in `PRODUCT.md` and `LEGAL.md` as founder-owned and never written.
 
 `LEGAL.md` and `PRODUCT.md` both assume this document exists. It does not, and the pipeline is now producing content — so the criteria are about to be applied by default rather than by decision. This is a draft to react to.
 
 **This is not legal advice.** It encodes the reasoning already in `LEGAL.md` into a checklist someone can apply in two minutes per book. **The exclusion criteria should be confirmed by counsel** at the same review that covers generated output.
+
+---
+
+## 0. Data points — verified 2026-08-28
+
+Collected because the founder asked for the facts to hand rather than a decision. **This is the section to update as titles are considered; the rest of the document is the reasoning behind it.**
+
+**The headline finding, and it is not a small one:** the biggest names in modern self-help have built **exactly this product themselves**, mostly in the last two years. E1 was drafted as a policy question about market substitution. It has turned out to be a live competitive fact.
+
+| Title | Author / rights-holder | Official app or course | Verified |
+|---|---|---|---|
+| **Atomic Habits** | James Clear | **Yes — "Atoms", launched Feb 2024.** Free download, subscription after a 28-day trial: **$10/mo or $70–120/yr**. Markets itself as *"bite-sized lessons and insightful strategies… one small step at a time"* with exclusive content from Clear | ✅ 2026-08-28 |
+| **The Subtle Art of Not Giving a F\*ck** | Mark Manson | **Yes — an AI coaching app ("Purpose"), plus the Mark Manson app.** Includes *"breakdowns on The Subtle Art principles, applied to real life"*, daily action system, monthly courses | ✅ 2026-08-28 |
+| The 7 Habits of Highly Effective People | FranklinCovey | **Assume yes** — FranklinCovey is a corporate-training business whose product *is* licensed courseware. Not separately verified | ⬜ check |
+| Rich Dad Poor Dad | Robert Kiyosaki | Not verified. Kiyosaki has a long history of licensed games and seminars | ⬜ check |
+| Mindset | Carol Dweck | Not verified | ⬜ check |
+| Deep Work / Cal Newport | Cal Newport | Not verified. Newport has courses; unclear whether book-specific | ⬜ check |
+
+**Read the first two rows carefully.** *Atoms* is not a habit tracker that happens to share a name — it sells **bite-sized lessons drawn from the book, by subscription**. That is ZoomOut's product description with a different logo on it. Manson's is the same shape.
+
+**What this means, stated plainly and without recommending anything:**
+
+- The two most obvious MVP candidates are the two where a rights-holder has the strongest commercial reason to object, and the clearest evidence of harm to point at — they can name a subscription price the reader would otherwise have paid.
+- It is also **trademark** exposure, not only copyright. Trademark is faster and cheaper to bring than a copyright claim, and does not need the fair-use argument to be resolved.
+- **This is a competitive signal too, not only a legal one.** Where an official app exists, ZoomOut is entering a market the author already serves, with the author's own material, at a moment when they have demonstrably decided the format is worth money.
+
+**The practical consequence for WP20:** picking a launch book is now a real choice rather than a formality, and the two names most likely to be reached for first are the two carrying the most weight. **No decision is asked for here** — this section exists so the decision, whenever it is taken, is taken against facts.
 
 ---
 
