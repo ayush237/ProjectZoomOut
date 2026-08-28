@@ -2,6 +2,7 @@ import type { PayloadRequest } from 'payload';
 import { describe, expect, it } from 'vitest';
 
 import {
+  humansOnlyField,
   machinesCreateDraftsOnly,
   machinesNeverDelete,
   machinesUpdateDraftsOnly,
@@ -125,6 +126,21 @@ describe('machinesNeverDelete', () => {
     expect(call(machinesNeverDelete, { req: machine })).toBe(false);
     expect(call(machinesNeverDelete, { req: draftWrite(machine) })).toBe(false);
     expect(call(machinesNeverDelete, { req: machine, data: { _status: 'draft' } })).toBe(false);
+  });
+});
+
+describe('humansOnlyField', () => {
+  it('refuses an anonymous request', () => {
+    expect(humansOnlyField({ req: anonymous })).toBe(false);
+  });
+
+  it('lets a human write the field', () => {
+    expect(humansOnlyField({ req: human })).toBe(true);
+  });
+
+  it('refuses a machine, draft flag or not — this field is not what that flag scopes', () => {
+    expect(humansOnlyField({ req: machine })).toBe(false);
+    expect(humansOnlyField({ req: draftWrite(machine) })).toBe(false);
   });
 });
 

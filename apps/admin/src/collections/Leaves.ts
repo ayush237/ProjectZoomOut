@@ -3,6 +3,7 @@ import type { CollectionConfig, Field } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
 import {
+  humansOnlyField,
   machinesCreateDraftsOnly,
   machinesNeverDelete,
   machinesUpdateDraftsOnly,
@@ -306,6 +307,44 @@ export const Leaves: CollectionConfig = {
       ],
     },
 
+    /* ---------------------------------------------------------------------- */
+    /* Gate 2 review (WP19 / WP15.4)                                          */
+    /* ---------------------------------------------------------------------- */
+
+    {
+      name: 'imageCandidates',
+      type: 'array',
+      admin: {
+        description:
+          'Scenario image candidates from the pipeline. Pick one, then copy its url/alt into Scenario → Illustration above. Not itself rendered to a reader.',
+      },
+      // No field-level restriction: this is exactly what the pipeline's draft-only
+      // write is for. See `humansOnlyField` below for the field that isn't.
+      fields: [
+        { name: 'url', type: 'text' },
+        { name: 'alt', type: 'text' },
+      ],
+    },
+
+    {
+      name: 'editorialFindings',
+      type: 'array',
+      admin: {
+        description:
+          'Advisory notes from the editorial reviewer. Read them, then decide below — this list cannot block publishing (R3).',
+      },
+      fields: [
+        {
+          name: 'slideKey',
+          type: 'select',
+          options: SLIDE_KEYS.map((key) => ({ label: key, value: key })),
+        },
+        { name: 'category', type: 'text' },
+        { name: 'note', type: 'text' },
+        { name: 'suggestion', type: 'text' },
+      ],
+    },
+
     {
       name: 'isPlaceholder',
       type: 'checkbox',
@@ -314,6 +353,36 @@ export const Leaves: CollectionConfig = {
         position: 'sidebar',
         description:
           'Mock content. Defaults to ON so nothing reaches production by accident — untick only for real, fact-checked content.',
+      },
+    },
+
+    /**
+     * The human's decision at gate 2. Defaults to `pending` so every Leaf authored
+     * before this field existed — none of which has been through gate 2 — reads as
+     * unreviewed rather than as some other status nobody chose.
+     *
+     * `access` is the enforced half of "the human's decision alone": the machine key
+     * can create and update these documents at all (collection-level access, above),
+     * but a value it sends for this one field is silently dropped rather than saved —
+     * see `humansOnlyField`'s own comment for why that is silent rather than a 403.
+     */
+    {
+      name: 'gateTwoStatus',
+      type: 'select',
+      defaultValue: 'pending',
+      access: {
+        create: humansOnlyField,
+        update: humansOnlyField,
+      },
+      options: [
+        { label: 'Pending review', value: 'pending' },
+        { label: 'Approved', value: 'approved' },
+        { label: 'Changes requested', value: 'changes_requested' },
+        { label: 'Rejected', value: 'rejected' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: "The human's decision at gate 2. The pipeline's machine key cannot set this.",
       },
     },
   ],

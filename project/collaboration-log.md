@@ -609,6 +609,147 @@ Your specification is `project/proposals/content-pipeline.md`. Read it in full, 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP15.4 — gate 2's three fields on Leaves — 2026-08-28
+
+**All 8 acceptance criteria met and verified.** Root `lint`, `typecheck`, `test` (971
+across four workspaces: shared 71, admin 195, backend 473, mobile 232) and `build` all
+pass, cold — `dist`/`.next` cleared first, run twice (once before a criterion-closing
+test was added, once after).
+
+**What changed:** `imageCandidates`, `editorialFindings` and `gateTwoStatus` added to
+`Leaves.ts`, exact field shapes from WP19's completion report, no deviation. New field
+access function `humansOnlyField` in `access/publishing.ts`, wired to `gateTwoStatus`'s
+`create`/`update` — the enforced route, not the documented-convention fallback; it
+wasn't disproportionate, one function covers it.
+
+**The silent-vs-refused distinction — worth knowing before touching this again.**
+Every collection-level function in `publishing.ts` throws a 403 on denial. Field-level
+access does not: I traced this through Payload 3.87's own source
+(`fields/hooks/beforeValidate/promise.js:216-236`) — a denied field's submitted value
+is deleted from the incoming data and the field's `defaultValue` re-applied, and the
+surrounding create/update still succeeds. So "the machine key cannot set
+`gateTwoStatus`" is provable only by reading the field back after the write, never by
+expecting the call to fail. `humansOnlyField`'s doc comment carries this; the
+acceptance criterion's own wording ("or a documented convention... is written down")
+anticipated something like it might be needed, though the enforced route still holds.
+
+**Mutation-checked:** removed `gateTwoStatus`'s `access` block, reran the full admin
+suite. Exactly the two tests asserting the machine can't set it went red — nothing
+else moved, including the human-sets-it test and the `humansOnlyField` unit tests.
+That split is deliberate and matches this file's own stated testing philosophy: the
+unit test proves the rule, the integration test proves the wiring.
+
+**Files touched:**
+- `apps/admin/src/access/publishing.ts` — `humansOnlyField`
+- `apps/admin/src/collections/Leaves.ts` — the three fields
+- `apps/admin/src/access/publishing.test.ts` — unit coverage for `humansOnlyField`
+- `apps/admin/test/cms.integration.test.ts` — behavioural coverage against real
+  Payload (Postgres via testcontainers)
+- `packages/shared/src/cms-generated.ts` — regenerated, additive only
+
+**Tests added:** 3 unit (`humansOnlyField` refuses anonymous, allows human, refuses
+machine regardless of the draft flag) + 4 integration against real Postgres: machine
+create with all three fields populated (pipeline fields saved, `gateTwoStatus` stays
+default); machine update (same split, prior value preserved); human update
+(`gateTwoStatus` writable — proves the restriction is machine-specific, not the field
+being broken); a fully-publishable Leaf with `editorialFindings` outstanding publishes
+successfully (R3 — advisory never gates).
+
+**All 21 existing Leaves verified by query against the real dev database**, not just
+the fresh testcontainer: `GET /api/leaves?limit=25` returns `totalDocs: 21`, every
+document carries the three new fields at their defaults
+(`imageCandidates: []`, `editorialFindings: []`, `gateTwoStatus: 'pending'`), including
+three that are already `_status: 'published'` — publishing itself still works with the
+new columns present.
+
+**Device gate, done exactly as specified:** opened Leaf 240 (Track 42, "Internalize
+the core formula until it becomes automatic behavior") in the admin UI after
+restarting the dev server (a stale `next-server` from before this session's changes
+was already running on :3001 — killed it first, per WP15.2's own "restart before
+verifying" note, which this package's own acceptance criteria repeats). All three
+fields render — Image Candidates and Editorial Findings empty (WP19's pipeline write
+to them is separately unverified live, per its own report), Gate Two Status defaulting
+to "Pending review" with the machine-can't-set-this copy visible. Set it to Approved,
+saved via "Save Draft," confirmed `_status` stayed `draft` and the value round-tripped
+over REST at `?draft=true`. Reverted it to `pending` afterward so Track 42's real
+state doesn't show a review that didn't happen — same reasoning for deleting the
+throwaway verification admin account (`wp15-4-verify@zoomout.local`, created via
+`create-admin` since I have no access to any real login and can't read `.env`) once
+done with it.
+
+**A pre-existing defect found while writing the update-path tests, not caused by this
+package:** `checkExactlyOneCorrectOption` in `validation/leafRules.ts` guards only
+`options === null || options === undefined`. A Leaf created with **no** `scenario` at
+all reads back as `scenario.options: []` — confirmed directly by logging it — which
+fails that guard and scores as "0 correct." **Any plain update to a Leaf that was
+created without a scenario therefore fails validation on a field the update never
+touches.** Invisible on create, because the hook there sees the raw incoming data
+(genuinely absent field); only appears on update, because Payload's own read-back of
+an untouched array field is `[]`, not `null`. Also invisible in the existing suite:
+the one test that updates a scenario-less Leaf
+(`'refuses to publish that incomplete Leaf'`) asserts `errors.map(e=>e.path)` with
+`arrayContaining`, so an extra `scenario.options` violation there wouldn't have failed
+it. My fixtures route around it (a valid 3-option scenario on every gate-2 test Leaf)
+rather than exercise it — not this package's rule to fix, and it touches the
+unlock-gate logic, which deserves a deliberate pass rather than a drive-by patch
+bundled into a three-field addition. Practical exposure is probably low — WP19's
+`draft_leaf` always writes a full scenario — but a human editing a still-incomplete
+placeholder Leaf a second time in the admin UI would hit this today.
+
+**Two things outside the diff, flagged rather than absorbed:**
+1. **`.claude/settings.json` carried an uncommitted, unexplained diff already in the
+   working tree at session start** — not mine, not under `project/`, so the "leave
+   Architect's edits alone" rule didn't cleanly cover it either. Most of it
+   (`docker exec zoomout-postgres psql`, `lsof`, `kill` allow-rules) reads like
+   ordinary dev-workflow tooling for this project. One entry does not:
+   `Write(/Users/ayushgupta/Documents/TheStarryInvitation/js/face-lock.js)`, in both
+   `permissions.allow` and `autoMode.allow` — a path with no relationship to this
+   repo. Not staged, not touched, flagged to the founder directly in chat.
+2. **`machinesUpdateDraftsOnly`'s comment overclaims what the Local API does.** It
+   says "the Local API passes the boolean" for the `draft` flag. Tracing it through
+   Payload 3.87 (`createLocalReq.js`, `operations/update.js`): the Local API's
+   `draft: true` option is never copied into `req.query.draft` — only real HTTP
+   populates that, from the actual query string. WP15.2/WP15.3 verified the rule via
+   curl, so this was never exercised end-to-end. An in-process caller trusting that
+   comment and calling `payload.update({ draft: true, ... })` as a machine would get
+   silently refused at the collection level. Not urgent — the pipeline authenticates
+   over real REST — but the comment overclaims. My own update-path test reproduces
+   the real REST shape directly (`req: { query: { draft: 'true' } }`) rather than
+   relying on the local option, so it isn't affected by the gap.
+
+**Assumptions made:**
+- `imageCandidates`/`editorialFindings` placed after Traceability, before the sidebar
+  cluster; `gateTwoStatus` in the sidebar next to `isPlaceholder`. Not specified
+  beyond "sidebar" for the status field — this groups the two review-input arrays
+  with the content they review, and keeps both sidebar decision fields together.
+- Did not touch `packages/shared/src/content.ts` or the backend mapper. Confirmed
+  `content.mapper.ts` builds its output field-by-field rather than spreading the raw
+  Payload document, so the three new fields cannot leak to the mobile app — they're
+  CMS-only scaffolding, not part of the reader-facing Leaf contract, and the handoff's
+  scope didn't call for a shared-types change.
+- Created `.claude/launch.json` (untracked, not committed) to drive the admin dev
+  server through this session's browser-preview tooling for the device gate. Left out
+  of this package's commits since it's tooling, not the feature — happy to commit it
+  separately if it's useful to keep around.
+
+**Time:** implementation ~20 min, tests ~40 min (most of it the `scenario.options`
+investigation and tracing the field-access silent-strip through Payload's source),
+device gate + REST verification ~25 min, cold gate (run twice) ~15 min, this report
+~20 min.
+
+**Follow-ups / tech debt for Architect:**
+- `checkExactlyOneCorrectOption`'s null-vs-empty-array gap above — needs a ruling on
+  whether/how to fix; it touches the unlock-gate logic.
+- `machinesUpdateDraftsOnly`'s comment inaccuracy above — small, worth a one-line
+  correction next time that file is touched.
+- The `.claude/settings.json` diff — the founder's to resolve, not mine.
+- WP19's own deferred items (the Payload-write half of `review-track` unverified
+  live, the Claude-via-Vertex quota) are unaffected by this package and still stand
+  exactly as WP19 reported them — this package only unblocks the 3 criteria that were
+  waiting on these fields existing.
+
+---
+
 ### Completed: WP15.3 — `delete` removed from the machine account — 2026-08-29
 
 **All 4 acceptance criteria met.** Root `lint`, `typecheck`, `test` (964 across four

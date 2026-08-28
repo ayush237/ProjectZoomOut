@@ -564,6 +564,163 @@ describe('publisher and coverUrl are required to publish a Track', () => {
 });
 
 /* -------------------------------------------------------------------------- */
+/* Gate 2 fields — access control (WP15.4)                                    */
+/* -------------------------------------------------------------------------- */
+
+describe('gate 2 fields on a Leaf', () => {
+  /**
+   * Fabricated rather than created through the Admins collection: `overrideAccess:
+   * false` below routes every access function straight through `req.user`, which is
+   * all `isMachineAccount` ever reads. A real API key additionally proves Payload's
+   * auth strategy resolves to this shape — that is `publishing.test.ts`'s job, and
+   * WP15.2/WP15.3's completion reports, not this file's.
+   */
+  const machineUser = { collection: 'admins', accountType: 'machine' };
+  const humanUser = { collection: 'admins', accountType: 'human' };
+
+  /**
+   * The real machine caller always sends this on every update (WP15.2, closed by
+   * WP19's `cms/client.py` switch) — reproduced here rather than relying on the
+   * Local API's own `draft` option, which does not populate `req.query.draft`
+   * despite `machinesUpdateDraftsOnly`'s comment describing it as if it did. Flagged
+   * in the completion report; simulating the real REST shape sidesteps it here.
+   */
+  const asDraftWrite = { query: { draft: 'true' } };
+
+  /**
+   * A valid scenario, so these fixtures don't trip `checkExactlyOneCorrectOption` on
+   * a plain update — see the completion report ("scenario.options on an untouched
+   * Leaf" finding). A Leaf created with no scenario at all reads back with
+   * `scenario.options: []` rather than `null`/`undefined`, which that rule's
+   * null-only guard does not treat as absent. These tests are about field access on
+   * `imageCandidates`/`editorialFindings`/`gateTwoStatus`, not scenario validation,
+   * so they route around the gap rather than exercise it.
+   */
+  const validScenario = {
+    prompt: 'Placeholder prompt?',
+    options: [
+      { text: 'A', isCorrect: true },
+      { text: 'B', isCorrect: false },
+      { text: 'C', isCorrect: false },
+    ],
+  };
+
+  let trackId: number | string;
+
+  beforeAll(async () => {
+    const track = await payload.create({
+      collection: 'tracks',
+      data: { bookTitle: 'Gate 2 Host', author: 'A' },
+    });
+    trackId = track.id;
+  });
+
+  it('lets the machine key populate imageCandidates and editorialFindings on create, but silently drops its gateTwoStatus', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: {
+        trackId,
+        orderIndex: 70,
+        title: 'Gate 2 create probe',
+        _status: 'draft',
+        imageCandidates: [{ url: 'https://example.test/a.png', alt: 'Candidate A' }],
+        editorialFindings: [
+          { slideKey: 'summary', category: 'prose', note: 'Stiff.', suggestion: 'Loosen it.' },
+        ],
+        gateTwoStatus: 'approved',
+      },
+      user: machineUser,
+      overrideAccess: false,
+    });
+
+    expect(leaf['imageCandidates']).toHaveLength(1);
+    expect((leaf['imageCandidates'] as Record<string, unknown>[])[0]).toMatchObject({
+      url: 'https://example.test/a.png',
+      alt: 'Candidate A',
+    });
+    expect(leaf['editorialFindings']).toHaveLength(1);
+    expect((leaf['editorialFindings'] as Record<string, unknown>[])[0]).toMatchObject({
+      slideKey: 'summary',
+      category: 'prose',
+    });
+    // Not the value the machine sent — field access denied it and the default stood.
+    expect(leaf['gateTwoStatus']).toBe('pending');
+  });
+
+  it('lets the machine key update editorialFindings on an existing Leaf, but drops its gateTwoStatus, leaving the prior value in place', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: { trackId, orderIndex: 71, title: 'Gate 2 update probe', scenario: validScenario },
+    });
+    expect(leaf['gateTwoStatus']).toBe('pending');
+
+    const updated = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: {
+        editorialFindings: [
+          { slideKey: 'payoff', category: 'attribution', note: 'Unattributed claim.' },
+        ],
+        gateTwoStatus: 'approved',
+      },
+      user: machineUser,
+      overrideAccess: false,
+      req: asDraftWrite,
+    });
+
+    expect(updated['editorialFindings']).toHaveLength(1);
+    expect(updated['gateTwoStatus']).toBe('pending');
+  });
+
+  it('lets a human set gateTwoStatus — the field is writable, just not by the machine', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: { trackId, orderIndex: 72, title: 'Gate 2 human probe', scenario: validScenario },
+    });
+
+    const updated = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: { gateTwoStatus: 'approved' },
+      user: humanUser,
+      overrideAccess: false,
+    });
+
+    expect(updated['gateTwoStatus']).toBe('approved');
+    // The tri-state outcome the founder chooses between — never published by this.
+    expect(updated['_status']).not.toBe('published');
+  });
+
+  it('publishes with editorialFindings still outstanding — advisory never gates publishing (R3)', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: {
+        trackId,
+        orderIndex: 73,
+        title: 'Gate 2 publish-with-findings probe',
+        summary: { body: 'Summary body.' },
+        scenario: validScenario,
+        payoff: { body: 'Payoff body.' },
+        stickyNotes: { notes: [{ note: 'Note one.' }, { note: 'Note two.' }] },
+        takeaway: { body: 'Takeaway body.' },
+        editorialFindings: [
+          { slideKey: 'payoff', category: 'prose', note: 'Still stiff.', suggestion: 'Rework it.' },
+        ],
+      },
+    });
+
+    const published = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: { _status: 'published' },
+    });
+
+    expect(published['_status']).toBe('published');
+    expect(published['editorialFindings']).toHaveLength(1);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* Takedown — the legal requirement                                            */
 /* -------------------------------------------------------------------------- */
 

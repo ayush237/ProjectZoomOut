@@ -1,4 +1,4 @@
-import type { Access, PayloadRequest } from 'payload';
+import type { Access, FieldAccess, PayloadRequest } from 'payload';
 
 /**
  * Write access for content collections — the control that keeps a machine out of
@@ -126,4 +126,28 @@ export const machinesUpdateDraftsOnly: Access<StatusBearing> = ({ req, data }) =
   const draft = req.query['draft'];
 
   return draft === true || draft === 'true';
+};
+
+/**
+ * Field-level write access: only a human may set this field.
+ *
+ * Built for `gateTwoStatus` on Leaves (WP15.4), which sits on the same documents
+ * the pipeline is meant to populate with `imageCandidates` and `editorialFindings`.
+ * The collection-level functions above are too blunt for that: refusing the whole
+ * write would also refuse the fields the machine is *supposed* to write. This
+ * refuses one field within an otherwise-permitted write instead.
+ *
+ * **Silent by design, not an error — unlike everything else in this file.** Payload
+ * evaluates field access after collection access, and a denial there does not throw:
+ * it deletes the submitted value and re-applies the field's `defaultValue`, so the
+ * request that carried it still succeeds. A machine that includes `gateTwoStatus` in
+ * a write is not met with a 403 for it; that one field is just not what it asked for.
+ * Verify by reading the field back after the write, not by expecting the call to fail.
+ */
+export const humansOnlyField: FieldAccess = ({ req }) => {
+  if (!req.user) {
+    return false;
+  }
+
+  return !isMachineAccount(req.user);
 };
