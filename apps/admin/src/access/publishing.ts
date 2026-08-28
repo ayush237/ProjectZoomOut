@@ -121,8 +121,13 @@ export const machinesUpdateDraftsOnly: Access<StatusBearing> = ({ req, data }) =
     return false;
   }
 
-  // REST sends the string; the Local API passes the boolean. Both are accepted, and
-  // anything else — including the flag being absent — is a refusal.
+  // REST populates this from the real query string. The Local API's own `draft`
+  // option does not (WP15.5; this comment previously claimed it did) — traced
+  // through Payload 3.87's source, that option is a separate mechanism controlling
+  // where Payload writes and is never copied into `req.query.draft`. A boolean only
+  // arrives here if a caller places one directly, which is why it stays accepted
+  // alongside the string. Anything else — including the flag being absent — is a
+  // refusal.
   const draft = req.query['draft'];
 
   return draft === true || draft === 'true';

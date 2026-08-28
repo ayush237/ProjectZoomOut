@@ -247,6 +247,23 @@ describe('Leaf validation is enforced by the CMS, not just by the rules', () => 
     expect(leaf.id).toBeDefined();
   });
 
+  it('updates a scenario-less Leaf without a validation error on the field the edit never touched (WP15.5)', async () => {
+    // Payload reads this Leaf's untouched scenario back as `options: []`, not
+    // `null` — a plain edit to it (unrelated to the scenario) must still succeed.
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: { trackId, orderIndex: 65, title: 'No scenario yet' },
+    });
+
+    const updated = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: { title: 'No scenario yet, retitled' },
+    });
+
+    expect(updated['title']).toBe('No scenario yet, retitled');
+  });
+
   it('refuses to publish that incomplete Leaf', async () => {
     const leaf = await payload.create({
       collection: 'leaves',
@@ -262,10 +279,19 @@ describe('Leaf validation is enforced by the CMS, not just by the rules', () => 
     );
 
     expect(messagesFrom(errors)).toMatch(/must be filled in before a Leaf can be published/u);
-    // Every incomplete slide is named, so the author fixes them in one pass.
-    expect(errors.map((e) => e.path)).toEqual(
-      expect.arrayContaining(['summary', 'scenario', 'payoff', 'stickyNotes', 'takeaway']),
-    );
+    // Exact set, not arrayContaining (WP15.5): the looser assertion is why the
+    // empty-options bug survived — an extra `scenario.options` violation from the
+    // old, over-eager checkExactlyOneCorrectOption would have passed unnoticed here,
+    // since arrayContaining only checks that these five are present, not that
+    // nothing else is. Every incomplete slide is named, so the author fixes them in
+    // one pass, and nothing beyond them fires.
+    expect(errors.map((e) => e.path)).toEqual([
+      'summary',
+      'scenario',
+      'payoff',
+      'stickyNotes',
+      'takeaway',
+    ]);
   });
 });
 

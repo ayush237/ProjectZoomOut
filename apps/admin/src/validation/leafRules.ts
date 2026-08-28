@@ -36,9 +36,17 @@ import {
 export function checkExactlyOneCorrectOption(leaf: LeafDocumentInput): RuleResult {
   const options = leaf.scenario?.options;
 
-  if (options === null || options === undefined) {
+  if (options === null || options === undefined || options.length === 0) {
     // Absent rather than wrong. Row count is Payload's job via minRows/maxRows, and
     // a rule that also policed it would produce two errors for one mistake.
+    //
+    // Empty counts as absent too, not just null/undefined (WP15.5): Payload reads a
+    // Leaf that was created without a scenario back as `options: []`, so a plain
+    // edit to that Leaf must not fail on a field it never touched. This does not
+    // weaken publishing — `checkAllSlidesPopulated` already treats an empty
+    // `options` as an incomplete scenario, so a published Leaf with nothing to
+    // answer still fails, just via the completeness rule rather than this one.
+    // Completeness stays that rule's job; this one stays about correctness.
     return PASSED;
   }
 
