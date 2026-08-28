@@ -100,8 +100,10 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **A domain** | ~15 min | **Deployment and the email provider both need it**, and it has the longest lead time of anything here — DNS and domain verification are waiting, not working | 2026-08-13 |
-| 2 | **What happens when the trial credit expires ~17 Sept** — enable billing, or stop at what the free tier allows | a decision | **WP18.** Images have no free tier and no fallback, so this decides whether illustrated scenarios happen at all | 2026-08-27 |
+| 1 | **Content Curation Policy** — approve, amend or reject the draft | a decision | **Which books can be ingested at all.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
+| 2 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
+| 3 | **A domain** | ~15 min, ~$12/yr | **Downgraded 2026-08-29 — it is not blocking anything today.** Cloud Run serves a free `*.run.app` URL, so deployment does not need it; the real driver is the email provider for password reset, which needs a verified sending domain. WP12 and WP13 are both parked, so buy it when WP12 starts. Buying earlier only banks the DNS propagation wait | 2026-08-13 |
+| ~~4~~ | ~~**Trial credit expiry ~17 Sept**~~ | — | — | ✅ **Answered 2026-08-29** — founder will move to another account for the MVP phase. See the note below |
 | 3 | **Content Curation Policy owner** — the criteria excluding authors with companion apps and publishers in AI litigation | a decision | Which books can launch at all | the original brief |
 | ~~4~~ | ~~**Age-gate threshold**~~ | — | — | ✅ **Ruled 13+ on 2026-08-28.** Two riders below |
 | 5 | **Streak vs library size** — a product call | a decision | Stage 3 | 2026-08-09 |
@@ -114,6 +116,25 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 **Item 1 is the one to do first** — not because it is urgent today, but because everything downstream of it is waiting rather than working, and it is fifteen minutes.
 
 **Items 3 and 4 have been open since the brief and are the ones most likely to surprise you late.** A curation policy discovered in Stage 5 can invalidate content produced in Stage 3. Item 3 now has a concrete case to reason from rather than being abstract — see the 2026-08-27 attributive-framing ruling, where a public-domain book turned out to teach 1910 metaphysics sincerely.
+
+### Cloud account after the trial — founder decision 2026-08-29
+
+**Moving to a different account for the MVP phase; purchase decisions after MVP.** Operationally this is low-friction and nothing is lost: the pipeline's Postgres and pgvector are local Docker, Payload's media store is local, and generated content lives in the CMS — **none of it is in GCP.** What changes is the project id, ADC credentials, and re-enabling the Vertex API. Budget an hour, not a day.
+
+**Two things to know rather than discover:**
+
+- **Google's welcome credit is once per billing account**, and their terms treat repeat trials as one customer, not several. A separate account under a genuinely different entity — a company rather than a person — is a different situation from a second personal account. Worth being deliberate about which one this is, because the failure mode is an account suspended mid-run rather than a bill.
+- **`location: global` and the Gemini 3.x endpoint behaviour carry over.** Regional endpoints 404 on the whole 3.x line — that trap is per-project and will recur on the new account.
+
+### Streak vs library size — recommendation on the table 2026-08-29
+
+**The problem:** a streak needs ≥1 Leaf a day, so a 20-Leaf library supports at most a 20-day streak, and a reader working at the intended 5/day exhausts it in four. It fails for exactly the readers who engage most, and `streak-30` is unreachable at launch.
+
+**Recommendation: let re-completing a Leaf count toward the streak, but not toward XP.**
+
+A streak answers *"did you show up today"*, not *"did you consume new material"* — those were only ever the same question because the library is small. Decoupling them removes the structural cap entirely and costs one condition in the streak service. **XP stays gated on first completion**, so there is no farming: replaying a Leaf keeps the habit alive and earns nothing.
+
+Rejected: *ship more books first* (makes a retention mechanic wait on the slowest thing in the project); *accept that streaks only matter as the library grows* (ships a mechanic knowing it breaks for the best readers).
 
 ### Riders on the 13+ ruling — flagged, not blocking
 
