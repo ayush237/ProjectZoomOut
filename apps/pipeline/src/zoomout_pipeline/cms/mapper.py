@@ -171,12 +171,18 @@ def leaf_payload(
     record: GeneratedLeafRecord,
     track_id: int,
     passages: dict[int, Passage],
+    findings: list[EditorialFinding] | None = None,
 ) -> dict[str, Any]:
     """A draft Leaf, in Payload's own shape.
 
     Note the two collection-shaped fields: `stickyNotes.notes` is rows of `{note}` and
     `scenario.options` is rows of `{text, isCorrect}`. Passing bare strings or a differently
     named key produces a document that saves cleanly and renders empty.
+
+    `findings` arrives on the create rather than in a follow-up PATCH: since WP20 wired
+    editorial review as a graph node, a Leaf is already reviewed by the time it is written,
+    so its advisory notes are known at create time. The retrofit path in `review-track`
+    still PATCHes them, because there the Leaf was written long before it was reviewed.
     """
     leaf = record.leaf
     extras = record.extras
@@ -204,6 +210,7 @@ def leaf_payload(
         "stickyNotes": {"notes": [{"note": note} for note in leaf.sticky_notes]},
         "takeaway": takeaway,
         "sourceReferences": source_references(record, passages),
+        **gate2_review_patch(findings=findings or []),
         "_status": DRAFT_STATUS,
     }
 

@@ -23,6 +23,7 @@ from zoomout_pipeline.models import (
     Acquisition,
     BookAnalysis,
     BookProvenance,
+    EditorialReviewResult,
     GeneratedExtras,
     GeneratedLeaf,
     GeneratedLeafRecord,
@@ -135,6 +136,14 @@ class PipelineState(BaseModel):
     # reviewed, so re-entering `review-track` skips a Leaf rather than re-reviewing it (and,
     # while editorial_review may run cross-family, re-spending money) for no reason.
     cms_reviews: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    # The reviewer's actual findings, keyed like `generated`.
+    #
+    # Separate from `cms_reviews` above, which holds a *summary* (counts, categories, cost)
+    # for run bookkeeping. This holds the findings themselves, because `write_drafts_to_cms`
+    # runs later in the graph than the review does and needs the real notes to put in
+    # Payload's `editorialFindings`. A count cannot be written to a field a human reads.
+    leaf_reviews: dict[str, EditorialReviewResult] = Field(default_factory=dict)
 
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)

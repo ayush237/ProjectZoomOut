@@ -17,9 +17,22 @@ from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.nodes import StructureRejectedError
 from zoomout_pipeline.graph.state import MAX_BREAKDOWN_ATTEMPTS, PipelineState
 from zoomout_pipeline.llm.client import LLMError
-from zoomout_pipeline.models import Acquisition, BookAnalysis
+from zoomout_pipeline.models import (
+    Acquisition,
+    BookAnalysis,
+    EditorialFinding,
+    EditorialFindingCategory,
+    EditorialReviewResult,
+    GeneratedExtras,
+    SlideKey,
+)
 
-from .conftest import ScriptedLLM, leaf_generation_defaults, make_plan
+from .conftest import (
+    ScriptedLLM,
+    leaf_generation_defaults,
+    make_generated_leaf,
+    make_plan,
+)
 
 
 def _run(
@@ -271,3 +284,60 @@ def test_a_late_parse_failure_escalates_the_last_good_plan(
     assert state.plan is not None, "the last valid plan must survive"
     assert state.escalation is not None
     assert state.structure_check is not None and not state.structure_check.passed
+
+
+def test_a_fresh_run_reaches_review_through_graph_edges(
+    deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
+) -> None:
+    """Tier B for WP20's newly wired edges.
+
+    The point is not that review *works* — `test_review.py` covers that. The point is that a
+    fresh run arrives at gate 2 already reviewed, with no `--run-id` retrofit invocation.
+    WP17, WP18 and WP19 each discovered separately that a node added behind a finished thread
+    cannot be reached; this is the wiring that stops WP20 being the fourth.
+    """
+    findings = EditorialReviewResult(
+        findings=[
+            EditorialFinding(
+                slide_key=SlideKey.PAYOFF,
+                category=EditorialFindingCategory.PROSE,
+                note="The second sentence is doing two jobs.",
+                suggestion="Split it in two.",
+            )
+        ],
+        overall_note="Clear, but the payoff is dense.",
+    )
+    llm = ScriptedLLM(
+        [analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)],
+        defaults={
+            "draft_leaf": make_generated_leaf(),
+            "extra_content": GeneratedExtras(),
+            "editorial_review": findings,
+            # `revise` returns the Leaf unchanged: enough to exercise the edge without
+            # making this a test of the revision loop's own behaviour.
+            "revise": make_generated_leaf(),
+        },
+    )
+    scoped = replace(deps, llm=llm)
+    graph, config, _ = _run(scoped, sample_epub)
+
+    path = Path(scoped.settings.runs_dir) / "run-test" / "leaf-plan.yaml"
+    body = yaml.safe_load(path.read_text())
+    body["approved"] = True
+    path.write_text(yaml.safe_dump(body, sort_keys=False))
+
+    graph.invoke(Command(resume=True), config)
+    state = PipelineState.model_validate(graph.get_state(config).values)
+
+    assert state.leaf_reviews, "a fresh run must arrive at gate 2 already reviewed"
+    assert set(state.leaf_reviews) == set(state.generated), (
+        "every generated Leaf gets a review — a Leaf that reached the CMS unreviewed would "
+        "be one a human is asked to judge with nothing to judge it against"
+    )
+    assert any(call["node"] == "editorial_review" for call in llm.calls), (
+        "review must have run as part of the graph, not been skipped"
+    )
+
+    first = state.leaf_reviews["0"]
+    assert first.findings, "the findings themselves must survive into state"
+    assert first.findings[0].suggestion, "a finding without a fix is not actionable"

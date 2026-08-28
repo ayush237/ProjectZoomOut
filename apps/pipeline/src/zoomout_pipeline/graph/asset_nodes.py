@@ -141,6 +141,15 @@ def attach_assets(
         uploaded_candidates.append({"id": media.get("id"), "url": media.get("url"), "alt": alt})
 
     patch: dict[str, Any] = {}
+    if uploaded_candidates:
+        # WP18 uploaded these and had nowhere to put them — WP15.4 added the field, so the
+        # human sees all three on the Leaf instead of hunting through the Media collection.
+        # Still not *attached*: choosing remains gate 2's job, and writing one into
+        # `scenario.image` here would present a decision as already taken.
+        patch["imageCandidates"] = [
+            {"url": candidate["url"], "alt": candidate["alt"]} for candidate in uploaded_candidates
+        ]
+
     diagram_record: dict[str, Any] | None = None
     if diagram is not None:
         data, spec = diagram

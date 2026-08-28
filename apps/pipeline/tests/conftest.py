@@ -28,6 +28,7 @@ from zoomout_pipeline.llm.client import GenerationResult
 from zoomout_pipeline.models import (
     BookAnalysis,
     Claim,
+    EditorialReviewResult,
     GeneratedExtras,
     GeneratedLeaf,
     LeafPlan,
@@ -295,5 +296,16 @@ def make_generated_leaf(claims: list[Claim] | None = None) -> GeneratedLeaf:
 
 
 def leaf_generation_defaults() -> dict[str, BaseModel]:
-    """Fallbacks that let a test resume past gate 1 without scripting WP17."""
-    return {"draft_leaf": make_generated_leaf(), "extra_content": GeneratedExtras()}
+    """Fallbacks that let a test resume past gate 1 without scripting every node.
+
+    `editorial_review` returns no findings by default, which means `revise` is never
+    reached — a test about resuming or durability should not also be a test about the
+    revision loop, and a default that quietly rewrote every Leaf would make it one.
+    """
+    return {
+        "draft_leaf": make_generated_leaf(),
+        "extra_content": GeneratedExtras(),
+        "editorial_review": EditorialReviewResult(
+            findings=[], overall_note="Reads clearly; nothing to flag."
+        ),
+    }

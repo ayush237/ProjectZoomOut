@@ -17,9 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
-from zoomout_pipeline.db.retrieval import Passage
+from zoomout_pipeline.db.retrieval import Passage, format_passages
 from zoomout_pipeline.graph.grounding import check_grounding
-from zoomout_pipeline.graph.leaf_nodes import format_passages
 from zoomout_pipeline.llm.client import StructuredClient
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import (

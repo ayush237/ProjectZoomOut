@@ -556,3 +556,34 @@ def test_the_patch_carries_no_other_fields() -> None:
     patch = gate2_review_patch(findings=[_finding()], candidates=[{"url": "u", "alt": "a"}])
 
     assert set(patch) == {"editorialFindings", "imageCandidates"}
+
+
+def test_a_created_leaf_carries_its_review_findings() -> None:
+    """Since WP20 wired review as a graph node, a Leaf is already reviewed when it is
+    written — so its findings belong on the create, not in a follow-up PATCH."""
+    payload = leaf_payload(
+        record=record(), track_id=7, passages={501: PASSAGE}, findings=[_finding()]
+    )
+
+    assert len(payload["editorialFindings"]) == 1
+    assert payload["editorialFindings"][0]["category"] == "prose"
+
+
+def test_a_created_leaf_reviewed_clean_omits_the_findings_field() -> None:
+    """Same rule as the PATCH path: Payload's default is already `[]`, and writing one
+    would claim a review happened in a field that cannot distinguish that from silence."""
+    for findings in (None, []):
+        payload = leaf_payload(
+            record=record(), track_id=7, passages={501: PASSAGE}, findings=findings
+        )
+        assert "editorialFindings" not in payload
+
+
+def test_a_created_leaf_never_carries_gate_two_status() -> None:
+    """The create path has the same prohibition as the patch path, and for the same reason:
+    that field is the human's decision and the pipeline is refused it by Payload anyway."""
+    payload = leaf_payload(
+        record=record(), track_id=7, passages={501: PASSAGE}, findings=[_finding()]
+    )
+
+    assert "gateTwoStatus" not in payload
