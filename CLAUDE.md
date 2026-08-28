@@ -58,7 +58,8 @@ Rules of thumb:
 │   ├── original-brief.md       # founder's original, unedited brief (archival)
 │   ├── projectplan.md         # active feature plan (Architect-owned)
 │   ├── projectRoadmap.md      # roadmap, backlog, decisions (Architect-owned)
-│   ├── collaboration-log.md   # handoffs + completion reports
+│   ├── collaboration-log.md   # handoffs + completion reports (active packages only)
+│   ├── archive/               # Phase 1 log, split out 2026-08-28 — read only when tracing history
 │   └── GETTING_STARTED.md     # how to launch each session
 ├── .claude/
 │   ├── settings.json
