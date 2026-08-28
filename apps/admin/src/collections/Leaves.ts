@@ -2,7 +2,11 @@ import { DIAGRAM_SPEC_FORMATS, SLIDE_KEYS } from '@zoomout/shared';
 import type { CollectionConfig, Field } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
-import { machinesCreateDraftsOnly, machinesUpdateDraftsOnly } from '../access/publishing';
+import {
+  machinesCreateDraftsOnly,
+  machinesNeverDelete,
+  machinesUpdateDraftsOnly,
+} from '../access/publishing';
 import { trimTextFields } from '../hooks/trimText';
 import { validateBeforeChange } from '../hooks/validateBeforeChange';
 import { validateLeaf } from '../validation/leafRules';
@@ -120,6 +124,7 @@ export const Leaves: CollectionConfig = {
     // content at all. See `access/publishing.ts` for why that is wider than "publish".
     create: machinesCreateDraftsOnly,
     update: machinesUpdateDraftsOnly,
+    delete: machinesNeverDelete,
   },
 
   versions: {

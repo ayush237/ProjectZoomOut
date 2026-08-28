@@ -1,3 +1,4 @@
+import { machinesNeverDelete } from '../access/publishing';
 import type { CollectionConfig } from 'payload';
 
 /**
@@ -28,6 +29,13 @@ export const Media: CollectionConfig = {
   },
   access: {
     read: () => true,
+    /**
+     * The pipeline uploads here, so it keeps create and update — but an image a Leaf
+     * points at is content, and a machine deleting one breaks that Leaf as surely as
+     * deleting the Leaf would. There is no draft/publish distinction to scope against
+     * in this collection, so `delete` is the only rule it needs.
+     */
+    delete: machinesNeverDelete,
   },
   upload: {
     /**

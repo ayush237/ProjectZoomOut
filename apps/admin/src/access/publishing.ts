@@ -39,6 +39,33 @@ function isMachineAccount(user: PayloadRequest['user']): boolean {
 }
 
 /**
+ * Delete: never, for a machine, on anything.
+ *
+ * **The pipeline has no use for deletion.** Its idempotency is find-then-update, and
+ * the one cleanup WP17 needed was housekeeping a human did with a login. So this costs
+ * the pipeline nothing, which is the easy half of the argument.
+ *
+ * The half that matters is what the capability would be worth if it were wrong.
+ * WP15.2's publish scoping was believed correct, had thirteen passing unit tests behind
+ * it, and still let this same key unpublish a live Track. **The identical mistake on
+ * `delete` does not expose content, it destroys it** — and unpublishing is how a
+ * takedown is served, so a machine that can delete a Track can break a legal obligation
+ * rather than merely embarrass one.
+ *
+ * Unconditional, with no inspection of the document or the request. There is nothing to
+ * get subtly wrong: no state to resolve, no query semantics to depend on, no flag a
+ * caller can send. That is the point — the previous rule failed precisely because it
+ * asked a question whose answer was ambiguous.
+ */
+export const machinesNeverDelete: Access = ({ req }) => {
+  if (!req.user) {
+    return false;
+  }
+
+  return !isMachineAccount(req.user);
+};
+
+/**
  * Create: a machine must say `draft` out loud.
  *
  * Tested against `'draft'` rather than against `'published'` so the refusal does not

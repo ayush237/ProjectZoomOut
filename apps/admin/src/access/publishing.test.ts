@@ -1,7 +1,11 @@
 import type { PayloadRequest } from 'payload';
 import { describe, expect, it } from 'vitest';
 
-import { machinesCreateDraftsOnly, machinesUpdateDraftsOnly } from './publishing';
+import {
+  machinesCreateDraftsOnly,
+  machinesNeverDelete,
+  machinesUpdateDraftsOnly,
+} from './publishing';
 
 /**
  * These assert the *rule*. The proof that the rule is actually reached — that Payload
@@ -105,5 +109,45 @@ describe('machinesUpdateDraftsOnly', () => {
     expect(call(machinesUpdateDraftsOnly, { req: machine, data: { _status: 'draft' } })).toBe(
       false,
     );
+  });
+});
+
+describe('machinesNeverDelete', () => {
+  it('refuses an anonymous request', () => {
+    expect(call(machinesNeverDelete, { req: anonymous })).toBe(false);
+  });
+
+  it('lets a human delete', () => {
+    expect(call(machinesNeverDelete, { req: human })).toBe(true);
+  });
+
+  it('refuses a machine, whatever it sends', () => {
+    expect(call(machinesNeverDelete, { req: machine })).toBe(false);
+    expect(call(machinesNeverDelete, { req: draftWrite(machine) })).toBe(false);
+    expect(call(machinesNeverDelete, { req: machine, data: { _status: 'draft' } })).toBe(false);
+  });
+});
+
+/**
+ * The refusal and the still-works check in one place, deliberately.
+ *
+ * Separated, a credential that can do nothing at all passes the first and fails the
+ * second in a different file, and nobody notices the pair no longer describes a useful
+ * key. Scoping is only correct when both halves hold at once.
+ */
+describe('the machine key is scoped, not disabled', () => {
+  it('cannot delete, but can still create and update drafts', () => {
+    expect(call(machinesNeverDelete, { req: machine })).toBe(false);
+    expect(call(machinesCreateDraftsOnly, { req: machine, data: { _status: 'draft' } })).toBe(true);
+    expect(call(machinesUpdateDraftsOnly, { req: draftWrite(machine), data: {} })).toBe(true);
+  });
+
+  it('still cannot publish', () => {
+    expect(call(machinesCreateDraftsOnly, { req: machine, data: { _status: 'published' } })).toBe(
+      false,
+    );
+    expect(
+      call(machinesUpdateDraftsOnly, { req: draftWrite(machine), data: { _status: 'published' } }),
+    ).toBe(false);
   });
 });

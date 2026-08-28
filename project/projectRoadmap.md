@@ -44,7 +44,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP18 | Assets — scenario images, diagram specs, one visual identity | **Pipeline Manager** | ✅ **Signed off 2026-08-29 (11/11)** — Track 42 fully illustrated, $2.34 against credit | Merge |
 | WP15.2 | Publish-incapable API key + admin `allowedDevOrigins` | Manager | ✅ **Signed off 2026-08-29 (8/8)** — merged as PR #20 | `delete` scoping + the pipeline-side switch, both handed off |
 | WP19 | Gate 2, the editorial reviewer, and the answer-length check | **Pipeline Manager** | 🟡 **8/11 verified 2026-08-30** — the 3 open are blocked on WP15.4, correctly | **WP15.4** (Manager) |
-| WP15.3 | Remove `delete` from the machine account | Manager | 📤 **Handed off 2026-08-29** — not started | — |
+| WP15.3 | Remove `delete` from the machine account | Manager | ✅ **Signed off 2026-08-30 (4/4)** — refusals confirmed by row counts, not status codes | Merge |
 | WP15.4 | Gate 2's three fields on Leaves | Manager | 📤 **Handed off 2026-08-30** | **Blocks WP19's last 3 criteria** |
 | WP20 | One book end to end — a published Track the pipeline produced | **Pipeline Manager** | ⬜ queued | WP19 |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |

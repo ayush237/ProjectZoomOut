@@ -1580,6 +1580,57 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP15.3 — `delete` removed from the machine account — 2026-08-29
+
+**All 4 acceptance criteria met.** Root `lint`, `typecheck`, `test` (964 across four
+workspaces) and `build` pass.
+
+`machinesNeverDelete` in `access/publishing.ts`, wired to `delete` on Tracks, Leaves and
+Media. Unconditional for a machine account, with no inspection of the document or the
+request — no state to resolve, no query semantics to depend on, no flag a caller can
+send. **That plainness is the design, not laziness about it.** WP15.2's publish rule
+failed precisely because it asked a question whose answer turned out to be ambiguous;
+there is nothing here for the same class of mistake to attach to.
+
+Media gets `delete` only. It has no draft/publish distinction to scope against, but an
+image a Leaf points at is content, and a machine deleting one breaks that Leaf as surely
+as deleting the Leaf would.
+
+**Verified against the running API after a restart** — Payload caches config at server
+start, per WP15.2's own note:
+
+| Attempt with the machine key | Result |
+|---|---|
+| `DELETE` its own draft Track | **403** |
+| `DELETE` a published Track | **403** |
+| `DELETE` a published Leaf | **403** |
+| `DELETE` a media item | **403** |
+| **Bulk `DELETE` by query** — a separate Payload operation | **403** |
+| `POST` create a draft Track | **201** |
+| `PATCH ?draft=true` an existing draft | **200** |
+| `PATCH` publish — WP15.2's rule, re-checked | **403** |
+| A human deleting, `overrideAccess: false` | **deleted** |
+
+**Refusals confirmed by data, not by status code.** Every document the key attempted to
+delete was still present afterwards, and the collection counts were unchanged — 37
+Tracks, 151 Leaves, 70 media. A 403 that had nonetheless deleted something would look
+identical in the response.
+
+**The two halves are asserted in one test**, per the handoff: `the machine key is scoped,
+not disabled` checks the delete refusal alongside create and update still succeeding.
+Split across files, a credential that can do nothing at all passes one and fails the
+other somewhere nobody is looking. Mutation-checked both ways — letting machines through
+reddens the refusal tests, refusing everyone reddens the human test.
+
+**The founder's API key was rotated** during verification and the old one no longer
+works. The new key was handed over directly; it is not in the repo.
+
+#### Not done, and deliberately
+
+**WP15.4 was handed off as "do this together with WP15.3 — same file, same access
+control, one restart."** This session was asked for WP15.3 alone, so I did not widen into
+it. It is still one restart's worth of work and unblocks three of WP19's criteria; it
+just needs dispatching.
 ### Completed: WP19 — gate 2, editorial review, and the answer-length check — 2026-08-29
 
 **Partial. 8 of 11 acceptance criteria met and verified; 3 blocked on the same root cause —
