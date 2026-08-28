@@ -15,6 +15,113 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-28 — WP15.6: Thumbnails for gate 2's image candidates
+
+*Manager. **Suggested model: Sonnet** — one field's admin config.*
+
+### Task: WP15.6 — render `imageCandidates` as thumbnails, not URL text
+
+**Context:** Gate 2 is the founder's screen and its whole point is speed. `imageCandidates` currently renders as three plain `url`/`alt` text rows, so comparing candidates means opening three tabs. WP19 measured 4 minutes per Leaf *with* that friction; WP20 is about to run it 18 times.
+
+**Objective:** A reviewer sees the three candidates side by side and picks one without leaving the Leaf.
+
+**Scope:** `apps/admin/` — `Leaves.ts`'s `imageCandidates` field, and a small admin component if Payload needs one.
+
+**Requirements**
+- The three candidates render as visible images, side by side, large enough to tell apart.
+- Picking one must stay as easy as it is now — copying `url`/`alt` into `scenario.image`, or better if Payload makes it cheap.
+- **`alt` stays visible.** It is a publish requirement, and a reviewer choosing on looks alone will not notice a bad one.
+- A broken or missing image URL must degrade, not break the edit screen. WP11 found a cover pointing at a web page; assume it recurs.
+
+**Out of scope:** changing the field's shape (the pipeline writes it), the pipeline, gate 2's logic, publishing rules.
+
+**Device gate:** *open a Track 42 Leaf and see three thumbnails you can actually compare* — then pick one and save as a draft.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Three candidates render as comparable images inside the Leaf editor
+- [ ] `alt` remains visible per candidate
+- [ ] A broken URL degrades without breaking the screen
+- [ ] Existing Leaves with no candidates render unchanged
+- [ ] The pipeline's write path still works — the field shape is unchanged
+
+**Testing expectations:** Tier B, plus the device gate, which is the real check here — this is a visual change and a test that asserts the config will pass whether or not a human can see anything.
+
+---
+
+### Handoff: 2026-08-28 — WP20: One book, end to end, published
+
+*Pipeline Manager. **Suggested model: Opus** — judging whether the content is any good* is *the deliverable, and no test in this repo can do it.*
+
+### Task: WP20 — regenerate Track 42 properly, take it through gate 2, and publish it
+
+**Context:** The last package. Everything exists — ingest, breakdown, drafting, grounding, assets, editorial review, gate 2 — and **nothing the pipeline has produced has ever been published.** Track 42 is real but defective: generated before the answer-length shuffle, still measuring 83% answerable without reading. This package produces the first Track a reader could legitimately learn from.
+
+**Objective:** *The Science of Getting Rich* regenerated with every fix in place, reviewed by the founder through gate 2, published, and visible in the app. Plus the two numbers that decide whether the library can grow: **what a book actually costs, and what it actually costs the founder in minutes.**
+
+**Scope:** `apps/pipeline/`. No `apps/admin` changes — if you need one, stop and say so.
+
+---
+
+**Requirements**
+
+*1 — wire the review loop as live graph edges*
+- `editorial_review` and `revise` are proven as pure functions and as a CLI retrofit. **Wire them into the graph** so a fresh run reaches gate 2 prepared, rather than needing a retrofit invocation.
+- This is the piece WP19 deliberately left, and the last of the graph-shape problem: a fresh run should not need `--run-id` archaeology.
+
+*2 — regenerate Track 42's text*
+- Everything downstream inherits it, so text first, then assets. **Do not carry the old Leaves forward.**
+- The regenerated Track must clear **the answer-length check** and carry the position shuffle. 83% answerable is the defect this package exists to remove.
+- **Attributive framing must be visible in the output**, not just in the prompt — Wattles' metaphysics presented as the author's claim, and apply-in-life carrying behavioural residue rather than a metaphysical instruction.
+
+*3 — regenerate the assets*
+- Images follow text. Use the **six-anchor** set, including the lit-lamp anchor added after WP18.
+- WP19 saw one candidate render a fully-featured face — not a guardrail breach, but a style drift. **Watch for it at volume** and say whether the sixth anchor changed anything.
+
+*4 — gate 2, by the founder, for real*
+- **This is a founder task inside the package, and the timing is a deliverable.** WP19 measured 4 minutes per Leaf mechanically, by the session that generated the content and made no corrections. The founder reading critically and correcting is a different number and nobody knows it.
+- **Report the real per-Leaf time across all 18**, and how much of it was reading versus correcting. That distinction decides what to optimise next: better editorial review, or a better screen.
+
+*5 — publish*
+- **The first time the pipeline's output reaches a published state.** Payload's publish validation gets its first real exercise: five slides, exactly one correct option, DTK sourced, disclaimer, purchase link, cover image, `alt` on every asset.
+- The Track is public domain, so nothing here waits on the acquisition question.
+- **A human publishes. The pipeline still cannot, and must not gain the ability.**
+
+*6 — close the retention loop, finally*
+- `purge_raw_text` was built in WP16, tested, and **never reached at end-of-run because no Track had ever finished.** This package is when the natural end arrives.
+- **Run it and verify by query**: raw text gone, embeddings and provenance intact, source references still resolvable. R6 has been an intention for four packages; make it a fact.
+
+*7 — housekeeping*
+- Three `A Test Book` Tracks (22 Leaves each) and a WP17 fixture Track are still in the CMS as drafts. Delete them with a human credential so the real Track is easy to find.
+
+---
+
+**Out of scope:** deployment, more books, the launch library decision, the admin UI thumbnail friction (queued separately for Manager), unpublishing the 27 placeholder Tracks.
+
+**Constraints**
+- Public-domain only, unchanged.
+- Cost is now measured, not estimated: editorial review is **~$0.24/Leaf**, a full Track **~$7–8**. Report the real total.
+- The credit expires ~17 September and the founder is moving accounts. If credentials shift mid-package, say so rather than working around it.
+
+**Read-it-yourself gate:** *Read three regenerated Leaves end to end, as a reader.* Is the scenario a real dilemma with plausible wrong answers, or a right answer beside two obvious ones? Does the payoff feel earned? **Is the prose still stiff?** WP19 answered "more honest, not less stiff" — say whether that is still true, because if it is, the editorial reviewer is doing half its job and WP14 needs to know.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `lint`/`test`/`build` unaffected
+- [ ] A **fresh run** reaches gate 2 preparation through graph edges, with no retrofit invocation
+- [ ] Track 42 regenerated: 18 Leaves, all grounded, **the answer-length check passing** and the shuffle applied
+- [ ] Attributive framing visible in the output, shown by example
+- [ ] Assets regenerated from the six-anchor set, `alt` on every one, no amber, no text, no identifiable people
+- [ ] **All 18 Leaves reviewed by the founder through gate 2**, and the real per-Leaf time reported with reading and correcting distinguished
+- [ ] **The Track is published and visible in the app**
+- [ ] `purge_raw_text` has run: raw text gone, embeddings and provenance intact — **verified by query**
+- [ ] The test Tracks are gone; Track 42 and the 27 placeholders untouched
+- [ ] **The real cost of one complete Track reported** — generation, assets, review, all in
+- [ ] Three Leaves have been read as a reader and judged
+
+**Testing expectations:** Tier A on the retention purge and on never-publishes. Tier B one happy path for the newly wired edges. The rest of this package is a real run, not a test suite — **the evidence is the published Track and the two numbers.**
+
+---
+
 ### Handoff: 2026-08-28 — WP15.5: The empty-options validation bug, and a comment that overclaims
 
 *Manager. **Suggested model: Sonnet** — the diagnosis is done and written below; what is left is a careful two-line change and the tests that pin it.*
