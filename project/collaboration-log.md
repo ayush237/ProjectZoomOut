@@ -1546,28 +1546,50 @@ conditioning, and the anchors contain no lit-lamp example to contradict it.
 Worth fixing by adding a sixth anchor that deliberately depicts a lit lamp *without* a glow,
 which teaches the exception rather than merely forbidding it. Recommended, not urgent.
 
-#### Cost
+#### Cost — final, measured against the finished run
 
 | | |
 |---|---|
 | Per image (verified) | **$0.039** |
-| Per Leaf | 3 candidates = **$0.117** |
-| **A fully illustrated Track** | **~$2.11** for 18 Leaves |
-| Diagrams | **$0** — a text call and a local render |
-| Anchor set (one-off) | $0.31, 8 images including the two discarded |
+| Track 42, actual | 52 images (51 charged + 1 from the earlier probe) = **$2.03** |
+| Diagrams | **$0** — a text call and a local render, all 18 |
+| Anchor set (one-off, not repeated per Track) | $0.31, 8 images including the two discarded |
+| **Total image spend, this package** | 60 images = **$2.34** |
 
-**Everything drawn from the trial credit — confirmed against the console, not assumed.** The
-whole project has consumed ₹184 of ₹28,710, still 99% remaining.
+**Drawn entirely from the trial credit — confirmed against the console, not assumed.** Billing
+remains enabled against the same account with no upgrade to a paid account, so nothing here
+touched a card.
 
 **The number that matters for the roadmap:** a Track costs roughly **$2 of text plus $2 of
 images**, so about **$4 fully illustrated**. Images are the only per-Leaf recurring cost, but
 they are not the dominant one — text is level with them.
 
-#### Status of the illustrated Track
+#### The illustrated Track — finished
 
-Running at roughly six minutes per Leaf, four complete and zero failures at the time of
-writing. It resumes safely: a Leaf that already carries assets is skipped, so re-running costs
-nothing for work already done.
+All 18 Leaves carry a diagram and three scenario candidates: **70 media rows, zero missing
+`alt`.** Two of 54 attempted candidates were refused by the model (the guardrails forbidding
+identifiable people apply to it as well as to us) and the run continued past them rather than
+failing the Leaf — 17 Leaves show 3 candidates each, confirming nothing silently short-changed
+a Leaf. Zero diagram renders failed. Nothing published: `tracks._status` and every
+`leaves._status` are still `draft`.
+
+**The amber guardrail was run against all 70 generated images, not only the anchors — 70 of 70
+clean.** That closes the loop the acceptance criterion asked for: checked, and said how, on
+the actual output rather than only on the reference set.
+
+#### A shared-checkout collision, and how it was handled
+
+After this report was first drafted, the shared working directory moved to
+`wp15.2-pipeline-key` — another session's branch, forked from before WP18 existed — which
+correctly removed WP18's tracked files from the working tree (they are only ever committed to
+`wp18-assets`, never merged). The stray `__pycache__` looked, for a moment, like lost work.
+
+**Nothing was lost.** Confirmed by reading the commits directly (`git show wp18-assets:...`)
+before touching anything. The rest of this verification — the full gate, the amber check
+against all 70 images, this edit — ran from a `git worktree` on `wp18-assets`, deliberately
+chosen over switching the shared checkout back: doing that would have discarded another
+session's uncommitted `apps/admin` work, which was mid-flight on WP15.2 at the time (and
+includes, incidentally, the `next.config.ts` fix this package's predecessor asked for).
 
 #### Deferred, named
 
