@@ -305,3 +305,82 @@ def test_spend_is_accumulated_across_every_call_in_the_loop() -> None:
 
     assert len(outcome.spend) == 3
     assert outcome.total_cost.total_tokens > 0
+
+
+# --------------------------------------------------------- _existing_claims_block
+
+
+def test_existing_claims_are_rendered_with_their_exact_quote() -> None:
+    """The actual fix: revision must be able to copy a citation verbatim rather than
+    reconstruct it from memory. Found by running revision against two real Track 42 Leaves
+    — grounding failed with 1 and 7 broken citations, on slides the findings never even
+    asked to touch, because the prompt never showed the model what its own citations were."""
+    from zoomout_pipeline.graph.review import _existing_claims_block
+
+    leaf = make_generated_leaf(
+        claims=[
+            Claim(
+                slide_key=SlideKey.SUMMARY,
+                text="A specific claim.",
+                citations=[
+                    Citation(
+                        passage_ref="P3",
+                        note="supports it",
+                        quote="an exact span from the passage",
+                    )
+                ],
+            )
+        ]
+    )
+
+    block = _existing_claims_block(leaf)
+
+    assert "P3" in block
+    assert "an exact span from the passage" in block
+    assert "supports it" in block
+    assert "summary" in block
+
+
+def test_existing_claims_block_handles_a_claim_with_no_quote() -> None:
+    """A note-only citation is valid (WP17) and must render without crashing or inventing
+    a quote that was never there."""
+    from zoomout_pipeline.graph.review import _existing_claims_block
+
+    leaf = make_generated_leaf(
+        claims=[
+            Claim(
+                slide_key=SlideKey.PAYOFF,
+                text="A claim with no quote.",
+                citations=[Citation(passage_ref="P1", note="a note, nothing more")],
+            )
+        ]
+    )
+
+    block = _existing_claims_block(leaf)
+
+    assert "quote=" not in block
+    assert "a note, nothing more" in block
+
+
+def test_an_unclaimed_leaf_renders_as_none() -> None:
+    from zoomout_pipeline.graph.review import _existing_claims_block
+
+    assert _existing_claims_block(make_generated_leaf(claims=[])) == "(none)"
+
+
+def test_revise_prompt_actually_carries_the_existing_claims_block() -> None:
+    """Wiring proof: the block this fix adds must reach the prompt the model sees, not just
+    exist as an unused helper function."""
+    llm = ScriptedLLM([make_generated_leaf()])
+
+    revise_leaf(
+        llm=llm,
+        record=_record(),
+        review=_review_with_findings(),
+        passages=[PASSAGE],
+        model="m",
+    )
+
+    prompt = llm.calls[0]["prompt"]
+    assert "P1" in prompt
+    assert "There is a thinking stuff" in prompt or "supports it" in prompt

@@ -63,6 +63,31 @@ def _options_block(leaf: GeneratedLeaf) -> str:
     )
 
 
+def _existing_claims_block(leaf: GeneratedLeaf) -> str:
+    """The Leaf's own claims, in a form the revise prompt can copy verbatim.
+
+    This is what makes "keep the citation if the wording is unchanged" an instruction the
+    model can actually follow, rather than one it can only approximate from memory. Without
+    this, revision has to reconstruct every claim's quote from scratch even for slides it
+    was not asked to touch — and re-typing a quote from memory is exactly how an exact span
+    stops being exact. Found by running revision against two real Track 42 Leaves before
+    this existed: their revisions failed grounding with 1 and 7 broken citations
+    respectively, on slides the findings never even asked to change.
+    """
+    if not leaf.claims:
+        return "(none)"
+    lines = []
+    for claim in leaf.claims:
+        for citation in claim.citations:
+            quoted_claim = f'"{claim.text}"'
+            quote_part = f' quote="{citation.quote}"' if citation.quote else ""
+            lines.append(
+                f"- [{claim.slide_key.value}] {quoted_claim} "
+                f"— cites {citation.passage_ref}, note: {citation.note}{quote_part}"
+            )
+    return "\n".join(lines)
+
+
 def _findings_block(review: EditorialReviewResult) -> str:
     if not review.findings:
         return "(none)"
@@ -128,6 +153,7 @@ def revise_leaf(
         sticky_notes="; ".join(record.leaf.sticky_notes),
         takeaway=record.leaf.takeaway_body,
         findings=_findings_block(review),
+        existing_claims=_existing_claims_block(record.leaf),
         passages=format_passages(passages),
     )
     result = llm.generate_structured(
