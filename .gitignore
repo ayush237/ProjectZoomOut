@@ -43,6 +43,12 @@ __pycache__/
 apps/pipeline/.data/
 apps/pipeline/runs/
 
+# Payload's local upload store. Generated assets, not source: 70 files and 50MB
+# after one illustrated Track, and it grows per book. Production serves these
+# from object storage, so committing them would bloat the repo permanently to
+# mirror a directory that is rebuilt from the CMS anyway.
+apps/admin/media/
+
 # Editors and OS
 .DS_Store
 .idea/
