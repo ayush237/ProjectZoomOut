@@ -18,6 +18,7 @@ from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.cms.mapper import leaf_payload, track_payload
 from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.graph.dependencies import NodeDependencies
+from zoomout_pipeline.graph.leaf_nodes import reload_passages
 from zoomout_pipeline.graph.nodes import Node
 from zoomout_pipeline.graph.state import PipelineState
 from zoomout_pipeline.logging import get_logger
@@ -28,41 +29,12 @@ _log = get_logger(__name__)
 def _passages_for_record(
     deps: NodeDependencies, passage_refs: dict[str, int]
 ) -> dict[int, Passage]:
-    """Reload the passages a Leaf cited, under the handles the model actually used.
+    """Reload a finished record's passages, keyed by chunk id for the mapper's lookups.
 
-    Driven by the stored `ref -> chunk_id` mapping rather than by position. Renumbering
-    handles from a sorted id list drops the high ones and re-points the rest at the wrong
-    chapters — see the note on `GeneratedLeafRecord.passage_refs`.
+    `reload_passages` (`leaf_nodes.py`) does the actual reload — this just re-shapes its
+    list into the dict form `leaf_payload`'s source-reference lookup wants.
     """
-    chunk_ids = sorted(set(passage_refs.values()))
-    if not chunk_ids:
-        return {}
-
-    with deps.connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, chapter_index, chapter_title, position_in_chapter, text
-            FROM book_chunks WHERE id = ANY(%s)
-            """,
-            (chunk_ids,),
-        )
-        rows = {int(str(r["id"])): r for r in cur.fetchall()}
-
-    passages: dict[int, Passage] = {}
-    for ref, chunk_id in sorted(passage_refs.items()):
-        row = rows.get(chunk_id)
-        if row is None:
-            continue
-        passages[chunk_id] = Passage(
-            ref=ref,
-            chunk_id=chunk_id,
-            chapter_index=int(str(row["chapter_index"])),
-            chapter_title=str(row["chapter_title"]),
-            position_in_chapter=int(str(row["position_in_chapter"])),
-            text=str(row["text"] or ""),
-            distance=0.0,
-        )
-    return passages
+    return {passage.chunk_id: passage for passage in reload_passages(deps, passage_refs)}
 
 
 def make_write_drafts_node(deps: NodeDependencies, client: PayloadClient | None = None) -> Node:
@@ -80,8 +52,7 @@ def make_write_drafts_node(deps: NodeDependencies, client: PayloadClient | None 
         if client is None:
             client = PayloadClient(
                 base_url=deps.settings.payload_url,
-                email=deps.settings.payload_email,
-                password=deps.settings.payload_password,
+                api_key=deps.settings.payload_api_key,
             )
 
         log = _log.bind(run_id=state.run_id, node="write_drafts_to_cms")

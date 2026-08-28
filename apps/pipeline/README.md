@@ -9,13 +9,16 @@ ingest → analyze → breakdown → [HUMAN GATE 1] → draft_leaf → extra_con
               ▲        │                             ▲                            │
               └────────┘                             └────────────────────────────┘
         MAX_BREAKDOWN_ATTEMPTS                            MAX_LEAF_ATTEMPTS
+                                                                              │
+                                                                              ▼
+                                                                    write_drafts_to_cms → END
 ```
 
-WP16 built the spine through gate 1. WP17 adds per-Leaf generation and **the grounding
-gate**. Assets are WP18 and the editorial loop is WP19.
-
-**Writing drafts to Payload is not wired up yet** — it is blocked on the `acquisition` field
-existing on Payload's Track collection (WP15.1, Manager's). See "The CMS boundary" below.
+WP16 built the spine through gate 1; WP17 added per-Leaf generation, the grounding gate and
+the Payload boundary. **Three deliberate invocations sit downstream of the graph itself**,
+for the reason recorded under "The graph-shape problem" below — `write-drafts`,
+`generate-assets` (WP18: image candidates and rendered diagrams), and gate 2's review
+artefacts (WP19), each addressed at a run that already reached `END`.
 
 **This is a standalone Python project.** It is deliberately *not* in the npm workspaces
 array, and the root `npm run build` / `npm test` do not touch it. Its gate is below.
@@ -70,6 +73,12 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_EXTRAS_MODEL` | no | Default `gemini-3.6-flash`. Dinner Table Knowledge and apply-in-life. |
 | `ZOOMOUT_PIPELINE_PAID_TIER` | no | Set `true` before any book that is not public domain. See below. |
 | `ZOOMOUT_PIPELINE_RUNS_DIR` | no | Where plan files are written. Default `runs/`. |
+| `ZOOMOUT_PIPELINE_PAYLOAD_URL` | no | Default `http://localhost:3001`. `localhost`, not `127.0.0.1` — see the note below. |
+| `ZOOMOUT_PIPELINE_PAYLOAD_API_KEY` | for CMS writes | The machine account's key (WP15.2). Provisioned by `npm run create-pipeline-key --workspace=apps/admin`, printed once, never in the repo. |
+| `ZOOMOUT_PIPELINE_IMAGE_MODEL` | no | Default `gemini-3-pro-image`. Matches the anchor set's family — conditioning is strongest within one. |
+| `ZOOMOUT_PIPELINE_DIAGRAM_MODEL` | no | Default `gemini-3.6-flash`. Only emits a JSON spec. |
+| `ZOOMOUT_PIPELINE_SCENARIO_CANDIDATES` | no | Default 3. How many illustrations the human chooses between at gate 2. |
+| `ZOOMOUT_PIPELINE_MAX_IMAGES_PER_TRACK` | no | Default 70. **Halts** a run rather than warning — see `assets/budget.py`. |
 
 ```bash
 export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline"
@@ -81,7 +90,16 @@ export ZOOMOUT_PIPELINE_GEMINI_API_KEY="..."
 export ZOOMOUT_PIPELINE_USE_VERTEX=true
 export ZOOMOUT_PIPELINE_VERTEX_PROJECT="your-project-id"
 export ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE=600
+
+# For anything that writes to Payload:
+export ZOOMOUT_PIPELINE_PAYLOAD_API_KEY="..."
 ```
+
+**`localhost`, deliberately not `127.0.0.1`, for `ZOOMOUT_PIPELINE_PAYLOAD_URL`.** Next's dev
+server rejects `/_next/*` requests whose `Origin` it does not allowlist, which covers
+`localhost` but not the IP form — the admin UI 403s its own JavaScript and renders blank with
+nothing on screen to explain why. `allowedDevOrigins` in `apps/admin/next.config.ts` (WP15.2)
+fixes the admin UI itself; the pipeline's default just avoids walking into the same trap.
 
 ### Vertex AI, and why it is the better target
 
@@ -175,17 +193,23 @@ Passages a Leaf cites are marked `is_cited`, which is what makes `purge-raw-text
 run: cited passages survive as the audit trail proving the claim after the book itself is
 deleted.
 
-## The CMS boundary — not yet open
+## The CMS boundary
 
-WP17 stops short of writing drafts to Payload. Payload's Track collection has **no
-`acquisition` field**, and creating a Track without one is precisely the record R6 says must
-never exist — the whole point of recording it is that "which Tracks must be regenerated when
-the source question resolves" stays a query rather than an act of memory.
+Open since WP17. `cms/client.py` writes **drafts only** — every payload is checked for
+`_status: "draft"` before it is sent, and the client has no publish method at all. Authenticates
+with the machine account's API key (WP15.2), not a login: `Authorization: admins API-Key
+<key>`, which Payload refuses for anything that would publish, unpublish, or edit a document
+that is already live — verified there against every vector, not just documented.
 
-That is `apps/admin` work (WP15.1) and belongs to Manager. When it lands, the writer goes in
-here, writes **drafts only**, and gets a maximal-fixture round-trip test against real Payload
-— because WP15 shipped a mapper that silently dropped three optional fields with 932 tests
-green, and source references are optional fields.
+**Any update must send `?draft=true`.** Without it Payload resolves the *published* row, and
+— WP15.2's finding — with drafts enabled, `_status` on its own resolves against a document's
+*latest version*: a Track that is published but carries a pending draft edit reads as a draft
+and gets written as one. Requiring the flag changes where a write lands rather than trusting
+what the document claims to be.
+
+The maximal-fixture round-trip runs against real Payload, not a stand-in — WP15 shipped a
+backend mapper that silently dropped three optional fields with 932 tests green, and this
+package's source references are optional fields too.
 
 ## Retention
 
@@ -215,7 +239,15 @@ uv run pytest -m live
 
 ## What is deliberately absent
 
-No Payload client, no Payload credential, no HTTP client at all — asserted in
-`tests/test_boundaries.py` against the parsed source, not by review. WP17 opens that
-boundary, and when it does the door is the REST API. Payload's tables are never touched:
-direct access bypasses draft/publish resolution, which silently breaks takedown.
+**HTTP is confined to `cms/client.py` and asserted to live nowhere else** —
+`tests/test_boundaries.py` checks the parsed source, not by review. Payload's tables are
+never touched regardless of caller: direct access bypasses draft/publish resolution, which
+silently breaks takedown.
+
+**The graph-shape problem.** A running graph cannot reach a thread that already reached
+`END` when a node is added behind it — every package since WP17 has hit this once. Rather
+than rediscovering it a fourth time, the pattern is now standard: a deliberate CLI
+invocation (`write-drafts`, `generate-assets`, and WP19's gate-2 equivalent) that loads a
+finished run's checkpointed state, does the work, and folds the result back in with
+`graph.update_state`. All three are idempotent — re-running skips whatever a Leaf already
+has.

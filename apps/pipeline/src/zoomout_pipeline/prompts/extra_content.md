@@ -42,6 +42,29 @@ meeting, write down…" is.
 It must follow from this Leaf's concept rather than being generic self-improvement advice.
 If the concept does not translate into an action, return nothing.
 
+**This is the sharpest case for attribution, because it instructs rather than describes.**
+A summary sentence that asserts the book's mechanism as fact is a framing problem. An
+`apply_in_life` that does the same is telling the reader to act on it — which is a
+different, larger claim.
+
+Where the book's own mechanism is metaphysical or causal in a way you would not assert as
+fact, **do not instruct the reader to perform the metaphysical step.** Instead, find the
+concrete, observable behaviour the book's own practice actually consists of, and instruct
+that.
+
+> **Instructs the metaphysical mechanism (wrong):** Impress your purpose upon the formless
+> substance today.
+>
+> **Instructs the behavioural residue (right):** Write a specific, vivid description of
+> what you want and read it daily.
+
+Both come from the same passage. The first asks the reader to do something whose stated
+effect ZoomOut has no basis to assert. The second is the same practice, described as what a
+person actually does — which is true regardless of whether the book's account of *why* it
+works is one you would defend. If a concept has no such residue — the mechanism itself is
+the entire instruction, with no observable action underneath it — that is a concept with no
+honest `apply_in_life`. Return nothing.
+
 ## claims
 
 Every factual assertion about what the book says needs an entry in **claims**, with a

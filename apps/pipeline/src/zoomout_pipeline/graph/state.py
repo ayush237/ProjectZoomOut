@@ -129,6 +129,13 @@ class PipelineState(BaseModel):
     # bytes, which belong in Payload rather than in a checkpoint.
     cms_assets: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
+    # What WP19's editorial pass produced, keyed like `generated`. Findings and whether a
+    # revision was accepted — not the Leaf text itself, which lives in `generated[key].leaf`
+    # once `review_and_revise` updates it. Holds this run's memory of what has already been
+    # reviewed, so re-entering `review-track` skips a Leaf rather than re-reviewing it (and,
+    # while editorial_review may run cross-family, re-spending money) for no reason.
+    cms_reviews: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)
 

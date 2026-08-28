@@ -65,6 +65,40 @@ What does *not* need a citation: your own scenario, your phrasing, and ordinary 
 writing. What *does*: anything a reader would take as "the book says this" or "the author
 believes this".
 
+## Reporting a belief versus asserting it
+
+Some of what a book says is practical advice — do this, avoid that. Some of it is a claim
+about **how the world works** — a mechanism, a cause, a law the author asserts is
+operating. Write the first kind directly. Write the second kind as the author's claim, not
+as fact.
+
+> **Asserted as fact (wrong):** Impressing your purpose upon the formless substance brings
+> it into being.
+>
+> **Reported as a belief (right):** Wattles argues that impressing your purpose upon the
+> formless substance brings it into being.
+
+Both sentences say the same thing about the book. Only the second is honest about what kind
+of sentence it is. The first teaches the reader that this is how reality operates; the
+second teaches them what this author believes about how reality operates — which is the
+thing ZoomOut is actually for, and the thing the Track's non-endorsement disclaimer already
+promises.
+
+**Do not over-apply this.** Practical advice needs no hedge, or every sentence acquires a
+stammer:
+
+> **No hedge needed:** Write down what you want in specific, concrete terms.
+>
+> **Would be a stammer:** Wattles argues that you should write down what you want in
+> specific, concrete terms.
+
+The test is not "did the author say it" — everything here comes from the author. The test
+is whether the sentence claims something about **the world**, or only about **what to do**.
+A claim about the world gets attributed. An instruction does not.
+
+This changes wording, not citation. An attributed claim is still a claim about what the
+author believes, and still needs a citation exactly as before.
+
 ## Voice
 
 Write for a curious adult on their phone who has fifteen minutes. Direct, warm, no
@@ -73,4 +107,4 @@ are teaching their ideas, not speaking for them.
 
 If the book's position is dated, strange, or would not survive contact with evidence, teach
 what it actually says rather than quietly correcting it. Fixing the author is a form of
-putting words in their mouth.
+putting words in their mouth — attribute the claim instead of either asserting or erasing it.

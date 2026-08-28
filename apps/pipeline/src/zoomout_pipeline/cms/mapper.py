@@ -18,6 +18,7 @@ from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.models import (
     Acquisition,
     BookProvenance,
+    GeneratedLeaf,
     GeneratedLeafRecord,
 )
 
@@ -109,6 +110,59 @@ def _passage_for(
     """
     by_ref = {passage.ref: passage for passage in passages.values()}
     return by_ref.get(ref)
+
+
+def revised_leaf_patch(*, leaf: GeneratedLeaf, existing: dict[str, Any]) -> dict[str, Any]:
+    """A PATCH body for a Leaf whose text `revise` rewrote.
+
+    **Read-modify-write, not trust-the-server-to-merge.** `revise` only ever touches the
+    five slide-text fields on `GeneratedLeaf` — never `scenario.image`,
+    `stickyNotes.diagram`, or `takeaway.dinnerTableKnowledge`/`applyInLife`, all of which
+    live outside it (the image is a human's gate-2 pick; the DTK and apply-in-life fields
+    come from `GeneratedExtras`, which revision explicitly does not touch). Whether
+    Payload's PATCH deep-merges a nested group or replaces it wholesale was really only
+    confirmed for one case — WP18 patched `stickyNotes.diagram` and `stickyNotes.notes`
+    survived. That is not the same field pairing as `scenario.image` alongside a revised
+    `scenario.prompt`, and a human's gate-2 image pick is not something to risk on an
+    analogy. `existing` is that Leaf's current document, fetched immediately before this
+    call — its sibling fields are copied forward unchanged rather than assumed to survive.
+
+    Does not touch `sourceReferences`: revision keeps a claim's original citation whenever
+    its wording is unchanged (the prompt says so explicitly), and rebuilding references here
+    would need the same passage lookup `leaf_payload` does for a fresh Leaf — better done
+    once, at generation, than duplicated for a narrower edit.
+    """
+    existing_scenario = existing.get("scenario") or {}
+    existing_sticky = existing.get("stickyNotes") or {}
+    existing_takeaway = existing.get("takeaway") or {}
+
+    takeaway: dict[str, Any] = {"body": leaf.takeaway_body}
+    if existing_takeaway.get("dinnerTableKnowledge"):
+        takeaway["dinnerTableKnowledge"] = existing_takeaway["dinnerTableKnowledge"]
+    if existing_takeaway.get("applyInLife"):
+        takeaway["applyInLife"] = existing_takeaway["applyInLife"]
+
+    scenario: dict[str, Any] = {
+        "prompt": leaf.scenario_prompt,
+        "options": [
+            {"text": option.text, "isCorrect": option.is_correct}
+            for option in leaf.scenario_options
+        ],
+    }
+    if existing_scenario.get("image"):
+        scenario["image"] = existing_scenario["image"]
+
+    sticky_notes: dict[str, Any] = {"notes": [{"note": note} for note in leaf.sticky_notes]}
+    if existing_sticky.get("diagram"):
+        sticky_notes["diagram"] = existing_sticky["diagram"]
+
+    return {
+        "summary": {"body": leaf.summary_body},
+        "scenario": scenario,
+        "payoff": {"body": leaf.payoff_body},
+        "stickyNotes": sticky_notes,
+        "takeaway": takeaway,
+    }
 
 
 def leaf_payload(

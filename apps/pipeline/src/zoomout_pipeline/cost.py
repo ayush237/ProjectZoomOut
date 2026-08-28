@@ -25,9 +25,15 @@ _RATES_PER_MTOK: dict[str, tuple[float, float]] = {
     "gemini-2.5-flash": (0.30, 2.50),
     "gemini-2.0-flash": (0.10, 0.40),
     "gemini-embedding-001": (0.15, 0.00),
-    # The 3.x models are deliberately absent. Their published rates were not verified
-    # here, and `unpriced_models` naming a model is more useful than a confident number
-    # that is wrong — a silent zero is indistinguishable from a free call.
+    # Verified against ai.google.dev/gemini-api/docs/pricing, 2026-08-29 — the standard
+    # (<=200k token) tier; the >200k tier is 4.00/18.00 and not modelled here, since no
+    # prompt in this pipeline approaches that length. Used by editorial_review and revise
+    # (WP19), the only nodes deliberately run on a stronger, differently-tuned model than
+    # generation so a Leaf is not reviewed by the same judgement that wrote it.
+    "gemini-3.1-pro-preview": (2.00, 12.00),
+    # The rest of the 3.x line is deliberately absent. Their published rates were not
+    # verified here, and `unpriced_models` naming a model is more useful than a confident
+    # number that is wrong — a silent zero is indistinguishable from a free call.
 }
 
 

@@ -366,3 +366,93 @@ def test_a_takeaway_reference_survives_so_dinner_table_knowledge_can_publish() -
     takeaway_refs = [r for r in payload["sourceReferences"] if r["slideKey"] == "takeaway"]
     assert takeaway_refs, "DTK without a takeaway reference is rejected by Payload"
     assert takeaway_refs[0]["chapter"] == "CHAPTER IX. How to Use the Will"
+
+
+# --------------------------------------------------------------- revised_leaf_patch
+
+
+def test_a_revision_patch_preserves_an_existing_image_pick() -> None:
+    """The safety property this function exists for: a human's gate-2 image choice must
+    survive an editorial revision of the surrounding text, regardless of what Payload's own
+    PATCH merge semantics turn out to be for this specific field pairing."""
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+
+    existing = {
+        "scenario": {
+            "prompt": "old prompt",
+            "options": [],
+            "image": {"url": "https://cdn.example/chosen.png", "alt": "chosen by a human"},
+        }
+    }
+
+    patch = revised_leaf_patch(leaf=make_generated_leaf(), existing=existing)
+
+    assert patch["scenario"]["image"] == existing["scenario"]["image"]
+    assert patch["scenario"]["prompt"] != "old prompt", "the revision itself must still apply"
+
+
+def test_a_revision_patch_preserves_an_existing_diagram() -> None:
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+
+    existing = {
+        "stickyNotes": {
+            "notes": [{"note": "old note"}],
+            "diagram": {
+                "url": "https://cdn.example/diagram.png",
+                "alt": "a flow diagram",
+                "spec": "{}",
+                "specFormat": "json",
+            },
+        }
+    }
+
+    patch = revised_leaf_patch(leaf=make_generated_leaf(), existing=existing)
+
+    assert patch["stickyNotes"]["diagram"] == existing["stickyNotes"]["diagram"]
+
+
+def test_a_revision_patch_preserves_dinner_table_knowledge_and_apply_in_life() -> None:
+    """Revision never touches extras — these fields cannot come from the revised leaf at
+    all, only from what was already there."""
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+
+    existing = {
+        "takeaway": {
+            "body": "old body",
+            "dinnerTableKnowledge": "a sourced deep-cut fact",
+            "applyInLife": "a concrete action",
+        }
+    }
+
+    patch = revised_leaf_patch(leaf=make_generated_leaf(), existing=existing)
+
+    assert patch["takeaway"]["dinnerTableKnowledge"] == "a sourced deep-cut fact"
+    assert patch["takeaway"]["applyInLife"] == "a concrete action"
+    assert patch["takeaway"]["body"] != "old body", "the revised takeaway body must still apply"
+
+
+def test_a_revision_patch_with_nothing_existing_omits_the_optional_fields() -> None:
+    """No image was ever picked, no diagram ever attached — the patch must not invent
+    empty groups for fields that were never there."""
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+
+    patch = revised_leaf_patch(leaf=make_generated_leaf(), existing={})
+
+    assert "image" not in patch["scenario"]
+    assert "diagram" not in patch["stickyNotes"]
+    assert "dinnerTableKnowledge" not in patch["takeaway"]
+    assert "applyInLife" not in patch["takeaway"]
+
+
+def test_a_revision_patch_never_touches_status_or_source_references() -> None:
+    """The patch is a pure content update — `update_leaf_draft` is what adds `_status`,
+    and rebuilding sourceReferences here would need the same passage lookup generation
+    already does, duplicated for no reason."""
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+
+    patch = revised_leaf_patch(leaf=make_generated_leaf(), existing={})
+
+    assert "_status" not in patch
+    assert "sourceReferences" not in patch
+    assert "trackId" not in patch
+    assert "orderIndex" not in patch
