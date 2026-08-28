@@ -108,6 +108,15 @@ describe('checkExactlyOneCorrectOption', () => {
     expect(checkExactlyOneCorrectOption({}).ok).toBe(true);
   });
 
+  it('passes when options is an empty array, not just null or undefined (WP15.5)', () => {
+    // This is what Payload actually reads a scenario-less Leaf back as on update —
+    // distinct from the null/undefined cases above, which is exactly why the old
+    // guard (checking only those two) missed it.
+    const leaf = completeLeaf({ scenario: { prompt: 'p', options: [] } });
+
+    expect(checkExactlyOneCorrectOption(leaf).ok).toBe(true);
+  });
+
   it('attaches the error to the options field', () => {
     const leaf = completeLeaf({
       scenario: { prompt: 'p', options: [option('A', false), option('B', false), option('C', false)] },
@@ -537,6 +546,18 @@ describe('the publish gate as a whole', () => {
       },
       sourceReferences: [{ slideKey: 'summary', chapter: 'Ch 1', note: 'A note.' }],
     });
+
+    expect(validateLeaf(leaf, false).ok).toBe(true);
+    expect(validateLeaf(leaf, true).ok).toBe(false);
+  });
+
+  it('lets a scenario-less draft save cleanly, but still refuses to publish it empty (WP15.5)', () => {
+    // checkExactlyOneCorrectOption now treats `options: []` as absent, matching
+    // null/undefined — so it is deliberately NOT what blocks publishing here.
+    // checkAllSlidesPopulated is: its scenario predicate needs 3 options with text,
+    // which an empty array can never satisfy. Asserted together so a regression in
+    // either rule is caught by the half of this test it actually belongs to.
+    const leaf = completeLeaf({ scenario: { prompt: 'p', options: [] } });
 
     expect(validateLeaf(leaf, false).ok).toBe(true);
     expect(validateLeaf(leaf, true).ok).toBe(false);

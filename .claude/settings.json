@@ -2,6 +2,7 @@
   "permissions": {
     "deny": [
       "Read(.env)",
+      "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(**/*.pem)",
       "Read(**/secrets/**)"
@@ -9,6 +10,20 @@
     "ask": [
       "Bash(rm *)",
       "Bash(git push *)"
+    ],
+    "allow": [
+      "Bash(docker exec zoomout-postgres psql:*)",
+      "Read(./apps/mobile/.env)",
+      "Edit(./apps/mobile/.env)",
+      "Bash(lsof *)",
+      "Bash(kill *)"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(lsof *)",
+      "Bash(kill *)"
     ]
   }
 }
