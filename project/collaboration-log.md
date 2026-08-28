@@ -15,6 +15,45 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-28 — WP15.5: The empty-options validation bug, and a comment that overclaims
+
+*Manager. **Suggested model: Sonnet** — the diagnosis is done and written below; what is left is a careful two-line change and the tests that pin it.*
+
+### Task: WP15.5 — treat an empty scenario as absent, and correct `machinesUpdateDraftsOnly`'s comment
+
+**Context:** Both found by WP15.4 while writing tests, neither caused by it, and it correctly declined to fix either in passing — the first touches unlock-gate logic and wanted a ruling.
+
+**Objective:** A human can edit a Leaf that has no scenario yet without being blocked by a validation error about a field they never touched, and a published Leaf still cannot have a broken scenario.
+
+**Scope:** `apps/admin/src/validation/leafRules.ts`, its tests, and one comment in `apps/admin/src/access/publishing.ts`.
+
+**Requirements**
+
+*1 — the empty-options bug*
+- `checkExactlyOneCorrectOption` guards only `options === null || options === undefined`. **Payload reads a Leaf created without a scenario back as `options: []`**, which matches neither, so the check runs on an empty array and fails.
+- The effect: **any plain edit to a scenario-less Leaf fails validation on a field the edit never touched.** Low exposure today because the pipeline always writes a full scenario, but it will bite a human re-editing an incomplete placeholder — which is exactly what gate 2 is about to make people do.
+- **Fix it as "empty is absent", but keep both halves.** A scenario-less *draft* must edit cleanly; a *published* Leaf with no options must still fail, because a published Leaf with nothing to answer is precisely what this rule exists to prevent. The reason WP15.4 did not do this in passing is that those two are one line apart.
+
+*2 — the comment*
+- `machinesUpdateDraftsOnly`'s doc says the Local API "passes the boolean" into `req.query.draft`. Traced through Payload's source: **it does not — only real HTTP populates that.**
+- The rule itself is fine and was verified by curl in WP15.2 and WP15.3. **The comment is what is wrong**, and a comment that overclaims about a security rule is worse than no comment, because the next person extends the rule trusting it.
+
+**Out of scope:** anything in `apps/pipeline`, gate 2's fields, changing what `machinesUpdateDraftsOnly` actually does.
+
+**Device gate:** *in the admin UI, open a Leaf that has no scenario, change its title, and save.* It should save. Then confirm a published Leaf with no scenario options still refuses to publish.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] A **draft** Leaf with `options: []` updates without a scenario validation error
+- [ ] A **published** Leaf with `options: []` is still rejected — mutation-checked, and it must go red for *this* rule
+- [ ] `null` and `undefined` behave exactly as before — no regression on the path that already worked
+- [ ] **The existing scenario-less update test asserts the exact error set, not `arrayContaining`** — that assertion is why this bug survived, and leaving it in place leaves the next one free to hide the same way
+- [ ] The `machinesUpdateDraftsOnly` comment matches what Payload actually does
+
+**Testing expectations:** Tier A — this is unlock-gate logic. The draft-passes and published-fails cases belong in one test file and both must be mutation-checked; a fix that makes everything pass satisfies half of this and breaks the product's central guarantee.
+
+---
+
 ### Handoff: 2026-08-29 — WP19: Gate 2, the editorial reviewer, and the answer-length check
 
 *Pipeline Manager. The last package before WP20 runs a book end to end.*

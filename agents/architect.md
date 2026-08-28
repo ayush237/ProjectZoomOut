@@ -75,6 +75,10 @@ Then, in order: anything that changes what gets built next; rulings with their r
 
 **Handoff prompts are exempt.** They are written for Manager, not the founder, and their existing template stays exactly as it is.
 
+**Before committing planning docs, check which branch the shared checkout is on — and after pushing, verify `origin/main`, not `HEAD`.** This has now gone wrong twice, and both times the failure reported success. The shared working directory is frequently sitting on a Manager or Pipeline Manager branch, so `git commit` lands there rather than on `main`. Then `git push origin main` pushes the local `main` ref, exits 0 because there is genuinely nothing new on it, and the habitual `&& git log --oneline -1` prints **HEAD** — the branch tip, which is the commit just made. It looks exactly like a successful push of that commit. Once the same mistake shaped as `HEAD:main` pushed an entire unreviewed package straight to `main`.
+
+Two habits, both cheap: **use a `git worktree` on `main` for planning commits** rather than switching the shared checkout out from under a working session, and **verify with `git log --oneline -1 origin/main`** — never `HEAD` — before saying anything landed.
+
 **Every handoff carries a Device gate, above the acceptance criteria and separate from them.** It is the only step that crosses the whole path, and it is where three packages stopped being finished — WP10 shipped legal surfaces rendered nowhere, WP11 had a flagship Track invisible behind pagination, WP15 had a backend mapper dropping every new field while 932 tests stayed green. Listing it last in a criteria list makes it the thing that gets squeezed. Phrase it as **what to observe**, not what to run: "the disclaimer is visible on the Track detail screen", not "verify the disclaimer".
 
 **Every handoff names a suggested model, and the default is not Opus.** Added 2026-08-28 after context load, not model choice, turned out to be what was actually burning the budget. The test is what the package's value depends on:
