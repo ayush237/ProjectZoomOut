@@ -690,6 +690,34 @@ describe('gate 2 fields on a Leaf', () => {
     // The tri-state outcome the founder chooses between — never published by this.
     expect(updated['_status']).not.toBe('published');
   });
+
+  it('publishes with editorialFindings still outstanding — advisory never gates publishing (R3)', async () => {
+    const leaf = await payload.create({
+      collection: 'leaves',
+      data: {
+        trackId,
+        orderIndex: 73,
+        title: 'Gate 2 publish-with-findings probe',
+        summary: { body: 'Summary body.' },
+        scenario: validScenario,
+        payoff: { body: 'Payoff body.' },
+        stickyNotes: { notes: [{ note: 'Note one.' }, { note: 'Note two.' }] },
+        takeaway: { body: 'Takeaway body.' },
+        editorialFindings: [
+          { slideKey: 'payoff', category: 'prose', note: 'Still stiff.', suggestion: 'Rework it.' },
+        ],
+      },
+    });
+
+    const published = await payload.update({
+      collection: 'leaves',
+      id: leaf.id,
+      data: { _status: 'published' },
+    });
+
+    expect(published['_status']).toBe('published');
+    expect(published['editorialFindings']).toHaveLength(1);
+  });
 });
 
 /* -------------------------------------------------------------------------- */
