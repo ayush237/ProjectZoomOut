@@ -17,6 +17,8 @@ from zoomout_pipeline.models import (
     BookProvenance,
     Citation,
     Claim,
+    EditorialFinding,
+    EditorialFindingCategory,
     GeneratedExtras,
     GeneratedLeafRecord,
     SlideKey,
@@ -456,3 +458,101 @@ def test_a_revision_patch_never_touches_status_or_source_references() -> None:
     assert "sourceReferences" not in patch
     assert "trackId" not in patch
     assert "orderIndex" not in patch
+
+
+# --------------------------------------------------------------- gate2_review_patch
+
+
+def _finding(
+    *,
+    slide_key: SlideKey = SlideKey.PAYOFF,
+    category: EditorialFindingCategory = EditorialFindingCategory.PROSE,
+) -> EditorialFinding:
+    return EditorialFinding(
+        slide_key=slide_key,
+        category=category,
+        note="a specific problem",
+        suggestion="a concrete fix",
+    )
+
+
+def test_findings_map_to_the_four_field_editorial_findings_shape() -> None:
+    """Matches Leaves.ts exactly: slideKey, category, note, suggestion. Nothing more,
+    nothing less — WP15.4 built this shape from WP19's own spec, so a drift here is this
+    package contradicting the spec it wrote."""
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(findings=[_finding()])
+
+    assert len(patch["editorialFindings"]) == 1
+    row = patch["editorialFindings"][0]
+    assert set(row) == {"slideKey", "category", "note", "suggestion"}
+    assert row["slideKey"] == "payoff"
+    assert row["category"] == "prose"
+
+
+def test_no_findings_omits_the_field_rather_than_writing_an_empty_array() -> None:
+    """A Leaf reviewed clean still needs the patch to say nothing about `editorialFindings`
+    — Payload's own default is already `[]`. The evidence that a review happened lives in
+    the pipeline's own `cms_reviews` state, not in this field."""
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(findings=[])
+
+    assert "editorialFindings" not in patch
+
+
+def test_candidates_map_to_url_and_alt_only() -> None:
+    """WP18's own candidate records also carry a media `id` — dropped here, because
+    `imageCandidates` (unlike Payload's Media collection) has no `id` field, only `url`
+    and `alt`, matching WP15.4's shape exactly."""
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(
+        findings=[],
+        candidates=[
+            {"id": 501, "url": "https://cms.example/media/1.png", "alt": "a scene"},
+            {"id": 502, "url": "https://cms.example/media/2.png", "alt": "another scene"},
+        ],
+    )
+
+    assert patch["imageCandidates"] == [
+        {"url": "https://cms.example/media/1.png", "alt": "a scene"},
+        {"url": "https://cms.example/media/2.png", "alt": "another scene"},
+    ]
+
+
+def test_no_candidates_omits_the_field() -> None:
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(findings=[], candidates=None)
+
+    assert "imageCandidates" not in patch
+
+    patch_empty = gate2_review_patch(findings=[], candidates=[])
+    assert "imageCandidates" not in patch_empty
+
+
+def test_the_patch_never_produces_gate_two_status() -> None:
+    """The one thing this function must never do, checked directly rather than trusted:
+    `gateTwoStatus` is the human's decision alone (WP15.4's `humansOnlyField`), and this
+    function has no parameter that could produce it — but a future edit could add one by
+    mistake, which is exactly what this test exists to catch."""
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(
+        findings=[_finding()],
+        candidates=[{"id": 1, "url": "https://cms.example/media/1.png", "alt": "a scene"}],
+    )
+
+    assert "gateTwoStatus" not in patch
+
+
+def test_the_patch_carries_no_other_fields() -> None:
+    """Same discipline as the revision-patch tests above: this is a narrow, two-field
+    patch, not a general-purpose Leaf update."""
+    from zoomout_pipeline.cms.mapper import gate2_review_patch
+
+    patch = gate2_review_patch(findings=[_finding()], candidates=[{"url": "u", "alt": "a"}])
+
+    assert set(patch) == {"editorialFindings", "imageCandidates"}

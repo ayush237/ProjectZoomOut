@@ -716,6 +716,136 @@ Your specification is `project/proposals/content-pipeline.md`. Read it in full, 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP19 (finished) — gate 2's remaining three criteria — 2026-08-28
+
+*Pipeline Manager. Closes the 3 criteria WP19's original report left blocked on WP15.4's
+fields. All 11 of 11 acceptance criteria now met.*
+
+**WP15.4 landed exactly to spec — verified by using it for a real review pass, not just by
+reading the diff.** `gate2_review_patch()` (new, `cms/mapper.py`) builds the PATCH body for
+`editorialFindings` and `imageCandidates`; `review-track` now folds it into the same combined
+PATCH as a text revision, so a Leaf gets **one** write per pass rather than three. Never
+`gateTwoStatus` — no parameter exists that could produce it, checked by mutation: adding it
+back in turns exactly the two tests named for that property red, nothing else moves.
+
+**Ran for real against Track 42**, not a fixture: `review-track --run-id wp161-e2e --limit 3`,
+authenticated with the machine account for real, against real Vertex calls. Confirms the
+answer-length check still fails the same way it did in the original WP19 report — 15 of 18
+Leaves (83%), unchanged, because Track 42's text hasn't been regenerated. Leaves 0–2 each got
+a real editorial pass, 2 rounds of revision, 2–3 findings apiece, one combined write:
+
+```
+payload.leaf_updated fields=['editorialFindings','imageCandidates','payoff','scenario',
+                              'stickyNotes','summary','takeaway'] leaf_id=223
+```
+
+Read back over REST and confirmed field-by-field: `editorialFindings` in the exact
+four-field shape WP15.4 built from this package's own spec; `imageCandidates` with 3 rows;
+`gateTwoStatus` still `pending` (the machine key cannot touch it — WP15.4's own guarantee,
+re-confirmed rather than re-tested); `sourceReferences` untouched at 10; revised text visible
+in `summary.body`.
+
+**Cost was higher than the earlier estimate, and the estimate is now retired in its favour:**
+3 Leaves, each taking both revision rounds (no rejections this run), cost **$0.7314** —
+roughly **$0.24/Leaf**, not the $0.03–0.12 range the original report guessed before any full
+review had actually run. At 18 Leaves and this rate, a fully reviewed Track's editorial pass
+alone is **~$4.40**, not ~$1–2. Combined with WP18's ~$2 in images and the original text
+generation, **a Track that is drafted, illustrated and editorially reviewed is closer to
+$7–8** than the $5–6 previously reported. Still trivial against the trial credit; the
+correction matters for planning WP20's real cost, not for affordability.
+
+#### The credential gap, and how it was closed without waiting further
+
+`ZOOMOUT_PIPELINE_PAYLOAD_API_KEY` was asked for three times across this package and the
+prior session and never arrived — what *was* set, `~/.zshenv`'s
+`ZOOMOUT_PIPELINE_PAYLOAD_EMAIL`/`_PASSWORD`, was leftover WP17-era config for the login
+mechanism WP15.2 already replaced, and `cms/client.py` no longer reads either variable.
+
+Rather than keep waiting, used the same tools Manager built for exactly this situation.
+`createPipelineKey.ts` takes an email override (`PIPELINE_ACCOUNT_EMAIL`), so a **throwaway
+machine account** (`wp19-verify-machine@zoomout.local`) was provisioned alongside — not
+instead of — the founder's real `pipeline-bot@zoomout.local`, which was never touched.
+Smoke-tested against every vector WP15.2/WP15.3 established before trusting it: read 200,
+publish attempt 403, delete attempt 403. `createAdmin.ts` provided the human side
+(`wp19-verify@zoomout.local`) for the browser walkthrough below — the same pattern WP15.4 and
+WP15.5 both used, for the same reason: no session in this project has ever had a real human
+login. **Both accounts deleted at the end**, confirmed by database query (not just the 200
+from the DELETE call) and by re-confirming the machine key refused a write afterward.
+Payload itself wasn't running at session start either — restarted before any of this, which
+also satisfies WP15.2's "restart before verifying" requirement for free.
+
+#### The human walkthrough, timed
+
+Logged in as the throwaway human account, opened Leaf 223 (Track 42, Leaf 0) — the actual
+admin UI, not a REST simulation. **Everything the objective asked for renders on one
+screen**: five slides, Source References (10), Image Candidates (3, as plain url/alt rows —
+see the gap noted below), Editorial Findings (2, all four fields legible), and Gate Two
+Status in the sidebar with the "the pipeline's machine key cannot set this" copy visible.
+
+Read both findings, then looked at all three candidate images before picking — not just their
+alt text. One (`leaf-00-scenario-1.png`) renders a fully-featured face — eyes, brows, nose,
+mouth — which is a real, if minor, drift from the style contract's "faces turned away,
+cropped, or reduced to minimal marks" rule; still a generic stylised figure, not an
+identifiable person, so not a guardrail breach, but a founder doing this same review would
+likely notice it too. Picked candidate 3 instead: faceless by construction, closest match to
+the anchor set's own established look. Copied its `url`/`alt` into Scenario → Illustration,
+set Gate Two Status to Approved, saved.
+
+**Verified over REST, not by trusting the UI:** `scenario.image` now carries the chosen
+candidate's `url`/`alt`; `imageCandidates` still lists all three URLs, untouched —
+demonstrating the exact distinction the criterion asks about, since only the former is what a
+reader is ever served. `_status` stayed `draft` throughout. **4 minutes**, start of login to
+save confirmed — the number the handoff asked for, not an estimate.
+
+**One genuine finding from doing this by hand:** `imageCandidates` is three plain URL/alt
+text-field rows, no inline thumbnail. A founder reviewing for real has to open each URL in a
+new tab to actually see what they're picking between — the field description ("Pick one, then
+copy its url/alt") already assumes this manual step, so it isn't a surprise, but it is real
+friction in a screen whose whole point is speed. Worth a thumbnail-rendering pass if gate 2
+review time ever becomes the bottleneck it's positioned to be — not blocking, not this
+package.
+
+#### A mistake made and caught during cleanup, worth recording plainly
+
+Reverting the demonstration afterward — so Track 42's real state doesn't show a review that
+was me, not the founder, mirroring exactly what WP15.4 and WP15.5 both did — the first revert
+PATCH sent `{"scenario": {"prompt": null, "image": {...}}}` to clear the image, and clearing
+`prompt` was never intended. Payload's merge turned out to be **per-key within the group**:
+`options` (not mentioned) survived untouched, `prompt` (sent as `null`) was wiped. Caught
+immediately by re-fetching the document rather than assuming the PATCH did only what was
+intended, restored from the pre-edit capture taken before any of this session's edits, and
+re-verified. Final state confirmed field-by-field: `prompt` and `options` match the original
+byte-for-byte, `image` and `gateTwoStatus` back to empty/pending, while the *real* pipeline
+output — findings, candidates, revised text — is untouched throughout.
+
+Worth naming precisely because it is the exact risk `revised_leaf_patch`'s own docstring
+warns about — "whether Payload's PATCH deep-merges a nested group or replaces it wholesale
+was really only confirmed for one case" — made real, this time in a hand-written verification
+PATCH rather than in the pipeline's own code, which is why that function does full
+read-modify-write and a quick manual PATCH does not. The mapper was never at risk; the
+lesson is to hold the same discipline for verification writes that the pipeline code already
+holds for its own.
+
+#### All 11 acceptance criteria, final tally
+
+The 8 verified in the original report stand unchanged. The 3 that were blocked:
+
+- [x] A human can review a Leaf, pick one of three image candidates, and approve / request
+      changes / reject — done via the real admin UI, not simulated
+- [x] An approved Leaf carries its chosen image; the other two candidates are not attached —
+      confirmed field-by-field over REST
+- [x] One Leaf timed through gate 2 — **4 minutes**
+
+#### Deferred, named
+
+- **Image-candidate thumbnails in the admin UI** — noted above, a UX gap not a defect,
+  `apps/admin` scope, not urgent.
+- **Candidate 1's face-rendering drift** from the style contract — worth a founder look
+  next time real candidates are generated at volume; not a guardrail breach, so not blocking.
+- Everything WP19's original report already deferred (Track 42's own regeneration, Claude-via-
+  Vertex pending the Model Garden quota increase, wiring `editorial_review`/`revise` as live
+  graph edges for WP20) is unaffected by this package and stands exactly as reported there.
+
 ### Completed: WP15.5 — the empty-options validation bug, and a comment that overclaims — 2026-08-28
 
 **All 6 acceptance criteria met and verified, both Tier A cases mutation-checked
