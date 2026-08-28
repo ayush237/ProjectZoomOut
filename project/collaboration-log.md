@@ -49,6 +49,42 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ---
 
+### Handoff: 2026-08-29 — WP15.7: "Use this candidate" — one click instead of two copy-pastes
+
+*Manager. **Suggested model: Sonnet** — the pattern exists; the risk is one specific Payload behaviour, named below.*
+
+### Task: WP15.7 — write a chosen candidate into `scenario.image` from the thumbnail
+
+**Context:** WP15.6 made the candidates comparable. Choosing one still means copying `url` and `alt` by hand into `scenario.image`. **WP20 has the founder doing that 18 times** — 36 copy-pastes inside the exact screen whose cost we are trying to measure and reduce. WP15.6 left this deliberately, correctly, because it steps past presentational; this is the follow-up it asked for.
+
+**Objective:** A reviewer clicks a candidate and `scenario.image` is populated with its `url` and `alt`.
+
+**Scope:** `apps/admin/` — the `imageCandidates` component WP15.6 built.
+
+**Requirements**
+- A control on each thumbnail writes that candidate's `url` **and** `alt` into `scenario.image`.
+- **The unverified risk WP15.6 named is the whole job:** whether `setValue` on `scenario.image.url` behaves correctly **before that group has any other data**. Verify it rather than assume it — a Leaf whose scenario image has never been set is the normal case here, not the edge case.
+- **`scenario.prompt` and `scenario.options` must be untouched.** WP19 demonstrated that a partial write to a Payload group silently nulls the siblings it omits — by hand, on this exact group. That is now a recorded hazard in the debt register, and this package writes into that group. Prove the siblings survive.
+- Choosing a second candidate replaces the first cleanly.
+- Manual editing of `scenario.image` still works — this adds a shortcut, it does not take over the field.
+
+**Out of scope:** the pipeline, publishing rules, changing `imageCandidates`' shape, removing candidates after a pick.
+
+**Device gate:** *on a Track 42 Leaf that has no `scenario.image` at all, click a candidate.* Then confirm three things in the same view: the url and alt landed, **`scenario.prompt` still reads what it read before**, and the three options are still there. Save as a draft and re-fetch to confirm what was actually stored.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Clicking a candidate populates `scenario.image.url` and `.alt`
+- [ ] **It works on a Leaf where `scenario.image` was previously empty** — the case WP15.6 could not verify
+- [ ] **`scenario.prompt` and `scenario.options` survive the write** — verified by re-fetching the saved document, not by looking at the form
+- [ ] Picking a different candidate replaces cleanly
+- [ ] Manual editing of `scenario.image` still works
+- [ ] `imageCandidates`' shape is unchanged — `generate:types` shows no diff
+
+**Testing expectations:** Tier B, plus the device gate. The sibling-survival check is the one that matters and it must be done by re-fetching the stored document — the form showing the right thing proves nothing about what Payload wrote.
+
+---
+
 ### Handoff: 2026-08-28 — WP20: One book, end to end, published
 
 *Pipeline Manager. **Suggested model: Opus** — judging whether the content is any good* is *the deliverable, and no test in this repo can do it.*
