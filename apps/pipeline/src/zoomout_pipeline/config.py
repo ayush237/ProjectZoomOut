@@ -55,6 +55,17 @@ DEFAULT_EXTRAS_MODEL = "gemini-3.6-flash"
 DEFAULT_IMAGE_MODEL = "gemini-3-pro-image"
 DEFAULT_DIAGRAM_MODEL = "gemini-3.6-flash"
 
+# WP19. R3 recommends cross-family review — Claude reviewing Gemini's own output — so a
+# same-family model does not grade its own homework. Verified 2026-08-29: Claude *is*
+# reachable through this project's existing Vertex/ADC setup with no new credential, but
+# every Anthropic base model returns 429 RESOURCE_EXHAUSTED — a default-zero Vertex Model
+# Garden quota, not a code problem. Submitting the quota increase is a console action for
+# whoever holds the project; until it lands, the default stays same-family but at the
+# strongest available tier — reviewed by a different model than generated it, even if not
+# a different family.
+DEFAULT_EDITORIAL_MODEL = "gemini-3.1-pro-preview"
+DEFAULT_REVISE_MODEL = "gemini-3.1-pro-preview"
+
 
 class PipelineSettings(BaseSettings):
     """Everything the pipeline needs from its environment."""
@@ -106,6 +117,8 @@ class PipelineSettings(BaseSettings):
     extras_model: str = DEFAULT_EXTRAS_MODEL
     image_model: str = DEFAULT_IMAGE_MODEL
     diagram_model: str = DEFAULT_DIAGRAM_MODEL
+    editorial_model: str = DEFAULT_EDITORIAL_MODEL
+    revise_model: str = DEFAULT_REVISE_MODEL
 
     # How many illustrations to offer the human per Leaf. Three is enough to choose between
     # without turning gate 2 into a gallery.

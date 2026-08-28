@@ -270,3 +270,41 @@ class GeneratedLeafRecord(BaseModel):
     passage_refs: dict[str, int] = Field(default_factory=dict)
 
     attempts: int = 1
+
+
+# ---------------------------------------------------------------------------- WP19
+# Editorial review — advisory, never blocking (R3).
+
+
+class EditorialFindingCategory(StrEnum):
+    """What kind of thing the reviewer is flagging.
+
+    Not a severity scale — there is no "this blocks" tier, because nothing here blocks.
+    The category is what lets a human skim findings by kind rather than reading every note.
+    """
+
+    PEDAGOGY = "pedagogy"
+    SCENARIO_PLAUSIBILITY = "scenario_plausibility"
+    PROSE = "prose"
+    ATTRIBUTION = "attribution"
+
+
+class EditorialFinding(BaseModel):
+    """One advisory note. Feeds `revise`; never rejects a Leaf on its own."""
+
+    slide_key: SlideKey
+    category: EditorialFindingCategory
+    note: str = Field(min_length=1, description="What the problem is, specifically.")
+    suggestion: str = Field(
+        min_length=1, description="A concrete fix — not 'improve this', an actual rewrite."
+    )
+
+
+class EditorialReviewResult(BaseModel):
+    """The reviewer's whole verdict on one Leaf. There is no pass/fail field on purpose —
+    this is advisory input to `revise`, not a gate with a verdict to check."""
+
+    findings: list[EditorialFinding] = Field(default_factory=list)
+    overall_note: str = Field(
+        min_length=1, description="One or two sentences: does this Leaf read well overall?"
+    )

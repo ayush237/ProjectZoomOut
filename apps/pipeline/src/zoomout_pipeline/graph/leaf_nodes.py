@@ -97,6 +97,48 @@ def format_passages(passages: list[Passage]) -> str:
     )
 
 
+def reload_passages(deps: NodeDependencies, passage_refs: dict[str, int]) -> list[Passage]:
+    """Reload a finished record's passages, under the handles the model actually used.
+
+    Driven by the stored `ref -> chunk_id` mapping rather than by position. Renumbering
+    handles from a sorted id list drops the high ones and re-points the rest at the wrong
+    chapters — see the note on `GeneratedLeafRecord.passage_refs`, and WP17's completion
+    report for how that bug actually shipped once already. Written once, here, so
+    `cms_node.py` and `review.py` share it rather than each keeping their own copy.
+    """
+    chunk_ids = sorted(set(passage_refs.values()))
+    if not chunk_ids:
+        return []
+
+    with deps.connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, chapter_index, chapter_title, position_in_chapter, text
+            FROM book_chunks WHERE id = ANY(%s)
+            """,
+            (chunk_ids,),
+        )
+        rows = {int(str(r["id"])): r for r in cur.fetchall()}
+
+    passages: list[Passage] = []
+    for ref, chunk_id in sorted(passage_refs.items()):
+        row = rows.get(chunk_id)
+        if row is None:
+            continue
+        passages.append(
+            Passage(
+                ref=ref,
+                chunk_id=chunk_id,
+                chapter_index=int(str(row["chapter_index"])),
+                chapter_title=str(row["chapter_title"]),
+                position_in_chapter=int(str(row["position_in_chapter"])),
+                text=str(row["text"] or ""),
+                distance=0.0,
+            )
+        )
+    return passages
+
+
 def retrieve_for_leaf(
     deps: NodeDependencies, *, book_id: UUID, planned: PlannedLeaf
 ) -> tuple[list[Passage], TokenSpend]:

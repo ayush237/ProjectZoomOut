@@ -19,6 +19,7 @@ dependencies = [
     "structlog>=24.4",
     "typer>=0.15",
     "pillow>=12.3.0",
+    "anthropic[vertex]>=1.2.0",
 ]
 
 [project.scripts]
