@@ -45,6 +45,7 @@ Always use this exact structure — Manager expects it:
 
 ```
 ### Task: <short, specific title>
+**Suggested model:** <Sonnet | Opus, and one clause saying why>
 **Context:** <why this matters — one or two sentences>
 **Objective:** <what "done" looks like, 1-3 sentences>
 **Scope:** <files/modules likely touched — Manager should verify, not trust blindly>
@@ -75,6 +76,13 @@ Then, in order: anything that changes what gets built next; rulings with their r
 **Handoff prompts are exempt.** They are written for Manager, not the founder, and their existing template stays exactly as it is.
 
 **Every handoff carries a Device gate, above the acceptance criteria and separate from them.** It is the only step that crosses the whole path, and it is where three packages stopped being finished — WP10 shipped legal surfaces rendered nowhere, WP11 had a flagship Track invisible behind pagination, WP15 had a backend mapper dropping every new field while 932 tests stayed green. Listing it last in a criteria list makes it the thing that gets squeezed. Phrase it as **what to observe**, not what to run: "the disclaimer is visible on the Track detail screen", not "verify the disclaimer".
+
+**Every handoff names a suggested model, and the default is not Opus.** Added 2026-08-28 after context load, not model choice, turned out to be what was actually burning the budget. The test is what the package's value depends on:
+
+- **Sonnet** where the handoff already contains the design — field additions, wiring, migrations, config, anything whose TypeScript is written out in a prior report. There is no judgement left to buy.
+- **Opus** where the *finding* matters more than the code. Every high-value output in this project has been the same skill — refusing to accept a green result. WP15.2's publish rule passed thirteen tests and still let a machine unpublish a live Track; WP17's citations silently pointed at the wrong chapter; WP19 traced *why* revise failed rather than stopping at "the net caught it". That instinct is what the legal gates rest on, and it is what WP20 is entirely made of.
+
+Getting this wrong in the cheap direction costs a package. Getting it wrong in the expensive direction costs it every time.
 
 **Optional fields are invisible when dropped.** A missing required field is a validation error on the first request; a missing optional one is indistinguishable from content that legitimately has none. Every additive change to the content model has this property, which is why the maximal-fixture contract test exists — see `agents/manager.md`.
 

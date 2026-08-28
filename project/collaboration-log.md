@@ -92,7 +92,9 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ### Handoff: 2026-08-30 — WP15.4: Gate 2's three fields on Leaves
 
-*Manager. **Do this together with WP15.3**, immediately below — same file, same access control, one restart.*
+*Manager. **Suggested model: Sonnet.** The design is already done — three field definitions with the TypeScript written out in WP19's completion report. There is no judgement call left in it, which is exactly the shape of package that does not need Opus.*
+
+*WP15.3 has since landed separately, so this is now standalone. Its restart note still applies.*
 
 ### Task: WP15.4 — add `imageCandidates`, `editorialFindings` and `gateTwoStatus` to Leaves
 
