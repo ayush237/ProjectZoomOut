@@ -266,6 +266,106 @@ def write_drafts(
     )
 
 
+@app.command("generate-assets")
+def generate_assets(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be illustrated.")],
+    limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
+) -> None:
+    """Generate and attach assets for a run whose Leaves are already in Payload.
+
+    A deliberate invocation rather than a graph node, for the reason WP17 established: adding
+    a node cannot reach a thread that already reached `END`, and Track 42's run has. Doing it
+    this way on purpose beats rediscovering it.
+
+    Re-running is safe: a Leaf that already carries a diagram is skipped.
+    """
+    from zoomout_pipeline.assets.budget import BudgetExceededError, ImageBudget
+    from zoomout_pipeline.assets.images import AnchorSet, ImageClient
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.graph.asset_nodes import (
+        attach_assets,
+        build_diagram,
+        generate_candidates,
+    )
+
+    settings = get_settings()
+    anchors = AnchorSet.load(settings.anchors_dir)
+    if len(anchors) == 0:
+        typer.secho(
+            f"no anchor set at {settings.anchors_dir} — every image would be unconditioned "
+            "and the library would not share a visual identity",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        if not state.cms_leaf_ids:
+            typer.secho(
+                f"run {run_id} has no Leaves in Payload — run write-drafts first",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+
+        client = deps.payload_client or PayloadClient(
+            base_url=settings.payload_url,
+            email=settings.payload_email,
+            password=settings.payload_password,
+        )
+        images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
+        budget = ImageBudget(max_images=settings.max_images_per_track)
+        assets = dict(state.cms_assets)
+
+        keys = sorted(state.cms_leaf_ids, key=lambda k: int(k))
+        if limit:
+            keys = keys[:limit]
+
+        typer.echo(f"{len(keys)} Leaves, {settings.scenario_candidates} candidates each")
+        typer.echo(f"anchors: {len(anchors)} | budget: {budget.max_images} images\n")
+
+        for key in keys:
+            if key in assets:
+                typer.echo(f"  leaf {key}: already has assets, skipped")
+                continue
+
+            record = state.generated[key]
+            try:
+                candidates = generate_candidates(
+                    client=images,
+                    record=record,
+                    anchors=anchors,
+                    model=settings.image_model,
+                    count=settings.scenario_candidates,
+                    budget=budget,
+                )
+            except BudgetExceededError as error:
+                typer.secho(f"\nHALTED: {error}", fg=typer.colors.RED, bold=True)
+                break
+
+            diagram = build_diagram(llm=deps.llm, record=record, model=settings.diagram_model)
+            assets[key] = attach_assets(
+                client=client,
+                leaf_id=state.cms_leaf_ids[key],
+                diagram=diagram,
+                candidates=candidates,
+                order=record.order,
+            )
+            typer.echo(
+                f"  leaf {key}: {len(candidates)} candidates"
+                f"{', diagram' if diagram else ', no diagram'}"
+            )
+
+        graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+
+    typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],

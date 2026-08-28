@@ -211,19 +211,25 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 - Reproduced precisely by the Pipeline Manager: same request with `Referer` → 200, with `Origin` → 403.
 - One line. Worth doing because the failure is undiagnosable from the browser — a blank page with nothing in the console that points at the cause.
 
-**Out of scope:** human role-based permissions (ruled not needed until a second person touches the CMS), anything in `apps/pipeline`.
+**Out of scope:** human role-based permissions (ruled not needed until a second person touches the CMS), **and the pipeline-side switch to the new key** — see the seam note below.
 
-**Device gate:** *load the admin UI at `http://127.0.0.1:3001/admin` and see it render*, then confirm the pipeline's key can create a draft and **cannot** publish one.
+> **Corrected 2026-08-28, before dispatch.** The first draft of this handoff carried the criterion *"the pipeline authenticates with an API key, not a password"* while scoping the work to `apps/admin`. **That criterion is not satisfiable inside that scope** — the client that authenticates lives in `apps/pipeline`, which Manager does not own. It is the same mistake that sent WP4 into WP3's module and WP6 into the backend, so it is corrected here rather than discovered by whoever picks this up.
+>
+> **The seam:** Manager provisions a publish-incapable key and proves it *is* publish-incapable. **Pipeline Manager switches the client to use it**, as a small follow-on once this lands. Until then the pipeline keeps working on its existing login — nothing breaks, and the two halves land in the right sessions.
+
+**Device gate:** *load the admin UI at `http://127.0.0.1:3001/admin` and see it render.* Then, using the new key directly (curl is fine — the pipeline is not switched over yet), confirm it **can create a draft and cannot publish one**.
 
 **Acceptance criteria**
 - [ ] Root `lint`, `typecheck`, `test`, `build` pass
-- [ ] The pipeline authenticates with an API key, not a password
-- [ ] **The key cannot publish** — verified by trying it and getting refused, not by reading config
+- [ ] A publish-incapable API key can be provisioned on `Admins`, and its creation is documented for the founder
+- [ ] **The key cannot publish** — verified by calling the API with it and being refused, not by reading config
+- [ ] The key **can** create and update a draft — otherwise it is scoped too tightly to be useful
 - [ ] The key is revocable independently of any human account
 - [ ] The admin UI renders at `127.0.0.1:3001` as well as `localhost:3001`
 - [ ] No credential is committed
+- [ ] The follow-on for `apps/pipeline` is written into `collaboration-log.md` so it is not lost at the seam
 
-**Testing expectations:** Tier B. The "cannot publish" check is the one that matters — verify the effect, not the config.
+**Testing expectations:** Tier B. The two that matter are behavioural and belong together: **the key is refused on publish and accepted on draft.** A key that cannot publish because it cannot do anything passes half of that and is useless. Verify the effect, not the config.
 
 ---
 
@@ -1533,6 +1539,169 @@ WP0 is signed off. `packages/shared` is built, tested, and ready — its content
 
 ## Completions (Manager → Architect)
 
+### Completed: WP18 — assets: image candidates, rendered diagrams, one visual identity — 2026-08-28
+
+**Anchor set approved by the founder and committed. Generation, rendering, guardrails, budget
+and upload all built and green.** The full 18-Leaf illustration run was still in flight when
+this was written — see *Status of the illustrated Track* below, which is the one thing not yet
+finished rather than not yet built.
+
+#### The anchor set went first, and it earned that ordering
+
+Five committed reference images plus a style contract derived from `design-direction.md`. It
+needed no Payload contact and no WP17 output, so it could land inside the credit window
+regardless of how the rest went — and it is the input everything else depends on.
+
+**Bringing it to the founder before generating at scale was the right call, because two of the
+first five were wrong** in ways no assertion would have caught. One came back as outlined line
+art; another rendered a lamp as a volumetric light cone. Neither is a bad picture. Both read
+as *a different illustrator*, which is precisely the failure the founder's requirement is
+about.
+
+Founder ruled: keep three, drop two, tighten the contract, regenerate. The contract gained two
+prohibitions **from evidence rather than anticipation** — no outlines or line art, no lighting
+effects — and a cap on teal after a third candidate used it as a background field rather than
+an accent.
+
+**The regenerated pair was conditioned on the three survivors, which is the mechanism the rest
+of the package rests on, and it worked**: the glow disappeared and the line art collapsed to
+faint residual contours. That is the first direct evidence that reference-image conditioning
+does what the founder asked for.
+
+#### An alignment worth recording
+
+**Requiring stylised, non-identifiable figures satisfies the legal guardrail and the
+consistency requirement with one rule.** Faces turned away or reduced to minimal marks make an
+identifiable person off-*style* before it is off-policy, and simultaneously remove the single
+biggest source of visual drift between images. The guardrail is enforced by construction
+rather than by hoping the model behaves.
+
+#### Diagrams: the constrained-JSON path, and a benefit R4 did not anticipate
+
+Rendered by us, from a spec, per R4. Four things follow, and the fourth was a surprise:
+
+1. Palette control — diagrams inherit `design-direction.md` and re-theme rather than needing
+   regeneration.
+2. **Legibility enforced by the schema**: 2–5 nodes, labels capped at 42 characters. An
+   unreadable diagram is unrepresentable rather than merely discouraged. WP9 learned this at
+   thumbnail size.
+3. Correctly spelled text. The no-text rule exists because *image models* cannot spell; it does
+   not apply when we draw the glyphs.
+4. **`alt` accurate by construction.** We know what is in the picture because we put it there.
+   A description derived from structure cannot hallucinate — strictly better than asking a
+   model to describe its own output, and a concrete argument for JSON over Mermaid that R4 did
+   not make.
+
+The spec is stored beside the render (`specFormat: json`), which is what WP15 added those
+fields for.
+
+#### The budget halts
+
+Charged **before** each call, not after — charging afterwards means the run has already spent
+what it was not allowed to spend, which makes a cap a report. Counted in images rather than
+currency, because the price is a published rate we do not control and the count is what the
+pipeline decides. Tier A tested by setting the cap low and asserting the refusal is not
+counted.
+
+#### Guardrails: be precise about which are actually checked
+
+| Guardrail | Enforcement |
+|---|---|
+| No reward amber `#FFB020` | **Mechanically, in code** — including against the committed anchors, since every image inherits them |
+| No rendered text | Style contract, plus a human looking |
+| No identifiable person | **By construction** — the contract requires figures with no distinguishing features |
+
+**Only amber is asserted in code, and the module says so.** Claiming the other two are
+"checked" because a prompt forbids them would be the same mistake as calling the 1:1 structure
+requirement enforced because `breakdown.md` asks for it.
+
+#### Two things the first live run taught
+
+**Payload wants a multipart upload's document fields as one JSON `_payload` part.** Sending
+them as separate form fields is silently ignored, and the upload then fails on `alt` being
+required — which reads as a bug in the alt text rather than in the encoding.
+
+**A draft patch lands in `_leaves_v`, not `leaves`.** Exactly the property WP15.1 recorded. My
+first verification query checked the published table, found empty fields, and looked like a
+dropped write. It was the versioning working as designed: what the pipeline writes stays
+invisible until a human publishes.
+
+#### A defect in my own process, not the code
+
+I reported adding a rate-limit retry to the image client, and **the patch had not applied** —
+the anchor run succeeded only because the quota had cleared. Caught later by inspection, not by
+the report. The lesson is the one this project keeps relearning: a patch that reports success
+is not a change that happened. I now grep for the thing I claim to have added.
+
+#### Read it yourself
+
+Three Leaves' candidates side by side. **They do look like one product** — same medium,
+palette, figure treatment and compositional language. A reader moving between Leaves would
+recognise them as coming from the same place, which is the founder's actual requirement and it
+is met.
+
+**But the no-lighting-effects rule is not holding under pressure.** Where a subject implies a
+light source — a shop at night, a laptop in a dark room — the model reaches for a glow anyway:
+mild on Leaf 1, pronounced on Leaf 2. The written prohibition is weaker than the anchor
+conditioning, and the anchors contain no lit-lamp example to contradict it.
+
+**This is style drift, not a guardrail breach** — no amber, no text, no identifiable people.
+Worth fixing by adding a sixth anchor that deliberately depicts a lit lamp *without* a glow,
+which teaches the exception rather than merely forbidding it. Recommended, not urgent.
+
+#### Cost — final, measured against the finished run
+
+| | |
+|---|---|
+| Per image (verified) | **$0.039** |
+| Track 42, actual | 52 images (51 charged + 1 from the earlier probe) = **$2.03** |
+| Diagrams | **$0** — a text call and a local render, all 18 |
+| Anchor set (one-off, not repeated per Track) | $0.31, 8 images including the two discarded |
+| **Total image spend, this package** | 60 images = **$2.34** |
+
+**Drawn entirely from the trial credit — confirmed against the console, not assumed.** Billing
+remains enabled against the same account with no upgrade to a paid account, so nothing here
+touched a card.
+
+**The number that matters for the roadmap:** a Track costs roughly **$2 of text plus $2 of
+images**, so about **$4 fully illustrated**. Images are the only per-Leaf recurring cost, but
+they are not the dominant one — text is level with them.
+
+#### The illustrated Track — finished
+
+All 18 Leaves carry a diagram and three scenario candidates: **70 media rows, zero missing
+`alt`.** Two of 54 attempted candidates were refused by the model (the guardrails forbidding
+identifiable people apply to it as well as to us) and the run continued past them rather than
+failing the Leaf — 17 Leaves show 3 candidates each, confirming nothing silently short-changed
+a Leaf. Zero diagram renders failed. Nothing published: `tracks._status` and every
+`leaves._status` are still `draft`.
+
+**The amber guardrail was run against all 70 generated images, not only the anchors — 70 of 70
+clean.** That closes the loop the acceptance criterion asked for: checked, and said how, on
+the actual output rather than only on the reference set.
+
+#### A shared-checkout collision, and how it was handled
+
+After this report was first drafted, the shared working directory moved to
+`wp15.2-pipeline-key` — another session's branch, forked from before WP18 existed — which
+correctly removed WP18's tracked files from the working tree (they are only ever committed to
+`wp18-assets`, never merged). The stray `__pycache__` looked, for a moment, like lost work.
+
+**Nothing was lost.** Confirmed by reading the commits directly (`git show wp18-assets:...`)
+before touching anything. The rest of this verification — the full gate, the amber check
+against all 70 images, this edit — ran from a `git worktree` on `wp18-assets`, deliberately
+chosen over switching the shared checkout back: doing that would have discarded another
+session's uncommitted `apps/admin` work, which was mid-flight on WP15.2 at the time (and
+includes, incidentally, the `next.config.ts` fix this package's predecessor asked for).
+
+#### Deferred, named
+
+- **A sixth anchor for lit interiors**, to teach the no-glow exception rather than assert it.
+- **OCR for the no-text guardrail.** Rejected for now: a dependency and its own false positives
+  to catch what the style contract already prevents, and a human sees every image at gate 2.
+- **Candidate selection is WP19's.** Candidates are uploaded and none is attached — picking one
+  here would present a decision as though it had been taken.
+- **`scenario.image` stays empty** until a human picks. That is the intended state, not a gap.
 ### Completed: WP15.2 — pipeline API key, and the admin UI blank-page bug — 2026-08-28
 
 **Both items done. All 8 acceptance criteria met.** Root `lint`, `typecheck`, `test`

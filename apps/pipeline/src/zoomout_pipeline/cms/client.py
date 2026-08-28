@@ -17,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any
+from uuid import uuid4
 
 from zoomout_pipeline.cms.mapper import DRAFT_STATUS
 from zoomout_pipeline.logging import get_logger
@@ -149,6 +150,79 @@ class PayloadClient:
 
     def get_leaf(self, leaf_id: int, *, draft: bool = True) -> dict[str, Any]:
         return self._get_document("leaves", leaf_id, draft=draft)
+
+    def upload_media(self, *, data: bytes, filename: str, alt: str) -> dict[str, Any]:
+        """Upload one image to Payload's media collection.
+
+        `alt` is required by the collection and by the shared schema, so it is a parameter
+        rather than an option — WP15 made an asset without alt text unpublishable, which
+        means an image with no alt is not a degraded asset but a Leaf that cannot ship.
+
+        Multipart is hand-rolled because this is the only multipart call in the package and
+        a dependency for one request would be a poor trade.
+        """
+        if not alt.strip():
+            raise PayloadError(
+                f"refusing to upload {filename} with empty alt text — an asset without alt "
+                "cannot be published, so uploading one just moves the failure later"
+            )
+
+        boundary = f"----zoomout{uuid4().hex}"
+        # Payload expects the document's own fields as a single JSON part named `_payload`,
+        # alongside the binary `file`. Sending them as separate form fields looks reasonable
+        # and is silently ignored — the upload then fails on `alt` being required, which
+        # reads as a bug in the alt text rather than in the encoding.
+        document = json.dumps({"alt": alt})
+        body = b"".join(
+            [
+                f"--{boundary}\r\n".encode(),
+                b'Content-Disposition: form-data; name="_payload"\r\n\r\n',
+                document.encode(),
+                f"\r\n--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
+                b"Content-Type: image/png\r\n\r\n",
+                data,
+                f"\r\n--{boundary}--\r\n".encode(),
+            ]
+        )
+
+        request = urllib.request.Request(
+            f"{self._base}/api/media",
+            data=body,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Authorization": f"JWT {self._authenticate()}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                result = dict(json.loads(response.read().decode() or "{}"))
+        except urllib.error.HTTPError as error:
+            raise PayloadError(
+                f"uploading {filename} failed: {error.code} {error.read().decode()[:400]}"
+            ) from error
+
+        doc = result.get("doc", result)
+        _log.info("payload.media_uploaded", media_id=doc.get("id"), filename=filename)
+        return dict(doc)
+
+    def update_leaf_draft(self, *, leaf_id: int, patch: dict[str, Any]) -> dict[str, Any]:
+        """Patch a Leaf's **draft** version.
+
+        `_status` is forced to draft on the way out and the payload goes through the same
+        guard as a create, so there is no path here that publishes — including one that
+        patches `_status` itself.
+        """
+        body = {**patch, "_status": DRAFT_STATUS}
+        _assert_draft(body, what="a Leaf update")
+
+        # `draft=true` matters: without it Payload patches the published version, and a
+        # document that has only ever been a draft has none.
+        query = urllib.parse.urlencode({"draft": "true"})
+        result = self._request("PATCH", f"/api/leaves/{leaf_id}?{query}", body=body)
+        _log.info("payload.leaf_updated", leaf_id=leaf_id, fields=sorted(patch))
+        return dict(result.get("doc", result))
 
     def find_leaf(self, *, track_id: int, order_index: int) -> int | None:
         """The existing draft Leaf at this position, if there is one.

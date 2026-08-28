@@ -13,6 +13,8 @@ gate 1 is human and asynchronous.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from zoomout_pipeline.cost import RunCost
@@ -122,6 +124,10 @@ class PipelineState(BaseModel):
     # it already wrote is the only thing standing between a retry and a duplicated Track.
     cms_track_id: int | None = None
     cms_leaf_ids: dict[str, int] = Field(default_factory=dict)
+
+    # What WP18 attached, keyed like `generated`. Holds media ids and urls — never image
+    # bytes, which belong in Payload rather than in a checkpoint.
+    cms_assets: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)

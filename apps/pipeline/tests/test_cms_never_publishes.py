@@ -13,7 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from zoomout_pipeline.cms.client import PayloadClient, PayloadPublishAttemptError
+from zoomout_pipeline.cms.client import (
+    PayloadClient,
+    PayloadError,
+    PayloadPublishAttemptError,
+)
 from zoomout_pipeline.cms.mapper import DRAFT_STATUS
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.models import (
@@ -60,8 +64,6 @@ def test_a_draft_gets_past_the_guard_and_is_only_stopped_by_the_network() -> Non
     shows a draft reaches the transport — where it fails for an unrelated reason, because the
     base URL points at a closed port.
     """
-    from zoomout_pipeline.cms.client import PayloadError
-
     with pytest.raises(PayloadError) as error:
         client().create_track({"bookTitle": "A book", "_status": DRAFT_STATUS})
 
@@ -80,6 +82,8 @@ def test_the_client_has_no_way_to_publish() -> None:
     assert surface == {
         "create_track",
         "create_leaf",
+        "update_leaf_draft",
+        "upload_media",
         "find_leaf",
         "find_track",
         "get_track",
@@ -143,3 +147,15 @@ def _provenance_for_test() -> BookProvenance:
         acquisition=Acquisition.PUBLIC_DOMAIN,
         ingested_at=datetime(2026, 8, 27, tzinfo=UTC),
     )
+
+
+@pytest.mark.parametrize("status", ["published", "PUBLISHED"])
+def test_patching_a_leaf_cannot_smuggle_a_publish(status: str) -> None:
+    """`_status` is forced to draft on the way out, so a patch naming `published` is
+    overwritten rather than honoured — and the guard runs on the result either way."""
+    with pytest.raises(PayloadError) as error:
+        client().update_leaf_draft(leaf_id=1, patch={"_status": status, "title": "x"})
+
+    # It failed at the transport (closed port), not at the guard — because the forced draft
+    # status made it a legal write. The point is that it can never become a publish.
+    assert not isinstance(error.value, PayloadPublishAttemptError)

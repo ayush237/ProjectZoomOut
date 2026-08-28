@@ -49,6 +49,12 @@ DEFAULT_EMBEDDING_MODEL = "gemini-embedding-001"
 DEFAULT_DRAFT_MODEL = "gemini-3.6-flash"
 DEFAULT_EXTRAS_MODEL = "gemini-3.6-flash"
 
+# WP18. The image model matches the one the anchor set was generated with — conditioning is
+# strongest when the reference images and the new one come from the same family. The diagram
+# model only emits a small JSON spec, so it stays on Flash.
+DEFAULT_IMAGE_MODEL = "gemini-3-pro-image"
+DEFAULT_DIAGRAM_MODEL = "gemini-3.6-flash"
+
 
 class PipelineSettings(BaseSettings):
     """Everything the pipeline needs from its environment."""
@@ -98,6 +104,17 @@ class PipelineSettings(BaseSettings):
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     draft_model: str = DEFAULT_DRAFT_MODEL
     extras_model: str = DEFAULT_EXTRAS_MODEL
+    image_model: str = DEFAULT_IMAGE_MODEL
+    diagram_model: str = DEFAULT_DIAGRAM_MODEL
+
+    # How many illustrations to offer the human per Leaf. Three is enough to choose between
+    # without turning gate 2 into a gallery.
+    scenario_candidates: int = 3
+
+    # The cap that halts a run. See assets/budget.py — it stops rather than warns.
+    max_images_per_track: int = 70
+
+    anchors_dir: Path = Path("assets/anchors")
 
     # Set true once a book that is not public domain goes through. §4a: paid tier only,
     # because the free tier trains on submitted content.
