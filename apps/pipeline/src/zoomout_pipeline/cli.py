@@ -365,6 +365,117 @@ def generate_assets(
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
 
 
+@app.command("review-track")
+def review_track(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be reviewed.")],
+    limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
+) -> None:
+    """Run the answer-length check and editorial review over a run already in Payload.
+
+    The third package in a row to hit the graph-shape problem: a run that already reached
+    `END` cannot be reached by adding a node behind it, so — like `write-drafts` and
+    `generate-assets` before it — this is a deliberate invocation over checkpointed state
+    rather than a graph edge.
+
+    The answer-length check runs once, over every generated Leaf, before anything else —
+    it is a Track-level measurement and does not care which Leaf is reviewed first. Editorial
+    review then runs per Leaf; an accepted revision is patched into Payload as a **draft**
+    text update (`?draft=true`, read-modify-write against the Leaf's current document so a
+    human's image pick or diagram survives). Editorial findings themselves are not yet
+    written to Payload — there is nowhere to put them until the three fields named in this
+    package's completion report exist. They are logged, reported here, and kept in
+    checkpointed state (`cms_reviews`) so nothing is lost while that lands.
+
+    Re-running is safe: a Leaf already in `cms_reviews` is skipped.
+    """
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.cms.mapper import revised_leaf_patch
+    from zoomout_pipeline.graph.answer_length_check import (
+        MAX_LONGEST_CORRECT_RATIO,
+        check_answer_length,
+    )
+    from zoomout_pipeline.graph.leaf_nodes import reload_passages
+    from zoomout_pipeline.graph.review import review_and_revise
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        if not state.generated:
+            typer.secho(f"run {run_id} has no generated Leaves to review", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        settings = deps.settings
+        client = deps.payload_client or PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key
+        )
+
+        length_result = check_answer_length(list(state.generated.values()))
+        typer.echo(
+            f"answer-length check: {'PASS' if length_result.passed else 'FAIL'} — "
+            f"{length_result.leaves_with_longest_correct} of {length_result.leaves_checked} "
+            "Leaves have the longest option correct "
+            f"({length_result.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%})"
+        )
+        if length_result.findings:
+            typer.secho(length_result.feedback, fg=typer.colors.YELLOW)
+        typer.echo("")
+
+        reviews = dict(state.cms_reviews)
+        generated = dict(state.generated)
+        keys = sorted(state.generated, key=lambda k: int(k))
+        if limit:
+            keys = keys[:limit]
+
+        for key in keys:
+            if key in reviews:
+                typer.echo(f"  leaf {key}: already reviewed, skipped")
+                continue
+
+            record = generated[key]
+            passages = reload_passages(deps, record.passage_refs)
+            outcome = review_and_revise(
+                llm=deps.llm,
+                record=record,
+                passages=passages,
+                review_model=settings.editorial_model,
+                revise_model=settings.revise_model,
+            )
+            generated[key] = outcome.record
+            reviews[key] = {
+                "findings": len(outcome.review.findings),
+                "categories": sorted({f.category.value for f in outcome.review.findings}),
+                "overall_note": outcome.review.overall_note,
+                "revised": outcome.revised,
+                "usd": round(outcome.total_cost.total_usd, 4),
+            }
+
+            leaf_id = state.cms_leaf_ids.get(key)
+            if outcome.revised and leaf_id is not None:
+                existing = client.get_leaf(leaf_id, draft=True)
+                patch = revised_leaf_patch(leaf=outcome.record.leaf, existing=existing)
+                client.update_leaf_draft(leaf_id=leaf_id, patch=patch)
+
+            typer.echo(
+                f"  leaf {key}: {len(outcome.review.findings)} findings"
+                f"{', revised' if outcome.revised else ''}"
+                f"{', written to CMS' if outcome.revised and leaf_id else ''}"
+            )
+
+        graph.update_state(  # type: ignore[attr-defined]
+            config, {"generated": generated, "cms_reviews": reviews}
+        )
+
+    total_usd = sum(r["usd"] for r in reviews.values())
+    typer.secho(
+        f"\n{len(reviews)} Leaves reviewed, ${total_usd:.4f}", fg=typer.colors.GREEN, bold=True
+    )
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
