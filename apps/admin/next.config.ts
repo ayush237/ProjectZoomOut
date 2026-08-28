@@ -17,6 +17,18 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 const workspaceRoot = path.resolve(dirname, '../..')
 
 const nextConfig: NextConfig = {
+  /**
+   * Next 16 refuses `/_next/*` requests whose `Origin` is not allowlisted, and Payload
+   * loads its admin chunks `crossorigin` — so those requests carry an `Origin` header.
+   * `localhost` is allowed by default; `127.0.0.1` is not, despite being the same host.
+   *
+   * The failure that produces is what earns the comment: the admin UI 403s **one of
+   * its own JavaScript chunks** and renders a blank page, with nothing in the console
+   * naming a cause. Undiagnosable from the browser, so one line of config gets seven
+   * of explanation.
+   */
+  allowedDevOrigins: ['127.0.0.1'],
+
   images: {
     localPatterns: [
       {
