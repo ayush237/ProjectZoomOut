@@ -9,6 +9,109 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-08-29 — WP19: Gate 2, the editorial reviewer, and the answer-length check
+
+*Pipeline Manager. The last package before WP20 runs a book end to end.*
+
+### Task: WP19 — per-Leaf human approval, advisory editorial review, and one more mechanical gate
+
+**Context:** Everything a Leaf needs now exists — grounded text, a diagram, three image candidates — and none of it has been reviewed. This package builds the review. **It is also the package that decides whether the library can grow**, and not for the reason the roadmap assumed: generation costs ~$4 a Track, while Critic-in-the-Loop review costs **4.5 to 7.5 hours per book** and lands entirely on one person. Money was never the ceiling. **Every design choice here should be read as "does this reduce the founder's minutes per Leaf".**
+
+**Objective:** A human opens a generated Leaf in Payload, sees everything about it on one screen — five slides, both assets, all source references, the editorial reviewer's findings — picks an image candidate, and approves, requests changes, or rejects. Plus one more mechanical check that runs before any of that.
+
+**Scope:** `apps/pipeline/`. Gate 2's surface lives in Payload — see the note on that below before building anything.
+
+---
+
+**Requirements**
+
+*1 — the answer-length check. Mechanical, and not part of `ground_check`*
+- WP17 measured the correct option as the **longest** in 15 of 18 Leaves, against a chance of ~6. Combined with the position bias it already fixed, a reader scored 83% without reading. `PRODUCT.md` calls active recall the product thesis; a gate answerable from formatting makes it decorative.
+- **Ruled 2026-08-27: this is its own mechanical, deterministic check — not `ground_check`, and not the advisory reviewer.** Keeping it out of the legal gate is right, because style findings are exactly what would make that gate arguable. But an advisory finding is too weak a guard for a defect that empties the product's core claim. **Your 1:1 structure check is the precedent**: mechanical, measured, not the legal gate.
+- **Measure per Track, not per Leaf.** One Leaf whose correct answer is longest is chance; a Track where it always is is a tell.
+- **The generation-side fix is substantive distractors, not a shortened correct answer.** That also addresses the strawmanned wrong options you found reading Leaf 6 — one fix, two problems.
+
+*2 — `editorial_review`. Advisory, and deliberately so*
+- Quality, pedagogy, scenario plausibility, prose. WP17's read-through named the standing complaint: **the prose is stiff.**
+- **Advisory means advisory.** It feeds `revise`; it does not block. R3 exists so the legal gate cannot be argued down on quality grounds, and the converse holds — an editorial reviewer that can veto becomes a second legal gate nobody designed.
+- Cross-family review costs money by construction (§4a: Claude has no free tier anywhere). **Price it before running it across a Track**, and say what you chose.
+
+*3 — `revise`, bounded*
+- Hard cap, then escalate to the human. R7's original figure was 2; WP16.1 raised the breakdown cap to 5 on the grounds that the cost assumption behind it had changed. **Pick a cap for this loop deliberately and say why** — do not inherit either number by default.
+
+*4 — attributive framing. Ruled 2026-08-27, and this is where it lands*
+- Claims about **how the world works** are framed as the author's — "Wattles argues that…" — rather than asserted as operative fact. Ordinary practical advice needs no hedge, or every sentence acquires a stammer.
+- **Apply-in-life is the sharpest case**, because it tells a reader to *do* something. Where the book's mechanism is metaphysical, take the behavioural residue — "write a specific, vivid description of what you want and read it daily" — not the metaphysical claim.
+- This is a prompt change plus something the editorial reviewer looks for. **It is not modernising the author**, which remains fabrication; it is the difference between reporting a belief and asserting it. The Track-level disclaimer already says we teach rather than endorse; the slide prose currently contradicts it, and the layer that reaches the reader wins.
+
+*5 — gate 2's surface*
+- **In Payload, not a file.** WP16's file-based gate 1 was ruled correct *for gate 1* — 20 titles review fine as text. Gate 2 is five slides, two assets and a set of source references per Leaf, eighteen times. That is a screen.
+- **The drafts are already there**, which is why WP17 opened the boundary early. Gate 2 is a review of what is in Payload, not a new transport.
+- **If building the admin view requires `apps/admin` changes, stop and say so** rather than reaching across — that is Manager's, and a small handoff is cheaper than a scope breach. Architect ruled 2026-08-27 that human RBAC is **not** required for this: one person is writer, reviewer and admin, and the pipeline's inability to publish is now a permission rather than a promise.
+
+*6 — the graph-shape problem, third occurrence*
+- Adding nodes cannot reach threads that already reached `END`. WP17 hit it and solved it with an explicit `write-drafts --run-id`; WP18 hit it again. **Track 42 is finished and this package adds three nodes behind it.** Design for it rather than rediscovering it.
+
+---
+
+**Out of scope:** WP20's end-to-end run, publishing, deployment, a semantic entailment check (named in the debt register, needs an LLM judge and is deliberately not folded into the mechanical gate), OCR for the no-text guardrail.
+
+**Also queued for you, small, and best done first:** the **sixth style anchor** — a lit interior with no glow, teaching the exception rather than only forbidding it. ~$0.04, approved 2026-08-29. **Do not regenerate Track 42's images for it** — that Track's text is regenerating after this package anyway and images follow text.
+
+**And the WP15.2 follow-on:** switch `cms/client.py` from the login to `Authorization: admins API-Key`. Creates need no change; **any update method must send `?draft=true`** — WP15.2 found that a `_status` constraint reads against the latest version, so a published document with a pending draft evaluates as a draft and slips through. `draft=true` changes where the write lands rather than what it claims.
+
+**Constraints**
+- Public-domain books only, unchanged.
+- The trial credit expires ~17 September. Editorial review is the one node here that spends.
+
+**Read-it-yourself gate:** *Take one Leaf through gate 2 as the founder will, and time it.* The number of minutes is the deliverable — it is the constraint on the whole library, and nobody has measured it. Then read a revised Leaf against its original: **did the editorial pass make the prose less stiff, or just different?** An advisory reviewer that changes text without improving it costs money and review minutes for nothing.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `lint`/`test`/`build` unaffected
+- [ ] **The answer-length check measures per Track and fires** on a deliberately-tell-ridden fixture — mutation-checked, and it must go red for the right rule
+- [ ] The length check is **separate from `ground_check`** — breaking one does not turn the other's tests red
+- [ ] `editorial_review` produces structured, actionable findings and **cannot block** — proven by a Leaf that passes with findings outstanding
+- [ ] `revise` terminates at its cap and escalates; the cap is a named constant with its reasoning
+- [ ] Attributive framing is applied, and a metaphysical apply-in-life is rendered as behavioural residue — shown by example, not asserted
+- [ ] A human can review a Leaf, pick one of three image candidates, and approve / request changes / reject
+- [ ] An approved Leaf carries its chosen image; the other two candidates are not attached
+- [ ] Nothing this package writes is ever in a published state
+- [ ] The three new nodes reach Track 42, which already finished
+- [ ] Editorial spend logged and reported per Leaf
+- [ ] **One Leaf has been taken through gate 2 and the minutes reported**
+
+**Testing expectations:** Tier A on the length check firing, the revision cap terminating, and never-publishes. Tier B one happy path each for review, selection and approval. Test the editorial node on its **contract** — findings parse, required fields present — never on its prose. Live-model runs stay in the explicit suite outside the normal gate. List what you deferred.
+
+---
+
+### Handoff: 2026-08-29 — WP15.3: Remove `delete` from the machine account
+
+*Manager. Two lines, per your own WP15.2 report.*
+
+### Task: WP15.3 — scope `delete` away from the pipeline's API key
+
+**Context:** WP15.2 scoped the machine account away from publishing and correctly left `delete` alone rather than widening scope without a ruling. **Ruled 2026-08-29: close it.**
+
+**Objective:** The pipeline's API key cannot delete Tracks, Leaves, or media.
+
+**Scope:** `apps/admin/` — the same access control WP15.2 touched.
+
+**Why, because it is worth more than two lines suggests:** the pipeline has no use for deletion — its idempotency is find-then-update, and WP17's junk-Track cleanup was manual housekeeping done by a human with a login. **The argument is WP15.2's own finding.** Publishing was believed scoped, thirteen unit tests agreed, and the key could still unpublish a live Track. The same class of mistake on `delete` does not expose content, it destroys it — and **takedown is a legal obligation**, so a machine account able to delete a Track is able to break a compliance mechanism.
+
+**Out of scope:** human roles, anything in `apps/pipeline`, revisiting WP15.2's publish scoping.
+
+**Device gate:** *using the key directly, attempt to delete a Leaf and be refused; then create and update a draft and succeed.* Both halves — a key that cannot delete because it cannot do anything is not the result.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] **The key is refused on delete** for Tracks, Leaves and media — verified by calling the API, not by reading config
+- [ ] The key can still create and update drafts, and still cannot publish
+- [ ] Payload's config cache means access-control changes need a server restart — **restart before verifying**, per WP15.2's own note, or the probe tests the old config
+
+**Testing expectations:** Tier B, but the refusal and the still-works checks belong together in one test so neither can pass alone.
+
+---
+
 ### Handoff: 2026-08-28 — WP18: Assets — scenario images and sticky-note diagrams
 
 *Pipeline Manager.*
@@ -1599,6 +1702,113 @@ includes, incidentally, the `next.config.ts` fix this package's predecessor aske
 - **Candidate selection is WP19's.** Candidates are uploaded and none is attached — picking one
   here would present a decision as though it had been taken.
 - **`scenario.image` stays empty** until a human picks. That is the intended state, not a gap.
+### Completed: WP15.2 — pipeline API key, and the admin UI blank-page bug — 2026-08-28
+
+**Both items done. All 8 acceptance criteria met.** Root `lint`, `typecheck`, `test`
+(959 across four workspaces) and `build` all pass.
+
+#### 1 — a publish-incapable API key
+
+`Admins` now has `useAPIKey: true` and an `accountType` of `human` or `machine`,
+defaulting to `human`. `npm run create-pipeline-key --workspace=apps/admin` provisions
+`pipeline-bot@zoomout.local` as a machine account and prints its key once; Payload keeps
+only a hash. Creation, rotation and revocation are documented in the new
+`apps/admin/README.md`.
+
+**The key is a separate identity from the login the pipeline uses today.** The script's
+first run found the existing `pipeline@zoomout.local` and converted it, which would have
+changed the rights of a credential another session is actively using — the one thing this
+package was scoped not to do. It was restored to `human` with its key cleared, and the
+machine account was provisioned alongside it instead. The pipeline keeps working
+untouched; the old login can be deleted once it switches over.
+
+**What "cannot publish" was made to mean.** Three things change what the public is
+served, not one: publishing, unpublishing, and editing a document that is already live.
+A machine is refused all three. It may create drafts, and may update through Payload's
+draft mechanism (`?draft=true`), which writes to the versions table rather than the
+published row.
+
+**Verified by calling the API, not by reading config** — every vector, against a Track
+that was published *and* carried a pending draft:
+
+| Attempt with the machine key | Result |
+|---|---|
+| `POST` create with `_status: draft` — the pipeline's real call | **201** |
+| `PATCH ?draft=true` — a legitimate draft edit | **200**, published row untouched |
+| `POST` create with `_status: published` | **403** |
+| `POST` create omitting `_status` | **403** |
+| `PATCH` a live row with no flag | **403** |
+| `PATCH _status: draft` — unpublish | **403** |
+| `PATCH ?draft=false` | **403** |
+| `PATCH ?draft=true` with `_status: published` | **403** |
+| Same probes against Leaves | **403** |
+| A human publishing, `overrideAccess: false` | **published** |
+| Any call after revoking through Payload | **403** |
+
+#### The first implementation was wrong, and only the behavioural check caught it
+
+`machinesUpdateDraftsOnly` originally returned a query constraint —
+`_status not_equals published` — so a published document would not be in the set the
+credential could address. Thirteen unit tests passed. Payload does apply the constraint.
+**It still let the machine key unpublish a live Track**, because with drafts enabled
+`_status` resolves against the document's *latest version*: a Track that is published but
+carries a pending draft edit reads as a draft to the query and is updated as one.
+
+The hole was invisible on a clean fixture and open on real content — the demo Track had a
+pending draft from the WP15.1 device gate, so it was the realistic case that failed and
+the tidy one that passed. **A published Track was edited and unpublished during the
+probe; it was restored from its last published version and the probe's version rows were
+deleted.**
+
+What replaced it does not ask what state the document is in. Requiring `draft=true`
+changes the write's *destination* rather than its value, so the published row is not what
+is being written at all, and a machine that forgets the flag is refused rather than
+quietly writing live content.
+
+**Two process notes, because both cost time and both will recur:**
+
+- **Payload caches its config at server start.** The first re-probe still showed the old
+  behaviour because the dev server had booted before the rewrite. Access functions,
+  collection config and hooks all need a restart, not HMR — a code change that appears
+  not to have worked is more likely stale than wrong.
+- **Revoking by flipping `enable_a_p_i_key` in the database does not revoke anything.**
+  The key kept authenticating. Payload clears the key hash as part of its own update, so
+  revocation has to go through Payload — the UI, or the API. This is in the README as a
+  warning because the database column looks like the off switch and is not.
+
+#### 2 — the blank admin UI
+
+One line: `allowedDevOrigins: ['127.0.0.1']` in `next.config.ts`. Mutation-checked by
+removing it and restarting — the chunk request with `Origin: http://127.0.0.1:3001` goes
+403 without it and 200 with it, while a genuinely foreign origin is still refused. The
+admin UI renders fully at `127.0.0.1:3001` with no console errors.
+
+#### Follow-on for Pipeline Manager — the other half of the seam
+
+**`apps/pipeline` still authenticates with a login and should switch to the key.**
+Nothing is broken until it does; this is the half of the seam the WP15.2 handoff assigned
+to the Pipeline session.
+
+- `cms/client.py` `_authenticate()` posts to `/api/admins/login` and sends
+  `Authorization: JWT <token>`. The key replaces both: send
+  `Authorization: admins API-Key <key>` on every request and delete the login round trip.
+- Config moves from `ZOOMOUT_PIPELINE_PAYLOAD_EMAIL` / `_PASSWORD` to a single
+  `ZOOMOUT_PIPELINE_PAYLOAD_API_KEY`. The founder has the key; it is not in the repo.
+- **Keep `_assert_draft`.** It is no longer the only thing standing between the pipeline
+  and a publish, but a clear error at the call site still beats a 403 from the server.
+- Creates need no change — `POST /api/tracks` with `_status: "draft"` and no query
+  parameter is accepted as-is, which is why create was deliberately not made to require
+  the `draft` flag.
+- **If an update method is ever added, it must send `?draft=true`** or it will be refused.
+- Once the switch lands, `pipeline@zoomout.local` can be deleted.
+
+#### One thing left for Architect to rule on
+
+**A machine account can still delete content.** Scoping covered publishing, as the
+handoff specified; `delete` access was left alone rather than widened without a ruling. A
+credential that cannot publish but can delete a published Track is a smaller hole than
+the one just closed — the previous login could do both — but it is not nothing, and
+closing it is two lines in the same file.
 
 
 ### Completed: WP17 (second half) — the Payload boundary — 2026-08-27

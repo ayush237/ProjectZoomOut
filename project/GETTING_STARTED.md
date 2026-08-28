@@ -61,6 +61,31 @@ alias claude-manager='claude --append-system-prompt "$(cat agents/manager.md)"'
 
 `--append-system-prompt` is an *append*, not a replacement — Claude Code's default tool guidance and safety behavior stay in place, and the persona file adds project-specific rules on top. The advantage over the app flow is that the persona can't be forgotten; the behavior is otherwise identical.
 
+## Give each session its own worktree — added 2026-08-29
+
+**Two sessions cannot hold two branches in one checkout.** Git has one HEAD per working directory, so when the second session switches branches the first one's files vanish out from under it mid-task.
+
+This has now happened three times, escalating:
+
+1. WP15.1 was branched from a **stale local `main`**, so it built without WP16 and produced a phantom eslint regression that cost real diagnosis time.
+2. WP16's untracked `.venv` sat in the tree across checkouts, linting on branches that had no ignore for it.
+3. **WP18 and WP15.2 collided directly** — the shared checkout moved to `wp15.2-pipeline-key` mid-session while the Pipeline Manager was verifying WP18, clearing WP18's files from the tree. Nothing was lost, but only because the Pipeline Manager read the commits before touching anything and finished from a worktree instead of switching back, which would have discarded eleven uncommitted `apps/admin` changes.
+
+**The third incident is the argument.** The recovery worked because a careful session noticed; the next one might not.
+
+```bash
+git worktree add ../ZO-admin    -b <manager-branch>  main
+git worktree add ../ZO-pipeline -b <pipeline-branch> main
+```
+
+Point Manager at `../ZO-admin` and Pipeline Manager at `../ZO-pipeline`. Same repository, same history, same remotes — separate HEADs, so neither can disturb the other. Architect keeps the original checkout for `project/` and `agents/`.
+
+**The cost, so it is not a surprise:** each worktree needs its own `npm install`, and the pipeline's needs its own `.venv`. Ten minutes, once.
+
+**When a package finishes**, `git worktree remove <path>`. A worktree left behind on a deleted branch is its own small confusion — and removing one is what broke Architect's shell cwd once, so run it from somewhere else.
+
+**Sequential work does not need this.** One session at a time in the shared checkout is fine and simpler. The rule is only: two sessions working at once means two worktrees.
+
 ## Two sessions, one repo
 Both sessions point at the same working directory, and `CLAUDE.md` loads automatically for both. Both have identical technical permissions — what differs is which persona loaded. Architect's "never touch application code" rule (see `agents/architect.md`) is enforced by instruction, not by disabling a tool, since it still needs Edit/Write for `projectplan.md`, `projectRoadmap.md`, and proposal docs.
 

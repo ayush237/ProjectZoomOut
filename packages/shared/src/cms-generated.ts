@@ -122,7 +122,7 @@ export interface AdminAuthOperations {
   };
 }
 /**
- * People who can author and publish ZoomOut content.
+ * People who can author and publish ZoomOut content, and the machine accounts that draft it.
  *
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "admins".
@@ -130,8 +130,15 @@ export interface AdminAuthOperations {
 export interface Admin {
   id: number;
   displayName: string;
+  /**
+   * A machine account writes drafts and cannot publish, unpublish, or edit anything already published — enforced by access control, not by the caller behaving. Defaults to human so an account is never silently created without publish rights.
+   */
+  accountType: 'human' | 'machine';
   updatedAt: string;
   createdAt: string;
+  enableAPIKey?: boolean | null;
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
   email: string;
   resetPasswordToken?: string | null;
   resetPasswordExpiration?: string | null;
@@ -500,8 +507,12 @@ export interface PayloadMigration {
  */
 export interface AdminsSelect<T extends boolean = true> {
   displayName?: T;
+  accountType?: T;
   updatedAt?: T;
   createdAt?: T;
+  enableAPIKey?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
   email?: T;
   resetPasswordToken?: T;
   resetPasswordExpiration?: T;
