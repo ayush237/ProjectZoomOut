@@ -384,9 +384,35 @@ export interface Leaf {
       }[]
     | null;
   /**
+   * Scenario image candidates from the pipeline. Pick one, then copy its url/alt into Scenario → Illustration above. Not itself rendered to a reader.
+   */
+  imageCandidates?:
+    | {
+        url?: string | null;
+        alt?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
+   * Advisory notes from the editorial reviewer. Read them, then decide below — this list cannot block publishing (R3).
+   */
+  editorialFindings?:
+    | {
+        slideKey?: ('summary' | 'scenario' | 'payoff' | 'stickyNotes' | 'takeaway') | null;
+        category?: string | null;
+        note?: string | null;
+        suggestion?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  /**
    * Mock content. Defaults to ON so nothing reaches production by accident — untick only for real, fact-checked content.
    */
   isPlaceholder?: boolean | null;
+  /**
+   * The human's decision at gate 2. The pipeline's machine key cannot set this.
+   */
+  gateTwoStatus?: ('pending' | 'approved' | 'changes_requested' | 'rejected') | null;
   updatedAt: string;
   createdAt: string;
   _status?: ('draft' | 'published') | null;
@@ -659,7 +685,24 @@ export interface LeavesSelect<T extends boolean = true> {
         note?: T;
         id?: T;
       };
+  imageCandidates?:
+    | T
+    | {
+        url?: T;
+        alt?: T;
+        id?: T;
+      };
+  editorialFindings?:
+    | T
+    | {
+        slideKey?: T;
+        category?: T;
+        note?: T;
+        suggestion?: T;
+        id?: T;
+      };
   isPlaceholder?: T;
+  gateTwoStatus?: T;
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
