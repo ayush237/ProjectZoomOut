@@ -83,10 +83,31 @@ def run(
         typer.Option(help="How this file was obtained. Required — see R6."),
     ],
     run_id: Annotated[str | None, typer.Option(help="Defaults to a generated id.")] = None,
+    cms_track_id: Annotated[
+        int | None,
+        typer.Option(help="Write into an existing Track instead of creating a new one."),
+    ] = None,
 ) -> None:
-    """Ingest, analyze, break down, and stop at the human gate."""
+    """Ingest, analyze, break down, and stop at the human gate.
+
+    `--cms-track-id` regenerates a Track that already exists, which is a different thing
+    from resuming one. A resumed run reuses the Track it created itself; this seeds the
+    same field from outside so a *new* run's Leaves land under the *old* Track's id.
+    WP20 needed it: Track 42's text was regenerated from scratch, and letting the run
+    create Track 45 would have left two Tracks of one book in the CMS with the founder
+    reviewing whichever they happened to open.
+
+    **It does not empty the Track first.** `write_drafts_to_cms` skips any `orderIndex`
+    Payload already holds, so pointing a run at a populated Track writes nothing — delete
+    the old Leaves first, deliberately, with a credential that is allowed to.
+    """
     resolved_run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
-    state = PipelineState(run_id=resolved_run_id, source_path=str(source), acquisition=acquisition)
+    state = PipelineState(
+        run_id=resolved_run_id,
+        source_path=str(source),
+        acquisition=acquisition,
+        cms_track_id=cms_track_id,
+    )
 
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": resolved_run_id}}
@@ -318,7 +339,7 @@ def generate_assets(
             api_key=settings.payload_api_key,
         )
         images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
-        budget = ImageBudget(max_images=settings.max_images_per_track)
+        budget = ImageBudget(max_images=settings.max_images_per_track, model=settings.image_model)
         assets = dict(state.cms_assets)
 
         keys = sorted(state.cms_leaf_ids, key=lambda k: int(k))
@@ -331,6 +352,26 @@ def generate_assets(
         for key in keys:
             if key in assets:
                 typer.echo(f"  leaf {key}: already has assets, skipped")
+                continue
+
+            # Ask Payload, not just local bookkeeping — the same reasoning `find_leaf`
+            # already carries for the CMS write, and for the same reason.
+            #
+            # `cms_assets` used to be persisted once, after this whole loop. So a run killed
+            # partway wrote every asset to Payload and recorded none of them, and the retry
+            # regenerated all of it: WP20's first asset run hung at Leaf 11 of 18, and the
+            # resume started again at Leaf 0, paying for images that already existed.
+            #
+            # That is the identical failure `write_drafts_to_cms` documents — interrupted at
+            # Leaf 11 of 18, local state disagreeing with the CMS — in the one code path that
+            # never got the fix. The incremental checkpoint below stops it recurring; this
+            # check is what recovers a run whose bookkeeping is *already* lost, which no
+            # amount of future checkpointing can help with.
+            existing = client.get_leaf(state.cms_leaf_ids[key], draft=True)
+            if ((existing.get("stickyNotes") or {}).get("diagram") or {}).get("url"):
+                typer.echo(f"  leaf {key}: already illustrated in the CMS, skipped")
+                assets[key] = {"recovered": True}
+                graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
                 continue
 
             record = state.generated[key]
@@ -360,7 +401,10 @@ def generate_assets(
                 f"{', diagram' if diagram else ', no diagram'}"
             )
 
-        graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+            # Checkpointed per Leaf, not once at the end. Images are the most expensive
+            # thing this pipeline buys, and bookkeeping written only on a clean exit is
+            # bookkeeping that is missing exactly when a retry needs it most.
+            graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
 
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
 
@@ -445,6 +489,7 @@ def review_track(
                 passages=passages,
                 review_model=settings.editorial_model,
                 revise_model=settings.revise_model,
+                max_attempts=settings.editorial_attempts,
             )
             generated[key] = outcome.record
             reviews[key] = {
@@ -489,6 +534,139 @@ def review_track(
     typer.secho(
         f"\n{len(reviews)} Leaves reviewed, ${total_usd:.4f}", fg=typer.colors.GREEN, bold=True
     )
+
+
+@app.command("balance-distractors")
+def balance_distractors(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be rebalanced.")],
+    dry_run: Annotated[
+        bool, typer.Option(help="Measure and report without calling a model or writing.")
+    ] = False,
+) -> None:
+    """Rewrite the wrong options of any Leaf whose correct answer is the longest.
+
+    WP20 regenerated Track 42 and still measured the tell in 11 of 18 Leaves — better than
+    the 15 of 18 that motivated the check, and still over the limit. `draft_leaf.md`
+    already forbids it; the model complies about a third of the time it matters, because
+    the correct option carries the Leaf's actual concept and nuance costs words.
+
+    So this repairs the Leaves that show it rather than regenerating the Track: only the two
+    wrong options change, they carry no citations, and the seven Leaves that already balance
+    are left alone. See `graph/distractors.py`.
+
+    Re-running is safe, and `--dry-run` measures without spending anything.
+    """
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.graph.answer_length_check import (
+        MAX_LONGEST_CORRECT_RATIO,
+        check_answer_length,
+    )
+    from zoomout_pipeline.graph.distractors import correct_is_longest, rebalance_options
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        if not state.generated:
+            typer.secho(f"run {run_id} has no generated Leaves", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        settings = deps.settings
+        before = check_answer_length(list(state.generated.values()))
+        typer.echo(
+            f"before: {before.leaves_with_longest_correct} of {before.leaves_checked} "
+            f"({before.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%}) "
+            f"— {'PASS' if before.passed else 'FAIL'}"
+        )
+
+        targets = sorted(
+            (key for key, record in state.generated.items() if correct_is_longest(record.leaf)),
+            key=int,
+        )
+        typer.echo(f"Leaves showing the tell: {[state.generated[k].order for k in targets]}\n")
+
+        if dry_run:
+            typer.secho("dry run — nothing called, nothing written", fg=typer.colors.YELLOW)
+            return
+
+        plan = {leaf.order: leaf.concept for leaf in state.plan.leaves} if state.plan else {}
+        client = deps.payload_client or PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key
+        )
+
+        generated = dict(state.generated)
+        repaired: list[int] = []
+        refused: list[int] = []
+
+        for key in targets:
+            record = generated[key]
+            candidate, spend = rebalance_options(
+                llm=deps.llm,
+                leaf=record.leaf,
+                concept=plan.get(record.order, record.title),
+                model=settings.draft_model,
+            )
+            if candidate is None:
+                refused.append(record.order)
+                typer.secho(
+                    f"  Leaf {record.order}: unchanged (rewrite did not help)",
+                    fg=typer.colors.YELLOW,
+                )
+                continue
+
+            generated[key] = record.model_copy(update={"leaf": candidate})
+            repaired.append(record.order)
+
+            leaf_id = state.cms_leaf_ids.get(key)
+            if leaf_id is not None:
+                # Only the options. Everything else on this Leaf — grounded prose, source
+                # references, a human's gate-2 image pick — is untouched by construction
+                # rather than by a read-modify-write that has to remember not to.
+                client.update_leaf_draft(
+                    leaf_id=leaf_id,
+                    patch={
+                        "scenario": {
+                            "prompt": candidate.scenario_prompt,
+                            "options": [
+                                {"text": option.text, "isCorrect": option.is_correct}
+                                for option in candidate.scenario_options
+                            ],
+                        }
+                    },
+                )
+            typer.secho(f"  Leaf {record.order}: rebalanced", fg=typer.colors.GREEN)
+            _echo_cost_line(spend)
+
+        after = check_answer_length(list(generated.values()))
+
+        # The re-measurement is checkpointed alongside the repaired Leaves, not just
+        # printed. `answer_length_check` ran before this command existed and recorded the
+        # Track as failing; leaving that in state would have `status` report a Track that
+        # now passes as one that does not — and the stale number is the one a later reader
+        # would trust, because it is the one the *run* produced.
+        #
+        # This is a fresh measurement of the current Leaves, not an edit of the old verdict.
+        # The run did fail at that point, and the commit history says so.
+        graph.update_state(  # type: ignore[attr-defined]
+            config, {"generated": generated, "answer_length": after}
+        )
+
+        typer.echo(
+            f"\nafter : {after.leaves_with_longest_correct} of {after.leaves_checked} "
+            f"({after.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%}) "
+            f"— {'PASS' if after.passed else 'FAIL'}"
+        )
+        typer.echo(f"repaired: {repaired}")
+        if refused:
+            typer.secho(f"still showing the tell: {refused}", fg=typer.colors.YELLOW)
+
+
+def _echo_cost_line(spend: Any) -> None:
+    typer.echo(f"      {spend.total_tokens} tokens, ${spend.usd:.4f}")
 
 
 @app.command("purge-raw-text")

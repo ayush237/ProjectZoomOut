@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from zoomout_pipeline.assets.images import USD_PER_IMAGE
+from zoomout_pipeline.assets.images import usd_per_image
 from zoomout_pipeline.logging import get_logger
 
 _log = get_logger(__name__)
@@ -27,11 +27,18 @@ class BudgetExceededError(RuntimeError):
 
 @dataclass
 class ImageBudget:
-    """Tracks image spend for one Track and refuses to go past its cap."""
+    """Tracks image spend for one Track and refuses to go past its cap.
+
+    `model` is carried only so the dollar figure in the log and the report is the rate for
+    the model actually being called. The *cap* is still counted in images and does not
+    consult it — an image budget that moved when a price did would stop being a limit the
+    run can reason about.
+    """
 
     max_images: int = DEFAULT_MAX_IMAGES_PER_TRACK
     spent: int = 0
     per_leaf: dict[int, int] = field(default_factory=dict)
+    model: str = ""
 
     def charge(self, *, leaf_order: int, count: int = 1) -> None:
         """Record images about to be generated, or refuse.
@@ -56,15 +63,15 @@ class ImageBudget:
             images=count,
             spent=self.spent,
             remaining=self.max_images - self.spent,
-            usd=round(self.spent * USD_PER_IMAGE, 4),
+            usd=round(self.usd, 4),
         )
 
     @property
     def usd(self) -> float:
-        return self.spent * USD_PER_IMAGE
+        return self.spent * usd_per_image(self.model)
 
     def report(self) -> str:
         return (
             f"{self.spent} images across {len(self.per_leaf)} Leaves, "
-            f"${self.usd:.2f} at ${USD_PER_IMAGE}/image"
+            f"${self.usd:.2f} at ${usd_per_image(self.model)}/image"
         )

@@ -29,14 +29,45 @@ _log = get_logger(__name__)
 # Portrait-ish, matching the scenario slide's illustration area on a phone.
 DEFAULT_ASPECT_RATIO = "4:3"
 
-# Published rate for the Gemini image models, per image. Unlike the text rates this one is
-# worth pinning: it is the only per-Leaf recurring cost in the pipeline, and the per-Track
-# number is what decides whether the library can grow.
-USD_PER_IMAGE = 0.039
+# Published rates per generated image, per model. This is the only per-Leaf recurring cost
+# in the pipeline, and the per-Track number is what decides whether the library can grow —
+# so it is priced per model rather than by one constant.
+#
+# It used to be one constant, `USD_PER_IMAGE = 0.039`. That is the Gemini 2.5 Flash Image
+# rate, and the pipeline's default image model has been `gemini-3-pro-image` since WP18 —
+# **so every image cost this pipeline has ever reported was 3.4x under.** One rate for a
+# configurable model is a bug waiting on a config change, and this one did not even wait.
+#
+# Verified against ai.google.dev/gemini-api/docs/pricing, 2026-09-01. Gemini 3 Pro Image
+# bills image output at $120/Mtok, which the page states as $0.134 per 1K/2K image; 4K
+# output is $0.24 and is not modelled, because `DEFAULT_ASPECT_RATIO` never requests it.
+_USD_PER_IMAGE: dict[str, float] = {
+    "gemini-3-pro-image": 0.134,
+    "gemini-2.5-flash-image": 0.039,
+}
+
+# What an unpriced image model is assumed to cost. Deliberately not zero, and deliberately
+# not silent — the text table's convention is that an unknown model reports zero and names
+# itself, which is right when the alternative is inventing a number. Here it is not: images
+# are the dominant per-Track cost, a zero would flatter the one number this package exists
+# to produce, and the most expensive rate on the page is a safer wrong answer than free.
+FALLBACK_USD_PER_IMAGE = 0.24
+
+
+def usd_per_image(model: str) -> float:
+    """The published per-image rate, falling back to the priciest known tier."""
+    return _USD_PER_IMAGE.get(model, FALLBACK_USD_PER_IMAGE)
+
 
 # Image quotas are far tighter than text quotas. Paced conservatively because a burst of
 # candidate generation is exactly the shape that trips them.
 IMAGE_REQUESTS_PER_MINUTE = 10
+
+# Longer than the text client's 180s, because image generation genuinely is slower — the
+# successful calls in WP20's run took 30-60 seconds each. Long enough not to cut off real
+# work, short enough that a wedged call surfaces in minutes instead of the three hours and
+# twelve minutes it actually took.
+DEFAULT_IMAGE_TIMEOUT_SECONDS = 300.0
 
 
 class ImageGenerationError(RuntimeError):
@@ -54,7 +85,7 @@ class ImageSpend:
 
     @property
     def usd(self) -> float:
-        return self.images * USD_PER_IMAGE
+        return self.images * usd_per_image(self.model)
 
 
 @dataclass
@@ -94,13 +125,42 @@ class ImageClient:
     """Gemini image generation over Vertex."""
 
     def __init__(
-        self, *, project: str, location: str = "global", limiter: RateLimiter | None = None
+        self,
+        *,
+        project: str,
+        location: str = "global",
+        limiter: RateLimiter | None = None,
+        request_timeout_seconds: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         from google import genai
+        from google.genai import types
 
         if not project:
             raise ImageGenerationError("Vertex needs a project id for image generation.")
-        self._client = genai.Client(vertexai=True, project=project, location=location)
+
+        # **The same two options the text client sets, for the same two reasons.** This
+        # client was built without either, and the cost was not theoretical: WP20's asset
+        # run hung on a single image call for Leaf 11 for **three hours and twelve minutes**
+        # before anyone looked, with the process alive, the budget charged, and nothing in
+        # the log to say it had stopped making progress.
+        #
+        # `timeout` bounds one attempt — without it the SDK waits forever, which is the
+        # exact sentence already written above `GeminiClient`'s copy of this line.
+        # `attempts=1` stops the SDK retrying underneath `generate`'s own bounded, logged,
+        # limiter-aware retry, so there is one retry layer rather than two.
+        #
+        # That both fixes existed in the text client and neither reached here is the
+        # finding: two clients, built weeks apart, each wrapping the same SDK with a
+        # different idea of what a request is allowed to do. Neither is wrong locally.
+        self._client = genai.Client(
+            vertexai=True,
+            project=project,
+            location=location,
+            http_options=types.HttpOptions(
+                timeout=int(request_timeout_seconds * 1000),
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
         # Image quotas are tighter than text quotas and bind quickly on a burst. Same
         # bounded retry as the text client rather than a second, subtly different one.
         self._limiter = limiter or RateLimiter(max_per_minute=IMAGE_REQUESTS_PER_MINUTE)

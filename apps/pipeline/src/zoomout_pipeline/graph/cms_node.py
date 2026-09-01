@@ -99,11 +99,13 @@ def make_write_drafts_node(deps: NodeDependencies, client: PayloadClient | None 
                 leaf_ids[key] = existing
                 continue
 
+            review = state.leaf_reviews.get(key)
             leaf_id = client.create_leaf(
                 leaf_payload(
                     record=record,
                     track_id=track_id,
                     passages=_passages_for_record(deps, record.passage_refs),
+                    findings=review.findings if review else None,
                 )
             )
             leaf_ids[key] = leaf_id

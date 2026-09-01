@@ -129,3 +129,17 @@ class PassageRepository:
 
         _log.info("retrieval.marked_cited", count=marked)
         return marked
+
+
+def format_passages(passages: list[Passage]) -> str:
+    """The passage block a model sees. Handles are positional and explicit.
+
+    Lives here, beside `Passage`, rather than in `graph/leaf_nodes.py` where it started:
+    both the drafting nodes and `graph/review.py` need it, and having the reviewer import it
+    from the generation module made those two files import each other the moment review was
+    wired into the graph as a node rather than called from a CLI.
+    """
+    return "\n\n".join(
+        f"### {p.ref} — {p.chapter_title} (passage {p.position_in_chapter + 1})\n\n{p.text}"
+        for p in passages
+    )

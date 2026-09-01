@@ -15,11 +15,11 @@ import pytest
 
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.leaf_nodes import (
-    format_passages,
     make_draft_leaf_node,
     make_extra_content_node,
     make_ground_check_node,
     route_after_ground_check,
+    route_after_review,
 )
 from zoomout_pipeline.graph.nodes import ingest_book
 from zoomout_pipeline.graph.state import MAX_LEAF_ATTEMPTS, PipelineState
@@ -230,16 +230,8 @@ def test_a_grounded_leaf_marks_its_passages_cited(
         assert int(str(cur.fetchone()["n"])) >= 1  # type: ignore[index]
 
 
-@pytest.mark.parametrize(
-    ("feedback", "cursor", "expected"),
-    [
-        ("something failed", 0, "draft_leaf"),
-        (None, 3, "draft_leaf"),
-        (None, 15, "done"),
-    ],
-)
-def test_routing_after_the_gate(feedback: str | None, cursor: int, expected: str) -> None:
-    state = PipelineState(
+def _routing_state(feedback: str | None, cursor: int) -> PipelineState:
+    return PipelineState(
         run_id="r",
         source_path="x.epub",
         acquisition=Acquisition.PUBLIC_DOMAIN,
@@ -253,12 +245,42 @@ def test_routing_after_the_gate(feedback: str | None, cursor: int, expected: str
         ),
     )
 
-    assert route_after_ground_check(state) == expected
+
+@pytest.mark.parametrize(
+    ("feedback", "cursor", "expected"),
+    [
+        # Grounding failed: redraft the same Leaf, and never reach review with it.
+        ("something failed", 0, "draft_leaf"),
+        # Cleared the legal gate — mid-Track and last Leaf alike go to review. Whether the
+        # Track is finished is deliberately not this router's question any more.
+        (None, 3, "review_leaf"),
+        (None, 15, "review_leaf"),
+    ],
+)
+def test_routing_after_the_gate(feedback: str | None, cursor: int, expected: str) -> None:
+    assert route_after_ground_check(_routing_state(feedback, cursor)) == expected
+
+
+@pytest.mark.parametrize(
+    ("cursor", "expected"),
+    [
+        (3, "draft_leaf"),
+        (15, "done"),
+    ],
+)
+def test_routing_after_review_owns_the_end_of_the_track(cursor: int, expected: str) -> None:
+    """ "Am I finished" is answered in exactly one place.
+
+    It used to be `route_after_ground_check`'s job as well; splitting review out of that
+    node moved it here, and leaving it in both would be two conditions that must agree
+    forever.
+    """
+    assert route_after_review(_routing_state(None, cursor)) == expected
 
 
 def test_passage_handles_are_positional_and_stable() -> None:
     """Citations are positional, so a reload in a different order would re-point every one."""
-    from zoomout_pipeline.db.retrieval import Passage
+    from zoomout_pipeline.db.retrieval import Passage, format_passages
 
     passages = [
         Passage(

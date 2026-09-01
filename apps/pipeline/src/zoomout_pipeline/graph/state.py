@@ -18,11 +18,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from zoomout_pipeline.cost import RunCost
+from zoomout_pipeline.graph.answer_length_check import AnswerLengthCheckResult
 from zoomout_pipeline.graph.structure_check import StructureCheckResult
 from zoomout_pipeline.models import (
     Acquisition,
     BookAnalysis,
     BookProvenance,
+    EditorialReviewResult,
     GeneratedExtras,
     GeneratedLeaf,
     GeneratedLeafRecord,
@@ -125,6 +127,13 @@ class PipelineState(BaseModel):
     cms_track_id: int | None = None
     cms_leaf_ids: dict[str, int] = Field(default_factory=dict)
 
+    # The per-Track answer-length measurement, taken once every Leaf exists.
+    #
+    # WP19 built the check and WP20 found it only ever ran inside the `review-track`
+    # retrofit command, so a fresh run reached the CMS without it — the same shape of gap
+    # as the un-wired review node, in the one check that guards the product's core claim.
+    answer_length: AnswerLengthCheckResult | None = None
+
     # What WP18 attached, keyed like `generated`. Holds media ids and urls — never image
     # bytes, which belong in Payload rather than in a checkpoint.
     cms_assets: dict[str, dict[str, Any]] = Field(default_factory=dict)
@@ -135,6 +144,14 @@ class PipelineState(BaseModel):
     # reviewed, so re-entering `review-track` skips a Leaf rather than re-reviewing it (and,
     # while editorial_review may run cross-family, re-spending money) for no reason.
     cms_reviews: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    # The reviewer's actual findings, keyed like `generated`.
+    #
+    # Separate from `cms_reviews` above, which holds a *summary* (counts, categories, cost)
+    # for run bookkeeping. This holds the findings themselves, because `write_drafts_to_cms`
+    # runs later in the graph than the review does and needs the real notes to put in
+    # Payload's `editorialFindings`. A count cannot be written to a field a human reads.
+    leaf_reviews: dict[str, EditorialReviewResult] = Field(default_factory=dict)
 
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)

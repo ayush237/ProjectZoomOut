@@ -66,6 +66,23 @@ DEFAULT_DIAGRAM_MODEL = "gemini-3.6-flash"
 DEFAULT_EDITORIAL_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_REVISE_MODEL = "gemini-3.1-pro-preview"
 
+# How many times `revise` may rewrite one Leaf before it escalates to the human.
+#
+# R7's original figure, kept rather than WP16.1's raised one. WP16.1 raised the breakdown
+# cap because the cost assumption behind R7's 2 no longer held on a Flash text call; that
+# reasoning does not transfer here. Editorial review may run cross-family per R3, and
+# Claude has no free tier anywhere (§4a) — so this loop can cost real money by
+# construction, and R7's original bound on cost is the one that applies to it.
+#
+# **It lives here, and is overridable, because of what WP20 found.** A cap of 2 means up to
+# five calls to the review model per Leaf: review, revise, review, revise, review. On
+# Vertex the pro preview model would not sustain that rate — the gap between consecutive
+# calls grew from seconds to ten minutes, then seventeen, then forty-four, and a
+# eighteen-Leaf Track stopped being reachable in a day. That is a **throughput** bound, a
+# property of a quota rather than of this loop, and it should be answerable by
+# configuration instead of by editing the number the cost argument above chose.
+DEFAULT_EDITORIAL_ATTEMPTS = 2
+
 
 class PipelineSettings(BaseSettings):
     """Everything the pipeline needs from its environment."""
@@ -117,6 +134,15 @@ class PipelineSettings(BaseSettings):
     extras_model: str = DEFAULT_EXTRAS_MODEL
     image_model: str = DEFAULT_IMAGE_MODEL
     diagram_model: str = DEFAULT_DIAGRAM_MODEL
+    # How many times `revise` may rewrite one Leaf before it escalates to the human.
+    #
+    # Configurable because the binding constraint turned out to be throughput, not cost:
+    # each attempt is two more calls to the review model, and WP20 found the pro preview
+    # model could not sustain five per Leaf on Vertex — consecutive calls drifted from
+    # seconds to forty-plus minutes. Lowering it trades revision depth for a Track that
+    # finishes. See `MAX_EDITORIAL_ATTEMPTS` for why the default is what it is.
+    editorial_attempts: int = DEFAULT_EDITORIAL_ATTEMPTS
+
     editorial_model: str = DEFAULT_EDITORIAL_MODEL
     revise_model: str = DEFAULT_REVISE_MODEL
 

@@ -100,3 +100,87 @@ def test_penalise_makes_the_next_acquire_wait() -> None:
 
     assert clock.slept, "after a 429 the next attempt must wait for the window"
     assert clock.now >= 60.0
+
+
+def test_the_sdk_does_not_retry_underneath_our_own_retry_loop() -> None:
+    """WP20: two stacked retry layers cost 109 minutes of a two-hour run.
+
+    `HttpOptions.timeout` bounds one HTTP attempt, not one call. The SDK retries 429s
+    internally with its own exponential backoff before this package is told anything, so
+    `_call_with_retry`'s five attempts and the limiter's 60-second `penalise()` sat on top
+    of an invisible, unbounded loop. Every long gap in the run ended in `llm.retrying` —
+    the delay had already happened inside a single call.
+
+    Asserting on the constructed `HttpOptions` rather than on a live call, because the
+    thing that regresses is someone rebuilding this object and dropping the field.
+    """
+    from google.genai import types
+
+    from zoomout_pipeline.llm.client import GeminiClient
+
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    import google.genai
+
+    original = google.genai.Client
+    google.genai.Client = _FakeClient  # type: ignore[misc, assignment]
+    try:
+        GeminiClient("key", request_timeout_seconds=180.0)
+    finally:
+        google.genai.Client = original  # type: ignore[misc]
+
+    options = captured["http_options"]
+    assert isinstance(options, types.HttpOptions)
+    assert options.timeout == 180_000, "the per-attempt timeout must still be set"
+    assert options.retry_options is not None, (
+        "the SDK's retry layer must be configured, not left at its defaults"
+    )
+    assert options.retry_options.attempts == 1, (
+        "attempts must be 1 — anything higher puts a second, silent retry loop under ours"
+    )
+
+
+def test_every_sdk_client_bounds_its_own_requests() -> None:
+    """WP20: the text client had a timeout and a disabled SDK retry. The image client had
+    neither, and nobody noticed until an asset run hung on one call for three hours and
+    twelve minutes — process alive, budget charged, log silent.
+
+    Parametrised over both constructors deliberately. The defect was never that one client
+    was wrong; it was that two clients wrapping the same SDK, written weeks apart, held
+    different ideas of what a request may do. A test that covers only the client someone
+    happens to be editing is how they drift apart again.
+    """
+    import google.genai
+    from google.genai import types
+
+    from zoomout_pipeline.assets.images import ImageClient
+    from zoomout_pipeline.llm.client import GeminiClient
+
+    captured: list[dict[str, object]] = []
+
+    class _FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.append(kwargs)
+
+    original = google.genai.Client
+    google.genai.Client = _FakeClient  # type: ignore[misc, assignment]
+    try:
+        GeminiClient("key")
+        ImageClient(project="p")
+    finally:
+        google.genai.Client = original  # type: ignore[misc]
+
+    assert len(captured) == 2, "both clients must have been constructed"
+    for name, kwargs in zip(("text", "image"), captured, strict=True):
+        options = kwargs.get("http_options")
+        assert isinstance(options, types.HttpOptions), f"{name} client sets no http_options"
+        assert options.timeout and options.timeout > 0, (
+            f"the {name} client has no request timeout — without one the SDK waits forever"
+        )
+        assert options.retry_options is not None and options.retry_options.attempts == 1, (
+            f"the {name} client leaves the SDK's own retry loop under ours"
+        )

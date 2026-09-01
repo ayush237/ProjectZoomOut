@@ -133,6 +133,52 @@ def test_the_node_uses_the_injected_client_rather_than_building_one(
     assert stub.created_tracks[0]["_status"] == DRAFT_STATUS  # type: ignore[union-attr]
 
 
+def test_a_preset_track_id_is_written_into_rather_than_creating_a_second_track(
+    deps: NodeDependencies, tmp_path: Path
+) -> None:
+    """WP20's `--cms-track-id`: regenerating a Track must not fork it.
+
+    Track 42's text was regenerated from scratch, and a run that created its own Track
+    would have left two Tracks of one book in the CMS — with the founder reviewing
+    whichever they happened to open, and publishing a coin flip.
+
+    The assertion that matters is `created_tracks == []`. Asserting only that the returned
+    id is 42 would pass just as happily if the node created Track 42 all over again.
+    """
+    from zoomout_pipeline.graph.cms_node import make_write_drafts_node
+    from zoomout_pipeline.graph.state import PipelineState
+    from zoomout_pipeline.models import GeneratedLeafRecord
+
+    from .conftest import make_generated_leaf
+
+    state = PipelineState(
+        run_id="run-cms-preset",
+        source_path=str(tmp_path / "book.epub"),
+        acquisition=Acquisition.PUBLIC_DOMAIN,
+        provenance=_provenance_for_test(),
+        cms_track_id=42,
+        generated={
+            "0": GeneratedLeafRecord(
+                order=0,
+                title="A Leaf",
+                leaf=make_generated_leaf(),
+                extras=GeneratedExtras(),
+                cited_chunk_ids=[],
+            )
+        },
+    )
+
+    result = make_write_drafts_node(deps)(state)
+    stub = deps.payload_client
+
+    assert result["cms_track_id"] == 42, "the preset Track must be the one written into"
+    assert stub.created_tracks == [], (  # type: ignore[union-attr]
+        "no Track may be created when one was named — that is the whole point of the flag"
+    )
+    assert stub.created_leaves, "the Leaves still have to be written somewhere"  # type: ignore[union-attr]
+    assert stub.created_leaves[0]["trackId"] == 42  # type: ignore[union-attr]
+
+
 def _provenance_for_test() -> BookProvenance:
     from datetime import UTC, datetime
 

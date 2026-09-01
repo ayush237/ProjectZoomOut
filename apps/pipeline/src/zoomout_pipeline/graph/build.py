@@ -3,19 +3,37 @@
     ingest ─> analyze ─> breakdown ─> [HUMAN GATE 1] ─> draft_leaf ─> extra_content
                              ▲   │                          ▲              │
                              └───┘                          │              ▼
-                    MAX_BREAKDOWN_ATTEMPTS                  └──────── ground_check
-                                                          MAX_LEAF_ATTEMPTS   │
-                                                                              ▼
+                    MAX_BREAKDOWN_ATTEMPTS                  ├──────── ground_check
+                                                            │              │ passed
+                                                  MAX_LEAF_ATTEMPTS        ▼
+                                                            └───────── review_leaf
+                                                        next Leaf          │ plan exhausted
+                                                                           ▼
+                                                                 answer_length_check
+                                                                           │
+                                                                           ▼
                                                               write_drafts_to_cms ─> END
 
-`ground_check` routes three ways: back to `draft_leaf` with its findings when a Leaf fails
-and the cap allows another attempt, on to the next Leaf when it passes, and to the end when
-the plan is exhausted.
+`ground_check` routes two ways: back to `draft_leaf` with its findings when a Leaf fails and
+the cap allows another attempt, and on to `review_leaf` when it passes.
+
+`review_leaf` is the editorial pass — advisory by construction. It reviews, revises up to
+its cap, and then routes: back to `draft_leaf` for the next Leaf, or on to the CMS write
+when the plan is exhausted. **It cannot reject.** `EditorialReviewResult` has no verdict
+field, so there is no value it could return that would stop a Leaf; R3 keeps the legal gate
+unarguable, and an editorial reviewer with a veto is a second legal gate nobody designed.
+
+Note where it sits: *after* `ground_check`, never before. Grounding is the legal gate, and
+revision rewrites prose — so revision has to happen on text that has already been proven
+against its sources, and the revised text is what the CMS then receives.
 
 `write_drafts_to_cms` is §3.3's `publish_to_cms`, renamed: it writes drafts and must never
 publish, and a node named for publishing is a name that eventually gets believed.
 
-Still absent, deliberately: assets (WP18) and `editorial_review` (WP19).
+Assets are deliberately not in this graph. They run as their own invocation
+(`generate-assets`) because images follow text: regenerating a Track's prose invalidates
+its illustrations, and coupling them into one graph makes the cheap half impossible to
+redo without the expensive half.
 """
 
 from __future__ import annotations
@@ -31,13 +49,17 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
+from zoomout_pipeline.graph.answer_length_check import AnswerLengthCheckResult
 from zoomout_pipeline.graph.cms_node import make_write_drafts_node
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.leaf_nodes import (
+    make_answer_length_node,
     make_draft_leaf_node,
     make_extra_content_node,
     make_ground_check_node,
+    make_review_leaf_node,
     route_after_ground_check,
+    route_after_review,
 )
 from zoomout_pipeline.graph.nodes import (
     make_analyze_node,
@@ -55,6 +77,9 @@ from zoomout_pipeline.models import (
     BookProvenance,
     Citation,
     Claim,
+    EditorialFinding,
+    EditorialFindingCategory,
+    EditorialReviewResult,
     GeneratedExtras,
     GeneratedLeaf,
     GeneratedLeafRecord,
@@ -81,6 +106,7 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     LeafPlan,
     PlannedLeaf,
     StructureCheckResult,
+    AnswerLengthCheckResult,
     RunCost,
     TokenSpend,
     Acquisition,
@@ -93,6 +119,10 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     Citation,
     ScenarioOptionDraft,
     SlideKey,
+    # WP20 — editorial review is a graph node now, so its findings are checkpointed.
+    EditorialReviewResult,
+    EditorialFinding,
+    EditorialFindingCategory,
 )
 
 
@@ -119,6 +149,8 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_node("draft_leaf", make_draft_leaf_node(deps))
     graph.add_node("extra_content", make_extra_content_node(deps))
     graph.add_node("ground_check", make_ground_check_node(deps))
+    graph.add_node("review_leaf", make_review_leaf_node(deps))
+    graph.add_node("answer_length_check", make_answer_length_node(deps))
     graph.add_node("write_drafts_to_cms", make_write_drafts_node(deps))
 
     graph.add_edge(START, "ingest")
@@ -135,8 +167,14 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_conditional_edges(
         "ground_check",
         route_after_ground_check,
-        {"draft_leaf": "draft_leaf", "done": "write_drafts_to_cms"},
+        {"draft_leaf": "draft_leaf", "review_leaf": "review_leaf"},
     )
+    graph.add_conditional_edges(
+        "review_leaf",
+        route_after_review,
+        {"draft_leaf": "draft_leaf", "done": "answer_length_check"},
+    )
+    graph.add_edge("answer_length_check", "write_drafts_to_cms")
     graph.add_edge("write_drafts_to_cms", END)
 
     return graph

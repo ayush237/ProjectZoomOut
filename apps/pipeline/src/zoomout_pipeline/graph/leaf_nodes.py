@@ -21,10 +21,20 @@ from typing import Any
 from uuid import UUID
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
-from zoomout_pipeline.db.retrieval import DEFAULT_TOP_K, Passage, PassageRepository
+from zoomout_pipeline.db.retrieval import (
+    DEFAULT_TOP_K,
+    Passage,
+    PassageRepository,
+    format_passages,
+)
+from zoomout_pipeline.graph.answer_length_check import (
+    MAX_LONGEST_CORRECT_RATIO,
+    check_answer_length,
+)
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.grounding import GroundingVerdict, check_grounding
 from zoomout_pipeline.graph.nodes import Node
+from zoomout_pipeline.graph.review import review_and_revise
 from zoomout_pipeline.graph.state import MAX_LEAF_ATTEMPTS, PipelineState
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import (
@@ -87,14 +97,6 @@ def _load_passages(deps: NodeDependencies, chunk_ids: list[int]) -> list[Passage
             )
         )
     return passages
-
-
-def format_passages(passages: list[Passage]) -> str:
-    """The passage block the model sees. Handles are positional and explicit."""
-    return "\n\n".join(
-        f"### {p.ref} — {p.chapter_title} (passage {p.position_in_chapter + 1})\n\n{p.text}"
-        for p in passages
-    )
 
 
 def reload_passages(deps: NodeDependencies, passage_refs: dict[str, int]) -> list[Passage]:
@@ -358,9 +360,135 @@ def make_ground_check_node(deps: NodeDependencies) -> Node:
 
 
 def route_after_ground_check(state: PipelineState) -> str:
-    """Redraft, move to the next Leaf, or finish. Never emit an ungrounded Leaf."""
+    """Redraft the same Leaf, or send it to editorial review. Never emit an ungrounded Leaf.
+
+    Note what this no longer decides: whether the Track is finished. A Leaf that clears the
+    legal gate always goes to `review_leaf` next, and it is *that* node's router that moves
+    on to the next Leaf or ends the Track — so the "am I done" question is asked in exactly
+    one place rather than in two that must be kept in agreement.
+    """
     if state.grounding_feedback is not None:
         return "draft_leaf"
+    return "review_leaf"
+
+
+def make_review_leaf_node(deps: NodeDependencies) -> Node:
+    """Editorial review for the Leaf `ground_check` just filed.
+
+    **A separate node from `ground_check`, deliberately.** R3's whole point is that the legal
+    gate cannot be argued down on quality grounds, and the cleanest guarantee of that is that
+    the two never run in the same function — `ground_check` has already returned its verdict
+    and filed the record before this node is reached, so nothing here is in a position to
+    revisit it.
+
+    Reviews `leaf_cursor - 1`, not `leaf_cursor`: `ground_check` advances the cursor as part
+    of filing the record, so by the time this runs the "current" Leaf is the next one, which
+    has not been drafted yet.
+    """
+
+    def review_leaf(state: PipelineState) -> dict[str, Any]:
+        # The Leaf ground_check just finished with. On the escalation path it filed nothing
+        # into `generated`, so there is genuinely nothing to review — that Leaf reaches the
+        # human through `leaf_escalations` instead, which is its own escalation channel.
+        key = str(state.leaf_cursor - 1)
+        record = state.generated.get(key)
+        if record is None:
+            return {}
+
+        log = _log.bind(run_id=state.run_id, node="review_leaf", leaf=record.order)
+        passages = reload_passages(deps, record.passage_refs)
+
+        outcome = review_and_revise(
+            llm=deps.llm,
+            record=record,
+            passages=passages,
+            review_model=deps.settings.editorial_model,
+            revise_model=deps.settings.revise_model,
+            max_attempts=deps.settings.editorial_attempts,
+        )
+
+        log.info(
+            "review_leaf.complete",
+            findings=len(outcome.review.findings),
+            categories=sorted({f.category.value for f in outcome.review.findings}),
+            revised=outcome.revised,
+            usd=round(outcome.total_cost.total_usd, 4),
+        )
+
+        return {
+            "generated": {**state.generated, key: outcome.record},
+            "leaf_reviews": {**state.leaf_reviews, key: outcome.review},
+            "cms_reviews": {
+                **state.cms_reviews,
+                key: {
+                    "findings": len(outcome.review.findings),
+                    "categories": sorted({f.category.value for f in outcome.review.findings}),
+                    "overall_note": outcome.review.overall_note,
+                    "revised": outcome.revised,
+                    "usd": round(outcome.total_cost.total_usd, 4),
+                },
+            },
+            "cost": _with_cost(state, *outcome.spend),
+        }
+
+    return review_leaf
+
+
+def route_after_review(state: PipelineState) -> str:
+    """Move to the next Leaf, or write the Track to the CMS.
+
+    The single place the Track's "am I finished" question is answered — see the note on
+    `route_after_ground_check`.
+    """
     if state.plan is not None and state.leaf_cursor < len(state.plan.leaves):
         return "draft_leaf"
     return "done"
+
+
+def make_answer_length_node(deps: NodeDependencies) -> Node:
+    """Measure the correct-option-is-longest tell, once, across the finished Track.
+
+    **Why it is a node at all.** WP19 built this check and wired it into `review-track`,
+    the retrofit command — so it ran on Track 42 only because someone invoked that command
+    by hand, and a *fresh* run reached the CMS having never measured itself. That is the
+    graph-shape problem wearing different clothes: not a node that cannot be reached, but a
+    check that lives outside the graph and so is only ever reached deliberately. The check
+    that guards the product's central claim is the last one that should depend on someone
+    remembering.
+
+    **It does not block, and that is a decision rather than an omission.** Three reasons,
+    in order of weight:
+
+    - The remedy is generation-side — substantive distractors — so the loop a block would
+      have to take is "re-draft all eighteen Leaves", with no per-Track attempt counter to
+      terminate it. A cap that does not exist is not a cap.
+    - Everything it writes is a draft that a human must approve. Gate 2 is where content
+      defects are meant to be caught, and a reviewer can rewrite an option in seconds.
+    - Halting before the CMS write leaves the founder with no Leaves to look at and no way
+      forward except another run, which is the more expensive failure of the two.
+
+    The counter-argument is real and belongs on the record: WP19 ruled that "an advisory
+    finding is too weak a guard for a defect that empties the product's core claim." What
+    makes this weaker than that ruling wants is that a warning does not stop the Track. If
+    that is the wrong trade, the fix is a per-Track regeneration budget, not moving this
+    check into `ground_check` — the legal gate must stay unarguable on style grounds (R3).
+    """
+
+    def answer_length_check(state: PipelineState) -> dict[str, Any]:
+        log = _log.bind(run_id=state.run_id, node="answer_length_check")
+        result = check_answer_length(list(state.generated.values()))
+
+        # `warning`, not `info`, on a failure. A run this long is read by skimming for the
+        # lines that are not routine, and a Track that is answerable without reading is
+        # exactly what must not scroll past.
+        (log.info if result.passed else log.warning)(
+            "answer_length.complete",
+            passed=result.passed,
+            ratio=round(result.longest_correct_ratio, 3),
+            leaves_with_longest_correct=result.leaves_with_longest_correct,
+            leaves_checked=result.leaves_checked,
+            limit=MAX_LONGEST_CORRECT_RATIO,
+        )
+        return {"answer_length": result}
+
+    return answer_length_check
