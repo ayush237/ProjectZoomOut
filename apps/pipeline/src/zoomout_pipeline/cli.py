@@ -354,6 +354,26 @@ def generate_assets(
                 typer.echo(f"  leaf {key}: already has assets, skipped")
                 continue
 
+            # Ask Payload, not just local bookkeeping — the same reasoning `find_leaf`
+            # already carries for the CMS write, and for the same reason.
+            #
+            # `cms_assets` used to be persisted once, after this whole loop. So a run killed
+            # partway wrote every asset to Payload and recorded none of them, and the retry
+            # regenerated all of it: WP20's first asset run hung at Leaf 11 of 18, and the
+            # resume started again at Leaf 0, paying for images that already existed.
+            #
+            # That is the identical failure `write_drafts_to_cms` documents — interrupted at
+            # Leaf 11 of 18, local state disagreeing with the CMS — in the one code path that
+            # never got the fix. The incremental checkpoint below stops it recurring; this
+            # check is what recovers a run whose bookkeeping is *already* lost, which no
+            # amount of future checkpointing can help with.
+            existing = client.get_leaf(state.cms_leaf_ids[key], draft=True)
+            if ((existing.get("stickyNotes") or {}).get("diagram") or {}).get("url"):
+                typer.echo(f"  leaf {key}: already illustrated in the CMS, skipped")
+                assets[key] = {"recovered": True}
+                graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+                continue
+
             record = state.generated[key]
             try:
                 candidates = generate_candidates(
@@ -381,7 +401,10 @@ def generate_assets(
                 f"{', diagram' if diagram else ', no diagram'}"
             )
 
-        graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+            # Checkpointed per Leaf, not once at the end. Images are the most expensive
+            # thing this pipeline buys, and bookkeeping written only on a clean exit is
+            # bookkeeping that is missing exactly when a retry needs it most.
+            graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
 
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
 

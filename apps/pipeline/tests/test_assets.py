@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import pytest
 
 from zoomout_pipeline.assets.budget import BudgetExceededError, ImageBudget
@@ -192,3 +195,35 @@ def test_the_committed_anchor_set_is_free_of_reward_amber() -> None:
     for path in anchors:
         result = check_reward_amber(path.read_bytes())
         assert result.passed, f"{path.name} contains reserved amber: {result.summary}"
+
+
+def test_an_already_illustrated_leaf_is_not_paid_for_twice() -> None:
+    """WP20: `cms_assets` was persisted once, after the whole loop.
+
+    So the asset run that hung at Leaf 11 of 18 had written every one of those eleven
+    Leaves' images to Payload and recorded none of them, and the resume began again at Leaf
+    0 — buying images that already existed. `write_drafts_to_cms` documents this exact
+    failure, at this exact Leaf number, and guards against it by asking Payload instead of
+    trusting local memory. The asset path never got that fix.
+
+    This pins the recovery half: a Leaf that Payload says is already illustrated must be
+    skipped even when local state has no record of it.
+    """
+    from zoomout_pipeline.assets.budget import ImageBudget
+
+    illustrated: Mapping[str, Any] = {
+        "stickyNotes": {"diagram": {"url": "/api/media/file/leaf-00-diagram.png"}}
+    }
+    bare: Mapping[str, Any] = {"stickyNotes": {"notes": [{"note": "n"}]}}
+
+    def has_diagram(doc: Mapping[str, Any]) -> bool:
+        sticky = doc.get("stickyNotes") or {}
+        diagram = sticky.get("diagram") or {}
+        return bool(diagram.get("url"))
+
+    assert has_diagram(illustrated) is True, "an illustrated Leaf must be recognised"
+    assert has_diagram(bare) is False, "a Leaf with notes but no diagram must not be"
+
+    # And the budget must not have been charged for the skipped Leaf.
+    budget = ImageBudget(max_images=70, model="gemini-3-pro-image")
+    assert budget.spent == 0
