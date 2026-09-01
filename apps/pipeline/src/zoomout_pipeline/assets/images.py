@@ -63,6 +63,12 @@ def usd_per_image(model: str) -> float:
 # candidate generation is exactly the shape that trips them.
 IMAGE_REQUESTS_PER_MINUTE = 10
 
+# Longer than the text client's 180s, because image generation genuinely is slower — the
+# successful calls in WP20's run took 30-60 seconds each. Long enough not to cut off real
+# work, short enough that a wedged call surfaces in minutes instead of the three hours and
+# twelve minutes it actually took.
+DEFAULT_IMAGE_TIMEOUT_SECONDS = 300.0
+
 
 class ImageGenerationError(RuntimeError):
     """The model returned no usable image, or refused the prompt."""
@@ -119,13 +125,42 @@ class ImageClient:
     """Gemini image generation over Vertex."""
 
     def __init__(
-        self, *, project: str, location: str = "global", limiter: RateLimiter | None = None
+        self,
+        *,
+        project: str,
+        location: str = "global",
+        limiter: RateLimiter | None = None,
+        request_timeout_seconds: float = DEFAULT_IMAGE_TIMEOUT_SECONDS,
     ) -> None:
         from google import genai
+        from google.genai import types
 
         if not project:
             raise ImageGenerationError("Vertex needs a project id for image generation.")
-        self._client = genai.Client(vertexai=True, project=project, location=location)
+
+        # **The same two options the text client sets, for the same two reasons.** This
+        # client was built without either, and the cost was not theoretical: WP20's asset
+        # run hung on a single image call for Leaf 11 for **three hours and twelve minutes**
+        # before anyone looked, with the process alive, the budget charged, and nothing in
+        # the log to say it had stopped making progress.
+        #
+        # `timeout` bounds one attempt — without it the SDK waits forever, which is the
+        # exact sentence already written above `GeminiClient`'s copy of this line.
+        # `attempts=1` stops the SDK retrying underneath `generate`'s own bounded, logged,
+        # limiter-aware retry, so there is one retry layer rather than two.
+        #
+        # That both fixes existed in the text client and neither reached here is the
+        # finding: two clients, built weeks apart, each wrapping the same SDK with a
+        # different idea of what a request is allowed to do. Neither is wrong locally.
+        self._client = genai.Client(
+            vertexai=True,
+            project=project,
+            location=location,
+            http_options=types.HttpOptions(
+                timeout=int(request_timeout_seconds * 1000),
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
         # Image quotas are tighter than text quotas and bind quickly on a burst. Same
         # bounded retry as the text client rather than a second, subtly different one.
         self._limiter = limiter or RateLimiter(max_per_minute=IMAGE_REQUESTS_PER_MINUTE)
