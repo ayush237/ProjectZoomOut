@@ -339,7 +339,7 @@ def generate_assets(
             api_key=settings.payload_api_key,
         )
         images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
-        budget = ImageBudget(max_images=settings.max_images_per_track)
+        budget = ImageBudget(max_images=settings.max_images_per_track, model=settings.image_model)
         assets = dict(state.cms_assets)
 
         keys = sorted(state.cms_leaf_ids, key=lambda k: int(k))
