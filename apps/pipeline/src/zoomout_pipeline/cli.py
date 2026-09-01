@@ -513,6 +513,128 @@ def review_track(
     )
 
 
+@app.command("balance-distractors")
+def balance_distractors(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be rebalanced.")],
+    dry_run: Annotated[
+        bool, typer.Option(help="Measure and report without calling a model or writing.")
+    ] = False,
+) -> None:
+    """Rewrite the wrong options of any Leaf whose correct answer is the longest.
+
+    WP20 regenerated Track 42 and still measured the tell in 11 of 18 Leaves — better than
+    the 15 of 18 that motivated the check, and still over the limit. `draft_leaf.md`
+    already forbids it; the model complies about a third of the time it matters, because
+    the correct option carries the Leaf's actual concept and nuance costs words.
+
+    So this repairs the Leaves that show it rather than regenerating the Track: only the two
+    wrong options change, they carry no citations, and the seven Leaves that already balance
+    are left alone. See `graph/distractors.py`.
+
+    Re-running is safe, and `--dry-run` measures without spending anything.
+    """
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.graph.answer_length_check import (
+        MAX_LONGEST_CORRECT_RATIO,
+        check_answer_length,
+    )
+    from zoomout_pipeline.graph.distractors import correct_is_longest, rebalance_options
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        if not state.generated:
+            typer.secho(f"run {run_id} has no generated Leaves", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        settings = deps.settings
+        before = check_answer_length(list(state.generated.values()))
+        typer.echo(
+            f"before: {before.leaves_with_longest_correct} of {before.leaves_checked} "
+            f"({before.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%}) "
+            f"— {'PASS' if before.passed else 'FAIL'}"
+        )
+
+        targets = sorted(
+            (key for key, record in state.generated.items() if correct_is_longest(record.leaf)),
+            key=int,
+        )
+        typer.echo(f"Leaves showing the tell: {[state.generated[k].order for k in targets]}\n")
+
+        if dry_run:
+            typer.secho("dry run — nothing called, nothing written", fg=typer.colors.YELLOW)
+            return
+
+        plan = {leaf.order: leaf.concept for leaf in state.plan.leaves} if state.plan else {}
+        client = deps.payload_client or PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key
+        )
+
+        generated = dict(state.generated)
+        repaired: list[int] = []
+        refused: list[int] = []
+
+        for key in targets:
+            record = generated[key]
+            candidate, spend = rebalance_options(
+                llm=deps.llm,
+                leaf=record.leaf,
+                concept=plan.get(record.order, record.title),
+                model=settings.draft_model,
+            )
+            if candidate is None:
+                refused.append(record.order)
+                typer.secho(
+                    f"  Leaf {record.order}: unchanged (rewrite did not help)",
+                    fg=typer.colors.YELLOW,
+                )
+                continue
+
+            generated[key] = record.model_copy(update={"leaf": candidate})
+            repaired.append(record.order)
+
+            leaf_id = state.cms_leaf_ids.get(key)
+            if leaf_id is not None:
+                # Only the options. Everything else on this Leaf — grounded prose, source
+                # references, a human's gate-2 image pick — is untouched by construction
+                # rather than by a read-modify-write that has to remember not to.
+                client.update_leaf_draft(
+                    leaf_id=leaf_id,
+                    patch={
+                        "scenario": {
+                            "prompt": candidate.scenario_prompt,
+                            "options": [
+                                {"text": option.text, "isCorrect": option.is_correct}
+                                for option in candidate.scenario_options
+                            ],
+                        }
+                    },
+                )
+            typer.secho(f"  Leaf {record.order}: rebalanced", fg=typer.colors.GREEN)
+            _echo_cost_line(spend)
+
+        graph.update_state(config, {"generated": generated})  # type: ignore[attr-defined]
+
+        after = check_answer_length(list(generated.values()))
+        typer.echo(
+            f"\nafter : {after.leaves_with_longest_correct} of {after.leaves_checked} "
+            f"({after.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%}) "
+            f"— {'PASS' if after.passed else 'FAIL'}"
+        )
+        typer.echo(f"repaired: {repaired}")
+        if refused:
+            typer.secho(f"still showing the tell: {refused}", fg=typer.colors.YELLOW)
+
+
+def _echo_cost_line(spend: Any) -> None:
+    typer.echo(f"      {spend.total_tokens} tokens, ${spend.usd:.4f}")
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
