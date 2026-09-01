@@ -49,6 +49,43 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ---
 
+### Handoff: 2026-09-02 — WP20.1: Attach Track 42's scenario images
+
+*Pipeline Manager. **Suggested model: Sonnet** — the selection judgement has been delegated away, so what remains is a write path you already own.*
+
+### Task: WP20.1 — attach one candidate per Leaf, as drafts, for the founder to review in one pass
+
+**Context:** WP20 published Track 42 with diagrams but **no scenario illustrations** — 54 candidates generated, 0 attached, because selection was WP15.7's affordance and it had not landed. WP15.7 has now landed.
+
+**The founder has delegated selection for this Track only**, and will choose personally for later books. That changes the shape of the job: it is no longer 18 choices between three, it is one automated pass plus one human review.
+
+**Objective:** Every Leaf on Track 42 carries a scenario image, chosen automatically, presented to the founder as a list to override rather than a set of decisions to make.
+
+**Scope:** `apps/pipeline/`. A command, not a graph node — Track 42 is finished and this is a one-off correction.
+
+**Requirements**
+- For each of the 18 Leaves, attach the **first candidate that passes the guardrails** to `scenario.image`, carrying both `url` and `alt`.
+- **Write drafts. Do not publish.** The Leaves are live; the machine key cannot edit published content and must not gain the ability. The founder publishes.
+- **Full read-modify-write on the scenario group.** WP19 demonstrated by hand that a partial PATCH silently nulls omitted siblings, on this exact group. `scenario.prompt` and `scenario.options` must survive — verified by re-fetching, not by the response.
+- **Report the 18 choices as a list** — Leaf order, title, chosen candidate index, and its `alt`. That list is what the founder reviews.
+- **Do not sweep the 53 orphans yet.** Once the founder has accepted or overridden, the unreferenced files are a query; sweeping now would delete candidates they might switch to.
+
+**Out of scope:** publishing, choosing on quality grounds beyond the guardrails, later books, regenerating any asset.
+
+**Read-it-yourself gate:** *look at the 18 you picked.* If a scenario is about a difficult conversation and the image is an empty desk, say so in the report — the founder is reviewing your list, and a flagged mismatch is worth more than a silent one.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass
+- [ ] All 18 Leaves have `scenario.image` set with `url` and `alt`, as **drafts**
+- [ ] **`scenario.prompt` and `scenario.options` are unchanged on all 18** — verified by re-fetching each document
+- [ ] Nothing is published by the pipeline; the published versions still show no image until a human acts
+- [ ] The 18 choices are reported as a reviewable list, with any mismatch flagged
+- [ ] The 53 orphaned media files are untouched
+
+**Testing expectations:** Tier A on never-publishes and on sibling survival. Tier B one happy path. This is a one-off correction against real data — the evidence is the re-fetched documents.
+
+---
+
 ### Handoff: 2026-08-29 — WP15.7: "Use this candidate" — one click instead of two copy-pastes
 
 *Manager. **Suggested model: Sonnet** — the pattern exists; the risk is one specific Payload behaviour, named below.*
