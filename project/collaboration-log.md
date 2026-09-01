@@ -202,6 +202,103 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP20.1 — attach Track 42's scenario images — 2026-09-02
+
+**All 6 acceptance criteria met.** 18 of 18 Leaves carry a scenario image as a **draft**;
+the published versions still show none. `apps/pipeline` lint, `ruff format --check`,
+`mypy --strict` (69 files) and `pytest` (198 passed, 2 deselected) are clean. Nothing
+outside `apps/pipeline` was touched.
+
+**Verified against live data, not against the command's own report:**
+
+| | |
+|---|---|
+| Draft view — `scenario.image` set, with alt | **18/18** |
+| Published view — `scenario.image` set | **0/18** — a human publishes |
+| `scenario.prompt` differing from the published version | **none** |
+| `scenario.options` differing from the published version | **none** |
+| Leaves without exactly 3 options / exactly 1 correct | **none** |
+| Media created by this package | **none** |
+
+The sibling proof is stronger than the handoff asked for. Rather than only comparing
+before-and-after around the write, the draft's prompt and options are compared against the
+**published** version — a copy this package never touched and could not have touched. They
+are byte-identical on all 18.
+
+**Leaf 0 was skipped and kept its existing image.** It was a pick a human made through
+WP15.7's own button during that package's device gate. Overwriting a person's choice to
+install an automatic one is the opposite of what a delegated pass is for, so
+`choose_candidate` leaves any Leaf that already has an image alone. The other 17 took
+candidate 0, which passed the guardrails in every case.
+
+---
+
+**Read-it-yourself gate — all 18 looked at, and the result is worth acting on.**
+
+**8 of 18 breach the style contract's no-glow rule.** `asset_style.md` is explicit: *"No
+lighting effects. No glow, no light cones or beams, no lens flare, no bloom, no volumetric
+light. A lamp is a shape, and the room around it is a darker shape."*
+
+| | Leaves |
+|---|---|
+| **Clean** | 0, 5, 6, 8, 9, 10, 12, 13, 15, 17 |
+| **Glow breach** | 1, 2, 3, 4, 7, 11, 14, 16 |
+
+Severity varies: **4, 7, 11 and 16** render a pronounced lamp or overhead cone; **1** projects
+a cone from a laptop screen; **3** is a softer lamp halo; **14** is screen bloom only. **Leaf 11
+is the exact image flagged in WP20's completion report** as the sampled candidate that
+rendered a luminous cone — the risk named there has now materialised on a Leaf, because
+nothing mechanical stands between a drifting candidate and selection.
+
+**This is the guardrail gap WP20 raised, now with a measured rate.** `check_reward_amber` is
+the only mechanical guardrail; all 72 images pass it, correctly, because the glow is pale
+cream rather than reserved amber. Selecting "the first candidate that passes the guardrails"
+is therefore only as strong as the guardrails, and on this dimension they are silent.
+**Roughly 44% of first candidates drift**, which is high enough that automatic selection on
+guardrails alone should not be the pattern for later books.
+
+**Subject matching is good.** No mismatch of the kind the handoff warned about — no empty
+desk standing in for a difficult conversation. The strongest: **Leaf 5** (colleagues at a
+lunch table mid-complaint, one visibly disengaged, for "guard your mind against negative
+talk"), **Leaf 9** (freelancer meeting a client over coffee, notebook open), **Leaf 17**
+(head in hands beside a task checklist, which is exactly what its correct answer is about),
+and **Leaf 0** (the roaster looking out at the rival cafe). Two are weak rather than wrong:
+**Leaf 12** and **Leaf 15** are generic desk scenes carrying little of their scenario.
+
+**Faces remain compliant.** Every figure is a profile silhouette with no eyes, mouth or
+brows. WP19's fully-featured-face drift has not recurred anywhere in the set.
+
+---
+
+**A correction to WP20's own completion report.** It recorded "53 orphaned media files".
+That count was taken mid-run, before the asset regeneration finished, and is wrong. The
+library holds **146 media, 72 referenced, 74 unreferenced**. The orphans are WP18's
+superseded set (`scenario-1/2/3`, `diagram-0`) plus a few from re-runs. **Untouched, as the
+handoff requires** — nothing was created or deleted by this package, confirmed by the
+newest media pre-dating it.
+
+---
+
+**Open for the founder.**
+
+1. **Override the 8 glow breaches**, or accept them. Each Leaf still carries its other two
+   candidates, so overriding is one click per Leaf in WP15.7's control. I did not choose on
+   quality grounds beyond the guardrails, per scope.
+2. **Publish when ready.** The images are drafts; readers see none of them until a human
+   publishes. The pipeline cannot.
+3. **The orphan sweep stays deferred**, correctly — the candidates a founder might switch to
+   are among the unreferenced files only after they switch. Sweep after the overrides.
+
+**Open for Architect.**
+
+**The mechanical guardrail gap now has a number.** WP20 reported it as a risk; this package
+measures it at **8 of 18 first candidates breaching the no-glow rule**. Two options worth
+ruling between: add a mechanical check for large uniform bright regions, or accept that
+image selection cannot be delegated without a human pass. The founder delegated this Track
+explicitly and will choose personally for later books, so nothing is blocked — but
+"first that passes the guardrails" is a weaker filter than it sounds while the guardrails
+cover one of the three stated conditions.
+
 ### Completed: WP15.7 — "Use this candidate" (implementation done, live-verified; root gate + commit still pending) — 2026-09-02
 
 **What changed:** `ImageCandidateThumbnail.tsx` (built in WP15.6) now has a "Use this candidate" button under each thumbnail. Clicking it makes two independent `useField({path: 'scenario.image.url'}).setValue(...)` / `.../.alt` calls — never sets the `scenario` or `scenario.image` group as a whole. Deliberate: Payload's form state is a flat path-keyed map, so a leaf-level `setValue` cannot touch `scenario.image.width`/`.height` or `scenario.prompt`/`scenario.options` — the exact unverified risk WP15.6 flagged.
