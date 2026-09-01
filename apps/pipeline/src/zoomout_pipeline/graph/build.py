@@ -3,19 +3,34 @@
     ingest ─> analyze ─> breakdown ─> [HUMAN GATE 1] ─> draft_leaf ─> extra_content
                              ▲   │                          ▲              │
                              └───┘                          │              ▼
-                    MAX_BREAKDOWN_ATTEMPTS                  └──────── ground_check
-                                                          MAX_LEAF_ATTEMPTS   │
-                                                                              ▼
+                    MAX_BREAKDOWN_ATTEMPTS                  ├──────── ground_check
+                                                            │              │ passed
+                                                  MAX_LEAF_ATTEMPTS        ▼
+                                                            └───────── review_leaf
+                                                        next Leaf          │ plan exhausted
+                                                                           ▼
                                                               write_drafts_to_cms ─> END
 
-`ground_check` routes three ways: back to `draft_leaf` with its findings when a Leaf fails
-and the cap allows another attempt, on to the next Leaf when it passes, and to the end when
-the plan is exhausted.
+`ground_check` routes two ways: back to `draft_leaf` with its findings when a Leaf fails and
+the cap allows another attempt, and on to `review_leaf` when it passes.
+
+`review_leaf` is the editorial pass — advisory by construction. It reviews, revises up to
+its cap, and then routes: back to `draft_leaf` for the next Leaf, or on to the CMS write
+when the plan is exhausted. **It cannot reject.** `EditorialReviewResult` has no verdict
+field, so there is no value it could return that would stop a Leaf; R3 keeps the legal gate
+unarguable, and an editorial reviewer with a veto is a second legal gate nobody designed.
+
+Note where it sits: *after* `ground_check`, never before. Grounding is the legal gate, and
+revision rewrites prose — so revision has to happen on text that has already been proven
+against its sources, and the revised text is what the CMS then receives.
 
 `write_drafts_to_cms` is §3.3's `publish_to_cms`, renamed: it writes drafts and must never
 publish, and a node named for publishing is a name that eventually gets believed.
 
-Still absent, deliberately: assets (WP18) and `editorial_review` (WP19).
+Assets are deliberately not in this graph. They run as their own invocation
+(`generate-assets`) because images follow text: regenerating a Track's prose invalidates
+its illustrations, and coupling them into one graph makes the cheap half impossible to
+redo without the expensive half.
 """
 
 from __future__ import annotations

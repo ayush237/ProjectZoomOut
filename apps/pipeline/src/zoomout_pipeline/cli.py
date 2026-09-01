@@ -83,10 +83,31 @@ def run(
         typer.Option(help="How this file was obtained. Required — see R6."),
     ],
     run_id: Annotated[str | None, typer.Option(help="Defaults to a generated id.")] = None,
+    cms_track_id: Annotated[
+        int | None,
+        typer.Option(help="Write into an existing Track instead of creating a new one."),
+    ] = None,
 ) -> None:
-    """Ingest, analyze, break down, and stop at the human gate."""
+    """Ingest, analyze, break down, and stop at the human gate.
+
+    `--cms-track-id` regenerates a Track that already exists, which is a different thing
+    from resuming one. A resumed run reuses the Track it created itself; this seeds the
+    same field from outside so a *new* run's Leaves land under the *old* Track's id.
+    WP20 needed it: Track 42's text was regenerated from scratch, and letting the run
+    create Track 45 would have left two Tracks of one book in the CMS with the founder
+    reviewing whichever they happened to open.
+
+    **It does not empty the Track first.** `write_drafts_to_cms` skips any `orderIndex`
+    Payload already holds, so pointing a run at a populated Track writes nothing — delete
+    the old Leaves first, deliberately, with a credential that is allowed to.
+    """
     resolved_run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
-    state = PipelineState(run_id=resolved_run_id, source_path=str(source), acquisition=acquisition)
+    state = PipelineState(
+        run_id=resolved_run_id,
+        source_path=str(source),
+        acquisition=acquisition,
+        cms_track_id=cms_track_id,
+    )
 
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": resolved_run_id}}

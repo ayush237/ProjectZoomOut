@@ -572,7 +572,8 @@ def test_a_created_leaf_carries_its_review_findings() -> None:
 def test_a_created_leaf_reviewed_clean_omits_the_findings_field() -> None:
     """Same rule as the PATCH path: Payload's default is already `[]`, and writing one
     would claim a review happened in a field that cannot distinguish that from silence."""
-    for findings in (None, []):
+    empty: list[list[EditorialFinding] | None] = [None, []]
+    for findings in empty:
         payload = leaf_payload(
             record=record(), track_id=7, passages={501: PASSAGE}, findings=findings
         )
