@@ -88,6 +88,8 @@ Two habits, both cheap: **use a `git worktree` on `main` for planning commits** 
 
 Getting this wrong in the cheap direction costs a package. Getting it wrong in the expensive direction costs it every time.
 
+**At sign-off, read the completion report's "deferred / not done" section for register entries — not just its findings.** WP20 reported, in its closing paragraph, that the published Track's `disclaimer` held editorial instructions, its purchase URL had no scheme, and its cover hotlinked a retailer's CDN. Two of those are the surfaces the 2026-08-28 ruling calls legally load-bearing. Sign-off harvested the report's *findings* and its *open questions* and stopped there, so all three went four days on no list at all while the roadmap's own summary named a founder item that was not in the live blocker list. **Nothing was wrong with the report** — it was thorough and honest, which is what makes this the harder kind of miss. A defect is not recorded until it reaches a list someone reads.
+
 **Optional fields are invisible when dropped.** A missing required field is a validation error on the first request; a missing optional one is indistinguishable from content that legitimately has none. Every additive change to the content model has this property, which is why the maximal-fixture contract test exists — see `agents/manager.md`.
 
 ## Sub-agents

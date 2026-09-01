@@ -96,26 +96,56 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 ## Part 3 — Blocked on the founder
 
-*Reviewed 2026-08-27. Ordered by when it bites, not by size.*
+*Reviewed 2026-09-02. Ordered by when it bites, not by size.*
+
+> **Renumbered 2026-09-02, and the reason is worth keeping.** This table had drifted into two
+> rows numbered 3, two numbered 4, and duplicate entries for the curation policy and the streak
+> question — while the roadmap's own summary named a founder item (Track 42's cover) that was not
+> in this list at all. That is the same drift the roadmap warns about, only inside the one list
+> declared live. **Deduplicated and renumbered; nothing was dropped.**
 
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **Content Curation Policy** — approve, amend or reject the draft | a decision | **Which books can be ingested at all.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
-| 2 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
-| 3 | **A domain** | ~15 min, ~$12/yr | **Downgraded 2026-08-29 — it is not blocking anything today.** Cloud Run serves a free `*.run.app` URL, so deployment does not need it; the real driver is the email provider for password reset, which needs a verified sending domain. WP12 and WP13 are both parked, so buy it when WP12 starts. Buying earlier only banks the DNS propagation wait | 2026-08-13 |
-| ~~4~~ | ~~**Trial credit expiry ~17 Sept**~~ | — | — | ✅ **Answered 2026-08-29** — founder will move to another account for the MVP phase. See the note below |
-| 3 | **Content Curation Policy owner** — the criteria excluding authors with companion apps and publishers in AI litigation | a decision | Which books can launch at all | the original brief |
-| ~~4~~ | ~~**Age-gate threshold**~~ | — | — | ✅ **Ruled 13+ on 2026-08-28.** Two riders below |
-| 5 | **Streak vs library size** — a product call | a decision | Stage 3 | 2026-08-09 |
-| 6 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
-| 7 | **SFX assets** — sourcing and licensing | unknown | Stage 4 polish | 2026-08-06 |
+| 1 | **Track 42's published legal surfaces are wrong** — see below. The `disclaimer` field holds editorial instructions instead of a non-endorsement disclaimer, the purchase URL has no scheme, and `coverUrl` hotlinks a retailer's CDN | ~10 min in the CMS | **Deployment.** These are the two surfaces `LEGAL.md` calls load-bearing, on the only real Track we have | 2026-09-01 |
+| 2 | **Content Curation Policy** — approve, amend or reject the draft, *including* the criteria on authors with companion apps and publishers in AI litigation | a decision | **Which books can be ingested at all, and which can launch.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
+| 3 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
+| 4 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
+| 5 | **A domain** | ~15 min, ~$12/yr | **Downgraded 2026-08-29 — it is not blocking anything today.** Cloud Run serves a free `*.run.app` URL, so deployment does not need it; the real driver is the email provider for password reset, which needs a verified sending domain. WP12 and WP13 are both parked, so buy it when WP12 starts. Buying earlier only banks the DNS propagation wait | 2026-08-13 |
+| 6 | **SFX assets** — sourcing and licensing | unknown | Stage 4 polish | 2026-08-06 |
+| ~~—~~ | ~~**Trial credit expiry ~17 Sept**~~ | — | — | ✅ **Answered 2026-08-29** — founder will move to another account for the MVP phase. See the note below |
+| ~~—~~ | ~~**Age-gate threshold**~~ | — | — | ✅ **Ruled 13+ on 2026-08-28.** Two riders below |
 | ~~—~~ | ~~GCP account and billing~~ | — | — | ✅ **closed** — ₹28,710 credit active, pipeline running on Vertex |
 
-**Nothing here blocks the work currently in flight.** WP17's remaining half needs none of it.
+**Nothing here blocks the work currently in flight.** WP20.1 needs none of it.
 
-**Item 1 is the one to do first** — not because it is urgent today, but because everything downstream of it is waiting rather than working, and it is fifteen minutes.
+**Item 1 is the one to do first**, and it is new to this list rather than newly urgent — it has been true since Track 42 was published on 2026-09-01, recorded only in the last paragraph of WP20's completion report. **Nothing reaches a reader today because nothing is deployed**, which is exactly why it is cheap now and expensive later: WP12 makes it live.
 
-**Items 3 and 4 have been open since the brief and are the ones most likely to surprise you late.** A curation policy discovered in Stage 5 can invalidate content produced in Stage 3. Item 3 now has a concrete case to reason from rather than being abstract — see the 2026-08-27 attributive-framing ruling, where a public-domain book turned out to teach 1910 metaphysics sincerely.
+**Item 2 has been open since the brief and is the one most likely to surprise you late.** A curation policy discovered in Stage 5 can invalidate content produced in Stage 3. It now has a concrete case to reason from rather than being abstract — see the 2026-08-27 attributive-framing ruling, where a public-domain book turned out to teach 1910 metaphysics sincerely.
+
+### Track 42's published legal surfaces — founder item 1, opened 2026-09-02
+
+**What it is:** WP20 published Track 42 and reported, in its closing paragraph, that three Track-level
+fields need founder attention. They were never carried onto any list. Two of them are the fields the
+2026-08-28 ruling names as *"the legally load-bearing surfaces"* that *"belong to the human gate"* —
+so the gate ran, the fields were filled, and nobody checked what they were filled with.
+
+| Field | State | Why it matters |
+|---|---|---|
+| `disclaimer` | Holds **editorial instructions**, not a disclaimer | `LEGAL.md` requires a non-endorsement disclaimer on **every** Track, and `PRODUCT.md` makes it a hard requirement rather than polish. This is the surface asserting the author does not endorse ZoomOut |
+| `purchaseLinks` | URL has **no scheme** | Purchase-forward framing is the other half of the same posture, and a link without a scheme is likely a dead link rather than a weak one |
+| `coverUrl` | Hotlinks `harivubooks.com`'s CDN | Someone else's image from someone else's infrastructure, on a published Track, in a product whose whole posture is care with other people's material. Already in the debt register |
+
+**Why this is a founder item and not a work package:** the disclaimer needs *writing*, and the
+purchase link needs *choosing*. Neither is something a session should invent — the 2026-08-28 ruling
+refused to let the pipeline auto-fill them for precisely that reason, calling it fabrication of a
+different kind. The cover is the one part that could be handed to a package, once there is an asset
+to point at.
+
+**The process finding, which outlives the fix:** a defect reported honestly in a completion report is
+not recorded until it reaches a list someone reads. WP20's report was thorough and this was in it;
+it still went four days unlisted because the register and the blocker list were updated from the
+report's *findings* section and not its *deferred* section. **At sign-off, a completion report's
+"deferred / not done" paragraph gets read as a source of register entries, the same as its findings.**
 
 ### Cloud account after the trial — founder decision 2026-08-29
 
