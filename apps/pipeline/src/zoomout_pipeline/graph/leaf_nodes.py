@@ -404,6 +404,7 @@ def make_review_leaf_node(deps: NodeDependencies) -> Node:
             passages=passages,
             review_model=deps.settings.editorial_model,
             revise_model=deps.settings.revise_model,
+            max_attempts=deps.settings.editorial_attempts,
         )
 
         log.info(

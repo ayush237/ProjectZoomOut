@@ -466,6 +466,7 @@ def review_track(
                 passages=passages,
                 review_model=settings.editorial_model,
                 revise_model=settings.revise_model,
+                max_attempts=settings.editorial_attempts,
             )
             generated[key] = outcome.record
             reviews[key] = {

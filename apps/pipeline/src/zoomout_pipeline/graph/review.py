@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from zoomout_pipeline.config import DEFAULT_EDITORIAL_ATTEMPTS
 from zoomout_pipeline.cost import RunCost, TokenSpend
 from zoomout_pipeline.db.retrieval import Passage, format_passages
 from zoomout_pipeline.graph.grounding import check_grounding
@@ -30,12 +31,10 @@ from zoomout_pipeline.prompts import render_prompt
 
 _log = get_logger(__name__)
 
-# R7's original figure, kept rather than WP16.1's raised one. WP16.1 raised the breakdown
-# cap because the cost assumption behind R7's 2 no longer held on a Flash text call; that
-# reasoning does not transfer here. Editorial review may run cross-family per R3, and Claude
-# has no free tier anywhere (§4a) — so this loop can cost real money by construction, and R7's
-# original bound on cost is the one that actually applies to it.
-MAX_EDITORIAL_ATTEMPTS = 2
+# The cap and its full reasoning live in `config.py`, beside the model settings it is
+# entangled with — cost on one side, quota throughput on the other. Re-exported under
+# its long-standing name so the loop below still reads as its own rule.
+MAX_EDITORIAL_ATTEMPTS = DEFAULT_EDITORIAL_ATTEMPTS
 
 
 @dataclass(frozen=True)

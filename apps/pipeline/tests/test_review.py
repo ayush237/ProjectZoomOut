@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.graph.review import (
@@ -384,3 +385,34 @@ def test_revise_prompt_actually_carries_the_existing_claims_block() -> None:
     prompt = llm.calls[0]["prompt"]
     assert "P1" in prompt
     assert "There is a thinking stuff" in prompt or "supports it" in prompt
+
+
+def test_the_cap_is_configurable_and_the_node_honours_the_setting() -> None:
+    """WP20: the cap has to be answerable from configuration, not by editing a constant.
+
+    A cap of 2 is up to five calls to the review model per Leaf. On Vertex the pro preview
+    model would not sustain that: consecutive calls drifted from seconds to ten minutes,
+    then seventeen, then forty-four, and an eighteen-Leaf Track stopped being reachable in
+    a day. The bound that bit was throughput, not the cost bound the constant was chosen
+    for — so it belongs in settings.
+
+    The assertion that earns its keep is the second one. A setting that exists but is not
+    threaded through to `review_and_revise` reads exactly like a working knob and changes
+    nothing, which is a worse failure than not having it.
+    """
+    settings = PipelineSettings(
+        database_url="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline",
+        gemini_api_key="k",
+        editorial_attempts=1,
+    )
+    assert settings.editorial_attempts == 1
+
+    import inspect
+
+    from zoomout_pipeline.graph import leaf_nodes
+
+    source = inspect.getsource(leaf_nodes.make_review_leaf_node)
+    assert "max_attempts=deps.settings.editorial_attempts" in source, (
+        "the review node must pass the configured cap; a setting nothing reads is a knob "
+        "that appears to work and does nothing"
+    )
