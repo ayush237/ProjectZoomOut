@@ -27,6 +27,10 @@ from zoomout_pipeline.db.retrieval import (
     PassageRepository,
     format_passages,
 )
+from zoomout_pipeline.graph.answer_length_check import (
+    MAX_LONGEST_CORRECT_RATIO,
+    check_answer_length,
+)
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.grounding import GroundingVerdict, check_grounding
 from zoomout_pipeline.graph.nodes import Node
@@ -438,3 +442,52 @@ def route_after_review(state: PipelineState) -> str:
     if state.plan is not None and state.leaf_cursor < len(state.plan.leaves):
         return "draft_leaf"
     return "done"
+
+
+def make_answer_length_node(deps: NodeDependencies) -> Node:
+    """Measure the correct-option-is-longest tell, once, across the finished Track.
+
+    **Why it is a node at all.** WP19 built this check and wired it into `review-track`,
+    the retrofit command — so it ran on Track 42 only because someone invoked that command
+    by hand, and a *fresh* run reached the CMS having never measured itself. That is the
+    graph-shape problem wearing different clothes: not a node that cannot be reached, but a
+    check that lives outside the graph and so is only ever reached deliberately. The check
+    that guards the product's central claim is the last one that should depend on someone
+    remembering.
+
+    **It does not block, and that is a decision rather than an omission.** Three reasons,
+    in order of weight:
+
+    - The remedy is generation-side — substantive distractors — so the loop a block would
+      have to take is "re-draft all eighteen Leaves", with no per-Track attempt counter to
+      terminate it. A cap that does not exist is not a cap.
+    - Everything it writes is a draft that a human must approve. Gate 2 is where content
+      defects are meant to be caught, and a reviewer can rewrite an option in seconds.
+    - Halting before the CMS write leaves the founder with no Leaves to look at and no way
+      forward except another run, which is the more expensive failure of the two.
+
+    The counter-argument is real and belongs on the record: WP19 ruled that "an advisory
+    finding is too weak a guard for a defect that empties the product's core claim." What
+    makes this weaker than that ruling wants is that a warning does not stop the Track. If
+    that is the wrong trade, the fix is a per-Track regeneration budget, not moving this
+    check into `ground_check` — the legal gate must stay unarguable on style grounds (R3).
+    """
+
+    def answer_length_check(state: PipelineState) -> dict[str, Any]:
+        log = _log.bind(run_id=state.run_id, node="answer_length_check")
+        result = check_answer_length(list(state.generated.values()))
+
+        # `warning`, not `info`, on a failure. A run this long is read by skimming for the
+        # lines that are not routine, and a Track that is answerable without reading is
+        # exactly what must not scroll past.
+        (log.info if result.passed else log.warning)(
+            "answer_length.complete",
+            passed=result.passed,
+            ratio=round(result.longest_correct_ratio, 3),
+            leaves_with_longest_correct=result.leaves_with_longest_correct,
+            leaves_checked=result.leaves_checked,
+            limit=MAX_LONGEST_CORRECT_RATIO,
+        )
+        return {"answer_length": result}
+
+    return answer_length_check

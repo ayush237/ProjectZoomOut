@@ -341,3 +341,46 @@ def test_a_fresh_run_reaches_review_through_graph_edges(
     first = state.leaf_reviews["0"]
     assert first.findings, "the findings themselves must survive into state"
     assert first.findings[0].suggestion, "a finding without a fix is not actionable"
+
+
+def test_a_fresh_run_measures_the_answer_length_tell_without_being_asked(
+    deps: NodeDependencies, sample_epub: Path, analysis: BookAnalysis
+) -> None:
+    """Tier B. WP19 built this check and wired it into `review-track` only.
+
+    So it ran on Track 42 because someone typed the retrofit command, and a fresh run wrote
+    eighteen Leaves to the CMS having never measured itself. A check that guards the
+    product's central claim — that the unlock gate cannot be passed without reading — is
+    the last one that should depend on somebody remembering to invoke it.
+
+    The assertion is `state.answer_length is not None`: the measurement happened as part of
+    the run. Whether it *passed* is a property of the generated content and belongs in
+    `test_answer_length_check.py`, which owns the rule itself.
+    """
+    llm = ScriptedLLM(
+        [analysis, make_plan(leaves=22, chapters_per_leaf=3, chapter_count=17)],
+        defaults={
+            "draft_leaf": make_generated_leaf(),
+            "extra_content": GeneratedExtras(),
+            "editorial_review": EditorialReviewResult(findings=[], overall_note="Fine."),
+            "revise": make_generated_leaf(),
+        },
+    )
+    scoped = replace(deps, llm=llm)
+    graph, config, _ = _run(scoped, sample_epub)
+
+    path = Path(scoped.settings.runs_dir) / "run-test" / "leaf-plan.yaml"
+    body = yaml.safe_load(path.read_text())
+    body["approved"] = True
+    path.write_text(yaml.safe_dump(body, sort_keys=False))
+
+    graph.invoke(Command(resume=True), config)
+    state = PipelineState.model_validate(graph.get_state(config).values)
+
+    assert state.answer_length is not None, (
+        "a fresh run must measure the answer-length tell without a retrofit invocation"
+    )
+    assert state.answer_length.leaves_checked == len(state.generated), (
+        "the check is per Track — every generated Leaf has to be in the denominator, or a "
+        "Track can dilute a tell by being measured on a subset of itself"
+    )

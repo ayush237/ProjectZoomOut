@@ -9,6 +9,9 @@
                                                             └───────── review_leaf
                                                         next Leaf          │ plan exhausted
                                                                            ▼
+                                                                 answer_length_check
+                                                                           │
+                                                                           ▼
                                                               write_drafts_to_cms ─> END
 
 `ground_check` routes two ways: back to `draft_leaf` with its findings when a Leaf fails and
@@ -46,9 +49,11 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from zoomout_pipeline.cost import RunCost, TokenSpend
+from zoomout_pipeline.graph.answer_length_check import AnswerLengthCheckResult
 from zoomout_pipeline.graph.cms_node import make_write_drafts_node
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.graph.leaf_nodes import (
+    make_answer_length_node,
     make_draft_leaf_node,
     make_extra_content_node,
     make_ground_check_node,
@@ -101,6 +106,7 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     LeafPlan,
     PlannedLeaf,
     StructureCheckResult,
+    AnswerLengthCheckResult,
     RunCost,
     TokenSpend,
     Acquisition,
@@ -144,6 +150,7 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_node("extra_content", make_extra_content_node(deps))
     graph.add_node("ground_check", make_ground_check_node(deps))
     graph.add_node("review_leaf", make_review_leaf_node(deps))
+    graph.add_node("answer_length_check", make_answer_length_node(deps))
     graph.add_node("write_drafts_to_cms", make_write_drafts_node(deps))
 
     graph.add_edge(START, "ingest")
@@ -165,8 +172,9 @@ def build_graph(deps: NodeDependencies) -> PipelineGraph:
     graph.add_conditional_edges(
         "review_leaf",
         route_after_review,
-        {"draft_leaf": "draft_leaf", "done": "write_drafts_to_cms"},
+        {"draft_leaf": "draft_leaf", "done": "answer_length_check"},
     )
+    graph.add_edge("answer_length_check", "write_drafts_to_cms")
     graph.add_edge("write_drafts_to_cms", END)
 
     return graph

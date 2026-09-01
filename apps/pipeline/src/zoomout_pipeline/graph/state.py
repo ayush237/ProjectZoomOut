@@ -18,6 +18,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from zoomout_pipeline.cost import RunCost
+from zoomout_pipeline.graph.answer_length_check import AnswerLengthCheckResult
 from zoomout_pipeline.graph.structure_check import StructureCheckResult
 from zoomout_pipeline.models import (
     Acquisition,
@@ -125,6 +126,13 @@ class PipelineState(BaseModel):
     # it already wrote is the only thing standing between a retry and a duplicated Track.
     cms_track_id: int | None = None
     cms_leaf_ids: dict[str, int] = Field(default_factory=dict)
+
+    # The per-Track answer-length measurement, taken once every Leaf exists.
+    #
+    # WP19 built the check and WP20 found it only ever ran inside the `review-track`
+    # retrofit command, so a fresh run reached the CMS without it — the same shape of gap
+    # as the un-wired review node, in the one check that guards the product's core claim.
+    answer_length: AnswerLengthCheckResult | None = None
 
     # What WP18 attached, keyed like `generated`. Holds media ids and urls — never image
     # bytes, which belong in Payload rather than in a checkpoint.
