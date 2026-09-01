@@ -752,6 +752,169 @@ Your specification is `project/proposals/content-pipeline.md`. Read it in full, 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP20 — one book, end to end, published — 2026-09-01
+
+**All 7 requirements and all 11 acceptance criteria met.** Track 42 —
+*The Science of Getting Rich* — is regenerated, illustrated, reviewed through gate 2 by
+the founder, **published**, and its raw text purged. `apps/pipeline` lint, `ruff format`,
+`mypy --strict` (67 files) and `pytest` (187 passed, 2 deselected) are clean; nothing
+outside `apps/pipeline` was touched, so root `lint`/`test`/`build` are unaffected.
+
+**The two numbers this package existed to produce:**
+
+| | |
+|---|---|
+| **Compute per book** | **$5.95** — text + review $2.94, images $2.81, diagram specs $0.11, distractor repair $0.09 |
+| **Founder time per book** | **~73 min** — 4:03 per Leaf, **73% reading / 27% correcting** |
+
+The run as executed cost $10.50; the $4.55 difference was images bought twice through a
+bug that no longer exists. **$5.95 is the figure to plan from.**
+
+**The finding that decides what to build next: it is the screen, not the reviewer.**
+Reading time has a **standard deviation of 13 seconds** across Leaves whose correcting
+cost ranged from 0:00 to 2:30. A Leaf approved untouched still took 2:40 to read. Reading
+cost is independent of content quality, so no improvement to generation, prompts or the
+editorial reviewer can reduce three-quarters of gate 2 — only a better review surface can.
+Correcting is spiky rather than a tax: two of the five timed Leaves were approved as-is,
+and **one Leaf accounted for 46% of all correcting time**, almost entirely a single
+missing dinner-table fact. That part is addressable upstream; it is the smaller half.
+
+**WP19's 4:00 estimate matched at 72:54 against 72:00, and the agreement is coincidence.**
+WP19 measured a machine reading for four minutes and correcting nothing. The founder reads
+in 2:58 and corrects for 1:05. Same total, different composition — anyone planning from
+that number would have assumed correcting was free.
+
+**The ratio that constrains the library:** the remaining credit buys ~48 books; the
+founder's time buys about 12. Money was never the ceiling and still is not.
+
+---
+
+**Requirement 1 — review wired as live graph edges.** `ground_check → review_leaf →
+{draft_leaf | answer_length_check}`. A fresh run now arrives at gate 2 already reviewed
+with no `--run-id` retrofit. Proven on the live run, not only in test.
+
+**Requirement 2 — text regenerated.** 18 Leaves, all grounded first attempt, old Leaves
+deleted rather than carried forward. Structure improved against the old Track: Leaves
+drawing on a single chapter 24% → **0%**, steps following the book's order 81% → **59%**.
+
+*The answer-length defect is removed: 83% → 61% on regeneration → **11% after repair**,*
+below the 33% chance rate. **Regenerating did not fix it.** `draft_leaf.md` has forbidden
+the tell since WP19 and the model complies about a third of the time it matters, because
+the correct option carries the Leaf's concept and nuance costs words — a general
+prohibition fights the semantics of the task. So `balance-distractors` rewrites only the
+wrong options of Leaves that show it: no citations touched, editorial review preserved,
+passing Leaves left alone. $0.09 and three minutes, against $3 and 35 minutes for a full
+regeneration. It **refuses** rewrites that miss the length target rather than reporting a
+fix that did not happen — three Leaves kept their originals.
+
+The position shuffle is intact (4/5/9 across slots, versus the old "second in 15 of 18,
+never third"). Attributive framing is visible throughout — *"Wattles argues that…"*,
+*"Because he views nature's supply as inexhaustible…"* — and apply-in-life carries
+behavioural residue with no metaphysics: *"Before finalizing your next business deal,
+evaluate whether what you are providing delivers more practical value than the cash value
+you are receiving."*
+
+**Requirement 3 — assets regenerated from the six-anchor set.** 54 scenario candidates and
+18 diagrams; every one carries alt text; all 72 pass the amber guardrail. `scenario.image`
+was left empty on all 18 by design — the pick is the human's.
+
+*On the sixth anchor: it demonstrably works and is demonstrably insufficient.* One sampled
+candidate showed the unlit-lamp treatment exactly as taught; another rendered the luminous
+cone the anchor exists to prevent. An anchor teaches a tendency, not a rule. **WP19's
+fully-featured-face drift did not recur** — figures are profile silhouettes with no eyes,
+mouth or brows. Not a blocker: three candidates per Leaf means drift costs a click.
+
+**Requirement 4 — gate 2 by the founder.** All 18 Leaves carry `approved`. Timings above.
+
+**Requirement 5 — published.** First time pipeline output has reached a published state.
+Payload's publish validation passed on all 18. **A human published; the pipeline still
+cannot and did not gain the ability.**
+
+**Requirement 6 — retention closed, verified by query.** Raw text 123,872 chars → **0**,
+`raw_text_purged_at` stamped. Retained: 136 chunks, 136 embeddings, 94 cited passages with
+their text, all 18 chapter locators. 42 uncited chunk texts nulled → 0 remain. A live
+pgvector similarity query still returns ranked results, so the vectors are usable rather
+than merely present. **168 source references across the published Track, zero with an
+unresolvable locator, 164 quotes still findable in retained cited text.**
+
+**Requirement 7 — housekeeping.** The handoff said three `A Test Book` Tracks and one WP17
+fixture. Actually present: **five test Tracks and two fixtures — 7 Tracks, 111 Leaves**,
+plus Track 42's 18 superseded ones. All 129 deleted with a human credential. Track 42 and
+the 28 placeholder Tracks untouched.
+
+---
+
+**Seven defects fixed that were not in the handoff, and the pattern behind four of them.**
+
+| | |
+|---|---|
+| `gemini-3.6-flash` unpriced | every text call in every run reported **$0.00** |
+| `USD_PER_IMAGE` a single constant | wrong model's rate — every image cost **3.4× under** |
+| answer-length check outside the graph | a fresh run reached the CMS never having measured itself |
+| editorial cap not configurable | a throughput bound answerable only by editing a cost constant |
+| SDK retry stacking under ours | **109 minutes of a two-hour run** spent inside calls that had not returned |
+| image client had no timeout at all | asset run hung **3h12m** on one call, process alive, log silent |
+| asset bookkeeping written once, at the end | a killed run re-bought images it already owned |
+
+**Four of these are the same shape: a fix or guard that existed in one place and was never
+carried to its sibling.** The SDK retry fix was in the text client, not the image client.
+The find-then-skip idempotency guard was in `write_drafts_to_cms`, not the asset path —
+where it failed at Leaf 11 of 18, *the identical failure that node's own comment
+documents*. The answer-length check ran in the retrofit command, not the graph. **The
+codebase knew about every one of these problems; it knew in the wrong file.** Tests now
+cover both siblings wherever a pair exists — `test_every_sdk_client_bounds_its_own_requests`
+is parametrised over both constructors for exactly this reason.
+
+Also corrected: `test_client_config.py` was passing or failing based on the operator's
+shell. Exporting the run environment turned two tests red — not because a guard broke, but
+because the shell supplied what they asserted was missing. The same leak turns a genuinely
+broken guard green.
+
+---
+
+**Read-it-yourself gate — three Leaves read end to end (3, 11, 17).**
+
+Scenarios are now real dilemmas. Leaf 11's are the clearest: quit today and force the
+change, keep it as a hobby and grow where your talents already are, or transition
+gradually — all three are things people actually do, and the *longest option is wrong*.
+
+**The prose is still stiff, and this is now settled rather than impressionistic.** After a
+full editorial pass and a revision loop on every Leaf, WP19's *"more honest, not less
+stiff"* holds. From Leaf 17: *"Wattles asserts that failure is impossible when you follow
+the scientific process, so a missed opportunity is simply a sign that a larger good is on
+its way."* Accurate reporting in 1910's cadence. The reviewer fires reliably on
+attribution, pedagogy and scenario plausibility — those were the categories across the
+whole run — and reliably does not touch register. **WP14 should treat register as a prompt
+problem the current reviewer does not address.**
+
+---
+
+**Open for Architect.**
+
+1. **Should the answer-length check block?** It warns. The remedy is generation-side, so a
+   block loops over re-drafting all 18 Leaves with no per-Track attempt counter to
+   terminate it, and halting leaves the founder nothing to review. WP19's *"an advisory
+   finding is too weak a guard"* is recorded beside the decision. If it wins, the answer is
+   a per-Track regeneration budget — **not** folding this into `ground_check`, which R3
+   must keep unarguable on style grounds.
+2. **Should `purge_raw_text` be the terminal graph node?** `repository.py` says WP20 would
+   wire it; deliberately not done. Purging at `END` means a failed asset run, a rejected
+   gate 2, or a regeneration forces a full re-ingest. **The natural end of a run is not
+   `write_drafts_to_cms` — it is after a human publishes, and the graph does not model
+   that.**
+3. **One of three asset conditions is mechanically enforced.** The criterion is "no amber,
+   no text, no identifiable people"; `check_reward_amber` is the only guardrail. Text and
+   faces rest on the prompt, the anchors and the human eye. The no-glow rule is unchecked.
+4. **WP15.7 is unbuilt**, so gate 2's image pick is a manual url/alt copy. Image selection
+   was deliberately deferred to a second pass; the 73-minute figure excludes it, and should
+   not be compared against a future measurement that includes it.
+
+**Deferred / not done:** scenario images are not attached to any Leaf (awaiting WP15.7);
+53 orphaned media files from the superseded assets remain in the library, unreferenced;
+the published Track's `disclaimer`, `coverUrl` and `purchaseLinks` need founder attention
+(the disclaimer currently contains editorial instructions, the cover hotlinks a third-party
+retailer CDN, and the purchase URL has no scheme).
+
 ### Completed: WP15.6 — thumbnails for gate 2's image candidates — 2026-08-29
 
 **All 6 acceptance criteria met and verified live, no automated test added — see
