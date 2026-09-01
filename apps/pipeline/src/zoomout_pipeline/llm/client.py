@@ -104,7 +104,26 @@ class GeminiClient:
         # Without this the SDK waits forever. A batch pipeline whose runs span days cannot
         # distinguish a hung request from a slow one, so a call that will never answer looks
         # exactly like progress — it did, for 83 minutes, before this was added.
-        http_options = types.HttpOptions(timeout=int(request_timeout_seconds * 1000))
+        #
+        # **`attempts=1` turns the SDK's own retrying off, and that is the point.** The
+        # timeout above bounds one HTTP attempt; it does not bound a call, because the SDK
+        # retries 429s internally with its own exponential backoff (max_delay 60s) before
+        # this package ever sees an error. Two retry layers then stack — the SDK's, silent
+        # and unbounded from here, underneath `_call_with_retry`'s five attempts and the
+        # rate limiter's own 60-second `penalise()`.
+        #
+        # WP20 measured what that costs. Every long gap in the run ended in `llm.retrying`,
+        # meaning the whole delay happened inside a single call before our code was told
+        # anything: gaps of 43, 17, 12, 10, 9 and 6 minutes, **109 minutes of a two-hour
+        # run**, against a configured per-request timeout of three minutes.
+        #
+        # One retry layer, and it is this package's: it logs, it paces against the limiter,
+        # and it charges the local window on rejection. The SDK's does none of those and
+        # cannot be observed from the outside.
+        http_options = types.HttpOptions(
+            timeout=int(request_timeout_seconds * 1000),
+            retry_options=types.HttpRetryOptions(attempts=1),
+        )
 
         if use_vertex:
             if not project:

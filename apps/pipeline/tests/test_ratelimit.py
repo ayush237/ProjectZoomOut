@@ -100,3 +100,45 @@ def test_penalise_makes_the_next_acquire_wait() -> None:
 
     assert clock.slept, "after a 429 the next attempt must wait for the window"
     assert clock.now >= 60.0
+
+
+def test_the_sdk_does_not_retry_underneath_our_own_retry_loop() -> None:
+    """WP20: two stacked retry layers cost 109 minutes of a two-hour run.
+
+    `HttpOptions.timeout` bounds one HTTP attempt, not one call. The SDK retries 429s
+    internally with its own exponential backoff before this package is told anything, so
+    `_call_with_retry`'s five attempts and the limiter's 60-second `penalise()` sat on top
+    of an invisible, unbounded loop. Every long gap in the run ended in `llm.retrying` —
+    the delay had already happened inside a single call.
+
+    Asserting on the constructed `HttpOptions` rather than on a live call, because the
+    thing that regresses is someone rebuilding this object and dropping the field.
+    """
+    from google.genai import types
+
+    from zoomout_pipeline.llm.client import GeminiClient
+
+    captured: dict[str, object] = {}
+
+    class _FakeClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    import google.genai
+
+    original = google.genai.Client
+    google.genai.Client = _FakeClient  # type: ignore[misc, assignment]
+    try:
+        GeminiClient("key", request_timeout_seconds=180.0)
+    finally:
+        google.genai.Client = original  # type: ignore[misc]
+
+    options = captured["http_options"]
+    assert isinstance(options, types.HttpOptions)
+    assert options.timeout == 180_000, "the per-attempt timeout must still be set"
+    assert options.retry_options is not None, (
+        "the SDK's retry layer must be configured, not left at its defaults"
+    )
+    assert options.retry_options.attempts == 1, (
+        "attempts must be 1 — anything higher puts a second, silent retry loop under ours"
+    )
