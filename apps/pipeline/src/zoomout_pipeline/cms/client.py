@@ -132,6 +132,28 @@ class PayloadClient:
     def get_leaf(self, leaf_id: int, *, draft: bool = True) -> dict[str, Any]:
         return self._get_document("leaves", leaf_id, draft=draft)
 
+    def fetch_media(self, url: str) -> bytes:
+        """The bytes behind a media url this CMS serves.
+
+        A read, not a write, and separate from `_request` because that one decodes JSON —
+        an image decoded as JSON is a confusing failure a long way from its cause.
+
+        WP20.1 needs it to run the guardrails over candidates the run no longer holds in
+        memory: WP18 checked each image as it was generated, but choosing between three of
+        them days later means checking again from what Payload actually stored.
+        """
+        target = url if url.startswith("http") else f"{self._base}{url}"
+        request = urllib.request.Request(
+            target, headers={"Authorization": f"admins API-Key {self._api_key}"}
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                return bytes(response.read())
+        except urllib.error.HTTPError as error:
+            raise PayloadError(f"GET {url} failed: {error.code}") from error
+        except urllib.error.URLError as error:
+            raise PayloadError(f"GET {url} could not reach Payload: {error.reason}") from error
+
     def upload_media(self, *, data: bytes, filename: str, alt: str) -> dict[str, Any]:
         """Upload one image to Payload's media collection.
 
@@ -204,6 +226,28 @@ class PayloadClient:
         result = self._request("PATCH", f"/api/leaves/{leaf_id}?{query}", body=body)
         _log.info("payload.leaf_updated", leaf_id=leaf_id, fields=sorted(patch))
         return dict(result.get("doc", result))
+
+    def list_leaves(self, *, track_id: int) -> list[dict[str, Any]]:
+        """Every draft Leaf on a Track, in order.
+
+        `draft=true` is not optional here. Without it Payload returns the *published*
+        version of each document, and a Leaf that is published with a pending draft reads
+        back as its published self — so a caller comparing siblings, or checking whether an
+        image is already attached, would be looking at the wrong version of the document it
+        is about to write to. WP20 hit exactly this reading Track 42 back after a patch.
+        """
+        query = urllib.parse.urlencode(
+            {
+                "where[trackId][equals]": str(track_id),
+                "draft": "true",
+                "depth": "0",
+                "limit": "100",
+                "sort": "orderIndex",
+            }
+        )
+        result = self._request("GET", f"/api/leaves?{query}")
+        docs = result.get("docs")
+        return [dict(doc) for doc in docs] if isinstance(docs, list) else []
 
     def find_leaf(self, *, track_id: int, order_index: int) -> int | None:
         """The existing draft Leaf at this position, if there is one.
