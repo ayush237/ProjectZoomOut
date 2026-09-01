@@ -641,9 +641,20 @@ def balance_distractors(
             typer.secho(f"  Leaf {record.order}: rebalanced", fg=typer.colors.GREEN)
             _echo_cost_line(spend)
 
-        graph.update_state(config, {"generated": generated})  # type: ignore[attr-defined]
-
         after = check_answer_length(list(generated.values()))
+
+        # The re-measurement is checkpointed alongside the repaired Leaves, not just
+        # printed. `answer_length_check` ran before this command existed and recorded the
+        # Track as failing; leaving that in state would have `status` report a Track that
+        # now passes as one that does not — and the stale number is the one a later reader
+        # would trust, because it is the one the *run* produced.
+        #
+        # This is a fresh measurement of the current Leaves, not an edit of the old verdict.
+        # The run did fail at that point, and the commit history says so.
+        graph.update_state(  # type: ignore[attr-defined]
+            config, {"generated": generated, "answer_length": after}
+        )
+
         typer.echo(
             f"\nafter : {after.leaves_with_longest_correct} of {after.leaves_checked} "
             f"({after.longest_correct_ratio:.0%}, limit {MAX_LONGEST_CORRECT_RATIO:.0%}) "
