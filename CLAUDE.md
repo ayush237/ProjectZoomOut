@@ -59,7 +59,8 @@ Rules of thumb:
 │   ├── projectplan.md         # active feature plan (Architect-owned)
 │   ├── projectRoadmap.md      # roadmap, backlog, decisions (Architect-owned)
 │   ├── collaboration-log.md   # handoffs + completion reports (active packages only)
-│   ├── archive/               # Phase 1 log, split out 2026-08-28 — read only when tracing history
+│   ├── archive/               # Phase 1 + Phase 2 logs and pre-08-25 decisions — read only when tracing history
+│   ├── token-budget.md        # how this project keeps per-session context small — read before adding to project/
 │   └── GETTING_STARTED.md     # how to launch each session
 ├── .claude/
 │   ├── settings.json

@@ -95,6 +95,14 @@ We deliberately don't `@import` the persona files into `CLAUDE.md`. `CLAUDE.md` 
 
 ## Context hygiene
 
+**Architect clears too — added 2026-09-02.** This rule existed for Manager since Phase 1 and Architect was never held to it, so one Architect session ran continuously from WP15 to WP20. **Every turn re-sends the whole conversation**, so a session that deep pays for every earlier package on every message. That was the single largest consumer of the weekly limit, and the fix costs nothing: the roadmap and the log are the memory, and Architect wrote them.
+
+**Clear at a boundary where the record is complete — never mid-package.** A package signed off and merged: clear freely. A package half-built with undocumented reasoning in the session's head: that reasoning is what gets lost.
+
+**Clearing is not free either.** A cleared session re-pays the document load — ~63k tokens after the 2026-09-02 archive, down from ~104k. So the rule of thumb is: **clearing saves once the conversation is longer than the documents it would reload.** That break-even is why archiving comes first, and why archiving at each sign-off matters more than any single clear.
+
+**And resuming a long conversation after a gap is the worst case of all** — the cached context has gone cold, so you pay full price for the entire history and learn nothing new from it. Prefer to end the day at a boundary.
+
 **Clear Manager after every work package. This is not optional housekeeping — it is how the workflow is designed to run.** Five packages in one context window will fill it, and a session running near its limit degrades exactly when the work gets hard.
 
 The sequence that loses nothing:
