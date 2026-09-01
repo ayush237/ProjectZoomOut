@@ -9,12 +9,13 @@ Read this file in full before taking any action in this repository. It applies t
 - **Full product context:** `project/PRODUCT.md` — read this before planning or implementing any feature. It defines the Track/Leaf taxonomy, the 5-slide Leaf structure, and the legal/content-integrity constraints that are hard requirements, not suggestions.
 
 ## How this repo is worked on
-Built through two persistent, separate Claude Code sessions with distinct roles. They are not interchangeable.
+Built through three persistent, separate Claude Code sessions with distinct roles. They are not interchangeable.
 
 | Session | Persona file | Launch | Owns |
 |---|---|---|---|
 | Architect | `agents/architect.md` | `claude-architect` (see `project/GETTING_STARTED.md`) | Planning, roadmap, architecture, handoff prompts, proposal/design docs. Doesn't touch application code — by instruction, not a technical restriction. |
 | Manager | `agents/manager.md` | `claude-manager` | Implementation, tests, e2e verification. Never edits planning docs (only appends to the collaboration log). |
+| Pipeline Manager | `agents/pipeline-manager.md` | see `project/GETTING_STARTED.md` | The Python content pipeline at `apps/pipeline` and nothing else. Added 2026-08-13. Same rules as Manager on planning docs. |
 
 Note: `agents/` here holds our own persona documents, loaded via `--append-system-prompt`. It's separate from Claude Code's native subagent directory at `.claude/agents/`, which holds `researcher` and `code-reviewer` — small, focused helpers the Architect session invokes mid-conversation for research and read-only review.
 

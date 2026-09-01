@@ -2,6 +2,21 @@
 
 Owned by Architect.
 
+## Where things stand — 2026-09-02
+
+**Read this first if you are a fresh session.** Both build phases are complete.
+
+- **The app works end to end on a device** — signup, library, the five-slide player, the payoff gate, XP, streaks, the daily cap, sharing, achievements. All mechanics server-authoritative. **Not deployed**; it runs against a laptop.
+- **The pipeline produces publishable books.** *The Science of Getting Rich* is live as Track 42 — 18 Leaves, every claim grounded to a retrieved passage, diagrams rendered, reviewed by the founder at gate 2, published, raw text purged.
+- **In flight:** WP20.1 (Pipeline Manager) — attaching Track 42's scenario images, which WP20 deferred.
+- **Next, all parked with no handoffs written:** WP12 deployment · WP13 password reset · WP14 hardening. WP12 needs a domain and the founder's new GCP account.
+- **The real constraint is founder hours, not money.** A book costs ~$6 of compute and ~73 minutes of gate 2 review. The credit buys ~48 books; the founder's time buys about 12.
+- **The library is 27 published placeholder Tracks plus Track 42.** Four more real books are what stands between here and something worth opening.
+
+**Founder items still open:** unpublish "The mountain is you" · replace Track 42's hotlinked cover · choose the launch books (`proposals/content-curation-policy.md` is drafted and deliberately undecided) · the streak-vs-library-size call · a domain.
+
+**Before adding anything to `project/`, read `token-budget.md`.** Every session pays for these files at startup.
+
 ## Phase 1 status board
 
 **Single source of truth for "what's done, what's next."** Architect updates this at every sign-off and every handoff.

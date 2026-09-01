@@ -50,6 +50,12 @@ The active files should hold **the current phase and nothing else**. Everything 
 
 ---
 
+### Archive at a boundary, never mid-package
+
+Learned immediately, by getting it wrong. The 2026-09-02 archive landed while the Pipeline Manager was mid-package on WP20.1, and rewrote `collaboration-log.md` substantially underneath it. Its handoff survived the cut — that was checked — but the session had already read the file, and concluded from a stale read that no handoff existed. It stopped and asked, which was right, and cost a round trip.
+
+**The rule is the same one that governs clearing:** archive when no session is mid-package. Verifying that the in-flight handoff survives is necessary and not sufficient — a session that has already read the file does not re-read it because the file changed.
+
 ## Lever 3 — Not every session reads every file
 
 A Manager package touching `apps/admin` does not need `content-pipeline.md`. A Pipeline Manager package does not need Phase 1's mobile handoffs. Today both read everything because `CLAUDE.md` points everyone at the same list.
