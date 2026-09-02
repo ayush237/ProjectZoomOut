@@ -106,7 +106,7 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **Track 42's published legal surfaces are wrong** — see below. The `disclaimer` field holds editorial instructions instead of a non-endorsement disclaimer, the purchase URL has no scheme, and `coverUrl` hotlinks a retailer's CDN | ~10 min in the CMS | **Deployment.** These are the two surfaces `LEGAL.md` calls load-bearing, on the only real Track we have | 2026-09-01 |
+| 1 | **Track 42's purchase URL has no scheme, and its cover hotlinks a retailer's CDN** — see below. **The disclaimer is fine; that claim was wrong** | ~5 min in the CMS | **Deployment.** The purchase link is one of the two surfaces `LEGAL.md` calls load-bearing, on the only real Track we have | 2026-09-01 |
 | 2 | **Content Curation Policy** — approve, amend or reject the draft, *including* the criteria on authors with companion apps and publishers in AI litigation | a decision | **Which books can be ingested at all, and which can launch.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
 | 3 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
 | 4 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
@@ -122,30 +122,37 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 **Item 2 has been open since the brief and is the one most likely to surprise you late.** A curation policy discovered in Stage 5 can invalidate content produced in Stage 3. It now has a concrete case to reason from rather than being abstract — see the 2026-08-27 attributive-framing ruling, where a public-domain book turned out to teach 1910 metaphysics sincerely.
 
-### Track 42's published legal surfaces — founder item 1, opened 2026-09-02
+### Track 42's published Track-level fields — founder item 1, opened 2026-09-02, **corrected 2026-09-02**
 
-**What it is:** WP20 published Track 42 and reported, in its closing paragraph, that three Track-level
-fields need founder attention. They were never carried onto any list. Two of them are the fields the
-2026-08-28 ruling names as *"the legally load-bearing surfaces"* that *"belong to the human gate"* —
-so the gate ran, the fields were filled, and nobody checked what they were filled with.
+**Read the correction first.** This item was opened from WP20's closing paragraph, which reported
+three defective Track-level fields. **Queried against the live published record, only two of the
+three are real.** The disclaimer is correct.
 
-| Field | State | Why it matters |
+| Field | State — **verified against the live CMS, not a report** | Why it matters |
 |---|---|---|
-| `disclaimer` | Holds **editorial instructions**, not a disclaimer | `LEGAL.md` requires a non-endorsement disclaimer on **every** Track, and `PRODUCT.md` makes it a hard requirement rather than polish. This is the surface asserting the author does not endorse ZoomOut |
-| `purchaseLinks` | URL has **no scheme** | Purchase-forward framing is the other half of the same posture, and a link without a scheme is likely a dead link rather than a weak one |
-| `coverUrl` | Hotlinks `harivubooks.com`'s CDN | Someone else's image from someone else's infrastructure, on a published Track, in a product whose whole posture is care with other people's material. Already in the debt register |
+| `disclaimer` | ✅ **Correct.** Reads *"ZoomOut teaches this book's ideas; it does not endorse them. The author's claims about how the world works are presented as his, not as fact."* | Not only valid — it reflects the 2026-08-27 attributive-framing ruling, which is more than the requirement asks. **Either it was corrected after WP20 reported, or the report was wrong; the record does not say which.** No action |
+| `purchaseLinks` | ❌ **Real.** `gutenberg.org/ebooks/59844` — no scheme | Purchase-forward framing is one of the two surfaces `LEGAL.md` calls load-bearing, and a schemeless URL is a dead link rather than a weak one. It renders on the Track detail screen and again at the end of the Leaf player, so a reader meets it twice |
+| `coverUrl` | ❌ **Real.** Hotlinks `harivubooks.com`'s CDN | Someone else's image from someone else's infrastructure, on a published Track, in a product whose whole posture is care with other people's material. **Track 42 sorts first in Explore**, so it is the first card anyone sees |
 
-**Why this is a founder item and not a work package:** the disclaimer needs *writing*, and the
-purchase link needs *choosing*. Neither is something a session should invent — the 2026-08-28 ruling
-refused to let the pipeline auto-fill them for precisely that reason, calling it fabrication of a
-different kind. The cover is the one part that could be handed to a package, once there is an asset
-to point at.
+**Why the remaining two are a founder item and not a work package:** the purchase link needs
+*choosing* and the cover needs an asset that does not exist yet. The 2026-08-28 ruling refused to let
+the pipeline auto-fill either, calling it fabrication of a different kind. The cover becomes a
+package the moment there is something to point at — Gutenberg's own scan, or a generated cover in the
+anchor style.
 
-**The process finding, which outlives the fix:** a defect reported honestly in a completion report is
-not recorded until it reaches a list someone reads. WP20's report was thorough and this was in it;
-it still went four days unlisted because the register and the blocker list were updated from the
-report's *findings* section and not its *deferred* section. **At sign-off, a completion report's
-"deferred / not done" paragraph gets read as a source of register entries, the same as its findings.**
+**Two process findings, and the second is the more useful.**
+
+*A defect reported honestly in a completion report is not recorded until it reaches a list someone
+reads.* WP20's report was thorough and named all three; they still went four days unlisted because
+sign-off harvested the report's *findings* and not its *deferred* section. Rule added to
+`agents/architect.md`.
+
+*And a defect copied from a report onto a blocker list is not verified either.* Architect listed all
+three as founder item 1 without querying the CMS — the same shape as the rule already in
+`agents/architect.md` about confirming a contract before writing a criterion on it, applied to a
+report instead of to code. **One of the three was wrong, and it was the one framed as legally
+load-bearing.** The check cost one HTTP request. Rule extended: **a defect inherited from a report
+is verified against the live system before it is listed as blocking.**
 
 ### Cloud account after the trial — founder decision 2026-08-29
 
