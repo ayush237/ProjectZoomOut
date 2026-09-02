@@ -106,7 +106,7 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **Track 42's purchase URL has no scheme, and its cover hotlinks a retailer's CDN** — see below. **The disclaimer is fine; that claim was wrong** | ~5 min in the CMS | **Deployment.** The purchase link is one of the two surfaces `LEGAL.md` calls load-bearing, on the only real Track we have | 2026-09-01 |
+| 1 | **Track 42's purchase URL has no scheme — and that makes the whole book invisible in Explore.** Not cosmetic; see below. Its cover also hotlinks a retailer's CDN. **The disclaimer is fine; that claim was wrong** | **30 seconds** in the CMS | **Everything.** Track 42 is dropped from Explore entirely today — this is the single highest-value 30 seconds on this list | 2026-09-01, severity corrected 2026-09-02 |
 | 2 | **Content Curation Policy** — approve, amend or reject the draft, *including* the criteria on authors with companion apps and publishers in AI litigation | a decision | **Which books can be ingested at all, and which can launch.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
 | 3 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
 | 4 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
@@ -131,7 +131,7 @@ three are real.** The disclaimer is correct.
 | Field | State — **verified against the live CMS, not a report** | Why it matters |
 |---|---|---|
 | `disclaimer` | ✅ **Correct.** Reads *"ZoomOut teaches this book's ideas; it does not endorse them. The author's claims about how the world works are presented as his, not as fact."* | Not only valid — it reflects the 2026-08-27 attributive-framing ruling, which is more than the requirement asks. **Either it was corrected after WP20 reported, or the report was wrong; the record does not say which.** No action |
-| `purchaseLinks` | ❌ **Real.** `gutenberg.org/ebooks/59844` — no scheme | Purchase-forward framing is one of the two surfaces `LEGAL.md` calls load-bearing, and a schemeless URL is a dead link rather than a weak one. It renders on the Track detail screen and again at the end of the Leaf player, so a reader meets it twice |
+| `purchaseLinks` | ❌ **Real, and far worse than first recorded.** `gutenberg.org/ebooks/59844` — no scheme | **It is not a dead link. It makes the entire Track disappear.** `purchaseLinkSchema.url` is `z.url()`, so `mapTrack` rejects the whole document, and Explore uses `keepValid` — which **drops** invalid Tracks silently rather than erroring. Measured 2026-09-02: **27 of 28 Tracks reach Explore, and the one dropped is Track 42.** Adding `https://` fixes it and was confirmed to make `mapTrack` succeed |
 | `coverUrl` | ❌ **Real.** Hotlinks `harivubooks.com`'s CDN | Someone else's image from someone else's infrastructure, on a published Track, in a product whose whole posture is care with other people's material. **Track 42 sorts first in Explore**, so it is the first card anyone sees |
 
 **Why the remaining two are a founder item and not a work package:** the purchase link needs

@@ -20,6 +20,61 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-02 — WP15.8: Resolve CMS-relative media URLs in the content mapper
+
+*Manager. **Suggested model: Sonnet** — the design is settled below and the failing values are printed. There is no judgement left to buy.*
+
+### Task: WP15.8 — resolve Payload-relative media URLs so real content maps
+
+**Context:** Track 42 is the first real content this project has produced, and **the app cannot render a single Leaf of it.** Payload stores media URLs relative — `/api/media/file/leaf-00-scenario-7.png` — while `imageAssetSchema` requires an absolute URL and `mapImageParts` passes the stored value straight through. Verified by running the real `mapLeaf` over a document fetched live from the CMS:
+
+```
+AS PUBLISHED (relative media urls): FAILED
+   - Leaf 244: scenario.image.url — Invalid URL
+   - Leaf 244: stickyNotes.diagram.url — Invalid URL
+WITH ABSOLUTE URLS            : OK
+```
+
+`requireValid` turns that into `ContentInvalidError` → **HTTP 502**, whose reasons are logged and deliberately never returned to the client. So the app shows *"This content is unavailable"* and the cause lives only in the backend log. **Blast radius is exactly Track 42:** of 39 published Leaves, the 18 carrying relative media URLs are all its; the 21 placeholder Leaves have no media, which is why nothing caught this.
+
+**This is WP15's failure with the sign flipped.** WP15's mapper silently *dropped* new fields while 932 tests stayed green; this one *rejects* them. Both times the field's producer and its renderer shipped weeks apart and nothing exercised them together.
+
+**Objective:** A published Leaf whose scenario image and diagram live in Payload's media library maps successfully, and both render in the app.
+
+**Scope:** `apps/backend/src/content/` — `content.mapper.ts` and its call sites in `content.repository.ts`. Verify rather than trust: `CONTENT_API_URL` already exists and `payloadClient` already uses it (`payloadClient.ts:79`), so no new environment variable should be needed.
+
+**Requirements**
+- Resolve CMS-relative media URLs against `CONTENT_API_URL`. **An already-absolute URL passes through untouched.**
+- **Cover all three siblings, not just the two that are failing today.** Media URLs appear in `scenario.image.url`, `stickyNotes.diagram.url` **and `Track.coverUrl`**. Fixing the Leaf pair alone is a one-sided fix of exactly the shape ruled on 2026-08-29 — and here it is not hypothetical: **founder item 1 replaces Track 42's hotlinked cover with an asset we host**, which lands in Payload media as a relative URL and breaks Track mapping the same way. Verified: `mapTrack` on Track 42 with `coverUrl: '/api/media/file/cover.png'` fails with `coverUrl — Invalid URL`.
+- **Do not change `packages/shared`.** The schema is frozen, and `z.url()` is right — a domain object should carry a resolvable URL. The stored relative value is also right. **The bug is the missing resolution step between them**, and that is the only thing to fix.
+- **Do not write absolute URLs into Payload.** That bakes a hostname into content and breaks on the first environment change.
+- Keep the mapper a pure function — take the base URL as a parameter rather than reading config inside it.
+
+**Out of scope**
+- **Production media serving.** See the debt note below — it is deliberately excluded and must be logged, not solved here.
+- `purchaseLinks[].url`. Track 42's is schemeless (`gutenberg.org/ebooks/59844`) and **that is a content defect the founder fixes in the CMS**, not something the mapper should paper over by inventing a scheme.
+- The pipeline, `apps/admin`, and the mobile app. Nothing in the app needs changing — `SlideImage` already renders `scenario.image` and `stickyNotes.diagram`.
+
+**Constraints:** the resolution helper is one function used by all three call sites; do not inline it three times. `CONTENT_API_URL`'s value decides reachability — `http://localhost:3001` serves a simulator, a LAN address serves a physical device — so nothing in code should assume loopback.
+
+**Before you start — a founder action this package depends on.** Track 42's schemeless purchase URL makes `mapTrack` fail, and Explore uses `keepValid`, which **drops** invalid Tracks rather than erroring. So Track 42 is currently absent from Explore entirely. The founder is adding the scheme. **If Track 42 does not appear in Explore when you begin, that is the cause and not your change** — confirm the purchase URL has a scheme before debugging anything else.
+
+**Device gate:** *open Track 42 in the app, add it to your library, and play a Leaf.* **The scenario illustration appears above the prompt, and the sticky-notes diagram appears on slide 4.** Both, observed on a device — not a passing mapper test.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] **`mapLeaf` succeeds on a real Track 42 document carrying relative `scenario.image.url` and `stickyNotes.diagram.url`** — the fixture is copied from the live CMS, not hand-written, because a hand-written one will get the shape subtly right and the URL wrong
+- [ ] **`mapTrack` succeeds on a Track whose `coverUrl` is relative** — the sibling, failing today only because nothing hosts a cover yet
+- [ ] An already-absolute URL is returned unchanged — asserted explicitly, not assumed
+- [ ] `GET /content/leaves/:id` returns **200** for a Track 42 Leaf that returns 502 today, against the live CMS
+- [ ] **Mutation check:** breaking the resolution reddens the new tests and nothing else
+
+**Testing expectations:** Tier B, plus the device gate — which is the criterion that matters, since every failure in this family has been invisible to unit tests by construction.
+
+**Log at sign-off — the unenforced half of the invariant.** The guarantee is *"a published Leaf's media reaches the reader."* This package delivers the first half: the mapper emits a resolvable URL. **The second half is unbuilt and belongs to WP12** — in production Payload must not be publicly reachable, so a URL resolved against Payload's origin will not load on a real phone. Serving media needs a storage adapter writing to object storage, or the backend proxying it. Neither exists and no package owns it. Per the both-halves rule, record it in the debt register at sign-off rather than leaving it to be discovered during a deploy.
+
+---
+
 ### Handoff: 2026-08-28 — WP15.6: Thumbnails for gate 2's image candidates
 
 *Manager. **Suggested model: Sonnet** — one field's admin config.*
