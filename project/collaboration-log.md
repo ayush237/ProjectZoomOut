@@ -57,7 +57,7 @@ WITH ABSOLUTE URLS            : OK
 
 **Constraints:** the resolution helper is one function used by all three call sites; do not inline it three times. `CONTENT_API_URL`'s value decides reachability — `http://localhost:3001` serves a simulator, a LAN address serves a physical device — so nothing in code should assume loopback.
 
-**Before you start — a founder action this package depends on.** Track 42's schemeless purchase URL makes `mapTrack` fail, and Explore uses `keepValid`, which **drops** invalid Tracks rather than erroring. So Track 42 is currently absent from Explore entirely. The founder is adding the scheme. **If Track 42 does not appear in Explore when you begin, that is the cause and not your change** — confirm the purchase URL has a scheme before debugging anything else.
+**A precondition that was blocking and is now cleared — do not re-investigate it.** Track 42's purchase URL was schemeless, which made `mapTrack` reject the whole document; Explore uses `keepValid`, which **drops** invalid Tracks rather than erroring, so the Track was silently absent from Explore. **The founder fixed it on 2026-09-02 and it is verified: `https://gutenberg.org/ebooks/59844`, published, and 28 of 28 Tracks now map.** Track 42 reaches Explore. What it still cannot do is play, which is this package. **If Explore ever comes up 27, that is this defect returning and not your change.**
 
 **Device gate:** *open Track 42 in the app, add it to your library, and play a Leaf.* **The scenario illustration appears above the prompt, and the sticky-notes diagram appears on slide 4.** Both, observed on a device — not a passing mapper test.
 

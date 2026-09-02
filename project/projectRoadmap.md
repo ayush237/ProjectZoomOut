@@ -68,7 +68,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP15.4 | Gate 2's three fields on Leaves | Manager | ✅ **Signed off 2026-08-28 (8/8)** — verified against the live dev DB, not only a fresh container | Merge; **unblocks WP19's last 3** |
 | WP15.5 | Empty-options validation bug + an overclaiming comment | Manager | ✅ **Signed off 2026-08-28 (6/6)** — narrow fix confirmed; both halves mutation-checked against the rule that carries each | Merge |
 | WP20.1 | Attach Track 42's scenario images — one candidate per Leaf, as drafts | **Pipeline Manager** | ✅ **Signed off 2026-09-02 (6/6)** — 18/18 draft Leaves illustrated, 0/18 published. Sibling survival proven against the *published* copy, which the machine key structurally cannot touch | Open the PR; founder overrides 8 glow breaches, then publishes |
-| WP15.8 | Resolve CMS-relative media URLs in the content mapper | Manager | 📤 **Handed off 2026-09-02** | Founder adds a scheme to Track 42's purchase URL first |
+| WP15.8 | Resolve CMS-relative media URLs in the content mapper | Manager | 📤 **Handed off 2026-09-02** | — precondition cleared, 28/28 Tracks map |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 
 ### Blocked on the founder

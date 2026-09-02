@@ -106,7 +106,7 @@ App Store: privacy nutrition labels, age rating, review submission. Sign in with
 
 | # | Item | Cost | Blocks | Open since |
 |---|---|---|---|---|
-| 1 | **Track 42's purchase URL has no scheme — and that makes the whole book invisible in Explore.** Not cosmetic; see below. Its cover also hotlinks a retailer's CDN. **The disclaimer is fine; that claim was wrong** | **30 seconds** in the CMS | **Everything.** Track 42 is dropped from Explore entirely today — this is the single highest-value 30 seconds on this list | 2026-09-01, severity corrected 2026-09-02 |
+| 1 | **Track 42's cover hotlinks a retailer's CDN.** ~~Purchase URL has no scheme~~ ✅ **fixed 2026-09-02** — it was hiding the whole book, not a dead link. **The disclaimer was never broken; that claim was wrong** | needs a hosted asset | Nothing today. **When it is fixed, the replacement lands as a relative Payload URL — which WP15.8 must already handle**, or the Track breaks again | 2026-09-01 |
 | 2 | **Content Curation Policy** — approve, amend or reject the draft, *including* the criteria on authors with companion apps and publishers in AI litigation | a decision | **Which books can be ingested at all, and which can launch.** Draft at `proposals/content-curation-policy.md` (2026-08-29) | the original brief |
 | 3 | **Streak vs library size** — a product call | a decision | Stage 3. Recommendation on the table, see below | 2026-08-09 |
 | 4 | **Unpublish "The mountain is you"** | 1 min | Nothing, but it is placeholder prose under a real author's name | 2026-08-12 |
