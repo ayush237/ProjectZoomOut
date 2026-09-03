@@ -86,6 +86,11 @@ def test_the_client_has_no_way_to_publish() -> None:
         "find_track",
         "get_track",
         "get_leaf",
+        # WP20.1 added two reads. `list_leaves` returns a Track's draft Leaves;
+        # `fetch_media` returns image bytes so the guardrails can be re-run over candidates
+        # the pipeline no longer holds in memory. Neither writes anything.
+        "list_leaves",
+        "fetch_media",
     }, (
         "The surface is asserted exactly so that adding a method is a deliberate act. If "
         "this fails because you added one, check it cannot publish and then update the set."

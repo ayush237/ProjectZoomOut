@@ -669,6 +669,120 @@ def _echo_cost_line(spend: Any) -> None:
     typer.echo(f"      {spend.total_tokens} tokens, ${spend.usd:.4f}")
 
 
+@app.command("attach-scenario-images")
+def attach_scenario_images(
+    track_id: Annotated[int, typer.Option(help="The Track whose Leaves should be illustrated.")],
+    dry_run: Annotated[
+        bool, typer.Option(help="Choose and report without writing anything.")
+    ] = False,
+) -> None:
+    """Attach one scenario candidate per Leaf, as drafts, for the founder to review.
+
+    WP20 published Track 42 with diagrams and no scenario illustrations, because choosing
+    was WP15.7's affordance and it had not landed. The founder has delegated selection **for
+    this Track only** — later books they choose themselves — so this produces a list to
+    override rather than a set of decisions already made.
+
+    Takes the Track directly rather than a run id: this is a correction to what is in the
+    CMS, and tying it to a checkpoint would make it useless for any Track whose run has been
+    archived.
+
+    **Writes drafts.** The Leaves are published; the machine key cannot edit a live document
+    and does not gain the ability here. Each write lands as a pending draft version and the
+    published Leaf still shows no image until a human publishes it.
+    """
+    from zoomout_pipeline.assets.selection import (
+        choose_candidate,
+        scenario_patch,
+        verify_siblings,
+    )
+    from zoomout_pipeline.cms.client import PayloadClient
+
+    settings = get_settings()
+    client = PayloadClient(base_url=settings.payload_url, api_key=settings.payload_api_key)
+
+    leaves = client.list_leaves(track_id=track_id)
+    if not leaves:
+        typer.secho(f"Track {track_id} has no Leaves", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    typer.echo(f"Track {track_id}: {len(leaves)} Leaves\n")
+
+    choices = [
+        choose_candidate(
+            client=client,
+            leaf=leaf,
+            order=int(leaf.get("orderIndex", 0)),
+            title=str(leaf.get("title", "")),
+            leaf_id=int(leaf["id"]),
+        )
+        for leaf in leaves
+    ]
+
+    if dry_run:
+        _echo_choices(choices)
+        typer.secho("\ndry run — nothing written", fg=typer.colors.YELLOW)
+        return
+
+    by_id = {int(leaf["id"]): leaf for leaf in leaves}
+    failures: list[int] = []
+
+    for choice in choices:
+        if not choice.chosen:
+            continue
+
+        before = by_id[choice.leaf_id]
+        assert choice.url is not None and choice.alt is not None
+        client.update_leaf_draft(
+            leaf_id=choice.leaf_id,
+            patch=scenario_patch(leaf=before, url=choice.url, alt=choice.alt),
+        )
+
+        # Re-fetched, not read from the PATCH response. WP19 nulled this group's siblings
+        # by hand and the response looked fine; what Payload stored is the only evidence.
+        after = client.get_leaf(choice.leaf_id, draft=True)
+        check = verify_siblings(before=before, after=after, order=choice.order)
+        if not check.passed:
+            failures.append(choice.order)
+            typer.secho(
+                f"  Leaf {choice.order}: SIBLINGS DAMAGED — "
+                f"prompt {'ok' if check.prompt_intact else 'LOST'}, "
+                f"options {'ok' if check.options_intact else 'LOST'}",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+
+    _echo_choices(choices)
+
+    if failures:
+        typer.secho(
+            f"\nSTOP: the scenario group was damaged on Leaves {failures}. "
+            "Restore them before anyone publishes.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(1)
+
+    written = sum(1 for c in choices if c.chosen)
+    typer.secho(
+        f"\n{written} Leaves illustrated as drafts; prompt and options verified intact on "
+        "every one. Nothing published.",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+
+def _echo_choices(choices: list[Any]) -> None:
+    """The founder's review list — this is the deliverable, not a progress log."""
+    typer.echo("\n  leaf  cand  title / alt")
+    typer.echo("  " + "-" * 92)
+    for choice in choices:
+        index = str(choice.index) if choice.index is not None else "-"
+        typer.echo(f"  {choice.order:>4}  {index:>4}  {choice.title[:70]}")
+        detail = choice.alt if choice.alt else f"({choice.reason})"
+        typer.echo(f"              {detail[:86]}")
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
