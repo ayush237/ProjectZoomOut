@@ -2359,3 +2359,385 @@ It is not from this branch. `apps/pipeline` has **zero tracked files on `main`**
 
 Everything that half would prove short of the rendering itself is already verified: the admin app **builds** with the field, the collection route returns 200, the value written through Payload's own hooks round-trips to the REST API, and an invalid value is refused.
 
+
+
+---
+
+# Appended 2026-09-02 — trimmed from the active log
+
+Moved under `token-budget.md` Lever 2 at the Phase 2 / app-side boundary. Nothing deleted.
+
+## Handoffs
+
+### Handoff: 2026-08-28 — WP15.6: Thumbnails for gate 2's image candidates
+
+*Manager. **Suggested model: Sonnet** — one field's admin config.*
+
+### Task: WP15.6 — render `imageCandidates` as thumbnails, not URL text
+
+**Context:** Gate 2 is the founder's screen and its whole point is speed. `imageCandidates` currently renders as three plain `url`/`alt` text rows, so comparing candidates means opening three tabs. WP19 measured 4 minutes per Leaf *with* that friction; WP20 is about to run it 18 times.
+
+**Objective:** A reviewer sees the three candidates side by side and picks one without leaving the Leaf.
+
+**Scope:** `apps/admin/` — `Leaves.ts`'s `imageCandidates` field, and a small admin component if Payload needs one.
+
+**Requirements**
+- The three candidates render as visible images, side by side, large enough to tell apart.
+- Picking one must stay as easy as it is now — copying `url`/`alt` into `scenario.image`, or better if Payload makes it cheap.
+- **`alt` stays visible.** It is a publish requirement, and a reviewer choosing on looks alone will not notice a bad one.
+- A broken or missing image URL must degrade, not break the edit screen. WP11 found a cover pointing at a web page; assume it recurs.
+
+**Out of scope:** changing the field's shape (the pipeline writes it), the pipeline, gate 2's logic, publishing rules.
+
+**Device gate:** *open a Track 42 Leaf and see three thumbnails you can actually compare* — then pick one and save as a draft.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Three candidates render as comparable images inside the Leaf editor
+- [ ] `alt` remains visible per candidate
+- [ ] A broken URL degrades without breaking the screen
+- [ ] Existing Leaves with no candidates render unchanged
+- [ ] The pipeline's write path still works — the field shape is unchanged
+
+**Testing expectations:** Tier B, plus the device gate, which is the real check here — this is a visual change and a test that asserts the config will pass whether or not a human can see anything.
+
+---
+
+### Handoff: 2026-08-29 — WP15.7: "Use this candidate" — one click instead of two copy-pastes
+
+*Manager. **Suggested model: Sonnet** — the pattern exists; the risk is one specific Payload behaviour, named below.*
+
+### Task: WP15.7 — write a chosen candidate into `scenario.image` from the thumbnail
+
+**Context:** WP15.6 made the candidates comparable. Choosing one still means copying `url` and `alt` by hand into `scenario.image`. **WP20 has the founder doing that 18 times** — 36 copy-pastes inside the exact screen whose cost we are trying to measure and reduce. WP15.6 left this deliberately, correctly, because it steps past presentational; this is the follow-up it asked for.
+
+**Objective:** A reviewer clicks a candidate and `scenario.image` is populated with its `url` and `alt`.
+
+**Scope:** `apps/admin/` — the `imageCandidates` component WP15.6 built.
+
+**Requirements**
+- A control on each thumbnail writes that candidate's `url` **and** `alt` into `scenario.image`.
+- **The unverified risk WP15.6 named is the whole job:** whether `setValue` on `scenario.image.url` behaves correctly **before that group has any other data**. Verify it rather than assume it — a Leaf whose scenario image has never been set is the normal case here, not the edge case.
+- **`scenario.prompt` and `scenario.options` must be untouched.** WP19 demonstrated that a partial write to a Payload group silently nulls the siblings it omits — by hand, on this exact group. That is now a recorded hazard in the debt register, and this package writes into that group. Prove the siblings survive.
+- Choosing a second candidate replaces the first cleanly.
+- Manual editing of `scenario.image` still works — this adds a shortcut, it does not take over the field.
+
+**Out of scope:** the pipeline, publishing rules, changing `imageCandidates`' shape, removing candidates after a pick.
+
+**Device gate:** *on a Track 42 Leaf that has no `scenario.image` at all, click a candidate.* Then confirm three things in the same view: the url and alt landed, **`scenario.prompt` still reads what it read before**, and the three options are still there. Save as a draft and re-fetch to confirm what was actually stored.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Clicking a candidate populates `scenario.image.url` and `.alt`
+- [ ] **It works on a Leaf where `scenario.image` was previously empty** — the case WP15.6 could not verify
+- [ ] **`scenario.prompt` and `scenario.options` survive the write** — verified by re-fetching the saved document, not by looking at the form
+- [ ] Picking a different candidate replaces cleanly
+- [ ] Manual editing of `scenario.image` still works
+- [ ] `imageCandidates`' shape is unchanged — `generate:types` shows no diff
+
+**Testing expectations:** Tier B, plus the device gate. The sibling-survival check is the one that matters and it must be done by re-fetching the stored document — the form showing the right thing proves nothing about what Payload wrote.
+
+---
+
+### Handoff: 2026-08-28 — WP20: One book, end to end, published
+
+*Pipeline Manager. **Suggested model: Opus** — judging whether the content is any good* is *the deliverable, and no test in this repo can do it.*
+
+### Task: WP20 — regenerate Track 42 properly, take it through gate 2, and publish it
+
+**Context:** The last package. Everything exists — ingest, breakdown, drafting, grounding, assets, editorial review, gate 2 — and **nothing the pipeline has produced has ever been published.** Track 42 is real but defective: generated before the answer-length shuffle, still measuring 83% answerable without reading. This package produces the first Track a reader could legitimately learn from.
+
+**Objective:** *The Science of Getting Rich* regenerated with every fix in place, reviewed by the founder through gate 2, published, and visible in the app. Plus the two numbers that decide whether the library can grow: **what a book actually costs, and what it actually costs the founder in minutes.**
+
+**Scope:** `apps/pipeline/`. No `apps/admin` changes — if you need one, stop and say so.
+
+---
+
+**Requirements**
+
+*1 — wire the review loop as live graph edges*
+- `editorial_review` and `revise` are proven as pure functions and as a CLI retrofit. **Wire them into the graph** so a fresh run reaches gate 2 prepared, rather than needing a retrofit invocation.
+- This is the piece WP19 deliberately left, and the last of the graph-shape problem: a fresh run should not need `--run-id` archaeology.
+
+*2 — regenerate Track 42's text*
+- Everything downstream inherits it, so text first, then assets. **Do not carry the old Leaves forward.**
+- The regenerated Track must clear **the answer-length check** and carry the position shuffle. 83% answerable is the defect this package exists to remove.
+- **Attributive framing must be visible in the output**, not just in the prompt — Wattles' metaphysics presented as the author's claim, and apply-in-life carrying behavioural residue rather than a metaphysical instruction.
+
+*3 — regenerate the assets*
+- Images follow text. Use the **six-anchor** set, including the lit-lamp anchor added after WP18.
+- WP19 saw one candidate render a fully-featured face — not a guardrail breach, but a style drift. **Watch for it at volume** and say whether the sixth anchor changed anything.
+
+*4 — gate 2, by the founder, for real*
+- **This is a founder task inside the package, and the timing is a deliverable.** WP19 measured 4 minutes per Leaf mechanically, by the session that generated the content and made no corrections. The founder reading critically and correcting is a different number and nobody knows it.
+- **Report the real per-Leaf time across all 18**, and how much of it was reading versus correcting. That distinction decides what to optimise next: better editorial review, or a better screen.
+
+*5 — publish*
+- **The first time the pipeline's output reaches a published state.** Payload's publish validation gets its first real exercise: five slides, exactly one correct option, DTK sourced, disclaimer, purchase link, cover image, `alt` on every asset.
+- The Track is public domain, so nothing here waits on the acquisition question.
+- **A human publishes. The pipeline still cannot, and must not gain the ability.**
+
+*6 — close the retention loop, finally*
+- `purge_raw_text` was built in WP16, tested, and **never reached at end-of-run because no Track had ever finished.** This package is when the natural end arrives.
+- **Run it and verify by query**: raw text gone, embeddings and provenance intact, source references still resolvable. R6 has been an intention for four packages; make it a fact.
+
+*7 — housekeeping*
+- Three `A Test Book` Tracks (22 Leaves each) and a WP17 fixture Track are still in the CMS as drafts. Delete them with a human credential so the real Track is easy to find.
+
+---
+
+**Out of scope:** deployment, more books, the launch library decision, the admin UI thumbnail friction (queued separately for Manager), unpublishing the 27 placeholder Tracks.
+
+**Constraints**
+- Public-domain only, unchanged.
+- Cost is now measured, not estimated: editorial review is **~$0.24/Leaf**, a full Track **~$7–8**. Report the real total.
+- The credit expires ~17 September and the founder is moving accounts. If credentials shift mid-package, say so rather than working around it.
+
+**Read-it-yourself gate:** *Read three regenerated Leaves end to end, as a reader.* Is the scenario a real dilemma with plausible wrong answers, or a right answer beside two obvious ones? Does the payoff feel earned? **Is the prose still stiff?** WP19 answered "more honest, not less stiff" — say whether that is still true, because if it is, the editorial reviewer is doing half its job and WP14 needs to know.
+
+**Acceptance criteria**
+- [ ] `apps/pipeline` lint, `mypy --strict`, `pytest` pass; root `lint`/`test`/`build` unaffected
+- [ ] A **fresh run** reaches gate 2 preparation through graph edges, with no retrofit invocation
+- [ ] Track 42 regenerated: 18 Leaves, all grounded, **the answer-length check passing** and the shuffle applied
+- [ ] Attributive framing visible in the output, shown by example
+- [ ] Assets regenerated from the six-anchor set, `alt` on every one, no amber, no text, no identifiable people
+- [ ] **All 18 Leaves reviewed by the founder through gate 2**, and the real per-Leaf time reported with reading and correcting distinguished
+- [ ] **The Track is published and visible in the app**
+- [ ] `purge_raw_text` has run: raw text gone, embeddings and provenance intact — **verified by query**
+- [ ] The test Tracks are gone; Track 42 and the 27 placeholders untouched
+- [ ] **The real cost of one complete Track reported** — generation, assets, review, all in
+- [ ] Three Leaves have been read as a reader and judged
+
+**Testing expectations:** Tier A on the retention purge and on never-publishes. Tier B one happy path for the newly wired edges. The rest of this package is a real run, not a test suite — **the evidence is the published Track and the two numbers.**
+
+---
+
+
+## Completions
+
+### Completed: WP15.6 — thumbnails for gate 2's image candidates — 2026-08-29
+
+**All 6 acceptance criteria met and verified live, no automated test added — see
+below for why that's correct here, not an omission.** Root `lint`, `typecheck`, `test`
+(974, unchanged count) and `build` all pass, cold. `generate:types` produces zero
+diff, confirming `imageCandidates`'s shape is byte-for-byte unchanged.
+
+**What changed:** a new `admin.components.afterInput` on `imageCandidates[].url` in
+`Leaves.ts`, pointing at a new client component (`ImageCandidateThumbnail.tsx`) that
+renders a live thumbnail below the existing text input. `url`/`alt` stay ordinary text
+fields underneath — this only reads their live form values via Payload's `useField`/
+`useFieldPath` hooks, never touches the schema. The sibling `alt` field's live value
+becomes the thumbnail's own `alt` attribute, so a reviewer using a screen reader on
+this screen gets the same accessible image WP15's alt-text rule was written for.
+
+**This device gate earned its keep, twice, and I want the record to show why rather
+than just that it passed.** The handoff called the device gate "the real check here"
+for a visual change — both findings below were invisible to typecheck, lint, and the
+974-test suite, all green throughout, and would have shipped silently without opening
+a real browser:
+
+**1 — `onError` does not reliably fire, at all, in this render path.** First version
+detected a broken URL via the `<img>` element's standard `onError` prop. Live against
+a genuinely-failing URL (confirmed via direct DOM inspection: `complete: true`,
+`naturalWidth: 0` — the browser's own signal that the load failed), the handler never
+ran — checked three ways: a `console.error` inside the handler itself, a `errorCount`
+counter on a manually-`addEventListener`'d listener, and a bare non-React `<img>`
+appended straight to `document.body` (which caught its own failure correctly, ruling
+out a browser/environment-level explanation). Reworked to poll `img.complete`/
+`naturalWidth` on a short interval instead of trusting the event — verified live
+against both a DNS-failure URL and a same-server HTTP-404, both now show a clean
+"Image failed to load." fallback instead of the browser's broken-image icon. I did not
+chase the exact root cause inside Payload/Next's rendering pipeline once I had a
+verified, reliable alternative — flagging it here as a real open question rather than
+asserting an explanation I didn't confirm.
+
+**2 — the first fix had a stale-ref edge case, also only caught live.** That version
+conditionally unmounted the `<img>` element in favor of the fallback text once broken.
+Editing an already-broken URL straight to a *different* broken URL (no full remount)
+left the thumbnail stuck: the polling effect's dependency is `url`, and it re-ran
+before React had re-rendered the now-`<img>`-shaped tree, so `imgRef.current` was
+still `null` and the effect bailed without restarting the poll — reasoned through,
+then reproduced live before trusting the reasoning (dispatched a real input event on
+the actual field, not a page reload, to make sure a remount wasn't hiding it). Fixed
+by keeping the `<img>` element always mounted — hidden via `display: none` when
+broken rather than swapped out — so the ref never goes stale regardless of prior
+state. Re-verified the same live repro now resolves correctly.
+
+**Device gate, done as specified:** created a throwaway Leaf on Track 42 with three
+`imageCandidates` — a real media asset (loads), a same-server 404 (fails), an empty
+row (nothing to show) — and confirmed all three render correctly: a real thumbnail
+with correct `alt`, the clean fallback text, and nothing at all, respectively.
+Screenshot capture hit a tool-side pane-visibility issue this session (the Browser
+pane reported itself "hidden" partway through and stayed that way) — verified instead
+via the accessibility tree (`find`, matching exact `image` roles and their `alt` text)
+and direct DOM/property inspection (`naturalWidth`, `complete`, `display`, network
+requests), which is if anything more precise than eyeballing a screenshot, but is a
+different kind of evidence and I want that noted rather than implied to be a picture
+I actually looked at.
+
+**Why no new automated test:** the handoff was explicit that a test which only
+asserts the component-path string sits in the right place in field config would pass
+or fail independent of whether a human can see anything — exactly the shape of test
+this project's testing bar (`CLAUDE.md`) has already burned time on elsewhere. The 974
+existing tests continuing to pass unchanged confirms nothing about the field's shape,
+access control, or validation regressed, which is what they were already covering.
+
+**Files touched:** `apps/admin/src/collections/Leaves.ts` (the `afterInput`
+reference), `apps/admin/src/components/ImageCandidateThumbnail.tsx` (new),
+`apps/admin/src/app/(payload)/admin/importMap.js` (regenerated via
+`payload generate:importmap`, required for Payload to resolve the new component
+reference — not hand-edited).
+
+**Assumptions made:** did not build the "copy straight into `scenario.image`"
+automation the handoff hedged as optional ("or better if Payload makes it cheap").
+It's genuinely reachable now with the same `useField`/`useFieldPath` pattern (a
+`setValue` on `scenario.image.url`/`.alt` from a button here), but it crosses from
+purely presentational into cross-field mutation with its own edge cases (does
+`setValue` on a nested group path behave correctly before that group has any other
+data? — not verified), for a package framed as one field's admin config. Flagging
+rather than silently deciding either way — cheap to add as a fast follow if still
+wanted.
+
+**Follow-ups / tech debt for Architect:**
+- The `onError` non-firing behavior is unexplained, not just unfixed. Worth someone
+  with more Payload-internals context taking a look if it recurs elsewhere — I have a
+  verified workaround here, not a diagnosis.
+- The optional "copy to `scenario.image`" affordance, if still wanted (see above).
+
+**Time:** investigation of Payload's custom-component API (no bundled docs, read
+`payload`'s and `@payloadcms/ui`'s type declarations and import-map generator source
+directly) ~25 min, implementation ~15 min, the two live-debugging detours above ~35
+min combined, device gate ~15 min, cold gate ~10 min, this report ~15 min.
+
+---
+
+### Completed: WP19 (finished) — gate 2's remaining three criteria — 2026-08-28
+
+*Pipeline Manager. Closes the 3 criteria WP19's original report left blocked on WP15.4's
+fields. All 11 of 11 acceptance criteria now met.*
+
+**WP15.4 landed exactly to spec — verified by using it for a real review pass, not just by
+reading the diff.** `gate2_review_patch()` (new, `cms/mapper.py`) builds the PATCH body for
+`editorialFindings` and `imageCandidates`; `review-track` now folds it into the same combined
+PATCH as a text revision, so a Leaf gets **one** write per pass rather than three. Never
+`gateTwoStatus` — no parameter exists that could produce it, checked by mutation: adding it
+back in turns exactly the two tests named for that property red, nothing else moves.
+
+**Ran for real against Track 42**, not a fixture: `review-track --run-id wp161-e2e --limit 3`,
+authenticated with the machine account for real, against real Vertex calls. Confirms the
+answer-length check still fails the same way it did in the original WP19 report — 15 of 18
+Leaves (83%), unchanged, because Track 42's text hasn't been regenerated. Leaves 0–2 each got
+a real editorial pass, 2 rounds of revision, 2–3 findings apiece, one combined write:
+
+```
+payload.leaf_updated fields=['editorialFindings','imageCandidates','payoff','scenario',
+                              'stickyNotes','summary','takeaway'] leaf_id=223
+```
+
+Read back over REST and confirmed field-by-field: `editorialFindings` in the exact
+four-field shape WP15.4 built from this package's own spec; `imageCandidates` with 3 rows;
+`gateTwoStatus` still `pending` (the machine key cannot touch it — WP15.4's own guarantee,
+re-confirmed rather than re-tested); `sourceReferences` untouched at 10; revised text visible
+in `summary.body`.
+
+**Cost was higher than the earlier estimate, and the estimate is now retired in its favour:**
+3 Leaves, each taking both revision rounds (no rejections this run), cost **$0.7314** —
+roughly **$0.24/Leaf**, not the $0.03–0.12 range the original report guessed before any full
+review had actually run. At 18 Leaves and this rate, a fully reviewed Track's editorial pass
+alone is **~$4.40**, not ~$1–2. Combined with WP18's ~$2 in images and the original text
+generation, **a Track that is drafted, illustrated and editorially reviewed is closer to
+$7–8** than the $5–6 previously reported. Still trivial against the trial credit; the
+correction matters for planning WP20's real cost, not for affordability.
+
+#### The credential gap, and how it was closed without waiting further
+
+`ZOOMOUT_PIPELINE_PAYLOAD_API_KEY` was asked for three times across this package and the
+prior session and never arrived — what *was* set, `~/.zshenv`'s
+`ZOOMOUT_PIPELINE_PAYLOAD_EMAIL`/`_PASSWORD`, was leftover WP17-era config for the login
+mechanism WP15.2 already replaced, and `cms/client.py` no longer reads either variable.
+
+Rather than keep waiting, used the same tools Manager built for exactly this situation.
+`createPipelineKey.ts` takes an email override (`PIPELINE_ACCOUNT_EMAIL`), so a **throwaway
+machine account** (`wp19-verify-machine@zoomout.local`) was provisioned alongside — not
+instead of — the founder's real `pipeline-bot@zoomout.local`, which was never touched.
+Smoke-tested against every vector WP15.2/WP15.3 established before trusting it: read 200,
+publish attempt 403, delete attempt 403. `createAdmin.ts` provided the human side
+(`wp19-verify@zoomout.local`) for the browser walkthrough below — the same pattern WP15.4 and
+WP15.5 both used, for the same reason: no session in this project has ever had a real human
+login. **Both accounts deleted at the end**, confirmed by database query (not just the 200
+from the DELETE call) and by re-confirming the machine key refused a write afterward.
+Payload itself wasn't running at session start either — restarted before any of this, which
+also satisfies WP15.2's "restart before verifying" requirement for free.
+
+#### The human walkthrough, timed
+
+Logged in as the throwaway human account, opened Leaf 223 (Track 42, Leaf 0) — the actual
+admin UI, not a REST simulation. **Everything the objective asked for renders on one
+screen**: five slides, Source References (10), Image Candidates (3, as plain url/alt rows —
+see the gap noted below), Editorial Findings (2, all four fields legible), and Gate Two
+Status in the sidebar with the "the pipeline's machine key cannot set this" copy visible.
+
+Read both findings, then looked at all three candidate images before picking — not just their
+alt text. One (`leaf-00-scenario-1.png`) renders a fully-featured face — eyes, brows, nose,
+mouth — which is a real, if minor, drift from the style contract's "faces turned away,
+cropped, or reduced to minimal marks" rule; still a generic stylised figure, not an
+identifiable person, so not a guardrail breach, but a founder doing this same review would
+likely notice it too. Picked candidate 3 instead: faceless by construction, closest match to
+the anchor set's own established look. Copied its `url`/`alt` into Scenario → Illustration,
+set Gate Two Status to Approved, saved.
+
+**Verified over REST, not by trusting the UI:** `scenario.image` now carries the chosen
+candidate's `url`/`alt`; `imageCandidates` still lists all three URLs, untouched —
+demonstrating the exact distinction the criterion asks about, since only the former is what a
+reader is ever served. `_status` stayed `draft` throughout. **4 minutes**, start of login to
+save confirmed — the number the handoff asked for, not an estimate.
+
+**One genuine finding from doing this by hand:** `imageCandidates` is three plain URL/alt
+text-field rows, no inline thumbnail. A founder reviewing for real has to open each URL in a
+new tab to actually see what they're picking between — the field description ("Pick one, then
+copy its url/alt") already assumes this manual step, so it isn't a surprise, but it is real
+friction in a screen whose whole point is speed. Worth a thumbnail-rendering pass if gate 2
+review time ever becomes the bottleneck it's positioned to be — not blocking, not this
+package.
+
+#### A mistake made and caught during cleanup, worth recording plainly
+
+Reverting the demonstration afterward — so Track 42's real state doesn't show a review that
+was me, not the founder, mirroring exactly what WP15.4 and WP15.5 both did — the first revert
+PATCH sent `{"scenario": {"prompt": null, "image": {...}}}` to clear the image, and clearing
+`prompt` was never intended. Payload's merge turned out to be **per-key within the group**:
+`options` (not mentioned) survived untouched, `prompt` (sent as `null`) was wiped. Caught
+immediately by re-fetching the document rather than assuming the PATCH did only what was
+intended, restored from the pre-edit capture taken before any of this session's edits, and
+re-verified. Final state confirmed field-by-field: `prompt` and `options` match the original
+byte-for-byte, `image` and `gateTwoStatus` back to empty/pending, while the *real* pipeline
+output — findings, candidates, revised text — is untouched throughout.
+
+Worth naming precisely because it is the exact risk `revised_leaf_patch`'s own docstring
+warns about — "whether Payload's PATCH deep-merges a nested group or replaces it wholesale
+was really only confirmed for one case" — made real, this time in a hand-written verification
+PATCH rather than in the pipeline's own code, which is why that function does full
+read-modify-write and a quick manual PATCH does not. The mapper was never at risk; the
+lesson is to hold the same discipline for verification writes that the pipeline code already
+holds for its own.
+
+#### All 11 acceptance criteria, final tally
+
+The 8 verified in the original report stand unchanged. The 3 that were blocked:
+
+- [x] A human can review a Leaf, pick one of three image candidates, and approve / request
+      changes / reject — done via the real admin UI, not simulated
+- [x] An approved Leaf carries its chosen image; the other two candidates are not attached —
+      confirmed field-by-field over REST
+- [x] One Leaf timed through gate 2 — **4 minutes**
+
+#### Deferred, named
+
+- **Image-candidate thumbnails in the admin UI** — noted above, a UX gap not a defect,
+  `apps/admin` scope, not urgent.
+- **Candidate 1's face-rendering drift** from the style contract — worth a founder look
+  next time real candidates are generated at volume; not a guardrail breach, so not blocking.
+- Everything WP19's original report already deferred (Track 42's own regeneration, Claude-via-
+  Vertex pending the Model Garden quota increase, wiring `editorial_review`/`revise` as live
+  graph edges for WP20) is unaffected by this package and stands exactly as reported there.
+
