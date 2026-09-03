@@ -28,7 +28,9 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 > both are above the fold deliberately.
 >
 > **1. Most of this is already written and it is sitting in the working tree.** The previous session
-> got cut off mid-package, uncommitted, on branch `wp20.1-attach-scenario-images`. `git diff
+> got cut off mid-package, uncommitted. The changes now sit on branch
+> **`wp15.8-media-url-resolution`**, level with `main` (moved there on 2026-09-02 once WP20.1 merged,
+> so nothing is stranded on a merged branch). `git diff
 > apps/backend/src/content/` shows `resolveMediaUrl` + `isAbsoluteUrl`, `baseUrl` threaded through
 > `mapTrack`/`mapLeaf`/`optionalImage`/`optionalDiagram`/`mapImageParts`, all three siblings covered,
 > and ~390 lines of new tests. **Read that diff before writing anything.** A copy is at
