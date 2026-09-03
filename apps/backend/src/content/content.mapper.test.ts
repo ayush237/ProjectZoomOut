@@ -11,6 +11,14 @@ import { mapLeaf, mapTrack } from './content.mapper.js';
  * the real thing fails.
  */
 
+/**
+ * The `baseUrl` every test passes to `mapTrack`/`mapLeaf` (WP15.8). Real Payload's own
+ * default, so a test that gets this wrong looks exactly like one that gets it right —
+ * deliberately, since the fixtures below carry both relative and absolute URLs and the
+ * point is that only the relative ones move.
+ */
+const BASE_URL = 'http://127.0.0.1:3001/api';
+
 function cmsTrack(overrides: Partial<CmsTrack> = {}): CmsTrack {
   return {
     id: 1,
@@ -57,7 +65,14 @@ function cmsLeaf(overrides: Partial<CmsLeaf> = {}): CmsLeaf {
     },
     takeaway: { body: 'Placeholder takeaway.', dinnerTableKnowledge: null },
     sourceReferences: [
-      { slideKey: 'summary', chapter: 'Chapter 1', page: null, quote: null, note: 'A note.', id: 's1' },
+      {
+        slideKey: 'summary',
+        chapter: 'Chapter 1',
+        page: null,
+        quote: null,
+        note: 'A note.',
+        id: 's1',
+      },
     ],
     isPlaceholder: true,
     createdAt: '2026-08-08T12:00:00.000Z',
@@ -85,7 +100,7 @@ const expectOk = <T>(result: { ok: boolean; value?: T; reasons?: readonly string
 
 describe('mapTrack', () => {
   it('maps a complete published Track', () => {
-    const track = expectOk(mapTrack(cmsTrack()));
+    const track = expectOk(mapTrack(cmsTrack(), BASE_URL));
 
     expect(track.bookTitle).toBe('Placeholder Book');
     expect(track.status).toBe('published');
@@ -93,19 +108,19 @@ describe('mapTrack', () => {
 
   it('stringifies the numeric id', () => {
     // Payload's Postgres adapter uses serial integers; cmsIdSchema is a string.
-    const track = expectOk(mapTrack(cmsTrack({ id: 7 })));
+    const track = expectOk(mapTrack(cmsTrack({ id: 7 }), BASE_URL));
 
     expect(track.id).toBe('7');
   });
 
   it('defaults a null isAffiliate to false', () => {
-    const track = expectOk(mapTrack(cmsTrack()));
+    const track = expectOk(mapTrack(cmsTrack(), BASE_URL));
 
     expect(track.purchaseLinks[0]?.isAffiliate).toBe(false);
   });
 
   it('treats a missing _status as draft, the safe direction', () => {
-    const track = expectOk(mapTrack(cmsTrack({ _status: null })));
+    const track = expectOk(mapTrack(cmsTrack({ _status: null }), BASE_URL));
 
     expect(track.status).toBe('draft');
   });
@@ -116,7 +131,7 @@ describe('mapTrack', () => {
     ['disclaimer', { disclaimer: null }],
     ['description', { description: null }],
   ] as const)('rejects a Track with no %s', (field, override) => {
-    const result = mapTrack(cmsTrack(override));
+    const result = mapTrack(cmsTrack(override), BASE_URL);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -126,11 +141,11 @@ describe('mapTrack', () => {
 
   it('rejects a Track with no purchase links', () => {
     // Purchase-forward framing is the mitigation for the market-substitution factor.
-    expect(mapTrack(cmsTrack({ purchaseLinks: [] })).ok).toBe(false);
+    expect(mapTrack(cmsTrack({ purchaseLinks: [] }), BASE_URL).ok).toBe(false);
   });
 
   it('rejects a non-URL cover', () => {
-    expect(mapTrack(cmsTrack({ coverUrl: 'not-a-url' })).ok).toBe(false);
+    expect(mapTrack(cmsTrack({ coverUrl: 'not-a-url' }), BASE_URL).ok).toBe(false);
   });
 
   /**
@@ -142,7 +157,7 @@ describe('mapTrack', () => {
     it.each(['public-domain', 'licensed', 'purchased', 'undocumented'] as const)(
       'carries %s through',
       (status) => {
-        const track = expectOk(mapTrack(cmsTrack({ acquisition: status })));
+        const track = expectOk(mapTrack(cmsTrack({ acquisition: status }), BASE_URL));
 
         expect(track.acquisition).toBe(status);
       },
@@ -156,11 +171,14 @@ describe('mapTrack', () => {
       // reading of a Track nobody has answered the question for.
       const legacy = { ...cmsTrack(), acquisition: undefined } as unknown as CmsTrack;
 
-      expect(expectOk(mapTrack(legacy)).acquisition).toBe('undocumented');
+      expect(expectOk(mapTrack(legacy, BASE_URL)).acquisition).toBe('undocumented');
     });
 
     it('rejects a status outside the four', () => {
-      const result = mapTrack(cmsTrack({ acquisition: 'borrowed' as unknown as TrackAcquisition }));
+      const result = mapTrack(
+        cmsTrack({ acquisition: 'borrowed' as unknown as TrackAcquisition }),
+        BASE_URL,
+      );
 
       expect(result.ok).toBe(false);
       expect(result.ok === false && result.reasons.join(' ')).toContain('acquisition');
@@ -171,7 +189,7 @@ describe('mapTrack', () => {
       // acquisition policy is an unmade launch decision, so enforcing one here would
       // block content on a rule nobody has written.
       const track = expectOk(
-        mapTrack(cmsTrack({ acquisition: 'undocumented', _status: 'published' })),
+        mapTrack(cmsTrack({ acquisition: 'undocumented', _status: 'published' }), BASE_URL),
       );
 
       expect(track.status).toBe('published');
@@ -179,7 +197,7 @@ describe('mapTrack', () => {
   });
 
   it('names the Track in its rejection reasons', () => {
-    const result = mapTrack(cmsTrack({ id: 99, publisher: null }));
+    const result = mapTrack(cmsTrack({ id: 99, publisher: null }), BASE_URL);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -194,7 +212,7 @@ describe('mapTrack', () => {
 
 describe('mapLeaf', () => {
   it('maps a complete published Leaf', () => {
-    const leaf = expectOk(mapLeaf(cmsLeaf()));
+    const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
 
     expect(leaf.title).toBe('Concept One');
     expect(leaf.id).toBe('42');
@@ -202,32 +220,34 @@ describe('mapLeaf', () => {
 
   describe('trackId relationship', () => {
     it('accepts a bare id, which is what depth=0 returns', () => {
-      expect(expectOk(mapLeaf(cmsLeaf({ trackId: 5 }))).trackId).toBe('5');
+      expect(expectOk(mapLeaf(cmsLeaf({ trackId: 5 }), BASE_URL)).trackId).toBe('5');
     });
 
     it('accepts a populated Track, in case the depth is ever raised', () => {
       // Guards against a future depth change producing "[object Object]" as a trackId.
-      const leaf = expectOk(mapLeaf(cmsLeaf({ trackId: cmsTrack({ id: 5 }) })));
+      const leaf = expectOk(mapLeaf(cmsLeaf({ trackId: cmsTrack({ id: 5 }) }), BASE_URL));
 
       expect(leaf.trackId).toBe('5');
     });
   });
 
   it('flattens sticky note rows into plain strings', () => {
-    const leaf = expectOk(mapLeaf(cmsLeaf()));
+    const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
 
     expect(leaf.stickyNotes.notes).toEqual(['Note one', 'Note two']);
   });
 
   it('maps a null isCorrect to false', () => {
-    const leaf = expectOk(mapLeaf(cmsLeaf()));
+    const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
 
     expect(leaf.scenario.options[2].isCorrect).toBe(false);
   });
 
   it('omits audio entirely rather than emitting an empty group', () => {
     // exactOptionalPropertyTypes makes `{ audio: undefined }` and no key different.
-    const leaf = expectOk(mapLeaf(cmsLeaf({ summary: { body: 'x', audio: { url: null } } })));
+    const leaf = expectOk(
+      mapLeaf(cmsLeaf({ summary: { body: 'x', audio: { url: null } } }), BASE_URL),
+    );
 
     expect(leaf.summary).not.toHaveProperty('audio');
   });
@@ -235,7 +255,10 @@ describe('mapLeaf', () => {
   it('maps audio through when a URL is present', () => {
     const leaf = expectOk(
       mapLeaf(
-        cmsLeaf({ summary: { body: 'x', audio: { url: 'https://cdn.test/a.mp3', durationSeconds: 30 } } }),
+        cmsLeaf({
+          summary: { body: 'x', audio: { url: 'https://cdn.test/a.mp3', durationSeconds: 30 } },
+        }),
+        BASE_URL,
       ),
     );
 
@@ -243,7 +266,7 @@ describe('mapLeaf', () => {
   });
 
   it('omits dinnerTableKnowledge when null rather than passing undefined through', () => {
-    const leaf = expectOk(mapLeaf(cmsLeaf()));
+    const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
 
     expect(leaf.takeaway).not.toHaveProperty('dinnerTableKnowledge');
   });
@@ -265,7 +288,7 @@ describe('mapLeaf', () => {
 
     it('carries the scenario image through', () => {
       const leaf = expectOk(
-        mapLeaf(cmsLeaf({ scenario: { ...cmsLeaf().scenario, image } })),
+        mapLeaf(cmsLeaf({ scenario: { ...cmsLeaf().scenario, image } }), BASE_URL),
       );
 
       expect(leaf.scenario.image).toEqual(image);
@@ -285,6 +308,7 @@ describe('mapLeaf', () => {
               },
             },
           }),
+          BASE_URL,
         ),
       );
 
@@ -300,6 +324,7 @@ describe('mapLeaf', () => {
       const leaf = expectOk(
         mapLeaf(
           cmsLeaf({ takeaway: { body: 'x', applyInLife: 'Name one cue you noticed today.' } }),
+          BASE_URL,
         ),
       );
 
@@ -310,7 +335,10 @@ describe('mapLeaf', () => {
       // Payload persists the group even when an author fills nothing in, so without the
       // URL check every Leaf in the library would carry a broken image.
       const leaf = expectOk(
-        mapLeaf(cmsLeaf({ scenario: { ...cmsLeaf().scenario, image: { url: null, alt: null } } })),
+        mapLeaf(
+          cmsLeaf({ scenario: { ...cmsLeaf().scenario, image: { url: null, alt: null } } }),
+          BASE_URL,
+        ),
       );
 
       expect(leaf.scenario).not.toHaveProperty('image');
@@ -323,6 +351,7 @@ describe('mapLeaf', () => {
       // only description they get.
       const result = mapLeaf(
         cmsLeaf({ scenario: { ...cmsLeaf().scenario, image: { url: image.url, alt: '  ' } } }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -362,6 +391,7 @@ describe('mapLeaf', () => {
             },
           },
         }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -384,6 +414,7 @@ describe('mapLeaf', () => {
             },
           },
         }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -398,9 +429,17 @@ describe('mapLeaf', () => {
       const result = mapLeaf(
         cmsLeaf({
           sourceReferences: [
-            { slideKey: 'summary', chapter: null, page: null, quote: null, note: 'reference', id: 's1' },
+            {
+              slideKey: 'summary',
+              chapter: null,
+              page: null,
+              quote: null,
+              note: 'reference',
+              id: 's1',
+            },
           ],
         }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -416,7 +455,7 @@ describe('mapLeaf', () => {
         id: `n${String(index)}`,
       }));
 
-      expect(mapLeaf(cmsLeaf({ stickyNotes: { notes } })).ok).toBe(false);
+      expect(mapLeaf(cmsLeaf({ stickyNotes: { notes } }), BASE_URL).ok).toBe(false);
     });
 
     it.each([2, 6])('accepts %i sticky notes', (count) => {
@@ -425,12 +464,13 @@ describe('mapLeaf', () => {
         id: `n${String(index)}`,
       }));
 
-      expect(mapLeaf(cmsLeaf({ stickyNotes: { notes } })).ok).toBe(true);
+      expect(mapLeaf(cmsLeaf({ stickyNotes: { notes } }), BASE_URL).ok).toBe(true);
     });
 
     it('rejects Dinner Table Knowledge with no takeaway source reference', () => {
       const result = mapLeaf(
         cmsLeaf({ takeaway: { body: 't', dinnerTableKnowledge: 'An unsourced claim.' } }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -445,7 +485,7 @@ describe('mapLeaf', () => {
         id: `o${String(index)}`,
       }));
 
-      expect(mapLeaf(cmsLeaf({ scenario: { prompt: 'p', options } })).ok).toBe(false);
+      expect(mapLeaf(cmsLeaf({ scenario: { prompt: 'p', options } }), BASE_URL).ok).toBe(false);
     });
 
     it('rejects two correct options', () => {
@@ -460,6 +500,7 @@ describe('mapLeaf', () => {
             ],
           },
         }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -479,6 +520,7 @@ describe('mapLeaf', () => {
             ],
           },
         }),
+        BASE_URL,
       );
 
       expect(result.ok).toBe(false);
@@ -502,17 +544,310 @@ describe('mapLeaf', () => {
     delete incomplete['payoff'];
     delete incomplete['takeaway'];
 
-    const result = mapLeaf(incomplete as unknown as CmsLeaf);
+    const result = mapLeaf(incomplete as unknown as CmsLeaf, BASE_URL);
 
     expect(result.ok).toBe(false);
   });
 
   it('names the Leaf in its rejection reasons', () => {
-    const result = mapLeaf(cmsLeaf({ id: 77, title: '' }));
+    const result = mapLeaf(cmsLeaf({ id: 77, title: '' }), BASE_URL);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reasons[0]).toContain('Leaf 77');
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Media URL resolution (WP15.8)                                              */
+/* -------------------------------------------------------------------------- */
+
+describe('media URL resolution', () => {
+  /**
+   * Copied verbatim from the live CMS — `GET /api/leaves?where[id][equals]=244&depth=0`
+   * against the real Track 42 / Leaf 244, 2026-09-02. Not hand-written: a hand-written
+   * fixture gets the shape subtly right and the URL wrong, which is exactly the bug
+   * this package exists to catch. `scenario.image.url` and `stickyNotes.diagram.url`
+   * are both CMS-relative here — that is the defect; every other field just rides
+   * along so the document is real rather than assembled to make the test pass.
+   */
+  const REAL_LEAF_244: CmsLeaf = {
+    id: 244,
+    trackId: 42,
+    orderIndex: 0,
+    title: 'Real wealth comes from creating value, not competing for it',
+    summary: {
+      body: "Wattles argues that true wealth comes from creating new value rather than competing over existing resources. Because he views nature's supply as inexhaustible, you never need to take anything away from others to succeed.",
+      audio: {
+        url: null,
+        durationSeconds: null,
+      },
+    },
+    scenario: {
+      prompt:
+        'You run a boutique coffee roasting business and notice a popular new cafe opening across the street, threatening your sales. How do you respond to build lasting wealth ?',
+      options: [
+        {
+          id: '6a96fc9e38b6d4946cf67907',
+          text: "Secure exclusive wholesale contracts with nearby offices and offer loyalty discounts to lock in the neighborhood's existing coffee drinkers.",
+          isCorrect: false,
+        },
+        {
+          id: '6a96fc9e38b6d4946cf67908',
+          text: "Negotiate long-term exclusive distribution deals with elite bean suppliers to restrict your competitor's access to premium single-origin crops.",
+          isCorrect: false,
+        },
+        {
+          id: '6a96fc9e38b6d4946cf67909',
+          text: 'Develop a unique roast profile and workshop program that teaches customers how to brew at home, expanding the market of coffee enthusiasts.',
+          isCorrect: true,
+        },
+      ],
+      image: {
+        url: '/api/media/file/leaf-00-scenario-7.png',
+        alt: "An illustration of the scenario: You run a boutique coffee roasting business and notice a popular new cafe opening across the street, threatening your sales. How do you respond to build lasting wealth according to Wattles' principle?. Stylised flat artwork; the figures are not identifiable.",
+        width: null,
+        height: null,
+      },
+      audio: {
+        url: null,
+        durationSeconds: null,
+      },
+    },
+    payoff: {
+      body: "By introducing an offering that teaches customers new skills, you create fresh value rather than fighting over the existing pool. Wattles believes true riches are formed on this 'creative plane'\u2014giving more in use value than you take in cash\u2014making them far more permanent than wealth won through competition.",
+      audio: {
+        url: null,
+        durationSeconds: null,
+      },
+    },
+    stickyNotes: {
+      notes: [
+        {
+          id: '6a96b64738b6d4946cf6777b',
+          note: 'Create new value instead of competing for existing resources.',
+        },
+        {
+          id: '6a96b64738b6d4946cf6777c',
+          note: 'Give more in use value than you take in cash value.',
+        },
+        {
+          id: '6a96b64738b6d4946cf6777d',
+          note: 'Rise entirely out of the competitive mindset.',
+        },
+      ],
+      diagram: {
+        url: '/api/media/file/leaf-00-diagram-2.png',
+        alt: 'A comparison diagram contrasting Creative Mindset \u2014 Create new value, Compete for existing resources \u2014 with Competitive Mindset \u2014 Give more in use value than cash value, Rise out of competitive mindset.',
+        width: null,
+        height: null,
+        spec: '{\n  "kind": "contrast",\n  "nodes": [\n    {\n      "label": "Create new value"\n    },\n    {\n      "label": "Compete for existing resources"\n    },\n    {\n      "label": "Give more in use value than cash value"\n    },\n    {\n      "label": "Rise out of competitive mindset"\n    }\n  ],\n  "left_heading": "Creative Mindset",\n  "right_heading": "Competitive Mindset"\n}',
+        specFormat: 'json',
+      },
+      audio: {
+        url: null,
+        durationSeconds: null,
+      },
+    },
+    takeaway: {
+      body: 'Wattles argues that you never have to beat someone else to succeed; lasting wealth comes from expanding the pie rather than fighting over the slices.',
+      dinnerTableKnowledge:
+        'Wattles compares competitive multi-millionaires to prehistoric monster reptiles\u2014necessary for evolutionary development, but ultimately wretched in their private lives and destined to be phased out.',
+      applyInLife:
+        'Before finalizing your next business deal or sale, evaluate whether what you are providing delivers more practical value to the customer than the cash value you are receiving in return.',
+      audio: {
+        url: null,
+        durationSeconds: null,
+      },
+    },
+    sourceReferences: [
+      {
+        id: '6a96b64738b6d4946cf6777e',
+        slideKey: 'summary',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote:
+          'You are to become a creator, not a competitor; you are going to get what you want, but in such a way that when you get it every other man will have more than he has now.',
+        note: 'Wattles explains that a person must become a creator rather than a competitor so everyone benefits.',
+      },
+      {
+        id: '6a96b64738b6d4946cf6777f',
+        slideKey: 'summary',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote: 'You are to create, not to compete for what is already created.',
+        note: 'Wattles states you must create rather than compete for what is already created.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67780',
+        slideKey: 'summary',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote: 'You do not have to take anything away from any one.',
+        note: 'Wattles asserts you do not need to take anything from anyone.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67781',
+        slideKey: 'summary',
+        chapter: 'CHAPTER III. Is Opportunity Monopolized?',
+        page: null,
+        quote: 'Nature is an inexhaustible storehouse of riches; the supply will never run short.',
+        note: "Wattles writes that nature's storehouse of riches will never run short.",
+      },
+      {
+        id: '6a96b64738b6d4946cf67782',
+        slideKey: 'payoff',
+        chapter: 'CHAPTER VI. How Riches Come to You.',
+        page: null,
+        quote:
+          'Give every man more in use value than you take from him in cash value; then you are adding to the life of the world by every business transaction.',
+        note: 'Wattles instructs to give more in use value than you take in cash value to add to the life of the world.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67783',
+        slideKey: 'payoff',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote:
+          'Riches secured on the competitive plane are never satisfactory and permanent; they are yours to-day, and another\u2019s to-morrow.',
+        note: 'Wattles states competitive riches are temporary and unsatisfactory.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67784',
+        slideKey: 'takeaway',
+        chapter: 'CHAPTER VI. How Riches Come to You.',
+        page: null,
+        quote: 'You do not have to beat anybody in business.',
+        note: 'Wattles states that you do not need to defeat others in your business dealings.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67785',
+        slideKey: 'takeaway',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote: 'You are to create, not to compete for what is already created.',
+        note: 'He advises to create rather than compete for what has already been created, effectively expanding the total wealth.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67786',
+        slideKey: 'takeaway',
+        chapter: 'CHAPTER V. Increasing Life.',
+        page: null,
+        quote:
+          'The multi-millionaires are like the monster reptiles of the prehistoric eras; they play a necessary part in the evolutionary process, but the same Power which produced them will dispose of them.',
+        note: 'Wattles likens multi-millionaires to prehistoric monster reptiles that fulfill an evolutionary function before being disposed of, noting their private lives show them to be wretched.',
+      },
+      {
+        id: '6a96b64738b6d4946cf67787',
+        slideKey: 'payoff',
+        chapter: 'CHAPTER VI. How Riches Come to You.',
+        page: null,
+        quote:
+          'Give every man more in use value than you take from him in cash value; then you are adding to the life of the world by every business transaction.',
+        note: 'Wattles explicitly rules that every transaction must provide more use value than cash value received.',
+      },
+    ],
+    imageCandidates: [
+      {
+        id: '6a96ef3338b6d4946cf678ef',
+        url: '/api/media/file/leaf-00-scenario-7.png',
+        alt: "An illustration of the scenario: You run a boutique coffee roasting business and notice a popular new cafe opening across the street, threatening your sales. How do you respond to build lasting wealth according to Wattles' principle?. Stylised flat artwork; the figures are not identifiable.",
+      },
+      {
+        id: '6a96ef3338b6d4946cf678f0',
+        url: '/api/media/file/leaf-00-scenario-8.png',
+        alt: "An illustration of the scenario: You run a boutique coffee roasting business and notice a popular new cafe opening across the street, threatening your sales. How do you respond to build lasting wealth according to Wattles' principle?. Stylised flat artwork; the figures are not identifiable.",
+      },
+      {
+        id: '6a96ef3338b6d4946cf678f1',
+        url: '/api/media/file/leaf-00-scenario-9.png',
+        alt: "An illustration of the scenario: You run a boutique coffee roasting business and notice a popular new cafe opening across the street, threatening your sales. How do you respond to build lasting wealth according to Wattles' principle?. Stylised flat artwork; the figures are not identifiable.",
+      },
+    ],
+    editorialFindings: [],
+    isPlaceholder: false,
+    gateTwoStatus: 'approved',
+    updatedAt: '2026-09-02T07:47:49.223Z',
+    createdAt: '2026-09-01T11:25:59.596Z',
+    _status: 'published',
+  };
+
+  it('maps a real, live Leaf whose scenario image and diagram are CMS-relative', () => {
+    const leaf = expectOk(mapLeaf(REAL_LEAF_244, BASE_URL));
+
+    expect(leaf.scenario.image?.url).toBe(
+      'http://127.0.0.1:3001/api/media/file/leaf-00-scenario-7.png',
+    );
+    expect(leaf.stickyNotes.diagram?.url).toBe(
+      'http://127.0.0.1:3001/api/media/file/leaf-00-diagram-2.png',
+    );
+  });
+
+  it('returns an already-absolute scenario image URL unchanged', () => {
+    // A different host than BASE_URL, deliberately: if resolution touched an absolute
+    // URL at all, this would come back rewritten onto BASE_URL's origin instead.
+    const leaf = expectOk(
+      mapLeaf(
+        cmsLeaf({
+          scenario: {
+            ...cmsLeaf().scenario,
+            image: { url: 'https://cdn.example.net/scenario.png', alt: 'Alt text' },
+          },
+        }),
+        BASE_URL,
+      ),
+    );
+
+    expect(leaf.scenario.image?.url).toBe('https://cdn.example.net/scenario.png');
+  });
+
+  /**
+   * Copied verbatim from the live CMS — `GET /api/tracks?where[id][equals]=42&depth=0`,
+   * 2026-09-02 — with `coverUrl` overridden to a relative value. No live Track carries
+   * one yet (Track 42's is still a hotlinked third-party image); this is the sibling a
+   * founder item is about to create by replacing that hotlink with a hosted asset, and
+   * `mapTrack` fails on it today exactly as `mapLeaf` fails on Leaf 244.
+   */
+  const REAL_TRACK_42_WITH_RELATIVE_COVER: CmsTrack = {
+    ...({
+      id: 42,
+      bookTitle: 'The Science of Getting Rich',
+      author: 'W. D. Wattles',
+      publisher: 'Elizabeth Towne Co',
+      description:
+        'Getting rich is an exact, law-governed science where anyone can systematically acquire wealth by holding a clear mental image of their desire on the creative plane, maintaining unwavering faith and gratitude, and supplementing that thought with efficient daily action in their present work.',
+      disclaimer:
+        "ZoomOut teaches this book's ideas; it does not endorse them. The author's claims about how the world works are presented as his, not as fact.",
+      purchaseLinks: [
+        {
+          id: '6a970887eb8564b69dbef17d',
+          retailer: 'Gutenberg',
+          url: 'https://gutenberg.org/ebooks/59844',
+          isAffiliate: false,
+        },
+      ],
+      leafCount: 18,
+      acquisition: 'public-domain',
+      isPlaceholder: false,
+      updatedAt: '2026-09-02T08:40:38.384Z',
+      createdAt: '2026-08-27T15:09:53.150Z',
+      _status: 'published',
+    } as CmsTrack),
+    coverUrl: '/api/media/file/cover.png',
+  };
+
+  it('maps a real Track whose cover is CMS-relative', () => {
+    const track = expectOk(mapTrack(REAL_TRACK_42_WITH_RELATIVE_COVER, BASE_URL));
+
+    expect(track.coverUrl).toBe('http://127.0.0.1:3001/api/media/file/cover.png');
+  });
+
+  it('returns an already-absolute cover URL unchanged', () => {
+    const track = expectOk(
+      mapTrack(cmsTrack({ coverUrl: 'https://cdn.example.net/cover.png' }), BASE_URL),
+    );
+
+    expect(track.coverUrl).toBe('https://cdn.example.net/cover.png');
   });
 });

@@ -32,6 +32,9 @@ import type { ZodError } from 'zod';
  *  - `stickyNotes.notes` is `{ note }[]` in Payload, `string[]` in the domain model
  *  - `scenario.options` is a plain array in Payload, a 3-tuple in the domain model
  *  - Payload adds `_status`, timestamps and row ids throughout
+ *  - media URLs (`scenario.image.url`, `stickyNotes.diagram.url`, `Track.coverUrl`)
+ *    are stored CMS-relative (`/api/media/file/...`); `imageAssetSchema` requires
+ *    absolute (WP15.8)
  */
 
 export type MappingResult<T> =
@@ -64,13 +67,13 @@ export const CONTENT_QUERY_DEPTH = 0;
 /* Track                                                                       */
 /* -------------------------------------------------------------------------- */
 
-export function mapTrack(document: CmsTrack): MappingResult<Track> {
+export function mapTrack(document: CmsTrack, baseUrl: string): MappingResult<Track> {
   const candidate = {
     id: String(document.id),
     bookTitle: document.bookTitle,
     author: document.author,
     publisher: document.publisher ?? undefined,
-    coverUrl: document.coverUrl ?? undefined,
+    coverUrl: isAbsent(document.coverUrl) ? undefined : resolveMediaUrl(document.coverUrl, baseUrl),
     description: document.description ?? undefined,
     disclaimer: document.disclaimer ?? undefined,
     purchaseLinks: (document.purchaseLinks ?? []).map((link) => ({
@@ -100,7 +103,7 @@ export function mapTrack(document: CmsTrack): MappingResult<Track> {
 /* Leaf                                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function mapLeaf(document: CmsLeaf): MappingResult<Leaf> {
+export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf> {
   // Checked before the schema runs so the failure names the actual cause. Left to
   // Zod it would surface as "expected string, received undefined" on an option id,
   // which tells whoever reads the log nothing about what to fix.
@@ -125,14 +128,14 @@ export function mapLeaf(document: CmsLeaf): MappingResult<Leaf> {
         text: option.text ?? undefined,
         isCorrect: option.isCorrect ?? false,
       })),
-      ...optionalImage(document.scenario?.image),
+      ...optionalImage(document.scenario?.image, baseUrl),
       ...optionalAudio(document.scenario?.audio),
     },
     payoff: mapBodySlide(document.payoff),
     stickyNotes: {
       // Payload array rows are objects; the domain model is a plain string list.
       notes: (document.stickyNotes?.notes ?? []).map((row) => row.note ?? ''),
-      ...optionalDiagram(document.stickyNotes?.diagram),
+      ...optionalDiagram(document.stickyNotes?.diagram, baseUrl),
       ...optionalAudio(document.stickyNotes?.audio),
     },
     takeaway: {
@@ -187,9 +190,7 @@ export function mapLeaf(document: CmsLeaf): MappingResult<Leaf> {
  * Object]"` as a track id.
  */
 function resolveRelationshipId(relationship: number | { id: number }): string {
-  return typeof relationship === 'number'
-    ? String(relationship)
-    : String(relationship.id);
+  return typeof relationship === 'number' ? String(relationship) : String(relationship.id);
 }
 
 /** Payload omits `_status` on some reads; absent is treated as draft, the safe direction. */
@@ -244,8 +245,8 @@ type CmsDiagram = (CmsImage & { spec?: string | null; specFormat?: string | null
  * gates disagree and the Leaf must not ship. `''` fails `alt`'s `min(1)` and the failure
  * is reported against `scenario.image.alt`, naming the field an editor has to fix.
  */
-function optionalImage(image: CmsImage): { image?: ImageAsset } {
-  const asset = mapImageParts(image);
+function optionalImage(image: CmsImage, baseUrl: string): { image?: ImageAsset } {
+  const asset = mapImageParts(image, baseUrl);
 
   return asset === null ? {} : { image: asset };
 }
@@ -257,8 +258,8 @@ function optionalImage(image: CmsImage): { image?: ImageAsset } {
  * exist, and narrowing the string here would put that list in two places and let them
  * drift. An unknown format is rejected by the schema with the field named.
  */
-function optionalDiagram(diagram: CmsDiagram): { diagram?: DiagramAsset } {
-  const asset = mapImageParts(diagram);
+function optionalDiagram(diagram: CmsDiagram, baseUrl: string): { diagram?: DiagramAsset } {
+  const asset = mapImageParts(diagram, baseUrl);
 
   if (asset === null) {
     return {};
@@ -287,7 +288,7 @@ function optionalDiagram(diagram: CmsDiagram): { diagram?: DiagramAsset } {
  * directly, which never pass through that hook. Untrimmed, a space-only alt would
  * satisfy both gates and reach a screen reader as silence.
  */
-function mapImageParts(image: CmsImage): ImageAsset | null {
+function mapImageParts(image: CmsImage, baseUrl: string): ImageAsset | null {
   const url = image?.url?.trim() ?? '';
 
   if (url.length === 0) {
@@ -295,11 +296,52 @@ function mapImageParts(image: CmsImage): ImageAsset | null {
   }
 
   return {
-    url,
+    url: resolveMediaUrl(url, baseUrl),
     alt: image?.alt?.trim() ?? '',
     ...(isAbsent(image?.width) ? {} : { width: image.width }),
     ...(isAbsent(image?.height) ? {} : { height: image.height }),
   };
+}
+
+/**
+ * Resolves a CMS-stored media URL to one a client can load directly (WP15.8).
+ *
+ * Payload stores media relatively (`/api/media/file/...`) so content stays portable
+ * across environments — moving Payload to a new host must not require rewriting every
+ * document. `imageAssetSchema` requires an absolute URL, because a domain object should
+ * carry something a client can fetch without also knowing where the CMS lives. This is
+ * the resolution step between those two, and the only thing that changes either side.
+ *
+ * **An already-absolute URL is returned exactly as stored**, not round-tripped through
+ * `URL` — `new URL(x).toString()` can normalise a well-formed absolute URL (default
+ * port, trailing slash, escaping) into a string that no longer matches the input, and a
+ * value this function had no reason to touch must not appear to have changed.
+ *
+ * **Only a leading-slash reference is resolved — anything else is left alone.** Payload's
+ * relative media URLs are always absolute-path references (`/api/media/file/...`); a
+ * value that is neither that nor already-absolute is not a CMS convention, it is a
+ * content defect (a typo, a hand-entered non-URL). `new URL(x, base)` would happily
+ * "resolve" `'not-a-url'` into a syntactically valid absolute URL too, which would
+ * launder that defect straight past `imageAssetSchema`'s `z.url()` check instead of
+ * being caught by it — the opposite of what the two-gate design in this file exists to
+ * do. Restricting resolution to `/`-prefixed input keeps that gate intact.
+ */
+function resolveMediaUrl(url: string, baseUrl: string): string {
+  if (isAbsoluteUrl(url)) {
+    return url;
+  }
+
+  return url.startsWith('/') ? new URL(url, baseUrl).toString() : url;
+}
+
+/** Whether a string already parses as a standalone URL, i.e. carries its own scheme. */
+function isAbsoluteUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
