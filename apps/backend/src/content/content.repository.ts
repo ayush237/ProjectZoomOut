@@ -78,7 +78,10 @@ export class PayloadContentRepository implements ContentRepository {
       // A single malformed Track must not blank the whole Explore surface, so invalid
       // documents are dropped and logged rather than thrown. Fetching one specific
       // Track behaves differently on purpose — see `findTrack`.
-      tracks: this.keepValid(response.docs.map(mapTrack), 'Track'),
+      tracks: this.keepValid(
+        response.docs.map((document) => mapTrack(document, this.config.CONTENT_API_URL)),
+        'Track',
+      ),
       page: response.page,
       totalPages: response.totalPages,
       totalTracks: response.totalDocs,
@@ -99,7 +102,7 @@ export class PayloadContentRepository implements ContentRepository {
       throw new ContentNotFoundError('Track');
     }
 
-    return this.requireValid(mapTrack(document), 'Track');
+    return this.requireValid(mapTrack(document, this.config.CONTENT_API_URL), 'Track');
   }
 
   public async listLeavesForTrack(trackId: string): Promise<readonly Leaf[]> {
@@ -112,7 +115,10 @@ export class PayloadContentRepository implements ContentRepository {
       }),
     );
 
-    return this.keepValid(response.docs.map(mapLeaf), 'Leaf');
+    return this.keepValid(
+      response.docs.map((document) => mapLeaf(document, this.config.CONTENT_API_URL)),
+      'Leaf',
+    );
   }
 
   public async findLeaf(leafId: string): Promise<Leaf> {
@@ -129,7 +135,7 @@ export class PayloadContentRepository implements ContentRepository {
       throw new ContentNotFoundError('Leaf');
     }
 
-    return this.requireValid(mapLeaf(document), 'Leaf');
+    return this.requireValid(mapLeaf(document, this.config.CONTENT_API_URL), 'Leaf');
   }
 
   /** Exposed for tests and for an operational purge; not called on the request path. */
