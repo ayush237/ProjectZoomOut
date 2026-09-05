@@ -1,0 +1,30 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Knowledge graph" },
+    { "id": "page-2", "name": "Superseded — botanical" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Track roadmap — knowledge graph", "page": "page-1" },
+    { "file": "System.dc.html", "x": 490, "y": 0, "w": 780, "h": 640, "title": "Node states & sound", "page": "page-1" },
+    { "file": "DirectionA.dc.html", "x": 1370, "y": 0, "w": 390, "h": 844, "title": "A — Spine (no illustration)", "page": "page-1" },
+    { "file": "TrackComplete.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Track complete — still botanical, needs redoing", "page": "page-2" },
+    { "file": "DirectionB.dc.html", "x": 490, "y": 0, "w": 390, "h": 844, "title": "B — whole tree as state (rejected: childish)", "page": "page-2" }
+  ],
+  "annotations": [
+    {
+      "id": "note-graph",
+      "x": 0,
+      "y": -190,
+      "w": 880,
+      "text": "KNOWLEDGE GRAPH — the direction after your neurons/mindmap note.\n\nWhy the botanical tree read childish, concretely: every branch was a constant-width round-capped stroke, so it was a SILHOUETTE — a solid cartoon shape. This is a NETWORK instead: fine edges, precise nodes, depth from density rather than mass. Same teal/amber, same tokens.\n\nGenerated rather than hand-drawn — a meandering spine of 18 Leaves, short dendrites off each, and a faint background web standing for what has not been reached yet. Node positions come out of the same geometry as the spine, so they sit ON the path instead of near it."
+    },
+    {
+      "id": "note-todo",
+      "x": 0,
+      "y": 900,
+      "w": 880,
+      "text": "STILL TO DO: page 2 holds the two artboards that still carry the old botanical tree. Track complete needs rebuilding in the graph language — it is the moment the whole metaphor pays off, so it should not be the one screen that looks like a different app."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

@@ -1,0 +1,33 @@
+VISUAL DIRECTION: a knowledge graph - neurons, mindmaps, constellations, tech trees. A book is a path of connected nodes through a wider web of ideas not yet reached. Fine edges, precise nodes, depth from density rather than mass. A botanical tree was tried and rejected: constant-width, round-capped branches read as a cartoon silhouette, which is wrong for 13+.
+
+COLOUR - DARK (the default theme). Shipping values; do not invent new colours.
+surface/0 #0B0F12 app background, surface/1 #141A1E cards, surface/2 #1C242A raised and inputs, surface/3 #26313A pressed, border #2E3A44 hairlines.
+primary #3DDCC8 interface/navigation/progress, hover #5FE6D5, press #26B8A6, on-primary #0B0F12.
+reward #FFB020 REWARD MOMENTS ONLY, reward-soft #FFC44D, on-reward #0B0F12.
+correct #4ADE80, incorrect #FF6B6B (softened; pure red glares on dark).
+text #F2F5F7, muted #A7B6C0.
+
+COLOUR - LIGHT (supported, never default). Not tints of the dark values - chosen independently, because a colour tuned for a dark background is wrong on a light one.
+surface/0-3 #FFFFFF, #F1F5F8, #E6EDF1, #D8E2E8. border #C3D1DA.
+primary #006A5E / #00584E / #00443C. reward #8A5200 (soft #FFC44D).
+correct #0F7038, incorrect #B3261E, text #0B1519, muted #4C5C66, on-primary and on-reward #FFFFFF.
+
+TYPE: Nunito (display, headings, UI) and Nunito Sans (body), both Google Fonts. Weights 400/600/700 only. display 32/40, h1 28/36, h2 22/28, h3 18/24, body 16/26, payoff 17/30, small 14/20, caption 12/16 uppercase tracked.
+
+SHAPE: radii 8 chips and inputs, 12 default, 20 cards and sheets, 999 buttons and pills. Spacing on a 4pt base: 4, 8, 12, 16, 24, 32, 48. Buttons are fully rounded pills.
+
+MOTION: spring physics, never linear easing. 150ms taps, 280ms transitions, 900ms celebrations. Rewards overshoot slightly (underdamped). Reduced motion swaps to an opacity fade and never removes feedback.
+
+RULES - requirements, not preferences:
+1. reward amber #FFB020 is reserved for reward moments only - XP, streaks, achievements, completion. Never navigation, buttons, links or brand. Teal is the interface. This is what stops a reward competing with the UI for attention.
+2. Depth comes from surface lightness, not shadow. An elevated card is a lighter surface with a hairline border. Shadows are invisible on dark and are not used.
+3. No glow, light cones, beams, bloom, lens flare or volumetric light. Anywhere.
+4. Never signal by colour alone. Correct/incorrect carry an icon and a motion cue as well - correct green and primary teal are adjacent in hue, and a reader must never have to tell them apart to know if they were right.
+5. WCAG AA against the surface the text actually sits on, verified per elevation level, not once against surface/0. Body 4.5:1, large 3:1.
+6. Minimum 44px hit targets.
+7. No fake iOS status bar and no fake keyboard - the real ones render on top.
+8. Icons: inline SVG, 24px grid, stroke-based, one consistent weight. Never emoji.
+9. Support OS font scaling - no absolute line heights that clip when text is sized up.
+10. The graph metaphor owns exactly one thing: progress through a book. XP is not sap, streaks are not roots. Extending it further makes the product cute and stops it being 13+.
+
+NEVER: orange as a brand colour; gradient-mesh backgrounds; Inter, Roboto or Arial; drop shadows; a mascot or character; rounded cards with a left-border accent stripe; confetti; trophies or medals; leaderboards or social comparison; invented metrics the product does not track (no time-saved, no percentile, no rating); more than five slides in a lesson, ever.

@@ -1,0 +1,14 @@
+# Generated, not source.
+
+# The seeded Claude Design canvas: 2.4 MB, and almost all of it is the editor
+# payload baked in at publish time. Rebuild with seed-canvas.mjs from the
+# .dc.html artboards plus canvas.json, which ARE tracked.
+zoomout-knowledge-tree.html
+
+# Throwaway render previews used to screenshot the artboards standalone.
+preview-all.html
+one-*.html
+
+# Intermediates from the generators.
+_*.svg
+_*.html

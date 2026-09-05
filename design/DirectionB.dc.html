@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Nunito+Sans:wght@400;600&display=swap">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Nunito', system-ui, sans-serif; }
+    a { color: #3DDCC8; } a:hover { color: #5FE6D5; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #0B0F12; color: #F2F5F7; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="padding: 20px 20px 12px 20px; display: flex; flex-direction: column; gap: 4px;">
+    <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #A7B6C0;">Your tree</div>
+    <div style="font-size: 22px; font-weight: 700; line-height: 28px;">The Science of Getting Rich</div>
+  </div>
+
+  <!-- The whole book as one standing tree: the roadmap is the silhouette. -->
+  <div style="flex-grow: 1; position: relative;">
+    <svg width="390" height="560" viewBox="0 0 390 560" fill="none" style="position: absolute; top: 0; left: 0;">
+      <!-- Trunk: grown from the root up to where the reader has reached -->
+      <path d="M195 548 L195 300" stroke="#3DDCC8" stroke-opacity="0.5" stroke-width="14" stroke-linecap="round"/>
+      <path d="M195 300 L195 176" stroke="#26313A" stroke-width="11" stroke-linecap="round"/>
+
+      <!-- Grown boughs -->
+      <path d="M195 452 C 138 428, 84 380, 52 322" stroke="#3DDCC8" stroke-opacity="0.45" stroke-width="8" stroke-linecap="round"/>
+      <path d="M195 436 C 252 412, 306 364, 338 306" stroke="#3DDCC8" stroke-opacity="0.45" stroke-width="8" stroke-linecap="round"/>
+      <path d="M195 372 C 152 336, 118 288, 100 232" stroke="#3DDCC8" stroke-opacity="0.38" stroke-width="6" stroke-linecap="round"/>
+      <path d="M195 348 C 240 314, 274 268, 292 214" stroke="#3DDCC8" stroke-opacity="0.38" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- Bare boughs: still to grow -->
+      <path d="M195 268 C 166 226, 150 178, 148 128" stroke="#26313A" stroke-width="5" stroke-linecap="round"/>
+      <path d="M195 248 C 226 208, 248 162, 252 112" stroke="#26313A" stroke-width="5" stroke-linecap="round"/>
+      <path d="M195 208 C 192 166, 194 124, 198 86" stroke="#26313A" stroke-width="4" stroke-linecap="round"/>
+
+      <!-- Fruit borne: completed Leaves -->
+      <g fill="#FFB020">
+        <circle cx="52" cy="322" r="10"/><circle cx="34" cy="352" r="8"/><circle cx="74" cy="348" r="8"/>
+        <circle cx="338" cy="306" r="10"/><circle cx="356" cy="336" r="8"/><circle cx="316" cy="334" r="8"/>
+        <circle cx="292" cy="214" r="9"/>
+      </g>
+
+      <!-- Buds: still to grow -->
+      <g stroke="#2E3A44" stroke-width="2" fill="#0B0F12">
+        <circle cx="148" cy="128" r="9"/><circle cx="126" cy="102" r="7"/><circle cx="170" cy="98" r="7"/>
+        <circle cx="252" cy="112" r="9"/><circle cx="274" cy="86" r="7"/><circle cx="230" cy="84" r="7"/>
+        <circle cx="198" cy="86" r="9"/><circle cx="198" cy="56" r="7"/>
+      </g>
+
+      <!-- The next Leaf: the one live element on the screen -->
+      <circle cx="100" cy="232" r="26" fill="#3DDCC8" fill-opacity="0.12"/>
+      <circle cx="100" cy="232" r="16" fill="#3DDCC8"/>
+
+      <!-- Roots -->
+      <path d="M195 548 C 156 556, 118 562, 84 560" stroke="#26313A" stroke-width="5" stroke-linecap="round"/>
+      <path d="M195 548 C 234 556, 272 562, 306 560" stroke="#26313A" stroke-width="5" stroke-linecap="round"/>
+    </svg>
+
+    <div style="position: absolute; top: 260px; left: 72px; padding: 5px 12px; border-radius: 999px; background: #1C242A; border: 1px solid #3DDCC8; font-size: 12px; font-weight: 700; color: #3DDCC8;">Leaf 8</div>
+  </div>
+
+  <div style="padding: 0 20px 26px 20px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="display: flex; gap: 10px;">
+      <div style="flex-grow: 1; background: #141A1E; border: 1px solid #2E3A44; border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 20px; font-weight: 700; color: #FFB020;">7</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #A7B6C0;">Fruit borne</div>
+      </div>
+      <div style="flex-grow: 1; background: #141A1E; border: 1px solid #2E3A44; border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 20px; font-weight: 700; color: #F2F5F7;">11</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #A7B6C0;">Still to grow</div>
+      </div>
+    </div>
+    <div style="height: 52px; border-radius: 999px; background: #3DDCC8; display: flex; align-items: center; justify-content: center;">
+      <span style="font-size: 16px; font-weight: 700; color: #0B0F12;">Grow the next leaf</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

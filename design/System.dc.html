@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Nunito+Sans:wght@400;600&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Nunito', system-ui, sans-serif; }
+    a { color: #3DDCC8; } a:hover { color: #5FE6D5; }
+  </style>
+</helmet>
+
+<div style="width: 780px; height: 640px; background: #0B0F12; color: #F2F5F7; padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 26px;">
+
+  <div style="display: flex; flex-direction: column; gap: 4px;">
+    <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: #3DDCC8;">System</div>
+    <div style="font-size: 26px; font-weight: 700;">Node states &amp; sound</div>
+    <div style="font-family: 'Nunito Sans', sans-serif; font-size: 14px; color: #A7B6C0;">Every state below uses a token that already ships. No new colours.</div>
+  </div>
+
+  <!-- States -->
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+
+    <div style="background: #141A1E; border: 1px solid #2E3A44; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="width: 62px; height: 62px; border-radius: 999px; background: #141A1E; border: 2px solid #2E3A44; display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A7B6C0" stroke-width="2.4" stroke-linecap="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div style="font-size: 14px; font-weight: 700;">Locked</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; text-align: center; color: #A7B6C0;">border<br>#2E3A44</div>
+      </div>
+      <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0; opacity: 0.7; text-align: center;">Silent. No motion.</div>
+    </div>
+
+    <div style="background: #141A1E; border: 1px solid #3DDCC8; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="width: 62px; height: 62px; border-radius: 999px; background: rgba(61,220,200,0.10); border: 2px solid rgba(61,220,200,0.30); display: flex; align-items: center; justify-content: center;">
+        <div style="width: 48px; height: 48px; border-radius: 999px; background: #3DDCC8; display: flex; align-items: center; justify-content: center;">
+          <span style="font-size: 18px; font-weight: 700; color: #0B0F12;">8</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div style="font-size: 14px; font-weight: 700; color: #3DDCC8;">Next</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; text-align: center; color: #A7B6C0;">primary<br>#3DDCC8</div>
+      </div>
+      <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0; opacity: 0.7; text-align: center;">Breathing ring, 2.4s. The only looping motion in the app.</div>
+    </div>
+
+    <div style="background: #141A1E; border: 1px solid #2E3A44; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="width: 62px; height: 62px; border-radius: 999px; background: #1C242A; border: 2px solid #FFB020; display: flex; align-items: center; justify-content: center;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFB020" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div style="font-size: 14px; font-weight: 700; color: #FFB020;">Complete</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; text-align: center; color: #A7B6C0;">reward<br>#FFB020</div>
+      </div>
+      <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0; opacity: 0.7; text-align: center;">Leaf unfurls on the bough. One soft chime.</div>
+    </div>
+
+    <div style="background: #141A1E; border: 1px solid #2E3A44; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="width: 62px; height: 62px; border-radius: 999px; background: #1C242A; border: 2px dashed #2E3A44; display: flex; align-items: center; justify-content: center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A7B6C0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </div>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+        <div style="font-size: 14px; font-weight: 700;">Revisit</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; text-align: center; color: #A7B6C0;">border, dashed</div>
+      </div>
+      <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0; opacity: 0.7; text-align: center;">Re-reading a finished Leaf. Does not exist yet — debt register.</div>
+    </div>
+  </div>
+
+  <!-- SFX -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div style="font-size: 16px; font-weight: 700;">Where sound goes</div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 28px;">
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #2E3A44; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #4ADE80; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Correct answer</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0;">exists</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #2E3A44; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #FF6B6B; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Wrong answer — never punishing</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0;">exists</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #3DDCC8; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #3DDCC8; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Payoff unlock — the signature moment</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #3DDCC8;">exists</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #FFB020; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #FFB020; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Leaf unfurls on the tree</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #FFB020;">new</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #FFB020; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #FFB020; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Track complete — the tree fruits</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #FFB020;">new</div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141A1E; border: 1px solid #2E3A44; border-radius: 12px;">
+        <div style="width: 8px; height: 8px; border-radius: 999px; background: #A7B6C0; flex-shrink: 0;"></div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 13px; flex-grow: 1;">Daily cap — an ending, not a refusal</div>
+        <div style="font-family: 'Nunito Sans', sans-serif; font-size: 11px; color: #A7B6C0;">exists</div>
+      </div>
+    </div>
+    <div style="font-family: 'Nunito Sans', sans-serif; font-size: 12px; color: #A7B6C0; line-height: 18px;">One timbre family across all six — wooden, soft-struck, close-mic'd. The two new sounds are the same instrument as the four that exist, pitched up a fourth. Silent switch always respected.</div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
