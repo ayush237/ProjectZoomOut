@@ -11,8 +11,9 @@ This is **not** a work package. No handoff has been written and nothing has been
 `apps/mobile`. It is design exploration, sitting ahead of a future package. The last *code* work was
 WP15.8 (media URL resolution), signed off and merged.
 
-Everything in `design/` is untracked. Decide deliberately whether it gets committed — it is Architect
--owned design work and arguably belongs in the repo, but it is currently outside `project/`.
+**Committed to `main` as of 2026-09-05** — `design/` is tracked. The generated artefacts stay
+gitignored (see `design/.gitignore`); the `.dc.html` artboards, `canvas.json` and the prompt files
+are the tracked source.
 
 ## What exists
 
@@ -82,7 +83,29 @@ Worth putting in the next prompt, because "make it more real" alone will not lan
 ## Next action
 
 Redo Screen 1 in the existing `ZoomOut Track Roadmap` project with a prompt covering the three
-points above, then continue with `remaining-screen-prompts.md` — screens 3 to 8.
+points above, then work the queue — **screens 3 to 12**.
+
+**Paste from `design/prompts/`, one single-line `.txt` per screen — not from the markdown.** The
+blockquotes in `remaining-screen-prompts.md` are wrapped for reading, and copying one pastes the
+line breaks, which Claude Design submits as separate fragments. That file stays the reference for
+*why* each `Do not` is there; the `.txt` files are what you paste.
+
+**Screens 9–12 were added 2026-09-05** and cover surfaces the original pack missed: sign in and sign
+up, the session wrap-up and the daily-cap state, the achievement unlock, and report-an-error with
+the failure states. The pack covered 9 of the app's 14 surfaces. **They must go into the same
+project as the rest** — that is the whole reason the pack says one conversation, and a surface
+discovered after it closes costs either a cold second conversation or reopening a stale one.
+
+**One decision that should not wait for implementation:** the knowledge-graph direction needs SVG
+and `apps/mobile` has none — `react-native-reanimated` is there, `react-native-svg` and Skia are
+not. Every curve in the direction (the meandering spine, the tapering dendrites, the resolved
+constellation, the compressed graph strip) is a bezier path, and React Native views cannot draw one.
+Architect's recommendation is **`react-native-svg`**, not Skia: it is a first-party Expo SDK package
+versioned against the SDK, and the direction rejects the lighting effects Skia would be for. Note
+that `Icon.tsx` declined an SVG dependency once — that reasoning was about taking a native
+dependency *for icons alone* and does not transfer. This matters now because it bounds what to
+accept from Claude Design: a frame that depends on effects only Skia can render is a decision being
+made by a mockup.
 
 **Two operational notes about Claude Design, learned the hard way:**
 
