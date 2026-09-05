@@ -7,6 +7,29 @@ screen inherits the same conversation and stays consistent. One per message, wai
 prompt containing line breaks gets submitted as fragments. Shift+Enter makes a newline if you want
 one; otherwise paste these as-is.
 
+> ## 📋 Paste from `design/prompts/`, not from this file
+>
+> **Added 2026-09-05.** The blockquotes below are wrapped for reading, and copying one pastes the
+> line breaks — which is exactly the fragmenting failure the paragraph above warns about. Every
+> prompt now also exists as a **single-line `.txt`** under `design/prompts/`, one file per screen,
+> in the same format as `screen-1-v2-prompt.txt` that worked. Open the file, select all, paste.
+>
+> **This file stays the reference** — it carries the reasoning and the rationale for each *Do not*.
+> The `.txt` files are the paste artefacts. If a prompt changes, change both.
+>
+> | Screen | File |
+> |---|---|
+> | 3 · Track complete | `prompts/screen-03-track-complete.txt` |
+> | 4 · Journey, Explore, Library | `prompts/screen-04-journey-explore-library.txt` |
+> | 5 · Profile and progress | `prompts/screen-05-profile-and-progress.txt` |
+> | 6 · The share card | `prompts/screen-06-share-card.txt` |
+> | 7 · Onboarding and legal | `prompts/screen-07-onboarding-and-legal.txt` |
+> | 8 · Component sheet | `prompts/screen-08-component-sheet.txt` — **Ionicons correction already folded in** |
+> | 9 · Sign in and sign up | `prompts/screen-09-sign-in-and-sign-up.txt` |
+> | 10 · Session end and the cap | `prompts/screen-10-session-end-and-cap.txt` |
+> | 11 · Achievement unlock | `prompts/screen-11-achievement-unlock.txt` |
+> | 12 · Report an error and failure | `prompts/screen-12-report-error-and-failure.txt` |
+
 **Two standing corrections** were set in the first message and carry through: four tabs (Explore,
 Library, Journey, Profile), and invented placeholder book titles rather than real in-copyright ones.
 
@@ -73,6 +96,85 @@ Library, Journey, Profile), and invented placeholder book titles rather than rea
 > the scenario option row in all four states, the empty-state layout, and the icon set on a 24px
 > grid. Show each in BOTH themes side by side, labelled with the token name that drives it. Do not
 > invent a component the screens do not use.
+
+---
+
+# Screens 9–12 — the surfaces the original pack missed
+
+**Added 2026-09-05.** Screens 1–8 cover nine of the app's fourteen surfaces. These four cover the
+rest. **They belong in the same conversation as the others** — that is the whole reason the pack
+says one project — so they must be pasted before that conversation is finished, not after.
+
+Order among 9–12 does not matter much. Screens 1 and 2 establish the language and everything after
+inherits it.
+
+## Screen 9 — sign in and sign up
+
+> SCREEN 9 - the two account screens, sign in and sign up, as two frames. This is the first thing
+> anyone sees and nothing in the set has designed it yet. Email and password only - there is no
+> Google or Apple button, no guest mode and no social sign-in of any kind, so do not leave room for
+> them. Sign up collects email and password only; date of birth is a separate screen that follows.
+> Include a forgot-password affordance on sign in even though that flow is not built yet, because it
+> is the only account-recovery path this product will ever have. Show inline validation for a
+> rejected email and a too-short password, on the field itself rather than as a banner at the top.
+> The knowledge-graph language should be present but quiet here - this is the one place a reader has
+> a task rather than a reward. Do not use a social-login divider or an "or continue with" row. Do
+> not use a full-screen illustration that pushes the fields below the fold. Do not put marketing
+> copy or feature bullets on a sign-in screen. Do not put a carousel onboarding before the fields.
+
+## Screen 10 — the end of a session, and the daily cap
+
+> SCREEN 10 - the end of a session, as two frames, and this is a named product constraint rather
+> than a nicety. The app caps a session at fifteen minutes or five hundred XP, whichever comes
+> first, and the specification is explicit that it must read as an ending rather than a refusal -
+> the reader is being thanked, not blocked. First frame: the wrap-up a reader reaches by choosing to
+> stop, carrying what they did today, Leaves completed, XP earned and streak, with the share action
+> primary. Second frame: the same moment arrived at involuntarily because the cap was hit, which
+> must differ in copy and not in tone; an in-progress Leaf is always allowed to finish, so the
+> reader is never cut off mid-Leaf and the screen must not imply they were. In the knowledge-graph
+> language this is the day's path lighting up rather than the whole book. Do not use a lock icon, a
+> barrier, a countdown timer or any paywall pattern. Do not use red or any warning colour. Do not
+> offer a way to continue past the cap, because there is not one. Do not invent a metric the product
+> does not track.
+
+## Screen 11 — the achievement unlock
+
+> SCREEN 11 - the achievement unlock moment, which the product has as a component today but has
+> never had designed. There are nineteen achievements across six categories, and I want the still
+> plus a four-frame sequence showing how the unlock arrives while the reader is mid-session - it
+> interrupts a Leaf, so it must resolve quickly and hand the screen back rather than becoming a
+> destination. Reward amber leads here, because this is the reward moment the palette reserves it
+> for. Include the badge, its name, one line of what earned it, and a share action; the full list
+> lives on Profile and this is not it. Also give me the earned and unearned states of a badge side
+> by side, because a locked achievement should read as attainable rather than as a grey absence. Do
+> not use confetti. Do not use a trophy or a medal. Do not use a full-screen modal that traps the
+> reader. Do not stack multiple unlocks into a queue the reader dismisses one at a time.
+
+## Screen 12 — report an error, and the failure states
+
+> SCREEN 12 - the states nothing in the set has covered: report an error, and failure. Report an
+> error is a legal requirement on every Leaf, routed to a fix queue, so it needs an affordance in
+> the player a reader can find without hunting, and a form short enough to actually be used - what
+> is wrong, in the reader's own words, with the Leaf identified automatically rather than asked for.
+> Then three failure frames: content that failed to load, no network, and the confirmation after a
+> report is sent. The product is online-only by design, so no-network is a genuine and frequent
+> state rather than an edge case, and it should read as calm rather than alarming. In the
+> knowledge-graph language a failure is a connection that has not resolved yet, not a broken one. Do
+> not use a red error banner or a warning triangle. Do not use a bug or insect icon. Do not ask the
+> reader to categorise the problem from a dropdown of our terms. Do not make the report form a
+> full-screen takeover of the Leaf they were reading.
+
+---
+
+## One correction to Screen 8 before you paste it
+
+**The icon set is already decided and shipped: Ionicons, via `@expo/vector-icons`.** It was chosen
+in `apps/mobile/src/components/Icon.tsx` for reasons that are still current — it is a font, so every
+icon takes the theme tint as a text property, which is exactly what WP6's raw text glyphs failed at.
+Screen 8 as written asks for "the icon set on a 24px grid" and will invent one.
+
+Add to that prompt: *the icon set is Ionicons and is not being replaced — show the app's actual
+vocabulary drawn from it, at 24px, rather than designing new glyphs.*
 
 ---
 
