@@ -20,6 +20,60 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-06 — WP21: redesign foundation — SVG, the handwritten font, and the token diff
+
+*Manager. **Suggested model: Sonnet** — this package is a dependency, a font and a report. The one judgement call in it is named explicitly below rather than left to you, which is what keeps it Sonnet work.*
+
+> **Read:** this handoff · `apps/mobile/App.tsx` · `apps/mobile/src/design/typography.ts` ·
+> `apps/mobile/src/design/index.ts` · `apps/mobile/package.json` · `design/zoomout-design-system.md` ·
+> `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `launch-blockers.md`, the rest of
+> this log, `apps/pipeline`, `apps/backend`, `apps/admin`. Nothing in this package needs them.
+
+### Task: WP21 — redesign foundation: SVG, the handwritten font, and the token diff
+
+**Suggested model:** Sonnet — the design is settled and the work is dependency, config and a report; there is no judgement left to buy.
+
+**Context:** A full visual redesign of the app was explored and approved — all 14 surfaces exist as mockups, entry point `design/RESUME-HERE.md`. Implementing it needs two things `apps/mobile` does not have: an SVG rendering primitive, because every curve in the new visual language is a bezier path that RN views cannot draw, and the Caveat font, which the design system now carries as `--font-handwritten` scoped to sticky notes. **This package adds both and changes nothing visible.** Five screen packages follow it and none can start until it lands.
+
+**Objective:** `apps/mobile` can draw a bezier path and render text in Caveat, on a build that includes the native module — and every existing screen looks exactly as it does today.
+
+**Scope:** `apps/mobile/package.json`, `apps/mobile/App.tsx`, `apps/mobile/src/design/typography.ts`, plus whatever the Expo install touches. Verify rather than trust: `expo-font` and `@expo-google-fonts/*` are already wired, so the font is an addition to an existing mechanism rather than a new one.
+
+**Requirements**
+- Add `react-native-svg` **via `npx expo install`, not `npm install`** — the Expo-pinned version for this SDK is the point, and this is a first-party SDK package.
+- Add Caveat (`@expo-google-fonts/caveat`), load it through `App.tsx`'s existing `useFonts` call, and expose it in `fontFamilies` as a third family.
+- **Update `typography.ts`'s docstring in the same commit.** It currently states *"Two families is a deliberate ceiling; font files are startup cost in React Native"* — which the code below it will now break. Record that the third family was added deliberately, on the founder's explicit instruction, scoped to sticky-note text only. **A rule left standing beside its own violation reads as an accident to everyone who was not in the room.**
+- **Produce a token diff** between the published design system (`design/zoomout-design-system.md`) and `src/design/` — palette, spacing, radius, typography, motion. **Report it; do not act on it.** Name what differs and what is missing on each side. If nothing differs, say so — the exploration claims the values were verified exact, and confirming that is a real result.
+- **The uncommitted `apps/mobile/package.json` change already in the working tree is yours to decide on, deliberately.** It switches the `android`/`ios` scripts from `expo start --android/--ios` to `expo run:android`/`expo run:ios`. Nobody recorded who made it or why, and it is exactly the change adding a native module requires. **Either adopt it into this commit and say so in your report, or set it aside — but do not sweep it in unexamined, and do not silently revert it.**
+
+**Out of scope**
+- **Any visible change whatsoever.** No screen, no component, no colour. If a pixel moves, this package has failed.
+- **Building a curve, path or graph primitive.** WP22 needs one and WP22 knows what shape it needs; a primitive designed before its only caller exists is a guess.
+- Acting on the token diff. Report only.
+- The `design/` mockups. Reference for a later package, not code to port.
+
+**Constraints:** adding a native module means Expo Go is no longer sufficient — a dev-client or prebuild build is required from here on. An `apps/mobile/ios/` prebuild already exists untracked, and is gitignored as of WP15.8, so that path is already partly walked; confirm it rather than starting a new one. **Whatever you render to prove the curve and the font must not survive into the commit** — otherwise it contradicts the criterion below it. Prove it, then remove it. **Do not run `git add -A` or `git add .`**; stage by path.
+
+**Device gate:** *on a build that includes the native module,* three things observed rather than inferred:
+1. **A bezier path draws on screen.** One curve, anywhere.
+2. **A Caveat sample renders as an actual script face.** A wrong `fontFamily` string does not error in React Native — it falls back to the system font silently, and every test still passes. Look at it.
+3. **Walk the app — Explore, Library, Journey, Profile, a Leaf, both themes — and confirm nothing looks different.** This is what the package actually rests on.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] `react-native-svg` present at the Expo-pinned version for this SDK, installed via `expo install`
+- [ ] Caveat loads through the existing `useFonts` call, and `fontFamilies` exposes it as a third family
+- [ ] `typography.ts`'s two-family docstring records the deliberate exception — **not merely contradicted by the code beneath it**
+- [ ] **Observed on a device: a bezier path draws, and a Caveat sample is visibly a script face rather than the system fallback**
+- [ ] **Observed on a device: every existing screen renders as it did before, in both themes** — verified by walking the app, not by tests passing
+- [ ] The committed diff contains no new visible UI
+- [ ] The token diff is written into the completion report
+
+**Testing expectations:** Tier B, and be honest that the unit-testable surface is thin and weak by construction — a test asserting `fontFamilies.handwritten === 'Caveat_400Regular'` proves the string, and the string is exactly what fails silently. **The device gate is where this package's evidence lives.** Note first-paint cost if a third font at boot is noticeable; `App.tsx` gates render on `fontsLoaded`.
+
+---
+
 ### Handoff: 2026-09-02 — WP15.8: Resolve CMS-relative media URLs in the content mapper
 
 *Manager. **Suggested model: Sonnet** — the design is settled below and the failing values are printed. There is no judgement left to buy.*

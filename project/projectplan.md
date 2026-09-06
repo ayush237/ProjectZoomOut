@@ -2,52 +2,50 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## The design exploration is complete — 2026-09-06
+## Active: the visual redesign, WP21–WP26 — approved 2026-09-06
 
-WP15.8 signed off and merged 2026-09-02 (see roadmap). Since then, a visual-redesign exploration ran directly on `main` — not a work package, no handoff, per `agents/architect.md`'s own scope for design docs under active exploration. It is now done: all 14 app surfaces the plan named are built as clickable mockups in Claude Design (project "ZoomOut Track Roadmap"), plus a published design system (94 tokens, 20 components). Entry point and full history: `design/RESUME-HERE.md`.
+The design exploration is complete: all 14 app surfaces exist as clickable mockups in Claude Design plus a published design system. Entry point `design/RESUME-HERE.md`. **Nothing in `apps/mobile` has changed yet.** This plan turns those mockups into the app, and was approved by the founder on 2026-09-06 including both rulings below.
 
-**What exists now that didn't a week ago:** a knowledge-graph/neuron visual language covering onboarding, sign-in/sign-up, the track roadmap, the 5-slide Leaf player (including a redesigned sticky-notes board — physical notes pinned to a textured board, not flat cards), session-end plus the daily-cap state, achievement unlock, report-an-error plus failure states, track-complete, and the share card (light-theme, for social). Every screen has a still plus, where the moment needs it, a multi-frame sequence showing how it arrives.
+**The redesign is three kinds of work wearing one name, and they carry very different risk.** That is the whole basis of the decomposition.
 
-**Two real dependencies this creates, neither yet in the codebase:**
-- **`react-native-svg`** — the entire visual language is bezier curves (the track roadmap's dendritic connections, the meandering spine). `apps/mobile` has `react-native-reanimated` but no SVG/Skia today. Recommended over Skia because it's a first-party Expo SDK package and the direction deliberately avoids the lighting effects Skia would be for.
-- **A new font token, `--font-handwritten`** (Caveat, via Google Fonts) — added to the design system scoped explicitly to sticky-note text, on the founder's explicit instruction, after the design system was confirmed to otherwise carry only Nunito/Nunito Sans. Every other surface is unaffected.
+| | Package | What it is | Model | Status |
+|---|---|---|---|---|
+| **Layer 1** | **WP21 — foundation** | `react-native-svg`, Caveat font, token diff. **No screen changes** | Sonnet | 📤 **Handed off 2026-09-06** |
+| **Layer 2** | **WP22 — Track roadmap** | Net-new screen with a real layout algorithm | **Opus** | Not written |
+| **Layer 3** | WP23 — Leaf player re-skin + sticky-notes board | Re-skin; slides are already separate components | Sonnet | Not written |
+| | WP24 — auth + onboarding | Re-skin; both screens exist | Sonnet | Not written |
+| | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | Not written |
+| | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | Not written |
 
-Both are recorded in the debt register below as **required, not yet built** — not blocking anything today, but whoever scopes the implementation work must carry them; neither should be rediscovered mid-package.
+Layer 1 is additive and invisible. Layer 3 is screen-by-screen and independently reversible. **Layer 2 is the only genuinely hard package**, and it is the centrepiece of the visual language.
 
-**None of this has touched `apps/mobile`.** It is a complete design reference, disconnected from the running app, which already works end-to-end against the *current* (un-redesigned) visual language.
+## The two rulings — both decided 2026-09-06
 
-## The decision — three independent threads, one founder's attention
+**Ruling 1 — the roadmap becomes `TrackDetailScreen`.** It does not get a new screen, and Journey keeps its per-track card.
 
-**1. Implement the redesign in `apps/mobile`.** The largest of the three by far. This is not a single work package — it's a full re-skin of an app that already works and is already tested (932+ tests, device-verified through WP0–WP11), across 14 screens, plus a new rendering primitive the app doesn't have today. Done carelessly, it's the highest-risk item on this list: a big-bang rewrite risks the regressions the tiered testing bar exists to catch. Done properly, it needs its own sequenced plan — foundation (SVG + font + ported design-system primitives) before core-loop screens (roadmap, Leaf player) before secondary screens (auth, achievements, errors) before growth screens (track-complete, share-card) — each stage device-gated before the next starts. **I have not written that plan yet. It's real work, and it deserves the same rigor as any other package, not a casual handoff because the mockups already exist.**
+The collision this resolves: `TrackDetailScreen.tsx`'s own docstring refuses to be what the roadmap is — *"Deliberately thin. It is not a contents list — Journey and Library already own 'where am I in this'."* The roadmap **is** a contents list, so this was an information-architecture change to a decision WP10 made on purpose, not a visual one. Ruled toward absorption because a reader tapping a book should get the book: two screens that both mean "this book" is a tap the reader has to learn. **The legal pair — disclaimer and purchase-forward link — stays on that screen, below the graph.** It is the only place in the app that renders it today and WP3 makes a Track unservable without it.
 
-**2. The second book — still standing, unchanged by any of this.** Every pipeline number this project owns still comes from one text (Wattles). Public-domain, structurally unlike Wattles, sidesteps the curation-policy blocker entirely. See below for the unchanged reasoning.
+**Ruling 2 — the sticky-notes board collapses to a single rotated column above a text-size threshold.** Notes keep their tape, shadow and paper at every size; they lose the scatter at large ones.
 
-**3. WP12 — deployment — still parked, still Stage 1 of `launch-blockers.md`.** Unchanged reasoning below.
+The collision this resolves is the sharpest in the redesign, and three things compound in it. `StickyNotesSlide.tsx` records that single-column was chosen *because* multi-column clips: *"at `accessibilityExtraExtraExtraLarge` any two-column arrangement either clips or leaves one column nearly empty — the seeded corpus varies note counts from two to six precisely so that was visible before it shipped."* The new board is exactly the staggered arrangement that finding rejected. On top of that sits the open, deliberately-unfixed debt that absolute `lineHeight` clips app-wide at XXXL, and Caveat renders roughly 1.35× larger. **Ruled toward degrading rather than accepting clipping, because the alternative makes the most decorative screen the one that breaks for the readers who need large text.**
 
-**These three don't fully compete.** The second book is Pipeline Manager's time, not Manager's — it can run in parallel with whichever of (1) or (2) Manager picks up. (1) and (3) do compete: they're both Manager, sequential.
+## Findings that shaped the decomposition
 
-**My recommendation: let the second book run now regardless — it's cheap, independent, and has been waiting since WP16.1. For Manager's next single-threaded package, I'd plan the redesign implementation before WP12.** The redesign is what the founder has just spent real time and attention on; letting that momentum go cold costs more than deployment slipping another cycle, and nothing about WP12 gets harder by waiting — it's the same argument that already justified deprioritizing it once. But this is the founder's call, not mine to make unilaterally: WP12 is real, and "the founder wants to see the new design working" is a legitimate reason to disagree with that ordering.
+- **The roadmap has no counterpart in the app at all.** The nearest thing, `TrackDetailScreen.tsx`, is 96 lines and deliberately not a contents list. So WP22 is a build, not a re-skin.
+- **The mockup contains a picture of one instance, not an algorithm.** Its geometry is hardcoded — `{n:1,x:150,y:212}` — for **18 nodes**, and Track 42 has **exactly 18 Leaves**. A package verified against Track 42 alone would pass while proving nothing. `PRODUCT.md` specifies 15–30 Leaves, so **WP22's device gate must open a Track whose Leaf count is not 18.**
+- **The share card is nearly free, and its risk is somewhere else.** `ShareCard.tsx` is already forced-light for precisely the reason the mockup gives, already brutal for thumbnail legibility, and already reserves a `MascotSlot` whose docstring says an illustration should drop in by *"replacing the contents of `MascotSlot` and nothing else"* — which is exactly where the constellation fragment goes. **The risk is the capture path**: `collapsable={false}` is load-bearing on Android and has not been re-tested since WP9. WP26's criterion must be about the captured image, not the rendered card.
+- **Caveat is a three-line change.** `expo-font` and `@expo-google-fonts/*` are already wired and `App.tsx` gates first paint on `useFonts`.
+- **A stale debt entry, corrected by checking.** The register still said `useReducedMotion` was "exported but never called — required fix". It is called in four places today (`AuthStack`, `ScenarioSlide`, `PayoffSlide`, `AchievementUnlock`). The real point survives the correction: the redesign multiplies animated surfaces — two four-frame sequences and the constellation resolve — so **swap-never-remove becomes a per-package criterion rather than a one-off.**
 
-**If the redesign goes first: say so and I'll write the actual implementation plan** — reading the current `apps/mobile` screen implementations against the new mockups first, so the plan reflects the real gap rather than an assumption. That reading is what the next session should spend its budget on, not re-deriving what's already settled above.
+## Alternatives rejected
 
-### Why not WP12 first (unchanged reasoning, still holds)
+**A single big-bang re-skin.** One package touching 14 screens has no useful device gate and no way back, against an app that currently works end to end with 12 mobile test files behind it. Six packages each leave a shippable app. The accepted cost is that the app looks half-migrated between WP22 and WP26 — tolerable precisely because nothing is deployed and the founder is the only reader.
 
-Deployment carries the one genuine security hole: Payload's REST API serves the payoff and the answer key anonymously, so an exposed CMS makes the unlock gate bypassable, and today "private networking" is a comment in one file. That is real and it is why WP12 is Stage 1 in `launch-blockers.md`.
+**Skia instead of `react-native-svg`.** `react-native-svg` covers every curve in the direction and is a first-party Expo SDK package versioned against the SDK; the direction explicitly rejects the lighting effects Skia exists for. `Icon.tsx` declined an SVG dependency once, but that reasoning was about taking a native dependency for icons alone and does not transfer.
 
-**But it is not urgent in the way it looks.** No users exist, nothing is deployed, and the hole is a property of being deployed rather than of the code. WP12 is also the longest package on the list, it needs a domain and the founder's new GCP account, and **it produces nothing a reader could open** — the library would still be 27 placeholder Tracks and one real book.
+**Building the curve primitive in WP21.** A primitive designed before its only caller exists is a guess. WP22 builds what it actually needs.
 
-### Why the second book, specifically (unchanged reasoning, still holds)
+## Standing, unchanged by this plan
 
-**Every pipeline number this project owns comes from a single text** — structure-check thresholds, prompt quality, the model comparison, cost per Track, the 3–4 sticky-note clustering, and the 73-minute gate 2 figure. Wattles is short, aphoristic, and from 1910. A second, structurally different book is the cheapest way to learn which of those findings describe the pipeline and which describe *The Science of Getting Rich*. **Why public domain, specifically: it takes the blocking decision off the table** — the curation policy has been open since the brief and is founder item 2, and a public-domain title needs none of it.
-
-### Standing blocker to design around, not to solve now
-
-**The answer-length publish-time check does not exist.** Warn-only is correct while the founder is the only reader, and it stops being correct the moment a Track is visible to anyone else. **Its trigger is WP12, not the next book or the redesign** — whoever writes WP12's handoff must carry it.
-
-## What was true at the end of Phase 2 that was not obvious at the start
-
-- **The constraint is founder hours, not money.** ~$6 of compute a book against ~73 minutes of gate 2 review. Every cost estimate made before WP20 was wrong, in one case because an unpriced model reported $0.00 and that was read as a total rather than as a broken instrument.
-- **Three-quarters of gate 2 is reading, and reading does not get cheaper.** Reading time has a standard deviation of 13 seconds across Leaves whose correcting ranged from zero to 2:30. No improvement to generation, prompts or the editorial reviewer can touch it — only a better review surface can.
-- **A fix belongs everywhere its concern has a sibling.** Four of WP20's seven defects were one-sided: a retry fix in the text client and not the image client, an idempotency guard in one write path and not the other. The codebase knew about every one of them; it knew in the wrong file.
-- **Guardrail language outran guardrail coverage four times.** One mechanical check out of four stated image conditions, described in the plural. Ruled 2026-09-02 into a naming rule.
-- **Manual verification kept finding what tests could not**, through both phases — a flagship Track invisible behind pagination, an app pinned to light mode for six packages, a citation silently pointing at the wrong chapter, and 44% of first-choice images breaching a style rule no test could see.
+- **The second book** — still recommended, still Pipeline Manager's time, still runs in parallel with any of this.
+- **WP12 deployment** — still parked. Production media serving remains the only thing between Track 42 and a real phone, and the answer-length publish-time check is still WP12's to carry.
