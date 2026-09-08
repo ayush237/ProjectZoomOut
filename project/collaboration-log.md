@@ -20,6 +20,65 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-10 — WP23: the Leaf player re-skin, and the sticky-notes board
+
+*Manager. **Suggested model: Sonnet** — the visual spec is settled and the slides are already separate components. The three judgement calls in it are named below rather than left for you to find.*
+
+> **Read:** this handoff · `apps/mobile/src/screens/leaf/` (all of it — `LeafPlayerScreen.tsx`, `ScenarioSlide.tsx`, `PayoffSlide.tsx`, `StickyNotesSlide.tsx`, `TakeawaySlide.tsx`) · `apps/mobile/src/components/SlideImage.tsx` · `apps/mobile/src/design/typography.ts` and `motion.ts` · `design/RESUME-HERE.md` · `agents/manager.md`.
+> **The visual spec** is the sticky-notes prompt recorded in this log under 2026-09-06, plus the live mockup in Claude Design ("ZoomOut Track Roadmap" project) — ask the founder to look with you rather than driving that browser yourself.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
+>
+> **Inherit from WP22 rather than rediscovering:** if you draw SVG, **batch curves sharing a colour and stroke width into one `d`** — that turned ~450 curves into 20 native `<Path>` elements. And **use `small`, not `caption`, for small text derived from a Leaf** — `caption` uppercases, and real chapter titles in caps read as signage.
+
+### Task: WP23 — the Leaf player re-skin, and the sticky-notes board
+
+**Suggested model:** Sonnet — settled spec, already-decomposed components, no algorithm.
+
+**Context:** The Leaf player is the product. WP22 put the new visual language on the roadmap screen; this puts it on the five slides a reader actually spends their session in. **The sticky-notes board is the piece the founder asked for by name** — today those notes are flat cards with a coloured left border, and the design calls for physical paper pinned to a board.
+
+**Objective:** All five slides read in the new visual language, and slide 4 reads as real sticky notes on a board — at every text size, with the payoff gate untouched.
+
+**Scope:** `apps/mobile/src/screens/leaf/` and `SlideImage.tsx` if the image treatment needs it.
+
+**Requirements**
+
+- **Re-skin all five slides** — summary, scenario, payoff, sticky notes, takeaway — plus the player's own chrome (header, progress, controls).
+- **The sticky-notes board:** raised paper notes, a few degrees of rotation each, tape or a pin at the top edge, layered shadow, on a textured board (cork, felt or wood grain) **built from existing tokens — a new colour value in this diff means something has gone wrong.** Staggered rather than grid-aligned. The board grows in height; it does not scroll inside itself. **No amber** — that is reserved for reward moments and this slide is not one.
+- **Note text uses `fontFamilies.handwritten` (Caveat). You are its first consumer** — WP21 added it and nothing has rendered a glyph in it since, so its real behaviour at size, and its line-height needs, are unobserved.
+- **Ruling of 2026-09-06, and the reason it exists:** above a text-size threshold **the board collapses to a single rotated column.** Notes keep their paper, tape and shadow at every size; they lose the scatter at large ones. `StickyNotesSlide.tsx`'s own docstring records why — *"at `accessibilityExtraExtraExtraLarge` any two-column arrangement either clips or leaves one column nearly empty"* — and that finding was made against the real corpus. **Choose the threshold empirically and report what you chose and why.** I am deliberately not naming a number; the constraint is the observation, not a value.
+- **The app-wide XXXL clipping debt bites hardest here, and this is the one place to work around it without fixing it.** `typography.ts` uses absolute `lineHeight`, which clips at the largest sizes; the founder ruled on 2026-08-12 not to fix that app-wide. **Caveat renders roughly 1.35× larger than the body face**, so note text is where that debt actually shows. Give the note text whatever line-height treatment it needs to not clip. **Do not change the shared type scale.**
+- **Decide where the diagram goes, and say why.** `StickyNotesSlide` renders `data.diagram` above the notes today, deliberately (WP15: *"Above rather than below, and never instead"*), and **the redesign spec is silent about it** — the mockup was built against invented content that had no diagram. Every pipeline-generated Leaf has one. It must still be there and it must not fight the board.
+- **Anything animated goes through `motionTimingConfig`** (WP22.1). Do not hand-roll a Reanimated config.
+
+**Out of scope**
+- **The payoff gate's logic.** This is a re-skin. The rule that the payoff stays locked until a correct answer is the product's central guarantee and no part of it changes.
+- **The report-error sheet's interior** — WP25 owns it. You may reposition its affordance in the player chrome if the new header requires it; you may not restyle the sheet.
+- Achievement unlock, session-end, Track-complete, share card. Other packages.
+- The shared type scale, the palette, and the app-wide `lineHeight` debt.
+
+**Constraints:** tokens only. Do not run `git add -A`; stage by path. If simulator input fights you, **do not spend the package on it** — per the 2026-09-09 ruling, hand interaction checks to the founder rather than hunting coordinates, and say in your report which checks you handed over.
+
+**Device gate — rendering only; the founder owns the feel (2026-09-09 ruling):**
+- A **Track 42 Leaf with a real diagram and real notes**, both themes.
+- **The board at its extremes:** a Leaf with the fewest notes and one with the most in the corpus. Report the actual range you found.
+- **Default text size and the largest accessibility size**, on the board specifically. **Nothing clips.** Confirm the single-column collapse fires where you set it.
+- A full pass through all five slides, both themes, confirming the payoff still unlocks only after a correct answer.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All five slides re-skinned, and the player chrome with them
+- [ ] Notes render as rotated, taped, shadowed paper on a textured board, in Caveat
+- [ ] **The threshold and the collapse behaviour are implemented, and the chosen threshold is reported with its reasoning**
+- [ ] **Observed: nothing clips on the board at the largest accessibility text size**, at both the smallest and largest note counts
+- [ ] The diagram is still present, its placement decided deliberately and explained
+- [ ] **The payoff gate is untouched** — verified by exercising it, not by reading the diff
+- [ ] No new colour, spacing, radius or duration values
+- [ ] Any animation goes through `motionTimingConfig`
+
+**Testing expectations:** Tier B, plus **Tier A on the collapse threshold** — that is a pure predicate over text size and note count, so it is genuinely unit-testable, unlike most of this package. Mutation-check it. For the rest, say plainly which evidence is a test and which is an observation, as WP21 and WP22 both did.
+
+---
+
 ### Handoff: 2026-09-09 — WP22.1: close the reduce-motion mechanism, not four call sites
 
 *Manager. **Suggested model: Sonnet** — you already found the mechanism, proved the fix at one call site, and invented the verification technique. What is left is applying it and closing the hole so the sixth call site cannot get it wrong.*
