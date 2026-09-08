@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
+import { ReduceMotion, type WithTimingConfig } from 'react-native-reanimated';
 
 /**
  * Motion, from `design-direction.md` §6.
@@ -82,6 +83,42 @@ export interface MotionPlan {
   readonly durationMs: number;
 }
 
-export function motionPlan(reducedMotion: boolean, durationMs: number = duration.standard): MotionPlan {
+export function motionPlan(
+  reducedMotion: boolean,
+  durationMs: number = duration.standard,
+): MotionPlan {
   return reducedMotion ? { kind: 'fade', durationMs } : { kind: 'spring', durationMs };
+}
+
+/**
+ * Forces a Reanimated animation to run regardless of the OS reduce-motion setting.
+ *
+ * This looks like a contradiction — a reduced-motion accommodation that turns reduced
+ * motion *off* — so it needs saying plainly: this disables **Reanimated's own**
+ * suppression, not the reader's preference. Reanimated reads the OS setting itself,
+ * independently of `motionPlan`, and by default silently skips the animation when it is
+ * on. Applied to a `fade` plan, that cancels the very swap `motionPlan` returned it for —
+ * turning the accommodation into the removal §6 forbids, with nothing failing and
+ * nothing warning. `motionPlan` has already made the reduced-motion decision by the time
+ * this runs; Reanimated must not make it a second time.
+ *
+ * Required at **every** nesting level of the animation, not only on `withTiming`'s own
+ * config: `withRepeat`, `withDelay` and `withSequence` each resolve reduce-motion
+ * independently and can suppress a correctly-configured child. Pass this to each of
+ * their `reduceMotion` parameters, the same way `motionTimingConfig` below carries it
+ * into `withTiming`'s.
+ */
+export const REDUCE_MOTION_OVERRIDE = ReduceMotion.Never;
+
+/**
+ * The Reanimated `withTiming` config for a `MotionPlan`.
+ *
+ * `motionPlan`'s companion: it is the abstraction's other half, and the reason the first
+ * half went uncalled for a whole package (`motionPlan` was exported and dead from WP6
+ * until WP22). Building the config here, once, is what makes the flag a property of the
+ * mechanism instead of something every caller has to remember — see
+ * `REDUCE_MOTION_OVERRIDE` for why the flag is required at all.
+ */
+export function motionTimingConfig(plan: MotionPlan): WithTimingConfig {
+  return { duration: plan.durationMs, reduceMotion: REDUCE_MOTION_OVERRIDE };
 }

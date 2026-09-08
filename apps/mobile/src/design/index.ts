@@ -31,6 +31,8 @@ export {
 export {
   duration,
   motionPlan,
+  motionTimingConfig,
+  REDUCE_MOTION_OVERRIDE,
   spring,
   useReducedMotion,
   type MotionPlan,

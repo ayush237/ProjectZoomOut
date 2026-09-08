@@ -9,7 +9,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { UnlockedAchievement } from '@zoomout/shared';
 
-import { duration, spring, useReducedMotion, useTheme } from '../design';
+import {
+  duration,
+  motionPlan,
+  motionTimingConfig,
+  REDUCE_MOTION_OVERRIDE,
+  spring,
+  useReducedMotion,
+  useTheme,
+} from '../design';
 import { Icon } from './Icon';
 import { Text } from './Text';
 
@@ -73,7 +81,14 @@ function UnlockCard({
     const stagger = index * 120;
 
     if (reducedMotion) {
-      opacity.value = withDelay(stagger, withTiming(1, { duration: duration.standard }));
+      // Swap, never remove (§6). `withDelay` resolves reduce-motion independently of the
+      // `withTiming` it wraps, so both need the override — see `REDUCE_MOTION_OVERRIDE`
+      // in `design/motion.ts`.
+      opacity.value = withDelay(
+        stagger,
+        withTiming(1, motionTimingConfig(motionPlan(reducedMotion, duration.standard))),
+        REDUCE_MOTION_OVERRIDE,
+      );
       return;
     }
 
