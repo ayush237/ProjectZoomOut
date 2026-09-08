@@ -20,6 +20,70 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-08 — WP22: the Track roadmap — the knowledge graph, on real data
+
+*Manager. **Suggested model: Opus** — the mockup contains a picture of one Track, not an algorithm. What this package is actually worth turns on what you find while generalising it, and there are at least three things in here a faithful transcription of the mockup would get wrong.*
+
+> **Read:** this handoff · `design/screen-1-v2-prompt.txt` (**the written visual spec — the most precise artefact for this screen**) · `design/RESUME-HERE.md` (the direction, and the two rejections that must not be re-litigated) · `apps/mobile/src/screens/TrackDetailScreen.tsx` · `apps/mobile/src/api/client.ts` (`LeafSummary`, `LibraryEntry`) · `packages/shared/src/progress.ts` (`trackProgressSummarySchema`) · `apps/mobile/src/design/` · `agents/manager.md`.
+> **The live mockup** is the Claude Design project "ZoomOut Track Roadmap" — ask the founder for access if you want to see it move; the written spec above is sufficient to build from.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `launch-blockers.md`, `apps/pipeline`, `apps/admin`, the rest of this log.
+
+### Task: WP22 — the Track roadmap: the knowledge graph, on real data
+
+**Suggested model:** Opus — this is a layout algorithm and a set of judgement calls about degrading gracefully, not a re-skin.
+
+**Context:** This is the **first package in which the app visibly changes**, and the roadmap is the centrepiece of the new visual language. WP21 landed the two things that made it possible: `react-native-svg` and Caveat. **The token diff came back zero**, so every colour, size, radius and duration you need already exists in `src/design/` — you are porting composition, never values.
+
+**The trap this package exists to avoid, stated plainly.** The mockup hardcodes node geometry — `{n:1,x:150,y:212}` — for exactly **18 nodes**. Track 42 has exactly **18 Leaves**. **A version verified only against Track 42 would look perfect and prove nothing.** `PRODUCT.md` specifies 15–30 Leaves per Track.
+
+**Objective:** Opening any Track shows its Leaves as a knowledge graph that reads as a stained neuron rather than a star chart — generated from that Track's real Leaves and the reader's real progress, at any Leaf count in 15–30, deterministically.
+
+**Scope:** `apps/mobile/src/screens/TrackDetailScreen.tsx` and new components/helpers under `apps/mobile/src`. Per the 2026-09-06 ruling, **the roadmap becomes this screen — it does not get a new one.**
+
+**Requirements**
+
+- **The layout is a pure function**, separate from the component: `(leafCount, viewport, seed) → geometry`. This is the single most important structural decision in the package, because it is what makes "does it work at 15 and at 30" a unit test rather than a device session.
+- **It must be deterministic.** The same Track draws the same graph on every render and every launch. Seed from the Track id — **never `Math.random()` at render time.** The mockup uses a seeded PRNG (`prng(4711)`) and that is not incidental: a graph that reshuffles on re-render is unusable and untestable.
+- **Three node states, not four: done, next, locked.** Derive them from `progress.completedLeaves` and `progress.nextLeafId` against `listLeaves(trackId)` sorted by `orderIndex` — **the client has no per-Leaf completion flag; I checked.** `LeafSummary` carries `{id, trackId, orderIndex, title, isPlaceholder}` and `TrackProgressSummary` carries counts plus `nextLeafId`, nothing more.
+- **Cross-check the derivation rather than assuming it.** "The first N are done" is only true if completion has no gaps. `nextLeafId` is documented as *"the first incomplete Leaf in `orderIndex` order"*, so the check is exact: **the Leaf at index `completedLeaves` must be `nextLeafId`.** If it ever isn't, the assumption is broken — **degrade to something honest rather than drawing a confident lie**, and report it. This project has been bitten twice by trusting a derived count.
+- **Do not build a fourth "revisit" state.** The mockup's fixture data carries one (`REVISIT=[2,5]`); **the domain model has no such concept and the API cannot supply it.** Building it would mean inventing reader state. Leave it out and I will log it with a trigger.
+- **Node labels use the real Leaf title, truncated — never paraphrased, shortened by rewording, or invented.** Generated content in this product is traceable to a source by design; a UI that rewords a title manufactures text with no provenance. Truncation is fine; authorship is not yours.
+- **The legal pair stays above the graph, visible without scrolling — this corrects my own ruling of 2026-09-06.** I wrote "below the graph" without having read the comment at `TrackDetailScreen.tsx:82`, which says *"The legal pair. Above the fold on this screen, not below a Leaf list."* The graph **is** a Leaf list, so "below the graph" is precisely the placement WP10 rejected on purpose. It stays above, compact. The constraint is the observation — **reachable without scrolling on a normal phone** — not a particular arrangement.
+- **Every connection curves.** No straight segments anywhere, including the faint background web. Recursive tapering dendrites 3–4 levels deep, asymmetric per node, many fine terminal branches, irregular node bodies, one longer axon-like process per cell. `screen-1-v2-prompt.txt` is the precise spec and the reasoning behind each point; follow it rather than re-deriving it.
+- **Density degrades before frame rate does.** Recursive branching at 30 nodes could mean thousands of SVG paths. **Measure it.** If a 30-node Track cannot hold a smooth scroll, **reduce dendrite density as node count rises** — do not ship a screen that stutters, and do not silently cap the Track length. Report the path count at 18 and at 30, and what you observed.
+- **Reduced motion: swap, never remove.** `useReducedMotion` and `motionPlan` already exist and are already used in four places. Anything that animates here honours them.
+- **The three node states must differ by more than hue**, since colour alone is not a state indicator for every reader.
+
+**Out of scope**
+- **Any change to `apps/backend` or `packages/shared`.** If you conclude the screen genuinely cannot be built without a per-Leaf completion field, **stop and say so** rather than reaching across the boundary — that is a different package and a different conversation.
+- The other four screen packages. Nothing outside this screen changes.
+- The "revisit" state.
+- Track-complete and the share card — WP26 owns both, including the finished-Track constellation.
+
+**Constraints:** tokens only, from `src/design/` — the token diff is zero, so **a new hex or spacing value in this diff means something has gone wrong**. The screen scrolls; decide deliberately where the Continue affordance lives and say why. Do not run `git add -A`; stage by path. `apps/mobile/ios/` is gitignored and large — leave it alone.
+
+**Device gate:** *on a signed build,* **two Tracks with different Leaf counts, because that is the whole point:**
+1. **Track 42 — 18 Leaves, real titles.** The one that matches the mockup.
+2. **The 20-Leaf placeholder flagship** (`PLACEHOLDER_LEAF_COUNT = 20`). Different count, and the one that proves the algorithm rather than the picture.
+
+On both: **both themes**, and **iOS Reduce Motion on**. Scroll the full length of the longer one and watch for stutter. Confirm the legal pair is visible without scrolling. **Then look at it and say whether it reads as a neuron or as a star chart** — that judgement is the founder's to make finally, but yours to report honestly first.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] The layout is a **pure function** with the component as a thin consumer
+- [ ] **Unit tests exercise the layout across the full 15–30 range**, not only 18 — including that node positions stay within the frame and the spine stays within roughly the middle two-thirds
+- [ ] **Determinism is asserted by a test**: the same input produces identical geometry across repeated calls
+- [ ] Node states derive from `completedLeaves`/`nextLeafId`, and **the `nextLeafId` cross-check is implemented and tested, including the failure branch**
+- [ ] No straight-line segments in the rendered graph, background web included
+- [ ] **Observed on a device, on both a 18-Leaf and a 20-Leaf Track, in both themes:** the graph renders, the states are distinguishable, and the legal pair is visible without scrolling
+- [ ] **Observed with Reduce Motion on:** motion is swapped, not removed
+- [ ] Path count at 18 and at 30 reported, with observed scroll behaviour
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** **Tier A on the layout function** — it is pure, so the question "does this work at any Leaf count" is genuinely answerable without a device, which is rare in this app and worth spending properly. Tier B on the screen. **Mutation-check the cross-check**: break the `nextLeafId` comparison and confirm a test reddens, since that branch is the one guarding against a confidently wrong screen.
+
+---
+
 ### Handoff: 2026-09-06 — WP21: redesign foundation — SVG, the handwritten font, and the token diff
 
 *Manager. **Suggested model: Sonnet** — this package is a dependency, a font and a report. The one judgement call in it is named explicitly below rather than left to you, which is what keeps it Sonnet work.*
