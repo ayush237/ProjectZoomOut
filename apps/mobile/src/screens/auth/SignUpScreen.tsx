@@ -2,15 +2,18 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 import { View } from 'react-native';
 
+import {
+  MINIMUM_PASSWORD_LENGTH,
+  displayNameError,
+  emailError,
+  passwordError,
+} from '../../auth/signUpValidation';
 import { useSignUpDraft } from '../../auth/SignUpDraft';
 import { Button, Screen, Text, TextField } from '../../components';
 import { useTheme } from '../../design';
 import type { AuthStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
-
-/** Matches the backend's rule: length only, no composition requirements (NIST 800-63B). */
-const MINIMUM_PASSWORD_LENGTH = 12;
 
 /**
  * Account details.
@@ -21,6 +24,12 @@ const MINIMUM_PASSWORD_LENGTH = 12;
  * half-created account behind.
  *
  * There is no timezone field, and there never will be. It is read from the device.
+ *
+ * **Collects a display name, though `screen-09-sign-in-and-sign-up.txt` says "email and
+ * password only".** The backend's `signUpBodySchema` requires `displayName` — dropping
+ * the field would not simplify the screen, it would make every signup fail. Read as the
+ * prompt eliding a field that does not change the visual language, not as an instruction
+ * to break signup; flagged here rather than silently kept or silently dropped.
  */
 export function SignUpScreen({ navigation }: Props): React.JSX.Element {
   const theme = useTheme();
@@ -34,14 +43,12 @@ export function SignUpScreen({ navigation }: Props): React.JSX.Element {
   const trimmedName = displayName.trim();
   const trimmedEmail = email.trim();
 
-  const nameError = trimmedName.length === 0 ? 'Tell us what to call you.' : undefined;
-  const emailError = trimmedEmail.includes('@') ? undefined : 'That does not look like an email address.';
-  const passwordError =
-    password.length >= MINIMUM_PASSWORD_LENGTH
-      ? undefined
-      : `Use at least ${String(MINIMUM_PASSWORD_LENGTH)} characters.`;
+  const nameError = displayNameError(displayName);
+  const emailValidationError = emailError(email);
+  const passwordValidationError = passwordError(password);
 
-  const valid = nameError === undefined && emailError === undefined && passwordError === undefined;
+  const valid =
+    nameError === undefined && emailValidationError === undefined && passwordValidationError === undefined;
 
   const advance = (): void => {
     setTouched(true);
@@ -83,7 +90,7 @@ export function SignUpScreen({ navigation }: Props): React.JSX.Element {
             keyboardType="email-address"
             autoComplete="email"
             placeholder="you@example.com"
-            error={touched ? emailError : undefined}
+            error={touched ? emailValidationError : undefined}
           />
 
           <TextField
@@ -94,7 +101,7 @@ export function SignUpScreen({ navigation }: Props): React.JSX.Element {
             secureTextEntry
             autoComplete="new-password"
             hint={`At least ${String(MINIMUM_PASSWORD_LENGTH)} characters. Length beats symbols.`}
-            error={touched ? passwordError : undefined}
+            error={touched ? passwordValidationError : undefined}
           />
 
           <Button testID="sign-up-continue" label="Continue" onPress={advance} />

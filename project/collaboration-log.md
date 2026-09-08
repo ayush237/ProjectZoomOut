@@ -434,6 +434,94 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP24 — the account and age-gate screens, and the legal surface — 2026-09-11
+
+**6 of 8 acceptance criteria device-verified with screenshots, not just tests; the other two are reasoned from an unchanged diff rather than observed.** Root `lint`, `typecheck` (4 workspaces), `test` (1,226 passing: shared 71, admin 198, backend 477, mobile 480 — 455 + 25 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`/reinstall. Unlike WP23, this package got a real device session — see "The simulator worked this time" below for why, since it changes what future packages should try first.
+
+**What changed:** `SignInScreen` drops the dormant social-provider loop entirely — no detection effect, no "or continue with" row, no dead-code path left "ready" for a launch that isn't happening (screen-09's spec: *"leaving room for it is wrong"*) — and gains the forgot-password affordance the spec requires, which reveals an honest in-place notice (*"Password reset isn't built yet — check back soon"*) rather than navigating anywhere. `SignUpScreen` now validates against a new pure module, `signUpValidation.ts`, that mirrors the backend's actual `signUpBodySchema` exactly instead of approximating it — this closes the logged bug where `includes('@')` let a malformed email through to the age-gate screen, which submitted it and surfaced the backend's bare *"Request body is invalid"* two screens later. `TrackLegal`'s disclaimer moves from `small`/`textMuted` to `body`/`textPrimary` so it reads as prose rather than a footnote, in place, not moved. `AgeGateScreen` and `AgeRefusedScreen` were read closely against `screen-07-onboarding-and-legal.txt` and left unchanged — audit below, not an oversight, and recorded beside the code in both files' own docstrings.
+
+**Files touched:**
+- `apps/mobile/src/auth/signUpValidation.ts` (new) — `displayNameError`, `emailError`, `passwordError`, mirroring `auth.routes.ts`'s `signUpBodySchema`. Tier A, mutation-checked
+- `apps/mobile/src/auth/signUpValidation.test.ts` (new) — 19 tests
+- `apps/mobile/src/screens/auth/SignInScreen.tsx` — social block removed, forgot-password added
+- `apps/mobile/src/screens/auth/SignUpScreen.tsx` — wired to the new validation module
+- `apps/mobile/src/screens/auth/authScreens.test.tsx` — extended: `SignUpScreen` had no tests before this package (gap closed), the stale "hides social buttons" test reframed, forgot-password covered
+- `apps/mobile/src/components/TrackLegal.tsx` — disclaimer restyled in place
+- `apps/mobile/src/screens/auth/AgeGateScreen.tsx`, `AgeRefusedScreen.tsx` — audit recorded in each docstring, no functional change
+
+---
+
+#### The backend research the "do not read `apps/backend`" note didn't anticipate
+
+The handoff's reading list excludes `apps/backend`, but its own requirement — *"match the backend's actual rules rather than approximating them"* — cannot be done without knowing what those rules are. I read exactly `auth.routes.ts`'s two schema definitions (about 20 lines) rather than treating the exclusion as blanket permission to explore the backend, and it's worth naming precisely what I found, because **the handoff's own description of the bug is imprecise in a way that would have produced a wrong fix if taken literally**: it says the current code *"ignores the backend's 256-character limit"* without saying which field. There is no 256 limit on email anywhere in the backend — `email: z.email()` is unbounded. The 256 limit is the **password's** maximum (`min(12).max(256)`). `displayName` has an 80-character maximum via `.trim().min(1).max(80)`, unmentioned by the handoff at all. `signUpValidation.ts` mirrors all three exactly, including the email regex copied verbatim from `zod`'s own source with a citation, and a test (`places no length ceiling on email, matching the backend's bare z.email()`) that would fail if I'd added the ceiling the handoff's wording suggests. Flagging this the way the WP23/Architect exchange flagged the stale sticky-notes citation: **the description of a defect is not always precise even when the defect itself is real**, and the fix should match the code, not the prose describing it.
+
+#### Two decisions the letter of the spec didn't settle, and why I settled them this way
+
+**`SignUpScreen` keeps the display-name field, though `screen-09-sign-in-and-sign-up.txt` opens with "email and password only."** The backend's `signUpBodySchema` requires `displayName` (`min(1).max(80)`, non-optional) — dropping the field would not simplify the screen, it would make every signup fail closed. I read this as the prompt eliding a field that doesn't change the visual language (it's the same `TextField` as the other two), not as an instruction to break signup. Recorded in the screen's own docstring, flagged here rather than decided silently either way.
+
+**"Forgot password?" reveals an inline `StatusMessage`, not a navigation.** No password-reset flow exists anywhere in this app or the backend (out of scope, confirmed — password reset itself is explicitly excluded from this package). The handoff's constraint is exact: *"it must not navigate somewhere that pretends to work."* A `Pressable` toggling an honest, static notice in place satisfies that literally — no route was invented, nothing pretends. If a real reset flow ships later, this becomes the affordance's real destination; until then it says what's true.
+
+#### Two things the handoff cited that turned out to be stale, checked before repeating them
+
+**"The plaintext password in `EmailSignUpDraft`'s route params"** — named in Out of scope as *"a real logged security item you will be next to it"* and told to re-flag for its own item. `EmailSignUpDraft` does not exist anywhere in the current tree (`grep` across `apps/mobile/src`, zero hits). `SignUpDraft.tsx`'s own docstring explains why: the draft moved into a ref-held context specifically so the password never becomes a navigation param, and `git log --follow` on that file shows exactly one commit — WP6's *"close the six review fixes and two cheap ones."* This was fixed at the source four packages ago and the handoff's citation of it is stale, the same shape as WP23's stale sticky-notes-prompt citation. **Not re-flagging it** — repeating a closed item back to Architect would be the same mistake in the other direction.
+
+**The "256-character limit" attributed to email**, covered above — not stale exactly, but imprecise in a way worth distinguishing from the `EmailSignUpDraft` case: that one no longer exists; this one exists but on the wrong field.
+
+#### What's device-verified vs. reasoned
+
+**Device-verified, this session, with screenshots at each step (detail in "the simulator worked this time" below):**
+- `SignInScreen`: no social row, no "or continue with" divider — dark and light themes
+- `SignInScreen`: "Forgot password?" reveals the honest notice in place, confirmed it does **not** navigate (`nav.navigate` aside — this is the live app, not the test harness)
+- `SignUpScreen`: a malformed email (`reader@example`, the exact historical bug case) reports **on the email field**, red border plus the "!" glyph, not a banner, not silently submitted — dark theme
+- `SignUpScreen`: simultaneously, a too-short password reports **on the password field** with its own message — light theme
+- Both screens at the **true accessibility maximum** (`content_size accessibility-extra-extra-extra-large`, one step past the standard XXXL WP23's debt note refers to) — light theme. Long strings (*"Forgot password?"*, the password hint, *"I already have an account"*) wrap across 2–3 lines; fields and buttons grow via `minHeight` rather than clipping. **Nothing clipped, including the case none of the app's other accessibility checks have specifically hit before: a wrapped multi-line link.**
+- Root `lint`/`typecheck`/`test`/`build`, clean from a full cold gate
+
+**Not device-verified — reasoned from an unchanged diff, not watched on a screen:**
+- `AgeGateScreen`, `AgeRefusedScreen` at any text size or theme. Zero functional diff in either file (docstring-only), so the risk this hides something is low, but "low risk" and "observed" are different claims and I'm not collapsing them.
+- `TrackDetailScreen`'s legal pair: confirmed **by diff** that its position is untouched (`TrackLegal.tsx` restyled in place; `TrackDetailScreen.tsx` has no diff at all) and confirmed by `trackDetail.test.tsx` and `leafPlayer.test.tsx` (TrackLegal's two consumers) still passing — but never rendered on the device this session. I ran out of a reliable path back to an authenticated screen (below) before reaching it.
+- Dark theme specifically at the accessibility maximum — I have dark-theme-at-default-size and light-theme-at-maximum-size, not the intersection of both. Theme changes colour tokens only, never layout, so I'm confident but it's an inference, not a fourth screenshot.
+
+#### The simulator worked this time — two findings worth carrying into WP25/26, unlike the last four packages' dead ends
+
+This is the first package in this project's four-package simulator-friction history where the device session actually produced what it was for, so it's worth being precise about what changed rather than filing it as one more entry in the pattern.
+
+**Finding 1 — my own error, not the tooling's: tap coordinates are in device points, not the screenshot's pixels.** The simulator tool states its coordinate space at `attach`/`launch` (**402×874 points** for this iPhone 16 Pro) but a screenshot renders at 3× that in the pixels a viewer sees. I spent the first several taps computing coordinates directly off what I was looking at, landing at points like `(859, 1183)` in a 402-wide space — genuinely off-canvas — which produced exactly the symptom this project's prior packages logged as "the simulator doesn't respond": identical screenshots across repeated taps, no error, nothing to debug. It is not a simulator defect and it cost real time to notice, because the failure mode is indistinguishable from the real flakiness WP21–23 hit. Once I divided by ~2.29 (or equivalently used the tool's stated point space directly rather than eyeballing the image), every tap landed. **Worth a line in whatever carries standing gotchas forward:** compute simulator tap coordinates in the tool's stated point space, never off a screenshot's displayed pixel size.
+
+**Finding 2 — a real, reproducible tool bug, worked around:** `npx expo run:ios`, with or without `--device <name-or-UDID>`, fails immediately with *"No code signing certificates are available to use"* — the physical-device signing error — even when targeting the already-booted simulator by exact name. Confirmed reproducible three times, different arguments each time. **Workaround that built and ran cleanly:** skip `expo run:ios` and drive `xcodebuild` directly against the existing prebuild — `xcodebuild -workspace apps/mobile/ios/ZoomOut.xcworkspace -scheme ZoomOut -configuration Debug -destination 'platform=iOS Simulator,id=<UDID>' -sdk iphonesimulator build` — then hand the resulting `.app` path (`Build/Products/Debug-iphonesimulator/ZoomOut.app` under the workspace's DerivedData) to the simulator tool's `launch` action directly, which installs and launches it in one step. Full build took roughly 15–20 minutes cold (Reanimated's C++ compiles slowest). **Bonus, tap-free and reliable for exactly the checks this project's device gates keep asking for:** `xcrun simctl ui <UDID> appearance <dark|light>` and `xcrun simctl ui <UDID> content_size <category>` (up to `accessibility-extra-extra-extra-large`) switch theme and Dynamic Type instantly, with zero taps and zero flakiness — this is what made the both-themes and largest-accessibility-size checks above possible without fighting navigation twice more. No prior package used either command.
+
+**What still didn't work, honestly:** typed text was occasionally dropped mid-field (an email lost its last four characters once; a re-navigation once landed keystrokes in the wrong screen's fields entirely), and one intended tap on "Create an account" silently no-opped, leaving me typing into whatever was already focused. Both are consistent with WP23's "taps registered late and out of order." I worked around the first by completing the partial text rather than fighting field-clearing, and stopped rather than chase the second — which is what put `TrackDetailScreen` out of reach for this session rather than a hard blocker.
+
+#### Mutation-checked, and precise
+
+| Mutation | Reddened | Precise? |
+|---|---|---|
+| `passwordError`: `< MINIMUM` → `<= MINIMUM` | only the two tests about the minimum boundary | yes |
+| `passwordError`: `> MAXIMUM` → `>= MAXIMUM` | only "accepts exactly the maximum" | yes |
+| `displayNameError`: `> MAXIMUM` → `>= MAXIMUM` | only the two tests about the maximum boundary | yes |
+| `emailError`: regex check → `.includes('@')` (the original bug, restored) | only the four tests that distinguish real shape validation from `includes('@')` | yes |
+
+All four reverted after confirming. `authScreens.test.tsx`'s new field-level and forgot-password tests are call-site wiring, not mutation-checked individually — same gap WP22.1 and WP23 both named for their own screen-level tests, not new to this package.
+
+#### Time
+
+Roughly: a fifth on implementation (the validation module, the two screen rewrites, the TrackLegal restyle), a fifth on tests and mutation-checking, and three-fifths on the device session — the native build (~20 min), the coordinate-space debugging that turned out to be my own error, and the verification walkthrough itself. That last share is disproportionate to the other packages' but it's the reason this package has six device screenshots instead of zero; WP23 spent a comparable fraction on the device session and got none.
+
+**Assumptions made:**
+1. Kept `displayName` on `SignUpScreen` against the prompt's literal "email and password only" — the backend requires it.
+2. "Forgot password?" reveals an inline notice rather than navigating — no reset flow exists to navigate to.
+3. `AgeGateScreen`/`AgeRefusedScreen` need no code change — audited against `screen-07-onboarding-and-legal.txt`'s every stated constraint and found already compliant.
+4. `TrackLegal`'s disclaimer moves to `body`/`textPrimary` as the concrete meaning of "legible... not a footnote" — a judgement call, not a value named in the spec.
+5. Added an 80-character `displayName` ceiling beyond the two fields (email, password) the handoff named explicitly — same bug class, same fix, flagged as an extension rather than done silently.
+
+**Follow-ups / tech debt for Architect:**
+1. **`TrackDetailScreen`'s legal pair and `AgeGateScreen`/`AgeRefusedScreen` still need a device pass** — position and legibility are reasoned from an unchanged diff, not observed. Given finding 2 above, a future session should reach this in minutes rather than needing another cold build.
+2. **The stale `EmailSignUpDraft` security item should be struck from wherever it's tracked** — it was fixed in WP6 and the citation in this handoff's Out-of-scope section is the second stale citation this project has surfaced in as many packages.
+3. **The simulator findings above (points-not-pixels, the `expo run:ios` signing bug and its `xcodebuild` workaround, `simctl ui appearance`/`content_size`) are worth a permanent home** — the same shape of "inherit rather than rediscover" block WP22 and WP23 carried forward, but this is the first package with something to hand forward that isn't just "expect friction."
+4. No component test exists for `SignInScreen`/`SignUpScreen`/`AgeGateScreen`/`AgeRefusedScreen` as components (only the black-box `authScreens.test.tsx` suite) — Tier C, consistent with the pre-existing pattern logged in prior packages.
+
+---
+
 ### Completed: WP23 — the Leaf player re-skin, and the sticky-notes board — 2026-09-08
 
 **5 of 8 acceptance criteria met with confidence; the board's visual rendering — clipping, the collapse firing where set, both themes, the real diagram — is implemented and unit-tested but not device-observed, and the founder made the call to close this out without that observation rather than keep fighting the simulator (below).** Root `lint`, `typecheck` (4 workspaces), `test` (1,201 passing: shared 71, admin 198, backend 477, mobile 455 — 451 + 4 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`. Read "What's device-verified vs. reasoned" before treating the board as closed — it names exactly which claims rest on which kind of evidence.

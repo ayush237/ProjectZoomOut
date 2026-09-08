@@ -46,8 +46,13 @@ export function TrackLegal({
         {/**
          * Rendered in full, never truncated and never behind a "more" control.
          * A disclaimer a reader has to expand is a disclaimer that was not made.
+         *
+         * `body`/`textPrimary` rather than `small`/`textMuted` (WP24) — the spec
+         * requires this to be "legible rather than buried in fine print... read
+         * without zooming" and "not styled as a footnote". Full reading size and full
+         * contrast is what makes that true, not just a bigger box around small text.
          */}
-        <Text variant="small" tone="textMuted" testID={`${testID}-disclaimer`}>
+        <Text variant="body" tone="textPrimary" testID={`${testID}-disclaimer`}>
           {track.disclaimer}
         </Text>
       </View>
