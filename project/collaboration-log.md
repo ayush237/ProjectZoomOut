@@ -20,6 +20,54 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-09 — WP22.1: close the reduce-motion mechanism, not four call sites
+
+*Manager. **Suggested model: Sonnet** — you already found the mechanism, proved the fix at one call site, and invented the verification technique. What is left is applying it and closing the hole so the sixth call site cannot get it wrong.*
+
+> **Read:** this handoff · `apps/mobile/src/design/motion.ts` · `apps/mobile/src/screens/track/TrackRoadmap.tsx` (your own fix, lines ~195–225, as the reference implementation) · the four call sites: `apps/mobile/src/navigation/AuthStack.tsx`, `apps/mobile/src/screens/leaf/PayoffSlide.tsx`, `apps/mobile/src/screens/leaf/ScenarioSlide.tsx`, `apps/mobile/src/components/AchievementUnlock.tsx` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, the rest of this log, `apps/pipeline`, `apps/admin`, `apps/backend`.
+
+### Task: WP22.1 — close the reduce-motion mechanism, not four call sites
+
+**Suggested model:** Sonnet — the finding is made and the fix is demonstrated; this is application and verification.
+
+**Context:** WP22 found that Reanimated reads the OS reduce-motion setting itself and disables animations by default — **which cancels the opacity fade that is our reduced-motion replacement.** `motion.ts` §6 is explicit that the rule is *"swap, never remove"*, and that removing feedback entirely *"is worse than the animation — it leaves someone who needs the accommodation with no confirmation that their tap registered."* The framework default silently turns our swap into exactly that removal. Nothing fails and nothing warns.
+
+**Two reasons this is a package now rather than a WP14 item.** First, **WP8 has carried an open founder device check since 2026-08-12** — *"iOS Reduce Motion on, replay the unlock"* — and this finding upgrades it from unverified to a named mechanism that would break it. Second, **WP23–WP26 are about to add animated surfaces**, WP25's achievement sequence most of all. Four call sites now is cheaper than eight later.
+
+**Objective:** Reduced motion is a swap and never a removal, on every animated surface in the app — enforced in one place rather than remembered at each call site, and verified by observation on each.
+
+**Scope:** `apps/mobile/src/design/motion.ts` and the four call sites above. WP22's own site is already correct and is your reference, not your work.
+
+**Requirements**
+
+- **Close the mechanism; do not patch four call sites.** A fix applied at four sites and not at the mechanism is a defect scheduled for the fifth — this project has recorded that shape four times, and the naming rule of 2026-09-02 came out of it. **Give `motionPlan` a companion that produces the actual Reanimated config with `reduceMotion: ReduceMotion.Never` set**, so the flag lives in exactly one place and a future animation gets it by construction.
+- **This is finishing what `motionPlan` started.** Its docstring already says the point: *"Returning a described intent rather than a boolean keeps the branch in one place."* **It was exported and never called — WP22 was its first caller.** The abstraction designed to prevent precisely this class of bug was dead code while the bug lived in four sites.
+- **Route all four existing call sites through it.**
+- **Record why the flag is required, at the mechanism.** Without a reason beside it, `reduceMotion: ReduceMotion.Never` reads as a contradiction — a reduced-motion accommodation that turns reduced motion off — and the next reader deletes it as a mistake. Say that it disables *Reanimated's own* suppression so that *our* swap survives.
+- **Verify each site by observation, using the technique you invented** — measuring pixels across frames in each mode. **Report per site whether it was actually broken.** You were careful not to claim they were; close that honestly, including any that turn out to have been fine.
+
+**Out of scope**
+- Any visual change, new animation, or redesign work. WP23 owns the next screen.
+- Changing the spring/duration constants.
+- `useReducedMotion` itself — the hook is correct; it is what happens downstream of it that is not.
+
+**Constraints:** tokens and constants unchanged. Do not run `git add -A`; stage by path.
+
+**Device gate:** **iOS Reduce Motion ON**, each of the four surfaces exercised: the auth stack transition, the scenario answer, **the payoff unlock**, and an achievement unlock. Feedback is *swapped*, never absent. **The payoff unlock closes WP8's open founder criterion** — say so explicitly in your report so it can finally be struck off, and flag if the founder should look at it themselves rather than take your word.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] The `ReduceMotion.Never` flag is set in **one** place, and the four call sites obtain it by construction rather than by repeating it
+- [ ] `motion.ts` records why the flag is required, beside it
+- [ ] **Observed with Reduce Motion ON, per site: feedback is swapped, not removed** — measured, not inspected
+- [ ] Each of the four sites is reported as *was broken* or *was already fine*
+- [ ] **A test reddens if the flag is removed from the mechanism** — or, if Reanimated's runtime behaviour genuinely cannot be asserted in a test, say so plainly and let the measurement stand as the evidence, as WP22 did
+
+**Testing expectations:** Tier B. **If the flag's effect is untestable, say so rather than writing a test that asserts the string is present** — a test that proves the config was written is not a test that proves the animation runs, and WP22 was right about that distinction.
+
+---
+
 ### Handoff: 2026-09-08 — WP22: the Track roadmap — the knowledge graph, on real data
 
 *Manager. **Suggested model: Opus** — the mockup contains a picture of one Track, not an algorithm. What this package is actually worth turns on what you find while generalising it, and there are at least three things in here a faithful transcription of the mockup would get wrong.*

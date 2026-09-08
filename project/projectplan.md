@@ -11,7 +11,8 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | | Package | What it is | Model | Status |
 |---|---|---|---|---|
 | **Layer 1** | **WP21 — foundation** | `react-native-svg`, Caveat font, token diff. **No screen changes** | Sonnet | 📤 **Handed off 2026-09-06** |
-| **Layer 2** | **WP22 — Track roadmap** | Net-new screen with a real layout algorithm | **Opus** | Not written |
+| **Layer 2** | **WP22 — Track roadmap** | Net-new screen with a real layout algorithm | **Opus** | ✅ **Signed off 2026-09-09 (10/10)**, PR #32 |
+| | **WP22.1 — reduce-motion mechanism** | One flag, one place, four call sites routed through it | Sonnet | 📤 **Handed off 2026-09-09** |
 | **Layer 3** | WP23 — Leaf player re-skin + sticky-notes board | Re-skin; slides are already separate components | Sonnet | Not written |
 | | WP24 — auth + onboarding | Re-skin; both screens exist | Sonnet | Not written |
 | | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | Not written |
