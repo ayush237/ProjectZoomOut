@@ -388,6 +388,12 @@ Asked for plainly, so answered plainly. **It reads as a neuron.** The recursive 
 - **Metro had been running for 6h42m** at the start of this package and I restarted it with `--clear` pre-emptively rather than discover a stale bundle later. No time lost, and recording it because the standing note says this has cost time three times.
 - **A test account with real progress exists for future device gates:** `wp22-roadmap-1788854406@example.test`, Track 42 at 5/18 and Track 29 at 3/20. Completing more Leaves on it today will award 0 XP — it hit the 500 XP daily cap during setup, which is correct behaviour and worth knowing before someone reads it as a bug.
 
+**Update, same day — density raised on the founder's call.** The reading judgement above flagged that the graph read as a *chain of cells* rather than a field of tissue, and offered `GRAPH.primaryLength` as the one-constant fix. The founder asked for "slightly denser"; it is now **36, raised from 30**.
+
+**Reach, not branch count** — the shared dendrite budget is untouched, so the curve count and the 20 `<Path>` elements are unchanged at every Leaf count. The change is free. Neighbouring dendritic fields now overlap rather than reaching toward each other, and the graph reads as continuous tissue while the spine stays legible and no label is crowded. Verified on Track 42 in both themes. Full gate re-run clean: lint, typecheck, 1,193 tests, build.
+
+**One incidental fixture change, so nobody reads it as a bug later:** the test account's Track 42 progress moved from 5/18 to 6/18 during this session. Leaf 249 was completed at 08:36 through the normal player flow — my own stray taps while navigating the simulator between checks, not anything the app did on its own. The roadmap picked the new state up correctly, which is a small piece of evidence in its favour: "Guard your mind against…" flipped to done and the ring moved to "Build a precise mental picture…" on the next load.
+
 **Time:** implementation ~20%; tests and the nine mutation checks ~20%; the device gate ~45% (of which the reduce-motion investigation and its pixel measurement was the single largest block, and sign-in/navigation friction a distant second); the cold gate ~5%; this write-up ~10%.
 
 
