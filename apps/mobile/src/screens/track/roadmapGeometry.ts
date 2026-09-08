@@ -118,7 +118,13 @@ const GRAPH = {
   /** Each generation is this fraction of its parent. Tapering, not spokes. */
   lengthDecay: 0.62,
   widthDecay: 0.66,
-  primaryLength: 30,
+  /**
+   * Reach, not branch count, is what turns a chain of cells into tissue: raised from
+   * 30 on the founder's call after WP22's device gate, so neighbouring dendritic
+   * fields overlap rather than merely reaching toward each other. It costs no paths —
+   * the density budget below is untouched — so it is free at every Leaf count.
+   */
+  primaryLength: 36,
   primaryWidth: 2.2,
   minStrokeWidth: 0.4,
 
