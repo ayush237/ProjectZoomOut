@@ -11,6 +11,7 @@ import { AgeGateScreen } from './AgeGateScreen';
 import { AgeRefusedScreen } from './AgeRefusedScreen';
 import { ProviderEmailMissingScreen } from './ProviderEmailMissingScreen';
 import { SignInScreen } from './SignInScreen';
+import { SignUpScreen } from './SignUpScreen';
 
 /**
  * The auth screens, rendered.
@@ -150,6 +151,13 @@ describe.each(['dark', 'light'] as const)('in the %s theme', (mode) => {
 
     expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
     expect(view.getByTestId('sign-in-submit')).toBeOnTheScreen();
+  });
+
+  it('renders sign-up', async () => {
+    const view = await renderScreen(<SignUpScreen {...navProps(stubNavigation())} />, { mode });
+
+    expect(view.getByTestId('sign-up-screen')).toBeOnTheScreen();
+    expect(view.getByTestId('sign-up-continue')).toBeOnTheScreen();
   });
 
   it('renders the age gate', async () => {
@@ -327,9 +335,11 @@ describe('sign-in', () => {
     expect(nav.navigate).toHaveBeenCalledWith('SignUp');
   });
 
-  it('hides social buttons that are not configured', async () => {
-    // Apple is unavailable under Jest and no Google client id is set, so neither should
-    // appear. A visible button that cannot work is worse than an absent one.
+  it('never renders a social sign-in affordance — WP24 removed the provider loop entirely', async () => {
+    // Previously this asserted the *dynamic* absence of unconfigured providers (Apple
+    // unavailable under Jest, no Google client id set). There is no detection left to be
+    // dynamic about: screen-09's "leaving room for it is wrong" removed the code path
+    // that could ever render one, not just today's inputs to it.
     const view = await renderScreen(<SignInScreen {...navProps(stubNavigation())} />);
 
     await waitFor(() => {
@@ -337,5 +347,70 @@ describe('sign-in', () => {
     });
     expect(view.queryByTestId('sign-in-apple')).toBeNull();
     expect(view.queryByTestId('sign-in-google')).toBeNull();
+    expect(view.queryByText(/continue with/iu)).toBeNull();
+  });
+
+  it('reveals an honest notice on "Forgot password?" rather than navigating', async () => {
+    // The spec requires the affordance even though no reset flow exists yet. It must not
+    // pretend to work, so pressing it reveals a notice in place and never navigates.
+    const nav = stubNavigation();
+    const view = await renderScreen(<SignInScreen {...navProps(nav)} />);
+
+    expect(view.queryByTestId('sign-in-forgot-password-notice')).toBeNull();
+
+    await fireEvent.press(view.getByTestId('sign-in-forgot-password'));
+
+    expect(view.getByTestId('sign-in-forgot-password-notice')).toBeOnTheScreen();
+    expect(nav.navigate).not.toHaveBeenCalled();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Sign-up validation                                                          */
+/* -------------------------------------------------------------------------- */
+
+describe('sign-up', () => {
+  it('reports a rejected email on the email field, not as a banner', async () => {
+    // The bug this closes: `includes('@')` let this through to the age-gate screen,
+    // which submitted it and surfaced the backend's unrelated-looking 400 instead.
+    const nav = stubNavigation();
+    const view = await renderScreen(<SignUpScreen {...navProps(nav)} />);
+
+    await fireEvent.changeText(view.getByTestId('sign-up-name'), 'Ada Lovelace');
+    await fireEvent.changeText(view.getByTestId('sign-up-email'), 'reader@example');
+    await fireEvent.changeText(view.getByTestId('sign-up-password'), 'a-sufficiently-long-password');
+    await fireEvent.press(view.getByTestId('sign-up-continue'));
+
+    await waitFor(() => {
+      expect(view.getByText('That does not look like an email address.')).toBeOnTheScreen();
+    });
+    expect(nav.navigate).not.toHaveBeenCalled();
+  });
+
+  it('reports a too-short password on the password field, not as a banner', async () => {
+    const nav = stubNavigation();
+    const view = await renderScreen(<SignUpScreen {...navProps(nav)} />);
+
+    await fireEvent.changeText(view.getByTestId('sign-up-name'), 'Ada Lovelace');
+    await fireEvent.changeText(view.getByTestId('sign-up-email'), 'reader@example.test');
+    await fireEvent.changeText(view.getByTestId('sign-up-password'), 'short');
+    await fireEvent.press(view.getByTestId('sign-up-continue'));
+
+    await waitFor(() => {
+      expect(view.getByText('Use at least 12 characters.')).toBeOnTheScreen();
+    });
+    expect(nav.navigate).not.toHaveBeenCalled();
+  });
+
+  it('advances to the age gate once every field is valid', async () => {
+    const nav = stubNavigation();
+    const view = await renderScreen(<SignUpScreen {...navProps(nav)} />);
+
+    await fireEvent.changeText(view.getByTestId('sign-up-name'), 'Ada Lovelace');
+    await fireEvent.changeText(view.getByTestId('sign-up-email'), 'reader@example.test');
+    await fireEvent.changeText(view.getByTestId('sign-up-password'), 'a-sufficiently-long-password');
+    await fireEvent.press(view.getByTestId('sign-up-continue'));
+
+    expect(nav.navigate).toHaveBeenCalledWith('AgeGate', { mode: 'email' });
   });
 });

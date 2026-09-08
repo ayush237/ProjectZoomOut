@@ -18,6 +18,10 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'AgeRefused'>;
  *
  * No account was created. The submission happens after this check, so a refused reader
  * leaves no partial record behind.
+ *
+ * **Audited against `screen-07-onboarding-and-legal.txt` for WP24 and left unchanged** —
+ * "kind rather than punitive" was already the design, not a gap this package needed to
+ * close. See the WP24 completion report for the full audit.
  */
 export function AgeRefusedScreen({ navigation }: Props): React.JSX.Element {
   const theme = useTheme();

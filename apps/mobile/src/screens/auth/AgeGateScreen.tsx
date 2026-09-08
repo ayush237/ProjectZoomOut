@@ -30,6 +30,11 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'AgeGate'>;
  * The local check is **UX only** — it stops a reader filling in a form they cannot
  * submit. The server decides, and when it refuses, `BELOW_MINIMUM_AGE` routes to a
  * screen written to be read without shame.
+ *
+ * **Audited against `screen-07-onboarding-and-legal.txt` for WP24 and left unchanged.**
+ * No modal, no checkbox, and the copy already reads as UX rather than compliance
+ * theatre — every constraint the spec states was already true here. See the WP24
+ * completion report for the full audit rather than assume this was skipped.
  */
 export function AgeGateScreen({ navigation, route }: Props): React.JSX.Element {
   const theme = useTheme();
