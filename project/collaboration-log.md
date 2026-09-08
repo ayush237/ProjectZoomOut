@@ -20,6 +20,60 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-11 — WP24: the account and age-gate screens, and the legal surface
+
+*Manager. **Suggested model: Sonnet** — four screens and one component that all already exist, against two specs that are both in the repo. Unlike WP23, I have read them and confirmed they cover what this package needs.*
+
+> **Read:** this handoff · **`design/prompts/screen-09-sign-in-and-sign-up.txt`** and **`design/prompts/screen-07-onboarding-and-legal.txt`** (both are the spec, both are in the repo) · `apps/mobile/src/screens/auth/` · `apps/mobile/src/components/TrackLegal.tsx` · `apps/mobile/src/components/TextField.tsx` and `Button.tsx` (**read before changing — see the constraint below**) · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
+>
+> **Inherit from WP22/WP23 rather than rediscovering:** batch SVG curves sharing a colour and stroke width into one `d`; use `small` rather than `caption` for small text (`caption` uppercases); route any animation through `motionTimingConfig`; and **if simulator input fights you, hand the interaction check to the founder rather than spending the package on coordinates** — that is the 2026-09-09 ruling and four packages of evidence.
+
+### Task: WP24 — the account and age-gate screens, and the legal surface
+
+**Suggested model:** Sonnet — settled specs, existing screens, no new mechanism.
+
+**Context:** Sign-in is the first thing anyone sees and it is still in the old visual language. This package also carries the two legally load-bearing surfaces — the age gate and the Track disclaimer/purchase link — which `PRODUCT.md` requires and which have never had a design pass.
+
+**Objective:** Sign in, sign up, the age gate, its refusal state, and the Track legal pair all read in the new visual language, with field-level validation that reports errors where the reader made them.
+
+**Scope:** `SignInScreen.tsx`, `SignUpScreen.tsx`, `AgeGateScreen.tsx`, `AgeRefusedScreen.tsx`, and `TrackLegal.tsx`.
+
+**Requirements**
+
+- **Follow the two spec files literally, including their "Do not" lists.** Between them they rule out a social-login divider or "or continue with" row (there is no social sign-in and leaving room for it is wrong), a full-screen illustration that pushes fields below the fold, marketing copy on a sign-in screen, a modal age gate, a disclaimer styled as a footnote, and any checkbox implying consent to anything beyond confirming age.
+- **Keep the forgot-password affordance on sign in** — the spec requires it even though the flow does not exist, because it is the only account-recovery path this product will ever have. **It must not navigate somewhere that pretends to work.** Decide what it does today and say so.
+- **Inline validation, on the field, not as a banner — and this closes a real logged defect.** `SignUpScreen` currently validates email as `includes('@')`, ignores the backend's 256-character limit, and submits nothing until after the age gate, so `reader@example` fails **on the age-gate screen** with "Request body is invalid". The spec's requirement and that bug have the same fix. Match the backend's actual rules rather than approximating them.
+- **The knowledge-graph language stays quiet here.** Per the spec: this is the one place a reader has a task rather than a reward. Do not make the sign-in screen a showcase.
+- **Do not move the Track legal pair.** WP22 established it **above** the graph on `TrackDetailScreen` after I corrected my own ruling — `TrackDetailScreen.tsx` carries a WP10 comment explaining why it is above the fold and not below a Leaf list. **Restyle it in place.** Its criterion is that the disclaimer is readable without zooming.
+
+**Out of scope**
+- **`ProviderEmailMissingScreen`** — dormant, social sign-in is deferred past Phase 1.
+- **The plaintext password in `EmailSignUpDraft`'s route params.** It is a real logged security item and you will be next to it, but **a security fix does not belong inside a visual package** — mixing them makes both harder to review. Flag it in your report; it gets its own item.
+- Password reset itself, the age threshold (an open legal decision, unaffected by a re-skin), and every other screen.
+
+**Constraints:** tokens only — no new colour, spacing, radius or duration values. **`Button.tsx`, `TextField.tsx` and `Screen.tsx` are shared with screens this package does not re-skin and does not verify.** Prefer per-screen composition. **If a shared component genuinely must change, say so explicitly and check its other consumers** — otherwise this package silently alters Explore, Library, Journey and Profile. Do not run `git add -A`; stage by path.
+
+**Device gate — rendering only; the founder owns the feel (2026-09-09 ruling):**
+- Sign in and sign up, **both themes**, at default and the largest accessibility text size.
+- **Validation observed where it belongs:** a rejected email and a too-short password each surface on their own field, not on a later screen and not as a banner.
+- The age gate and the refusal state — **the refusal reads as kind, not punitive.**
+- `TrackDetailScreen` on a real Track: the legal pair still **above the fold**, disclaimer readable without zooming, and the graph WP22 built undisturbed.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four auth screens and `TrackLegal` re-skinned
+- [ ] **A rejected email and a too-short password each report on their own field** — observed, not asserted from the diff
+- [ ] The forgot-password affordance exists and its behaviour today is stated
+- [ ] **The legal pair is unmoved and still above the fold on a real Track**
+- [ ] No new colour, spacing, radius or duration values
+- [ ] If any shared component changed, its other consumers are named and checked
+- [ ] Observed in both themes at the largest accessibility text size, with nothing clipped
+
+**Testing expectations:** Tier B, plus **Tier A on the validation predicates** — email and password rules are pure functions and genuinely unit-testable, unlike the layout. Mutation-check them. `authScreens.test.tsx` exists; extend rather than replace. Say plainly which evidence is a test and which is an observation.
+
+---
+
 ### Handoff: 2026-09-10 — WP23: the Leaf player re-skin, and the sticky-notes board
 
 *Manager. **Suggested model: Sonnet** — the visual spec is settled and the slides are already separate components. The three judgement calls in it are named below rather than left for you to find.*

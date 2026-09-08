@@ -79,7 +79,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP22.1 | Close the reduce-motion mechanism — one flag, four call sites | Manager | ✅ **Signed off 2026-09-09, now 6/6** — `motionTimingConfig` centralises the flag; three sites routed through it; **AuthStack correctly needed no change**, its transition being native rather than Reanimated. **The 6th closed 2026-09-10 by founder observation** | Merged as PR #33 |
 | WP23 | Leaf player re-skin + the sticky-notes board | Manager | ⚠️ **Signed off 2026-09-11 on what it delivered — the board, not the re-skin.** `stickyNotesLayout.ts` is pure, Tier A and mutation-checked; Caveat has its first consumer; a VoiceOver reading-order bug was caught **before** it shipped. **Four slides untouched, correctly** — there is no Leaf player spec in the repo and Manager refused to guess | Merged as PR #34 |
 | WP23.1 | Re-skin Summary / Scenario / Payoff / Takeaway | Manager | 🔒 **Blocked — no spec exists.** Needs the Leaf player mockup exported out of Claude Design first | Founder, ~2 min |
-| WP24 | Auth + onboarding re-skin | Manager | ⬜ not written | WP21 |
+| WP24 | Auth, age gate, and the Track legal surface | Manager | 📤 **Handed off 2026-09-11** | — |
 | WP25 | Achievement unlock, session-end/cap, report-error, failure states | Manager | ⬜ not written | WP21 |
 | WP26 | Track complete + share card | Manager | ⬜ not written | WP21 |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
