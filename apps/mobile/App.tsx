@@ -1,3 +1,4 @@
+import { Caveat_400Regular } from '@expo-google-fonts/caveat';
 import {
   Nunito_400Regular,
   Nunito_600SemiBold,
@@ -40,7 +41,8 @@ function AppBody(): React.JSX.Element {
   const theme = useTheme();
 
   // Two families, six weights — the ceiling `design-direction.md` §4 sets, because font
-  // files are startup cost in React Native.
+  // files are startup cost in React Native. Caveat is the one deliberate exception: a
+  // single weight, scoped to sticky-note text only — see `typography.ts`.
   const [fontsLoaded, fontError] = useFonts({
     Nunito_400Regular,
     Nunito_600SemiBold,
@@ -48,6 +50,7 @@ function AppBody(): React.JSX.Element {
     NunitoSans_400Regular,
     NunitoSans_600SemiBold,
     NunitoSans_700Bold,
+    Caveat_400Regular,
   });
 
   /**

@@ -7,6 +7,15 @@ import type { TextStyle } from 'react-native';
  * playful without reading juvenile — and **Nunito Sans** for body copy. Two families is
  * a deliberate ceiling; font files are startup cost in React Native.
  *
+ * **One exception, added deliberately (WP21, on the founder's explicit instruction):
+ * `fontFamilies.handwritten`, a single Caveat weight, scoped to sticky-note text only.**
+ * It is not part of the type scale below and has no `TypographyVariant` — sticky notes
+ * compose it directly rather than through `typography`, because the whole point of a
+ * third family is that it looks like a different hand, not another entry in the system.
+ * Recorded here, beside the rule it breaks, so it reads as a decision and not as drift:
+ * a ceiling silently exceeded looks identical to one deliberately raised, and the
+ * difference matters to whoever reads this file next without having been in the room.
+ *
  * Sizes are unscaled. React Native multiplies them by the OS font-size setting at
  * render time, and nothing here opts out of that — see `Text.tsx`, which is the only
  * component allowed to touch `allowFontScaling` and never disables it. Users who size
@@ -26,6 +35,11 @@ export const fontFamilies = {
     semibold: 'NunitoSans_600SemiBold',
     bold: 'NunitoSans_700Bold',
   },
+  /**
+   * Sticky-note text only (WP21). One weight, not a scale — see the exception note
+   * above before reaching for this anywhere else.
+   */
+  handwritten: 'Caveat_400Regular',
 } as const;
 
 /** Every font file the app loads at boot. Kept beside the families it names. */
