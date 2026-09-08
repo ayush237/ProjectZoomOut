@@ -27,6 +27,19 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 > **Read:** this handoff · `design/screen-1-v2-prompt.txt` (**the written visual spec — the most precise artefact for this screen**) · `design/RESUME-HERE.md` (the direction, and the two rejections that must not be re-litigated) · `apps/mobile/src/screens/TrackDetailScreen.tsx` · `apps/mobile/src/api/client.ts` (`LeafSummary`, `LibraryEntry`) · `packages/shared/src/progress.ts` (`trackProgressSummarySchema`) · `apps/mobile/src/design/` · `agents/manager.md`.
 > **The live mockup** is the Claude Design project "ZoomOut Track Roadmap" — ask the founder for access if you want to see it move; the written spec above is sufficient to build from.
 > **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `launch-blockers.md`, `apps/pipeline`, `apps/admin`, the rest of this log.
+>
+> **Two things from WP21 you will need and would otherwise rediscover the hard way** — carried here
+> deliberately, because the reading list above tells you not to read the report they came from:
+>
+> 1. **If the iOS build fails to compile in Expo's own vendored Swift**, it is a known Swift 6.2
+>    regression, not your diff. `node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Coding/JavaScriptCodable+Date.swift:53`
+>    — qualify the call as `Swift.abs(milliseconds)`. **This lives only in `node_modules` and does not
+>    survive `npm install`**, so re-apply it if it reappears. If you find yourself applying it more
+>    than once, a `patch-package` entry is the real fix and is worth raising.
+> 2. **Tapping this app's pill buttons through simulator automation is unreliable** and has cost real
+>    time in two packages now. It is **not** a code defect — `Button.tsx` honours the 44pt minimum and
+>    wraps nothing, which I checked. Do not "fix" the app for it. Asking the founder to tap has twice
+>    been faster than hunting coordinates.
 
 ### Task: WP22 — the Track roadmap: the knowledge graph, on real data
 
