@@ -10,7 +10,15 @@ import Animated, {
 import type { PublicScenarioSlide } from '@zoomout/shared';
 
 import { Button, Icon, SlideImage, Text } from '../../components';
-import { MIN_TOUCH_TARGET, duration, spring, useReducedMotion, useTheme } from '../../design';
+import {
+  MIN_TOUCH_TARGET,
+  duration,
+  motionPlan,
+  motionTimingConfig,
+  spring,
+  useReducedMotion,
+  useTheme,
+} from '../../design';
 
 const OPTION_LABELS = ['A', 'B', 'C'] as const;
 
@@ -80,7 +88,13 @@ export function ScenarioSlide({
       return;
     }
 
-    feedbackOpacity.value = withTiming(1, { duration: duration.micro });
+    // Runs in both motion modes — it is the confirmatory signal, not the flourish — so
+    // Reanimated must not be left free to suppress it under Reduce Motion. See
+    // `REDUCE_MOTION_OVERRIDE` in `design/motion.ts`.
+    feedbackOpacity.value = withTiming(
+      1,
+      motionTimingConfig(motionPlan(reducedMotion, duration.micro)),
+    );
 
     if (!reducedMotion) {
       nudge.value = withSequence(

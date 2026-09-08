@@ -11,7 +11,14 @@ import Animated, {
 import type { PayoffSlide as PayoffSlideData } from '@zoomout/shared';
 
 import { Icon, Text } from '../../components';
-import { duration, spring, useReducedMotion, useTheme } from '../../design';
+import {
+  duration,
+  motionPlan,
+  motionTimingConfig,
+  spring,
+  useReducedMotion,
+  useTheme,
+} from '../../design';
 
 export interface PayoffSlideProps {
   /**
@@ -67,7 +74,12 @@ export function PayoffSlide({ data, justUnlocked }: PayoffSlideProps): React.JSX
     }
 
     if (reducedMotion) {
-      opacity.value = withTiming(1, { duration: duration.standard });
+      // Swap, never remove (§6) — and Reanimated must not cancel the swap itself. See
+      // `REDUCE_MOTION_OVERRIDE` in `design/motion.ts`.
+      opacity.value = withTiming(
+        1,
+        motionTimingConfig(motionPlan(reducedMotion, duration.standard)),
+      );
       return;
     }
 

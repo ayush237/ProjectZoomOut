@@ -321,6 +321,79 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP22.1 — close the reduce-motion mechanism, not four call sites — 2026-09-08
+
+**5 of 6 acceptance criteria met outright; the sixth — live on-device observation, "measured, not inspected" — was not achieved this session, and that gap is the one thing in this report that needs a founder decision, not just a read.** Root `lint`, `typecheck` (4 workspaces), `test` (1,197 passing: shared 71, admin 198, backend 477, mobile 451 — 447 + 4 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`. What I have instead of device measurement is a source-level trace of Reanimated's actual reduce-motion resolution code, which is precise but is not the thing the handoff asked for. Detail and the reasoning for that call are below; please read the "What I could not verify" section before treating the four surfaces as closed.
+
+**What changed:** `motionPlan` gained the companion the handoff asked for. `motionTimingConfig(plan)` in `apps/mobile/src/design/motion.ts` returns the actual Reanimated `WithTimingConfig` (`{ duration, reduceMotion: REDUCE_MOTION_OVERRIDE }`), and `REDUCE_MOTION_OVERRIDE` (`= ReduceMotion.Never`) is the one named place the flag now lives, with its rationale written beside it. `PayoffSlide`, `ScenarioSlide` and `AchievementUnlock` route their reduced-motion `withTiming` calls through it; `AchievementUnlock` additionally passes `REDUCE_MOTION_OVERRIDE` to `withDelay`'s own `reduceMotion` parameter, for a reason that isn't obvious — see below. `TrackRoadmap.tsx` was not touched, per the handoff's scope. `AuthStack.tsx` was not touched either, but for a different reason: it isn't broken, and the reasoning is below.
+
+**Files touched:**
+- `apps/mobile/src/design/motion.ts` — `motionTimingConfig` + `REDUCE_MOTION_OVERRIDE`, with the "why" recorded beside the flag
+- `apps/mobile/src/design/index.ts` — exports the two new symbols
+- `apps/mobile/src/design/motion.test.ts` — new `motionTimingConfig`/`REDUCE_MOTION_OVERRIDE` coverage
+- `apps/mobile/src/screens/leaf/PayoffSlide.tsx` — reduced-motion fade routed through the mechanism
+- `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` — the wrong-answer feedback fade routed through it
+- `apps/mobile/src/components/AchievementUnlock.tsx` — the fade **and** its `withDelay` wrapper routed through it
+
+---
+
+#### Why `withDelay` needed its own argument, not just the inner config
+
+This is the one non-obvious piece of the mechanism, and worth recording precisely because it is exactly the shape of mistake this package exists to close off. I read Reanimated 4.5.1's actual source (`node_modules/react-native-reanimated/src/animation/{util,timing,delay}.ts`) rather than assume from the reference implementation:
+
+- Every animation — leaf (`withTiming`) or higher-order (`withDelay`, `withRepeat`, `withSequence`) — resolves its own `reduceMotion` independently, from its own optional config argument. If none is given, it defaults to live OS state at the moment the animation starts.
+- For a leaf animation, if `reduceMotion` resolves true, Reanimated's `decorateAnimation` wrapper sets `animation.current = animation.toValue` immediately and replaces `onFrame` with a no-op. **This is the precise, sourced answer to a question I had to resolve before I could know what to look for on-device: a suppressed animation snaps instantly to its target value — it does not freeze at the start value.** Content is never missing; the transition is.
+- `withDelay`'s own `onFrame` is `if (now - startTime >= delayMs || animation.reduceMotion)` — if **the delay's own** `reduceMotion` resolves true, the wait is skipped on the very first frame, regardless of what the wrapped animation's config says. Its `onStart` only inherits its resolved value into the child *if the child's `reduceMotion` is still `undefined`* — so a child with its own explicit override is never overwritten by the parent, but the parent's *own* behaviour (the wait itself) is ungoverned by the child either way.
+
+Concretely, this means `AchievementUnlock`'s original code — `withDelay(stagger, withTiming(1, { duration: duration.standard }))`, no `reduceMotion` anywhere — had two independent failure points, not one: the inner fade would snap instead of transition, **and**, separately, every card's stagger would collapse to zero because the outer delay would resolve `reduceMotion` from live OS state and skip itself. Fixing only the inner `withTiming` (which is as far as a literal reading of "the config" goes) would have left the stagger bug standing. `PayoffSlide` and `ScenarioSlide` don't use `withDelay` in their reduced-motion branch, so they needed only the inner fix.
+
+#### Per site: was it broken?
+
+All four assessments below rest on the source trace above, applied to each site's *original* code, not on live observation — see the next section for why. Stated as plainly as WP22 stated its own:
+
+| Site | Reduced-motion animation | Verdict | Why |
+|---|---|---|---|
+| `PayoffSlide` | one `withTiming`, no wrapper | **Was broken** | No `reduceMotion` anywhere in the original; under real Reduce Motion the 280ms fade would snap to opaque instantly. Content still appears — this is a lost transition, not a missing one. |
+| `ScenarioSlide` | one `withTiming`, no wrapper, runs in **both** motion modes | **Was broken** | Same mechanism. This one runs unconditionally, so it was silently vulnerable even outside the "reduced motion" branch — nothing in the original code path so much as checked `reducedMotion` before this line ran. |
+| `AchievementUnlock` | `withTiming` inside `withDelay` | **Was broken, two ways** | The fade would snap (as above) **and** the per-card stagger would collapse to simultaneous, independently, per the `withDelay` mechanism above. |
+| `AuthStack` | none — no Reanimated | **Was already fine** | Its transition is `@react-navigation/native-stack`'s own `animation`/`animationDuration` props, which `react-native-screens` implements as a **native** platform transition. Confirmed by reading both packages' `package.json`: neither lists `react-native-reanimated` as a dependency, and `react-native-screens` only reaches for it from an opt-in `reanimated/` subpath this app never imports. WP22's finding is specifically about Reanimated's own reduce-motion default; a mechanism that never touches Reanimated cannot carry that specific bug. I did not change this file. |
+
+#### Mutation-checked, and precise
+
+| Mutation | Reddened | Precise? |
+|---|---|---|
+| Drop `reduceMotion` from `motionTimingConfig`'s returned object | the 2 tests asserting the override is present (fade-plan and spring-plan cases) | yes — nothing else moved |
+| `REDUCE_MOTION_OVERRIDE = ReduceMotion.System` instead of `.Never` | those same 2, plus the test on the constant itself | yes |
+
+Both reverted after confirming. I did not mutation-check the three call sites themselves — there is no component test for `PayoffSlide`, `ScenarioSlide` or `AchievementUnlock` to catch it (none existed before this package, and Tier B for this handoff didn't ask for one), and the shipped Jest mock resolves every Reanimated animation to its target value immediately regardless of config, so a call-site mutation would not redden anything even if a test existed to try. **The wiring from call site to mechanism is protected by TypeScript's function signatures and by this report's diff review, not by an automated test.** That is a real, if narrow, gap — noted rather than papered over.
+
+#### What I could not verify, and why
+
+The handoff's device gate asks for observation "measured, not inspected" on all four surfaces, using the pixel technique WP22 invented. I attempted this and did not get it to a state I'd stand behind. Two separate things went wrong, and they're different in kind:
+
+**1. Simulator touch input was unreliable in this session** — the same thing WP21 and WP22 both logged (WP22's handoff carried it forward explicitly: *"Tapping this app's pill buttons through simulator automation is unreliable and has cost real time in two packages now. It is not a code defect... asking the founder to tap has twice been faster than hunting coordinates."*) I hit the same wall a third time: taps silently no-op'd or landed on stale state repeatedly before I found the actual cause — my coordinates were being interpreted in the *displayed* screenshot's pixel space rather than the device's 402×874 point space (a ~2.3x mismatch), not a timing race as I first assumed. Once corrected, taps became reliable. I'm recording the precise fix (displayed-image px → device pt is roughly ×1.31 then ÷3 for this device) since this is now the third package to lose time to this class of problem, and the actual cause turned out to be different each time.
+
+**2. Once input was reliable, catching the transition itself was a harder problem than WP22's, and a different one.** WP22 measured a *continuously repeating* animation — the ring pulses forever, so ten screenshots taken at any arbitrary moments are already a valid sample. Three of my four sites are **one-shot** transitions (150–280ms) that settle permanently. Bracketing a 150ms window requires the screenshot burst to start *before or during* the state change, and every tool round-trip in this environment (the tap call returning, then a separate call starting a capture loop) cost enough latency that my bursts landed entirely before or entirely after the transition, never during it — confirmed by twenty-five-frame bursts coming back byte-identical, consistent with "settled the whole time," not with "caught nothing by bad luck." This is a genuine limitation of sequential tool calls against a sub-300ms event, not a fixable coordinate bug like the first one.
+
+I considered and rejected temporarily lengthening the animation durations to make the window easier to catch, live: the handoff's constraints say tokens and constants unchanged, and I didn't want to risk that boundary for a verification step, reverted or not.
+
+**What this means concretely: the mechanism's correctness rests on the Reanimated source trace above (which I'm confident in — it's reading the actual shipped code, not inference) and on the unit tests, not on having watched it swap on a screen.** The four device-gate checks the handoff asks for — the auth transition, the scenario answer, the payoff unlock, and an achievement unlock, all with Reduce Motion on — are still open. Given WP21 and WP22's own precedent, I'd suggest the founder do these directly rather than a third session re-fighting simulator automation; each is a five-second check once you're on the right screen (submit a wrong scenario answer; reach a fresh payoff; cross an achievement threshold; open the auth stack) and "does the thing fade in smoothly or pop instantly" is easy to see by eye even without WP22's pixel technique, precisely because the failure mode is a lost transition, not lost content.
+
+**WP8's founder criterion — "iOS Reduce Motion on, replay the unlock" — is not closed by this report.** The mechanism that would have broken it is fixed and the fix is reasoned through precisely above, but per the handoff's own instruction I'm saying plainly rather than borrowing confidence from the code: it needs the founder's own look before it's struck off, same as WP22 flagged for the roadmap's "neuron, not star chart" judgement.
+
+#### Time
+
+Roughly: a fifth implementing the mechanism and the three call sites, a fifth on the Reanimated source trace (this bought real confidence and is reusable — the next package touching this mechanism doesn't have to redo it), a fifth on tests and mutation-checking, and the remaining two-fifths on the device-gate attempt that's reported above as not fully successful. That last share is larger than the work it produced; the simulator-automation problem is now costing this project time out of proportion to what it should, three packages running.
+
+**Assumptions made:** That "the config" in the handoff's second requirement was meant to cover every nesting level a `MotionPlan`-driven animation actually uses in these four sites (config object *and* wrapper argument), not only `withTiming`'s own field — the `withDelay` finding above is what that assumption rests on, not a guess.
+
+**Follow-ups / tech debt for Architect:**
+1. The device-gate observation (all four surfaces, Reduce Motion on) is still open — see above for why, and the suggestion to close it directly rather than via another simulator session.
+2. Simulator touch-automation reliability has now cost time in three consecutive packages (WP21, WP22, WP22.1), for three different underlying reasons each time. Worth a line in the debt register even though no single instance is a code defect — the pattern itself is the cost.
+3. No component test exists for `PayoffSlide`, `ScenarioSlide`, or `AchievementUnlock` — Tier C, logged per the testing bar's "report what you did not test" rule, worklist for WP14.
+
+---
+
 ### Completed: WP22 — the Track roadmap: the knowledge graph, on real data — 2026-09-08
 
 **All 10 acceptance criteria met, verified on a signed build against the live local backend.** Root `lint`, `typecheck` (4 workspaces), `test` (1,193 passing: shared 71, admin 198, backend 477, mobile 447) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`.
