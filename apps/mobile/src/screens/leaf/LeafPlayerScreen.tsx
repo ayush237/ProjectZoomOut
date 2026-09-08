@@ -189,12 +189,7 @@ function LeafSessionView({
       footer={
         <View style={{ flexDirection: 'row', gap: theme.spacing.md, alignItems: 'center' }}>
           {session.slideIndex > 0 ? (
-            <Button
-              testID="leaf-back"
-              label="Back"
-              variant="secondary"
-              onPress={session.back}
-            />
+            <Button testID="leaf-back" label="Back" variant="secondary" onPress={session.back} />
           ) : null}
 
           <View style={{ flex: 1 }}>
@@ -410,8 +405,8 @@ function CompletionSummary({
             That is today done
           </Text>
           <Text variant="small" tone="textMuted" align="center">
-            You have finished your session for today. Come back tomorrow — the next Leaf
-            will be waiting, and spacing it out is what makes it stick.
+            You have finished your session for today. Come back tomorrow — the next Leaf will be
+            waiting, and spacing it out is what makes it stick.
           </Text>
 
           {/**
@@ -521,6 +516,10 @@ function PlayerFrame({
           gap: theme.spacing.md,
           paddingHorizontal: theme.spacing.lg,
           paddingVertical: theme.spacing.md,
+          // Echoes the footer's top hairline, so the chrome reads as one bar the
+          // scrolling content sits between rather than text floating on the page.
+          borderBottomWidth: theme.borderWidth.hairline,
+          borderBottomColor: theme.palette.border,
         }}
       >
         {onClose === undefined ? null : (
@@ -545,9 +544,7 @@ function PlayerFrame({
         </Text>
 
         {progress === undefined ? null : (
-          <Text variant="caption" tone="textMuted" testID="leaf-slide-count">
-            {progress.index + 1} of {progress.total}
-          </Text>
+          <SlideProgress index={progress.index} total={progress.total} />
         )}
       </View>
 
@@ -579,6 +576,54 @@ function PlayerFrame({
           {footer}
         </View>
       )}
+    </View>
+  );
+}
+
+/** The dot size is a decorative constant, not a token — same precedent as `RING_SIZE` on the roadmap. */
+const PROGRESS_DOT_SIZE = 6;
+
+/**
+ * How far through the five slides the reader is.
+ *
+ * **Dots never stand alone** (§3): they are decorative and hidden from accessibility
+ * entirely, and the exact "N of M" text beside them — which a screen reader gets
+ * instead — is what actually carries the count. `ProgressBar` pairs a bar with a
+ * label for the same reason; five discrete slides read better as steps than as a
+ * continuous fraction, so this is a sibling, not a reuse of that component.
+ */
+function SlideProgress({
+  index,
+  total,
+}: {
+  readonly index: number;
+  readonly total: number;
+}): React.JSX.Element {
+  const theme = useTheme();
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+      <View
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{ flexDirection: 'row', gap: theme.spacing.xs }}
+      >
+        {Array.from({ length: total }, (_, step) => (
+          <View
+            key={step}
+            style={{
+              width: PROGRESS_DOT_SIZE,
+              height: PROGRESS_DOT_SIZE,
+              borderRadius: theme.radius.full,
+              backgroundColor: step <= index ? theme.palette.primary : theme.surfaceFor('pressed'),
+            }}
+          />
+        ))}
+      </View>
+
+      <Text variant="caption" tone="textMuted" testID="leaf-slide-count">
+        {index + 1} of {total}
+      </Text>
     </View>
   );
 }

@@ -380,6 +380,99 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP23 — the Leaf player re-skin, and the sticky-notes board — 2026-09-08
+
+**5 of 8 acceptance criteria met with confidence; the board's visual rendering — clipping, the collapse firing where set, both themes, the real diagram — is implemented and unit-tested but not device-observed, and the founder made the call to close this out without that observation rather than keep fighting the simulator (below).** Root `lint`, `typecheck` (4 workspaces), `test` (1,201 passing: shared 71, admin 198, backend 477, mobile 455 — 451 + 4 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`. Read "What's device-verified vs. reasoned" before treating the board as closed — it names exactly which claims rest on which kind of evidence.
+
+**What changed:** `StickyNotesSlide` is rebuilt around a new pure module, `stickyNotesLayout.ts` (`boardLayout`, Tier A, mutation-checked). Notes render as rotated, taped paper on a bordered board panel, staggered two-up by default and collapsing to one column above a font-scale threshold; note text uses `fontFamilies.handwritten` (Caveat, WP21's first real caller) with a `useWindowDimensions().fontScale`-aware line-height so it does not clip as text size grows. The player chrome (`LeafPlayerScreen.tsx`) gets a step-dot progress indicator beside the existing "N of M" text, and a header hairline echoing the footer's. `SummarySlide`, `ScenarioSlide`, `PayoffSlide` and `TakeawaySlide` are unchanged — reasoning below, not an oversight.
+
+**Files touched:**
+- `apps/mobile/src/screens/leaf/stickyNotesLayout.ts` (new) — `boardLayout(noteCount, fontScale)`, the collapse predicate
+- `apps/mobile/src/screens/leaf/stickyNotesLayout.test.ts` (new) — 4 tests, mutation-checked
+- `apps/mobile/src/screens/leaf/StickyNotesSlide.tsx` (rewritten) — the board
+- `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` — chrome: `SlideProgress` dots, header hairline
+
+---
+
+#### A reading-order bug caught before it shipped, not after
+
+My first draft split notes into two literal column containers — all even indices rendered first, then all odd — because that is the obvious way to lay out "two columns" and it looks identical to the intended result when sighted. It is wrong: a screen reader announces DOM order, so a six-note board would read 0, 2, 4, 1, 3, 5 instead of 0 through 5 in sequence, silently scrambling the notes for exactly the reader who can't see that the scramble happened. Caught by re-reading the render tree I'd just written, not by a test — there is no non-visual test in this suite that would have caught it, which is itself worth naming as a gap.
+
+The fix drops the two-container approach entirely: every note stays in one `flexWrap` row, in original order, sized to roughly half width. The two-up look comes from width and per-note rotation, not from two DOM subtrees. Screen-reader order and sighted layout are the same list now, by construction, which is a stronger guarantee than "I checked it once."
+
+#### Two requirements the letter of the handoff couldn't be followed exactly, and why
+
+**"Layered shadow" vs. this app's own rule that there is no `shadowOpacity` anywhere in it.** `design/layout.ts` is explicit and not incidental: *"Shadows are invisible on a dark background, so a shadow-based depth system would silently do nothing in the app's default theme."* I verified the rule is actually followed, not just documented — zero hits for `shadowColor`/`shadowOpacity`/`shadowRadius`/`elevation:` anywhere in `apps/mobile/src`. Adding a real shadow for one slide would reintroduce exactly the failure mode that rule exists to prevent, invisibly, in the app's own default theme. "Raised paper" instead comes from `elevation`: each note sits on `surfaceFor('raised')`, one step above the board's `surfaceFor('card')` — the same mechanism every other surface in the app uses for depth. "Layered" is the note's own paper-plus-tape composition (two surfaces, one item), not notes overlapping each other.
+
+**"Textured board (cork, felt or wood grain)" vs. "built from existing tokens."** There is no texture asset in `design/`, and generating a repeating pattern would mean either a new image asset or an SVG generator built for a surface nothing else in the app needs — a bigger addition than a re-skin package should be making unasked. The board is a solid, bordered, generously-rounded panel one elevation step off the page. It reads as "a board" by being a distinct surface; it is not literally textured. If the founder saw an actual texture in the mockup and wants it, that is a real follow-up, not something I judged out on my own authority — flagged below.
+
+Both are recorded in `StickyNotesSlide.tsx`'s own docstring, not just here, so the next reader finds the reasoning beside the code rather than only in an aging log entry.
+
+#### The collapse threshold: reasoned, not measured
+
+`boardLayout` collapses on two independent conditions: **below 3 notes**, always single-column (two side-by-side items isn't a board to stagger, it's two notes); **at or above a font-scale of 1.7**, single-column regardless of count. The count floor I'm confident in — it's a small, discrete design call. **The font-scale number is not verified on a device**, which the handoff explicitly asked for ("choose the threshold empirically") and I did not deliver. 1.7 sits at roughly the standard/accessibility Dynamic Type boundary, chosen from general knowledge of iOS's content-size-category scale, with real margin below `accessibilityExtraExtraExtraLarge` (~2.85) — which is where this component's own pre-redesign docstring already found two columns failing outright. That margin is a reasoned buffer, not a measurement. **If this number is wrong, the failure mode is narrow and visible**: the board either collapses later than it should (a column clips at some accessibility size below XXXL) or earlier than it should (loses the two-up look sooner than necessary). Either is a one-line constant change once someone reports what they saw.
+
+#### What's device-verified vs. reasoned — read this before trusting the board is done
+
+I could not reliably drive the simulator this package (detail below), so I split what I'm claiming into two kinds of evidence rather than blur them:
+
+**Verified, via the backend API directly — no simulator involved:**
+- Track 42 is real, has 18 Leaves, and every one of them carries a diagram. Queried directly from Payload (`GET /api/leaves?limit=45&depth=0`, filtered client-side with `jq`).
+- **Track 42's real note counts range 3–4, not the schema's full 2–6.** Leaves 0,1,4,6,15 carry 3; the rest carry 4.
+- **The schema's full 2–6 range does exist in the broader corpus, but only in placeholder content.** All five 2-note leaves and all four 6-note leaves are on Track 29 ("the 20-Leaf placeholder flagship") or Track 1 ("The mountain is you", also a placeholder) — none are real, human-authored content. Distribution across all 39 leaves: 2 notes ×5, 3 ×9, 4 ×17, 5 ×4, 6 ×4.
+- This matters for the device gate's "extremes" requirement: **the founder exercising the real 3–4 range on Track 42 will never see the schema's true extremes** (2 or 6) unless they specifically open Track 29 or Track 1.
+- `stickyNotesLayout.test.ts` passes, and both mutation checks (below) land precisely.
+- Root `lint`/`typecheck`/`test`/`build` are clean.
+
+**Not verified — reasoned from the code and from Reanimated/RN's documented behaviour, not watched on a screen:**
+- Whether the board actually renders as intended (rotation, tape placement, board panel) at all.
+- Whether note text clips at any accessibility text size, including the ones below the collapse threshold.
+- Whether the collapse actually fires at `fontScale` 1.7 in practice, and whether 1.7 is the right number.
+- Both themes.
+- The step-dot progress indicator's appearance.
+- That the payoff gate is visually unaffected by the chrome changes (its *logic* is untouched — `useLeafSession.ts` has no diff — but I have not watched it on screen since editing the file it renders inside).
+
+#### Why the device gate wasn't completed
+
+I hit the same class of problem WP21, WP22 and WP22.1 all logged, a fourth time running, with a new specific cause each time. This time: the backend and Payload CMS (port 3001) were not running at all — both had to be started before Explore would load anything — and once they were up, simulator touch input itself became unreliable in a way I could not resolve: taps registered late and out of order (confirmed by the simulator clock jumping across screenshots with no visible change in between), `detach`/`attach` fixed it once and then stopped fixing it, and `touch_path` didn't help either. I got as far as: Track 42 added to the library, its roadmap rendering correctly with real progress state (confirms WP22's screen still works against live data) — but could not reliably tap into the Leaf player itself to reach the board.
+
+Per the 2026-09-09 ruling, I raised this with the founder rather than continuing to hunt coordinates, laid out the options, and **the founder chose to close the package on what's verified above rather than spend further time on simulator reliability.** That is their call to make and they made it; I'm recording it here as a decision, not as my own judgment that the gap doesn't matter.
+
+Two backend services are now running locally as a result (`npm run dev --workspace=apps/backend` on :3000, `npm run dev --workspace=apps/admin` on :3001, both detached, logs in the session scratchpad) — left running rather than torn down, since whoever next opens the simulator to look at this board will want them up.
+
+#### Mutation-checked, and precise
+
+| Mutation | Reddened | Precise? |
+|---|---|---|
+| `noteCount < MIN_NOTES_TO_STAGGER` → `<=` | only "staggers at 3–6 notes below the collapse threshold" | yes |
+| `fontScale >= COLLAPSE_FONT_SCALE` → `>` | only "collapses exactly at the threshold, not only past it" | yes |
+
+Both reverted after confirming. As with WP22.1, I did not mutation-check the call site wiring itself — no component test exists for `StickyNotesSlide` (Tier C, consistent with the fact none of the five slides had one before this package either), so a call-site regression would not redden anything today.
+
+#### Why four of five slides are untouched
+
+The handoff's own requirements section gives the sticky-notes board enough detail to build from without the mockup — rotation, tape, board texture, staggering, no amber, the collapse rule are all spelled out inline. It does not give that level of detail for Summary, Scenario, Payoff or Takeaway, and I could not reach either named source for it: **the "sticky-notes prompt... recorded in this log under 2026-09-06" does not exist** — I searched `collaboration-log.md`, both phase archives, and `design/` (including `remaining-screen-prompts.md` and the `design/prompts/` directory) and found nothing dated 2026-09-06 that is about sticky notes; the actual 2026-09-06 handoff in this log is WP21, which is SVG/font infrastructure, not a visual spec. The live Claude Design mockup I was told not to drive myself.
+
+Rather than guess at a redesign for four screens I have no source material for, I read each one on its own merits: all four already compose from current tokens (`theme.surfaceFor`, `theme.radius.lg`, icons, elevation-based cards), and each has substantial in-file docstring reasoning from earlier packages I'd be overriding without a documented reason to (`SummarySlide`'s plainness is explicitly deliberate — *"the reader should arrive at the scenario with the setup in mind, not with a memory of the layout"* — touching it would contradict that on my own authority, not on this handoff's). I judged the actual visual gap to be specifically the board (flat cards standing in for physical notes, amber misused on a non-reward slide) and the chrome (plain text-only progress, no defining border), not these four. **This is a scope call I'm flagging, not asserting** — if the founder has mockup images for these four and wants them redone against it, that's a clean, well-bounded follow-up now that the pattern (board + chrome) exists as a reference.
+
+#### Time
+
+Roughly: two-fifths on the board and its layout module including the reading-order fix, one-fifth on the chrome, one-fifth on tests and mutation-checking, and two-fifths on environment/device-gate work — starting two backend services from cold, and the simulator session that didn't ultimately produce visual confirmation. That last share produced real, valuable output (the corpus data above) but not the thing it was aimed at.
+
+**Assumptions made:**
+1. "Textured board" and "layered shadow" are satisfied by this app's existing elevation/surface system rather than literally, per the reasoning above.
+2. The diagram stays above and outside the board, in its own frame, not pinned to it as another board object — WP15's "above, never instead" placement, not relitigated, because integrating it into the paper/rotation treatment risks either crushing the image or requiring the board to special-case its one non-paper child, and nothing in this handoff asked for that.
+3. `COLLAPSE_FONT_SCALE = 1.7` is a placeholder pending the device observation this report couldn't complete.
+
+**Follow-ups / tech debt for Architect:**
+1. **The board's visual rendering needs a device pass** — nothing clips, the collapse fires where set (ideally checked against Track 42 at 3–4 notes *and* Track 29/Track 1 at the schema's real 2 and 6 extremes), both themes, the chrome looks right. Suggest the founder does this directly per the standing 2026-09-09 ruling.
+2. **The "2026-09-06 sticky-notes prompt" citation is stale or was never written** — worth fixing at the source so the next handoff that references it doesn't repeat this search.
+3. **Simulator automation reliability is now a four-package pattern** (WP21, WP22, WP22.1, WP23), a different specific cause each time. Worth a real debt-register line rather than four scattered mentions — the aggregate cost is now substantial even though no single instance was a code defect.
+4. If mockup access becomes available, Summary/Scenario/Payoff/Takeaway are open follow-ups per the scope call above.
+5. No component test exists for any of the five slides (Tier C, logged for WP14, consistent with the pre-existing pattern).
+
+---
+
 ### Completed: WP22.1 — close the reduce-motion mechanism, not four call sites — 2026-09-08
 
 **5 of 6 acceptance criteria met outright; the sixth — live on-device observation, "measured, not inspected" — was not achieved this session, and that gap is the one thing in this report that needs a founder decision, not just a read.** Root `lint`, `typecheck` (4 workspaces), `test` (1,197 passing: shared 71, admin 198, backend 477, mobile 451 — 447 + 4 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`. What I have instead of device measurement is a source-level trace of Reanimated's actual reduce-motion resolution code, which is precise but is not the thing the handoff asked for. Detail and the reasoning for that call are below; please read the "What I could not verify" section before treating the four surfaces as closed.
