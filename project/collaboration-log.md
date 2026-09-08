@@ -273,6 +273,124 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP22 — the Track roadmap: the knowledge graph, on real data — 2026-09-08
+
+**All 10 acceptance criteria met, verified on a signed build against the live local backend.** Root `lint`, `typecheck` (4 workspaces), `test` (1,193 passing: shared 71, admin 198, backend 477, mobile 447) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`.
+
+**What changed:** `TrackDetailScreen` now renders a Track's Leaves as a neuron-like knowledge graph below the legal pair. Four new files under `apps/mobile/src/screens/track/`, one rewritten screen, one new screen test. Nothing outside `apps/mobile/src/screens` was touched; no backend, no `packages/shared`, no new dependency.
+
+**Files touched:**
+- `apps/mobile/src/screens/track/roadmapGeometry.ts` (new) — the pure layout, `(leafCount, viewport, seed) → geometry`
+- `apps/mobile/src/screens/track/roadmapGeometry.test.ts` (new) — 187 tests
+- `apps/mobile/src/screens/track/roadmapModel.ts` (new) — state derivation, the `nextLeafId` cross-check, label truncation
+- `apps/mobile/src/screens/track/roadmapModel.test.ts` (new) — 19 tests
+- `apps/mobile/src/screens/track/TrackRoadmap.tsx` (new) — the SVG component
+- `apps/mobile/src/screens/TrackDetailScreen.tsx` (rewritten body)
+- `apps/mobile/src/screens/trackDetail.test.tsx` (new) — 8 tests
+
+---
+
+#### The structural decision, and what it bought
+
+**The layout is a pure function and the component is a thin consumer**, exactly as the handoff required. Geometry takes a *count*, not the Leaves — it has no access to a title or a completion state, so it cannot accidentally encode one. The component pairs `geometry.nodes[i]` with `model.nodes[i]`.
+
+What that bought is the whole point of the package: **the 15–30 range is a unit test, not a device session.** Every count from 15 to 30 is exercised for node count, frame containment, the middle-two-thirds spine band, one spine curve per gap, recursive taper, the axon, the irregular soma, and the absence of straight segments. 187 tests, and none of them needed a Track to be authored first.
+
+**Determinism** seeds from the Track id via FNV-1a into mulberry32. Three tests: identical geometry across repeated calls (deep equality over every control point, not a spot check on centres); identical on a *third* call after a different Track was laid out in between, which is what catches a generator held in module scope; and different Tracks producing different graphs. Confirmed on device — Track 42 and Track 29 draw visibly different meanders.
+
+#### The cross-check
+
+Implemented exactly as specified: the Leaf at index `completedLeaves` must be `nextLeafId`, with the finished-Track branch asserting the pointer is null instead. Range and integrality are checked first so the index is never taken on a nonsense count.
+
+**The degrade keeps what the server asserted and drops only what this client derived.** On a mismatch, the node matching `nextLeafId` is still marked `next` — the server said so — and every `done` claim is dropped, `completedLeaves` is reported as zero rather than repeating half of a contradiction beside a map that disagrees with it, and the screen shows a caveat. The reader still has somewhere to resume; they just are not shown a confident map of progress that may not be theirs.
+
+**Mutation-checked, and it lands precisely.** Replacing `sorted[completed]?.id === progress.nextLeafId` with `sorted[completed] !== undefined` reddens exactly five tests — the four cross-check unit tests and the one screen test — and nothing else.
+
+#### Nine mutation checks, all precise
+
+| Mutation | Reddened | Precise? |
+|---|---|---|
+| Cross-check accepts any Leaf at the completed index | 4 model + 1 screen — all the cross-check tests | yes |
+| `minBowFraction: 0.4 → 0` (remove the bow floor) | only "curves every connection, background web included" | yes |
+| `spineBand: 2/3 → 1` | "spine inside the middle two thirds" + "node inside the frame" | yes — the second is a real consequence, not noise |
+| `mulberry32(seed)` → `Math.random()` | only the two determinism tests | yes |
+| Fixed per-node dendrite budget | all three density-budget tests | yes |
+| Truncation uppercases instead of only cutting | "never rewords, only cuts" + 2 exact-output + 1 screen | yes |
+| `maxDepth: 4 → 1` (spokes, not recursion) | "tapering, recursive dendritic field" + path-count flatness | yes |
+| Remove the try/catch around the library read | only "keeps the legal pair on screen when the library request fails" | yes |
+| `somaJitter: 0.24 → 0` (perfect circles) | only "irregular body rather than a circle" | yes |
+
+Note the fourth row: `Math.random()` did **not** redden "gives different Tracks different graphs", correctly — random satisfies difference. That test is real but it is not the one guarding determinism, and it would have been easy to believe otherwise.
+
+#### Two things the device gate caught that no test could
+
+**1. Reduce Motion silently turned the swap into a removal.** Reanimated reads the OS reduce-motion setting *itself* and disables animations by default — so with Reduce Motion on it cancelled the opacity fade too, which is the accommodation, not the thing being accommodated. Nothing failed, nothing warned in the app, and the ring simply sat still: indistinguishable from a ring that was never meant to move.
+
+Caught by measurement rather than by eye. Ten native screenshots per mode, mean brightness of a box around the ring: **before the fix, six frames identical to three decimal places (spread 0.000)**. After adding `ReduceMotion.Never` to the fade: spread 7.011, oscillating smoothly. Frame-differencing then separates the two modes cleanly — with motion allowed the changed pixels sweep a **26–100 px annulus with deltas up to 156 levels** (the ring physically scaling); with Reduce Motion on they sit in a **31–83 px band with deltas ≤ 86** and a near-constant changed-pixel count (the ring holding position and only changing brightness). Same element, different property. Swap, not remove — and now actually so.
+
+`motionPlan` had never been used anywhere in the app before this; it was exported and dead. This is its first load-bearing call site.
+
+**2. Node labels were shouting.** I first used `variant="caption"`, which is the right weight but uppercases and letter-spaces. On device, eighteen fragments of a real author's chapter titles in caps read as signage rather than as a table of contents, and were materially harder to scan. Switched to `small`. Truncating a title is a space decision; restyling its capitalisation is a different kind of change to make to someone else's words.
+
+#### Performance — measured, and density did **not** have to be cut
+
+| Leaves | Curves | `<Path>` elements | Graph height |
+|---|---|---|---|
+| 15 | 437 | 20 | 1,870 pt |
+| **18** (Track 42) | **449** | **20** | 2,240 pt |
+| 20 (Track 29) | 457 | 20 | 2,486 pt |
+| 24 | 473 | 20 | 2,980 pt |
+| **30** | **497** | **20** | 3,720 pt |
+
+Two mechanisms, and they are independent:
+
+- **A shared dendrite budget rather than a per-node one.** 380 dendrite paths are divided across the Track, so per-node density falls from 25 at 15 Leaves to 13 at 30 — this is the handoff's "reduce dendrite density as node count rises", and it keeps the *curve* count within 14% across a range where the node count doubles.
+- **Curve batching.** SVG path data takes many subpaths in one `d`, so every curve sharing a colour and stroke width is concatenated into a single `<Path>`. **450 curves become 20 native elements, and that number is flat at every Leaf count.** One React element per curve would have meant ~450 native views inside a scroll view, which is where a screen like this stutters.
+
+Because of the second mechanism the first never had to bite hard: **no Track length was capped and no visual density was sacrificed.** Scrolling the full 2,486 pt of the 20-Leaf Track in four fast swipes rendered and settled correctly every time. **I want to be exact about the limit of that claim: I can confirm correct rendering under fast scrolling, not frame timing — screenshots cannot measure dropped frames.** The founder holding the device is the only one who can say it *feels* smooth, and 20 flat native paths is the reason I expect it does.
+
+#### Reading judgement: neuron, not star chart — with one honest reservation
+
+Asked for plainly, so answered plainly. **It reads as a neuron.** The recursive tapering dendrites and the fine terminal branches do most of that work, and the total absence of straight segments does the rest — there is nothing in the frame that reads as a constellation, which was the specific failure being corrected.
+
+**The reservation:** it reads as a *chain of neurons* more than as a field of stained tissue. Cells sit roughly 123 pt apart and their dendritic fields only just reach each other, so the eye follows a strand rather than resting on a mesh. I chose not to push dendrite reach further because longer processes start tangling with the node labels, and legibility of a real author's chapter titles seemed the more valuable half of that trade. **It is a one-constant change (`GRAPH.primaryLength`) if the founder wants it denser** — worth looking at on the device before deciding, because it reads differently at actual size than in a screenshot.
+
+#### Decisions made, with reasons
+
+1. **Progress is read from `GET /library` and matched by Track id.** There is no `GET /content/tracks/:id/progress` — `TrackProgressSummary` reaches the client on a `LibraryEntry` and nowhere else. One extra request on this screen; the alternative was a backend change, which was explicitly out of scope. **A failed library read does not take the screen down**: the disclaimer and purchase links are why this screen exists and they are legal obligations, so a failed *progress* request degrades to a caveat. Mutation-checked.
+
+2. **Three sources of "no progress", three sentences.** Not on the shelf yet / could not be checked / the server contradicted itself. Collapsing them would have told a reader browsing from Explore that something had gone wrong when nothing had. Both of the first two were observed on device.
+
+3. **Only the `next` node opens from the map.** Re-reading a completed Leaf is a capability this app has deliberately not shipped — `LibraryScreen` declined it for want of a Leaf id, and this screen is the first place on the client where that id exists. Adding it *because I now could* is a different decision from this package's, so it is a follow-up below rather than a quiet inclusion. Every node is still an accessibility node with its state spoken; the others are simply not buttons rather than buttons that are disabled.
+
+4. **Back moved from the bottom of the screen to the top.** It used to sit after the purchase links, which was fine when the screen ended there; with a 2,240 pt graph below it, a back control at the bottom is one the reader must traverse the entire book to reach. The legal pair is still above the fold with it there — confirmed on device on both Tracks, including Track 29 whose title wraps to three lines.
+
+5. **Continue sits between the legal pair and the graph.** It is the only position reachable without scrolling past the whole book, and a floating pill over a scrolling graph would cover the nodes it is about.
+
+6. **No `npm install` in the cold gate.** Deliberate, and I want it on the record: this diff adds no dependency, so a reinstall would prove nothing — and it would destroy the `Swift.abs` patch in `node_modules/expo-modules-jsi` that WP21 flagged and that the handoff says to preserve. `dist` and `.next` were deleted and the whole gate run from cold.
+
+**Assumptions made:** one, stated because the handoff did not cover it — this screen is reachable from Explore for a Track that is **not on the reader's shelf**, where no rollup exists to fetch. That renders as `confidence: 'unknown'`: the graph draws (the shape of a book is not a claim about the reader), nothing is marked done, no Continue appears, and a line says why.
+
+**Tokens:** no new colour, spacing, radius or duration value. Every colour in the new component comes from `theme.palette` / `surfaceFor`; every dimension from `spacing` / `radius` / `borderWidth` / `MIN_TOUCH_TARGET`. Amber is untouched — a finished Leaf on a map is progress, not a prize. The numbers in `GRAPH` (curvature ratios, taper factors, branch lengths) are algorithm parameters with no meaning outside that file, and are documented as such beside the rule they are not.
+
+**The three states differ by shape, not only hue:** done is a *filled* body, locked is a *hollow* outline, and next is the only one wearing a ring and the only one showing its full title. It survives greyscale.
+
+---
+
+**Follow-ups / tech debt for Architect:**
+
+- **Re-reading a completed Leaf from the map is now one line away.** The client holds real Leaf ids on this screen for the first time; `LibraryScreen`'s comment deferring this to WP14 was written when it did not. Worth a decision rather than a drive-by: `completeLeaf` is idempotent and awards 0 XP on replay, so it is safe, but "can a reader re-open a finished Leaf" is a product question.
+- **Density is one constant from being denser** — `GRAPH.primaryLength`, currently 30. See the reading judgement above.
+- **Locked dendrites at 0.28 opacity are very faint in the light theme** — near-invisible on white in places. Deliberate (locked content is de-emphasised and the outline plus label carry the information), but if the founder wants the tissue more present in light, that opacity is theme-independent today and would need splitting.
+- **The handoff says `motionPlan` is "already used in four places"; it was used in none.** `useReducedMotion` is used in four (AuthStack, PayoffSlide, ScenarioSlide, AchievementUnlock); `motionPlan` was exported and dead until this package. No consequence — flagging it only because the roadmap may be tracking it as covered.
+- **Tier C deferred, for WP14's worklist:** no component render tests for `TrackRoadmap` in the light theme (theme correctness was verified on device in both, on both Tracks); no test that the reduce-motion branch is selected (it is a Reanimated runtime behaviour and the pixel measurement above is the only real evidence — a jest test with the mock would assert nothing); no test for label *placement* (left/right side selection, the next-node card); no failure-path tests for `getTrack`/`listLeaves` beyond the one error state the screen already had.
+- **One test that cannot be mutation-checked, noted per the standing rule:** "keeps the legal pair on screen when the library request fails" *can* be — and was. But `roadmapGeometry.test.ts`'s "grows tall enough to hold every Leaf without overlapping the frame edge" is close to structural and would survive most plausible breakages; treat it as weak.
+- **Metro had been running for 6h42m** at the start of this package and I restarted it with `--clear` pre-emptively rather than discover a stale bundle later. No time lost, and recording it because the standing note says this has cost time three times.
+- **A test account with real progress exists for future device gates:** `wp22-roadmap-1788854406@example.test`, Track 42 at 5/18 and Track 29 at 3/20. Completing more Leaves on it today will award 0 XP — it hit the 500 XP daily cap during setup, which is correct behaviour and worth knowing before someone reads it as a bug.
+
+**Time:** implementation ~20%; tests and the nine mutation checks ~20%; the device gate ~45% (of which the reduce-motion investigation and its pixel measurement was the single largest block, and sign-in/navigation friction a distant second); the cold gate ~5%; this write-up ~10%.
+
+
 ### Completed: WP20.1 — attach Track 42's scenario images — 2026-09-02
 
 **All 6 acceptance criteria met.** 18 of 18 Leaves carry a scenario image as a **draft**;
