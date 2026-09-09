@@ -82,7 +82,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP23.1 | Summary / Scenario / Payoff / Takeaway + the cork board | Manager | ✅ **Signed off 2026-09-09 (9/9)** — PayoffSlide ruling below | Branch `wp23.1-leaf-slides-cork-board`, unpushed |
 | WP24 | Auth, age gate, and the Track legal surface | Manager | ✅ **Signed off (6/8 observed, 2 pending two screenshots)** — sign-up validation now mirrors `signUpBodySchema` exactly, closing the malformed-email defect the spec and the bug shared. **AgeGate/AgeRefused audited and deliberately left unchanged** | Merged as PR #35. **Open: the sign-up → age-gate seam, unlooked-at** |
 | WP25 | Achievement unlock, session-end/cap, report-error, failure states | Manager | ✅ **Signed off 2026-09-10 (8/9)** — 9th is code-verified only; the one-shot-transition limit WP22.1 established makes it unbracketable. Also fixed a real pre-existing a11y bug: the report sheet's scrim was hiding the whole sheet from assistive tech | ✅ **Merged as PR #38** (verified 2026-09-10). It carried the `design/**` eslint fix, so `main`'s lint gate is green again |
-| WP26 | Track complete + share card | Manager | ⬜ not written | WP21 |
+| WP26 | Track complete + share card | Manager | 📤 **Handed off 2026-09-10** | 🔒 **Blocked on PR #37 merging** — it consumes `layoutRoadmap`, whose signature changes in that PR |
 | WP27 | **Explore, Library, Journey, Profile** — the four tab screens | Manager | ⬜ **not written — a gap in the 2026-09-06 plan, found 2026-09-09** | Specs `screen-04`/`screen-05` exist |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 

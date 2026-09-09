@@ -17,7 +17,7 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | | WP23.1 — the other four slides + the cork board | Unblocked: the spec is now nine screenshots in `design/leaf_player/` | Sonnet | 📤 **Handed off 2026-09-09** |
 | | WP24 — auth, age gate, legal surface | Re-skin; all five surfaces exist | Sonnet | ✅ **Signed off (6/8 observed)**, PR #35 |
 | | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | 📤 **Handed off 2026-09-09** |
-| | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | Not written |
+| | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | 📤 **Handed off 2026-09-10**, blocked on PR #37 |
 | | **WP27 — Explore, Library, Journey, Profile** | **A gap in this plan, found 2026-09-09.** The four tab screens were never assigned to a package. Specs exist: `screen-04`, `screen-05` | Sonnet | Not written |
 
 Layer 1 is additive and invisible. Layer 3 is screen-by-screen and independently reversible. **Layer 2 is the only genuinely hard package**, and it is the centrepiece of the visual language.

@@ -20,6 +20,80 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-10 — WP26: Track complete, and the share card
+
+*Manager. **Suggested model: Sonnet** — one net-new screen whose layout is given and whose data already exists, plus a card whose architecture is already correct. Checked: neither mockup contains a single CSS keyframe, so there is no web-to-Reanimated animation port hiding in here.*
+
+> **⛔ DO NOT START UNTIL PR #37 IS MERGED. This is a hard dependency, verified across both branches.**
+> `layoutRoadmap`'s signature changes in that PR:
+> `main` → `layoutRoadmap(leafCount: number, viewport, seed)`
+> PR #37 → `layoutRoadmap(states: readonly LeafNodeState[], viewport, seed)`
+> **This package consumes that function.** Branching from today's `main` means writing against a signature that breaks the moment #37 lands. If #37 is still open, say so and stop.
+>
+> **Read:** this handoff · **`design/claude_design/Track complete.html`** and **`design/claude_design/Share card.html`** — the sources of truth · `design/prompts/screen-03-track-complete.txt` and `screen-06-share-card.txt` for the *reasoning* behind each "Do not" · `apps/mobile/src/screens/share/ShareCard.tsx` — **read its docstrings before changing anything** · `apps/mobile/src/screens/track/roadmapGeometry.ts` · `apps/mobile/src/components/TrackLegal.tsx` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, the rest of this log.
+>
+> **Inherited, so a `/clear` does not lose it:** to view the mockups, `ZoomOut prototype.html` needs a static server rooted at `design/claude_design` (relative stylesheets); the jump bar reaches any screen. **RN's jest preset reports `fontScale: 2`, so a passing screen test says nothing about the default rendering.** Amber's boundary, ruled 2026-09-09: *outline for what you have done, fill for what you have just won* — **finishing a book is unambiguously the second**, so fill is right here. Batch SVG curves sharing colour and stroke width; route animation through `motionTimingConfig`; `small` not `caption`.
+
+### Task: WP26 — Track complete, and the share card
+
+**Suggested model:** Sonnet.
+
+**Context:** Finishing an entire book is the largest reward in the product **and the app has no screen for it at all** — `screens/share/` holds only the achievement share and the daily wrap-up. The share card is the growth mechanic `PRODUCT.md` leans on, and its component is already sound; what it lacks is the constellation.
+
+**Objective:** Finishing a Track produces a moment worth the work, and a card worth posting — and the *captured file* is what proves the second, not the rendered screen.
+
+**Scope:** a new Track-complete screen under `apps/mobile/src/screens/share/`, plus `ShareCard.tsx`.
+
+**Track complete — a build, not a re-skin**
+
+- **Consume `layoutRoadmap`; do not re-derive geometry.** WP22 built it for this: it is pure and **seeded from the Track id**, so the finished constellation and the roadmap screen agree on shape for free. Re-deriving guarantees they disagree.
+- **Verify each stat exists before rendering it.** The spec asks for XP earned, day streak and first-try count. `screen-10`'s rule — *"do not invent a metric the product does not track"* — applies here too, and the standing rule of 2026-09-09 says check at the point of use. **If first-try count is not obtainable, say so rather than approximating it.**
+- **The legal pair is required on this screen and `TrackLegal` already exists** — WP24 restyled it. **Reuse it; do not rebuild it.** `PRODUCT.md` requires a non-endorsement disclaimer and a purchase-forward link on Track completion, and this is the completion surface.
+- Primary action *"Share your constellation"*, secondary *"Find your next book"*. **No confetti, no trophy, no medal, no full-screen modal that traps the reader.**
+- **Amber may lead here** — it is the reward moment the palette reserves the colour for — **but the spec says it is still an accent and must not flood the screen.**
+
+**The share card — its architecture is already right, so change less than you expect**
+
+- **Read `ShareCard.tsx`'s docstrings first.** It is already forced-light for exactly the reason `screen-06` gives, and already brutal about thumbnail legibility because a real capture at 130px proved it had to be. **Do not re-litigate either.**
+- **`MascotSlot` is where the constellation fragment goes.** Its docstring states the intent outright: an illustration should arrive by *"replacing the contents of `MascotSlot` and nothing else."* That is the whole change.
+- Square **and** 9:16. Three pieces of information, no more. The wordmark is a brand mark and does not count as a fourth.
+- **Do not change the shared `achievement` icon.** It is a trophy, the mockups use an organic glyph, and that divergence is real — **but it is rendered by Profile's badge grid too, and WP27 owns the swap across all three consumers** (ruled 2026-09-10). Changing it here would alter a surface this package cannot verify.
+
+**The risk that actually matters, and where this package can ship a silent failure**
+
+**The criterion is the captured image, not the card on screen.** `captureRef` photographs the rendered tree, and `collapsable={false}` on the outer `View` is load-bearing on Android — without it the view is flattened out of the native hierarchy and there is nothing to photograph. **That guard has not been exercised since WP9.** A card that looks perfect on screen and captures blank or clipped is exactly the defect this package is positioned to ship, and no test in this repo can see it.
+
+**Also landing here: a reader may re-open a finished Leaf.** Ruled 2026-09-09. It is safe — `completeLeaf` is idempotent and awards 0 XP on replay. **It counts for nothing, and it is explicitly not the answer to the streak-versus-library-size question**, which stays open. Wire the affordance; do not let it earn anything.
+
+**Out of scope**
+- **Profile's badge grid and the shared icon swap** — WP27.
+- The roadmap screen itself, Explore, Library, Journey.
+- Anything that makes re-completion count toward a streak, XP or an achievement.
+
+**Constraints:** tokens only. Do not run `git add -A`; stage by path.
+
+**Device gate**
+- **Producing a finished Track takes setup** — Track 42 is 18 Leaves. You will likely need a seeded or near-complete account rather than playing to it. **Say how you produced it**; if you could not, say that rather than implying you saw it.
+- **Capture the card and open the resulting file** — both aspect ratios. **Inspect the image, not the preview**, and view it at thumbnail scale: if the headline number and the book are not readable shrunk, the card has failed its only job.
+- Track complete in **both themes** at accessibility-max. The share card is forced-light by design in both — that is correct, not a bug.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Track complete exists, consumes `layoutRoadmap`, and its constellation matches the roadmap's shape for the same Track
+- [ ] Every stat shown is sourced from real data — **any that is not obtainable is reported, not approximated**
+- [ ] The legal pair renders via the existing `TrackLegal`
+- [ ] The constellation fragment arrives by replacing `MascotSlot`'s contents, and nothing else in the card's structure moves
+- [ ] Both aspect ratios produced
+- [ ] **The captured file is opened and inspected, at full size and at thumbnail scale** — evidence is the image
+- [ ] The shared `achievement` icon is unchanged in the diff
+- [ ] Re-opening a finished Leaf works and awards nothing — verified by checking XP before and after
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier B, plus **Tier A on anything pure** — a stat-availability predicate and any constellation-fragment selection belong in a tested module, following `roadmapGeometry` and `stickyNotesLayout`. **Be explicit that the capture path is untestable here** and that the opened file is the evidence; do not write a test that asserts `collapsable` is set and call that verification.
+
+---
+
 ### Handoff: 2026-09-09 — WP22.2: port the roadmap's visuals from `graph.jsx`
 
 *Manager. **Suggested model: Opus** — the port itself is mechanical, but there is one unsolved design problem in it that the mockup cannot answer, and the founder has now twice said this screen does not match. A second miss costs their attention, which is the scarce thing.*
