@@ -20,6 +20,68 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-09 — WP23.1: the four remaining Leaf slides, and the cork board
+
+*Manager. **Suggested model: Sonnet** — the spec is now a set of screenshots of the real mockup rather than prose, which is more precise, not less. Four things in it would be wrong if transcribed faithfully; all four are named below.*
+
+> **Read:** this handoff · **`design/leaf_player/`** — nine screenshots walking the five slides in several states. **This is the spec.** · `apps/mobile/src/screens/leaf/` · `apps/mobile/src/components/SlideImage.tsx` · `apps/mobile/src/design/palette.ts` (the `correct`/`incorrect` tokens) · `agents/manager.md`.
+> **`design/leaf_player/Library.html` is not part of this package** — it is the Library screen, captured by mistake. Ignore it here; it is kept for WP27.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
+>
+> **The screenshots are reference, not source. Do not transcribe them.** WP22 is the cautionary case: that mockup hardcoded geometry for exactly 18 nodes and Track 42 has exactly 18 Leaves, so a faithful copy would have looked perfect and been wrong for every other Track. **Read them for intent, then build against real data.**
+>
+> **Inherited, so a `/clear` does not lose it:** screenshot pixels are not the tool's tap-point space (that was the real cause of WP21–23's tap trouble); there is a working `xcodebuild` route around the `expo run:ios` signing bug; **`simctl` switches theme and text size with zero taps**. Route animation through `motionTimingConfig`; `small` not `caption`; batch SVG curves sharing a colour and stroke width into one `d`.
+
+### Task: WP23.1 — the four remaining Leaf slides, and the cork board
+
+**Suggested model:** Sonnet — bounded, specified, no algorithm.
+
+**Context:** WP23 rebuilt the sticky-notes board but left Summary, Scenario, Payoff and Takeaway untouched, because **no Leaf player spec existed in the repo** — my handoff cited one that was never committed. That spec now exists as screenshots. **The Leaf player is currently the app's most visible inconsistency: one slide in the new language, four in the old.**
+
+**Objective:** All five slides read as one screen, and the sticky-notes board sits on real cork.
+
+**Scope:** `apps/mobile/src/screens/leaf/` and the board's layer inside it.
+
+**Requirements**
+
+- **Re-skin Summary, Scenario, Payoff and Takeaway** to match `design/leaf_player/`. The chrome — the five-segment progress bar, the `SUMMARY 1 / 5` label-and-counter row, the close and header icons — **is already built and shipped in WP23**; extend it, do not rebuild it.
+- **Give the board a real cork texture, drawn as a repeating SVG `<Pattern>`** — ruled 2026-09-09. `react-native-svg` is available. **No image asset**: nothing to license, ship or scale. The rest of the board — rotation, tape, the raised-paper treatment, the single-column collapse above the text-size threshold — is WP23's and stays as built.
+
+**The four things that are wrong if you copy the mockup literally**
+
+1. **The dashed "Optional illustration — or browse files" box is an editor affordance, not a reader one.** The mockup had no content, so it drew an upload placeholder. **The real app shows `scenario.image` or shows nothing** — `SlideImage` already handles both. Do not build a dashed placeholder into the player.
+2. **The red on a wrong answer is correct and is not the "no red" rule.** `screen-12` bans red for *system failures* — load errors, no network. **A wrong answer is not a failure state**, and `palette.ts` carries `correct`/`incorrect` for exactly this. Keep the incorrect treatment; the mockup's "Not quite… retries cost nothing" framing matches the product's unlimited-retry rule and is worth keeping.
+3. **The header in the mockup carries one icon. The real header also carries the report-an-error flag**, placed in WP23 and a legal requirement on every Leaf. **Reconcile them — do not drop the flag** to match a picture.
+4. **"LEAF 8 · 3 MIN" — verify the duration exists before rendering it.** `PRODUCT.md` says a Leaf is *about* three minutes, but that is a design intention, not necessarily a stored field. Per the standing rule of 2026-09-09, check at the point of use. **If nothing in the data supplies it, do not invent it** — the same reasoning as `screen-10`'s "do not invent a metric the product does not track."
+
+**Out of scope**
+- The sticky-notes board's layout, rotation, tape and collapse threshold — WP23 built them and they stay.
+- `ReportErrorSheet`'s interior and the failure states — WP25.
+- `ShareCard` — WP26. Explore, Library, Journey, Profile — WP27.
+- The payoff gate's logic. This is a re-skin; the rule that the payoff stays locked until a correct answer does not change.
+
+**Constraints:** tokens only — no new colour, spacing, radius or duration values. Do not run `git add -A`; stage by path.
+
+**Device gate — use the zero-tap `simctl` route for theme and text size:**
+- **A full pass through all five slides on a Track 42 Leaf**, both themes — they must read as one screen, not four new and one old.
+- **A wrong answer, then a correct one** — the incorrect treatment renders, and the payoff still unlocks only after a correct answer.
+- **The cork board at default and accessibility-max text size**, both themes. Cork must read as texture, not noise, and must not fight the notes.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four slides re-skinned and consistent with the WP23 chrome
+- [ ] **The board renders an SVG cork pattern; no image asset is added**
+- [ ] No dashed illustration placeholder anywhere in the player
+- [ ] The report-an-error flag survives in the header
+- [ ] The Leaf duration is either sourced from real data or absent — **state which**
+- [ ] **Observed: wrong answer renders the incorrect treatment; payoff unlocks only after a correct one**
+- [ ] Observed in both themes at accessibility-max, nothing clipped
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier B. The pure-module precedent (`roadmapGeometry`, `stickyNotesLayout`) applies to anything with a decision in it — the cork pattern's tiling maths, if it has any, belongs in a testable function rather than inline. Say plainly which evidence is a test and which is an observation.
+
+---
+
 ### Handoff: 2026-09-09 — WP25: the reward and failure moments
 
 *Manager. **Suggested model: Sonnet** — four surfaces that exist, three specs in the repo, no new mechanism. The choreography is specified rather than left to you.*

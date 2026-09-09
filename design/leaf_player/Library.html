@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Library</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Card,Icon,ProgressBar,TrackGraph,TabBar}=window.ZoomOutDesignSystem_442bf9;
+const TABS=['In progress','Saved','Finished'];
+const ACTIVE=[
+{title:'The quiet arithmetic',author:'Marisol Vane',done:7,total:18,meta:'Leaf 8 next'},
+{title:'The cost of certainty',author:'Tobias Renner',done:3,total:16,meta:'Leaf 4 next'},
+{title:'Rooms that decide',author:'Idris Fennimore',done:1,total:14,meta:'Leaf 2 next'}];
+const FINISHED=[
+{title:'Long odds',author:'Hana Vireo',done:12,total:12},
+{title:'Nothing is standard',author:'Petra Oyelaran',done:11,total:11}];
+function nodesFor(done,total){const n=7,d=Math.round(done/total*n);return Array.from({length:n}).map((_,i)=>({id:'n'+i,state:i<d?'done':i===d?'current':'locked'}))}
+function Segment({label,selected}){return<span style={{flex:1,display:'inline-flex',alignItems:'center',justifyContent:'center',height:44,borderRadius:'var(--radius-sm)',background:selected?'var(--surface-raised)':'transparent',border:(selected?'var(--border-width-focus)':'var(--border-width-hairline)')+' solid '+(selected?'var(--primary)':'transparent'),color:selected?'var(--primary)':'var(--text-secondary)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase',whiteSpace:'nowrap'}}>{label}</span>}
+function Row({title,author,done,total,meta,finished}){return<Card interactive padding="var(--space-sm)" radius="var(--radius-md)" style={{display:'flex',alignItems:'center',gap:'var(--space-md)'}}>
+<div aria-hidden="true" style={{flex:'0 0 100px',background:'var(--surface-page)',border:'1px solid var(--border-hairline)',borderRadius:'var(--radius-sm)',padding:4}}>
+<TrackGraph nodes={nodesFor(done,total)} width={160} height={48} ambientDensity={8} showCurrentLabel={false}/></div>
+<div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}>
+<span style={{fontFamily:'var(--font-display)',fontWeight:'var(--weight-bold)',fontSize:'var(--text-h3-size)',lineHeight:1.25,color:'var(--text-heading)',textWrap:'pretty'}}>{title}</span>
+<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>{author}</span>
+{finished
+?<span style={{display:'inline-flex',alignItems:'center',gap:'var(--space-xs)',color:'var(--reward)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase'}}><Icon name="check" size={14}/>{total} leaves complete</span>
+:<div style={{display:'flex',flexDirection:'column',gap:4,marginTop:2}}>
+<ProgressBar value={done/total} height={4}/>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>{meta} · {done} / {total}</span></div>}</div>
+<Icon name="chevron-right" size={20} color="var(--text-secondary)"/></Card>}
+function Library(){return<div className="screen" data-screen-label="Library">
+<header style={{padding:'var(--space-xl) var(--gutter) var(--space-md)',display:'flex',flexDirection:'column',gap:'var(--space-lg)'}}>
+<div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:1.2,color:'var(--text-heading)'}}>Library</h1>
+<span className="zo-caption" style={{color:'var(--text-secondary)',paddingBottom:4}}>5 tracks</span></div>
+<div style={{display:'flex',gap:'var(--space-xs)',padding:4,background:'var(--surface-card)',border:'1px solid var(--border-hairline)',borderRadius:'var(--radius-md)'}}>
+{TABS.map((t,i)=><Segment key={t} label={t} selected={i===0}/>)}</div>
+</header>
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-lg)',padding:'var(--space-sm) var(--gutter) var(--space-lg)'}}>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+{ACTIVE.map(t=><Row key={t.title} {...t}/>)}</section>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Finished</span>
+{FINISHED.map(t=><Row key={t.title} {...t} finished/>)}</section></div>
+<TabBar activeKey="library" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Library/>);
+</script>
+</body></html>
