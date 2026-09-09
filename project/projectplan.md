@@ -15,7 +15,7 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | | **WP22.1 — reduce-motion mechanism** | One flag, one place, four call sites routed through it | Sonnet | ✅ **Signed off 2026-09-09, 6/6** — closed by founder observation 2026-09-10 |
 | **Layer 3** | WP23 — the sticky-notes board | Delivered. The re-skin half did not — no spec | Sonnet | ⚠️ **Partial, 2026-09-11**, PR #34 |
 | | WP23.1 — re-skin the other four slides | Blocked on a spec that does not exist in the repo | Sonnet | 🔒 **Blocked on a founder export** |
-| | WP24 — auth, age gate, legal surface | Re-skin; all five surfaces exist | Sonnet | 📤 **Handed off 2026-09-11** |
+| | WP24 — auth, age gate, legal surface | Re-skin; all five surfaces exist | Sonnet | ✅ **Signed off (6/8 observed)**, PR #35 |
 | | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | Not written |
 | | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | Not written |
 
