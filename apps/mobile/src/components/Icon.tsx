@@ -37,7 +37,15 @@ const ICONS = {
   remove: 'remove-circle-outline',
   resume: 'play-circle',
   retry: 'refresh',
-  error: 'alert-circle',
+  /**
+   * A failure that has not resolved, not one that is broken (WP25/screen-12).
+   *
+   * Deliberately not an alert glyph: `alert-circle` and a triangle both say "something
+   * is wrong", which is the reading the product explicitly rejects for a load failure
+   * or a dropped connection — the app is online-only by design, so both are routine,
+   * frequent states rather than emergencies. A pulse reads as "still trying" instead.
+   */
+  unresolved: 'pulse-outline',
   success: 'checkmark-circle',
   info: 'information-circle',
   chevron: 'chevron-forward',

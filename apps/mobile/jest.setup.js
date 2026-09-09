@@ -76,3 +76,25 @@ jest.mock('expo-apple-authentication', () => ({
   AppleAuthenticationButtonType: { SIGN_IN: 0, SIGN_UP: 1 },
   AppleAuthenticationButtonStyle: { WHITE: 0, BLACK: 2 },
 }));
+
+/**
+ * `Modal` presents its children through a separate native root
+ * (`RCTModalHostView`), and the test renderer has nothing to attach that root to —
+ * `ReportErrorSheet` (WP25) is this app's first `Modal` consumer, and every one of its
+ * testIDs was unreachable through `getByTestId`/`getByText` even though `toJSON()`'s
+ * debug dump could still print them, because the dump and the query traverse the tree
+ * differently. Real `Modal` renders its children exactly when `visible`, which is the
+ * one behaviour any test here needs — the native presentation itself is Apple's/
+ * Android's code, not this app's, and belongs to a device check, not a unit test.
+ */
+jest.mock('react-native/Libraries/Modal/Modal', () => {
+  const { createElement, forwardRef } = require('react');
+  const { View } = require('react-native');
+
+  const MockModal = forwardRef(function MockModal({ visible, children }, ref) {
+    return visible ? createElement(View, { ref }, children) : null;
+  });
+
+  // The real file is `export default`, which Babel's interop reads off `.default`.
+  return { __esModule: true, default: MockModal };
+});

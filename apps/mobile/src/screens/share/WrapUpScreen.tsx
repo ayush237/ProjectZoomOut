@@ -139,8 +139,10 @@ function WrapUpView({
     <Screen testID="wrap-up-screen">
       <ScrollView contentContainerStyle={{ gap: theme.spacing.xl, paddingBottom: theme.spacing.xxl }}>
         <View style={{ gap: theme.spacing.sm }}>
+          {/* Static across both endings — the two states differ in what follows, never
+              in this label (WP25 acceptance criterion: one layout, copy-only diff). */}
           <Text variant="caption" tone="primary">
-            Today
+            Session complete
           </Text>
           <Text variant="display">
             {leafCount === 0 ? 'Nothing yet today' : 'That is a session'}
@@ -167,6 +169,22 @@ function WrapUpView({
             detail={summary.leaves.slice(0, 3).map((leaf) => leaf.title)}
           />
         </View>
+
+        {/* Nothing to add to yet — the zero-state above already says so. */}
+        {leafCount === 0 ? null : (
+          <View testID="wrap-up-stats" style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
+            {wrapUpStats(summary).map((stat) => (
+              <View key={stat.label} style={{ flex: 1, gap: theme.spacing.xs }}>
+                <Text variant="h2" testID={`wrap-up-stat-${stat.label}`}>
+                  {stat.value}
+                </Text>
+                <Text variant="caption" tone="textMuted">
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         <AchievementUnlock achievements={unlocked} testID="wrap-up-unlocks" />
 
@@ -217,6 +235,33 @@ function WrapUpView({
       </ScrollView>
     </Screen>
   );
+}
+
+export interface WrapUpStat {
+  readonly value: number;
+  readonly label: string;
+}
+
+/**
+ * The three numbers on the wrap-up screen: leaves, XP, and the streak.
+ *
+ * **The streak's "Day one" fallback is the mockup's, not invented here** —
+ * `design/claude_design/proto/leaf.jsx`'s `SessionEnd` shows a streak of zero as `{value:
+ * 1, label: 'Day one'}` rather than `0` / `Day streak`, because a reader's first day is a
+ * beginning, not an absence. `1`, `2`, `3`… reads as a novelty losing its shine; `1` with
+ * "Day one" reads as it counting from the start every time.
+ *
+ * A pure function so the three numbers — and the fallback — are provable without
+ * mounting the screen (WP25's testing bar names this exact kind of selector).
+ */
+export function wrapUpStats(summary: SessionSummary): readonly [WrapUpStat, WrapUpStat, WrapUpStat] {
+  const streak = summary.streak.current;
+
+  return [
+    { value: summary.leaves.length, label: 'Leaves today' },
+    { value: summary.xpEarned, label: 'XP earned' },
+    streak > 0 ? { value: streak, label: 'Day streak' } : { value: 1, label: 'Day one' },
+  ];
 }
 
 /**
