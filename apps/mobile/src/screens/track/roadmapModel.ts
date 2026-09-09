@@ -23,7 +23,21 @@
 import type { LeafSummary } from '../../api/client';
 import type { TrackProgressSummary } from '@zoomout/shared';
 
-export type LeafNodeState = 'done' | 'next' | 'locked';
+/**
+ * The four states a cell on the map can be in.
+ *
+ * **`revisit` is rendered but unreachable, deliberately, as of WP22.2.** The design
+ * source (`design/claude_design/proto/graph.jsx`) has four node treatments and this
+ * screen shipped three, because nothing the client receives says a Leaf is due for
+ * review: `TrackProgressSummary` carries counts and a `nextLeafId`, and `LeafSummary`
+ * carries no completion or recall data at all. The ruling that dropped it in WP22 was
+ * about the *data*, and it still stands; it was never about the drawing. So the state,
+ * its geometry and its paint all exist and are tested, and `buildRoadmapModel` never
+ * returns it. Whatever eventually decides a Leaf needs revisiting — a spaced-repetition
+ * pass, a failed payoff, an author's correction — will have a rendered state waiting for
+ * it rather than a design question reopened months later.
+ */
+export type LeafNodeState = 'done' | 'next' | 'revisit' | 'locked';
 
 /**
  * How much of the reader's progress this roadmap can honestly claim.
@@ -150,16 +164,14 @@ function isConsistent(sorted: readonly LeafSummary[], progress: TrackProgressSum
 /* Labels                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** A done Leaf's label: enough to recognise, not enough to re-read. */
-export const DONE_LABEL_CHARS = 26;
-
 /**
- * A locked Leaf's label: a few words at most.
- *
- * Shorter than a done one on purpose — the reader should be able to see the shape of
- * the book ahead of them without the map spoiling what is in it.
+ * **`DONE_LABEL_CHARS` and `LOCKED_LABEL_CHARS` were removed in WP22.2.** They were
+ * fixed budgets — 26 and 18 characters — chosen before anyone knew how much gutter a
+ * label would have, and they were what produced a one-line stub beside every cell. The
+ * budget is now derived per node from the room that node actually has and from the OS
+ * text scale; see `roadmapLabels.ts`. Deliberately not replaced by a new constant: a
+ * constant is the thing that was wrong.
  */
-export const LOCKED_LABEL_CHARS = 18;
 
 /**
  * Shortens a title to fit beside a node.
@@ -190,11 +202,14 @@ export function truncateTitle(title: string, maxChars: number): string {
   return `${kept.trimEnd()}…`;
 }
 
-/** What a node's label says, given its state. */
+/**
+ * What the Leaf the reader is up to says on its card.
+ *
+ * **Only that one node now.** Every other label goes through `roadmapLabels.ts`, which
+ * wraps to the gutter it actually has rather than to a constant — see that module for
+ * why a fixed character count could not survive the WP22.2 port. The card is the one
+ * place on this screen with room for a whole sentence, so it gets the whole sentence.
+ */
 export function labelFor(node: RoadmapNode): string {
-  if (node.state === 'next') {
-    return node.title.trim();
-  }
-
-  return truncateTitle(node.title, node.state === 'done' ? DONE_LABEL_CHARS : LOCKED_LABEL_CHARS);
+  return node.title.trim();
 }

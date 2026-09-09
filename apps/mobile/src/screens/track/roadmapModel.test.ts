@@ -2,8 +2,6 @@ import type { TrackProgressSummary } from '@zoomout/shared';
 
 import type { LeafSummary } from '../../api/client';
 import {
-  DONE_LABEL_CHARS,
-  LOCKED_LABEL_CHARS,
   buildRoadmapModel,
   labelFor,
   truncateTitle,
@@ -205,11 +203,11 @@ describe('labels', () => {
   });
 
   it('leaves a short title exactly as it is', () => {
-    expect(truncateTitle('Loss aversion', DONE_LABEL_CHARS)).toBe('Loss aversion');
+    expect(truncateTitle('Loss aversion', 26)).toBe('Loss aversion');
   });
 
   it('cuts on a word boundary when there is a usable one', () => {
-    expect(truncateTitle(LONG, DONE_LABEL_CHARS)).toBe('The Compounding Cost of a…');
+    expect(truncateTitle(LONG, 26)).toBe('The Compounding Cost of a…');
   });
 
   it('cuts mid-word rather than returning almost nothing', () => {
@@ -218,18 +216,50 @@ describe('labels', () => {
     expect(truncateTitle('Antidisestablishmentarianism', 10)).toBe('Antidisest…');
   });
 
-  it('gives the next Leaf its full title and the others a truncated one', () => {
+  /**
+   * **The side labels left this module in WP22.2.** `labelFor` used to shorten every
+   * state to one of two fixed character budgets; those budgets were what produced a
+   * one-line stub beside each cell, and they could not know how much gutter a given node
+   * actually had. The wrapping and the budget now live in `roadmapLabels.ts`, keyed on
+   * real width and on the OS text scale, and `labelFor` is left holding only the card
+   * under the Leaf the reader is up to — which shows the title whole.
+   */
+  it('gives every node its title in full, because the card has room for it', () => {
     const model = buildRoadmapModel(
       [leaf(0, LONG), leaf(1, LONG), leaf(2, LONG)],
       progress({ totalLeaves: 3, completedLeaves: 1, nextLeafId: 'leaf-1' }),
     );
 
-    const [done, next, locked] = model.nodes;
+    const [, next] = model.nodes;
 
     expect(next && labelFor(next)).toBe(LONG);
-    expect(done && labelFor(done).length).toBeLessThanOrEqual(DONE_LABEL_CHARS + 1);
-    expect(locked && labelFor(locked).length).toBeLessThanOrEqual(LOCKED_LABEL_CHARS + 1);
-    // Locked is deliberately the shortest: the map should not spoil what is ahead.
-    expect(locked && labelFor(locked).length).toBeLessThan(done ? labelFor(done).length : 0);
+  });
+});
+
+describe('the revisit state', () => {
+  it('is never derived from progress, however the counts fall', () => {
+    // Built and rendered in WP22.2, unreachable on purpose: nothing the client receives
+    // says a Leaf is due for review. This is the assertion that says the unreachability
+    // is a decision rather than an oversight — if a future package wires recall data in,
+    // this test is the one that should fail and be updated deliberately.
+    const leaves = Array.from({ length: 6 }, (_, index) => leaf(index));
+
+    for (let completed = 0; completed <= 6; completed += 1) {
+      const model = buildRoadmapModel(
+        leaves,
+        progress({
+          totalLeaves: 6,
+          completedLeaves: completed,
+          nextLeafId: completed === 6 ? null : `leaf-${String(completed)}`,
+        }),
+      );
+
+      expect(model.nodes.map((node) => node.state)).not.toContain('revisit');
+    }
+
+    // And with no rollup at all, which is the other branch that assigns states.
+    expect(buildRoadmapModel(leaves, null).nodes.map((node) => node.state)).not.toContain(
+      'revisit',
+    );
   });
 });

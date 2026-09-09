@@ -188,10 +188,30 @@ describe('the Track roadmap on a book the reader is part way through', () => {
       expect(view.getByTestId('track-detail-title')).toBeOnTheScreen();
     });
 
+    /**
+     * **Every Leaf is a node; not every Leaf is a label.** WP22.2 gave the next Leaf's
+     * card the mockup's behaviour of hiding whatever it would otherwise be sitting on
+     * top of, so a label can legitimately be absent — see `roadmapLabels.ts`.
+     *
+     * What must never be absent is the Leaf itself. The node is the accessibility
+     * element and it carries the **full, untruncated** title at every text size, which
+     * is the guarantee that makes dropping a decorative label safe. Asserting that here
+     * rather than asserting a label per Leaf, because that is the promise the module
+     * makes and the one a regression would break.
+     */
     for (const leaf of LEAVES) {
       expect(view.getByTestId(`roadmap-node-${leaf.id}`)).toBeOnTheScreen();
-      expect(view.getByTestId(`roadmap-label-${leaf.id}`)).toBeOnTheScreen();
+      expect(
+        view.getByTestId(`roadmap-node-${leaf.id}`).props['accessibilityLabel'] as string,
+      ).toContain(leaf.title);
     }
+
+    // Most Leaves still carry a visible label; only what the card covers is dropped.
+    const labelled = LEAVES.filter(
+      (leaf) => view.queryByTestId(`roadmap-label-${leaf.id}`) !== null,
+    );
+
+    expect(labelled.length).toBeGreaterThanOrEqual(LEAVES.length - 2);
 
     // The state a reader has to be able to find on a graph two thousand points tall.
     expect(view.getByTestId('roadmap-next-ring')).toBeOnTheScreen();
@@ -203,7 +223,7 @@ describe('the Track roadmap on a book the reader is part way through', () => {
     expect(view.getByTestId('track-detail-progress-bar-label')).toHaveTextContent('2 of 5 complete');
   });
 
-  it('shows the next Leaf its full title and the rest a truncated one', async () => {
+  it('shows the next Leaf its full title and wraps the rest to a verbatim prefix', async () => {
     const view = await renderDetail(backendWith({ completedLeaves: 2, nextLeafId: 'leaf-2' }));
 
     await waitFor(() => {
@@ -213,8 +233,38 @@ describe('the Track roadmap on a book the reader is part way through', () => {
     expect(view.getByTestId('roadmap-label-leaf-2')).toHaveTextContent(
       'The Cost of Postponing Decision Number 2',
     );
-    // Truncated, and still a prefix of the real title — never reworded.
-    expect(view.getByTestId('roadmap-label-leaf-4')).toHaveTextContent('The Cost of…');
+
+    /**
+     * **This assertion changed in WP22.2 and the change is the point.** It used to read
+     * `'The Cost of…'` for one named Leaf — a single line cut at a fixed eighteen
+     * characters, which was all that fit in the 37pt gutter the old two-thirds meander
+     * left. The narrowed band and the two-line wrap give more of the sentence back.
+     *
+     * **Asserted over every label that renders rather than over a named one**, for a
+     * reason worth knowing: React Native's jest preset reports `fontScale: 2`, so this
+     * screen renders here as though the reader had doubled their text size. Which Leaves
+     * keep a label under those conditions is a property of the degradation rules, not
+     * something a test should pin by id — naming one made this test fail the moment the
+     * card started widening with the text scale, for no defect at all.
+     *
+     * What must hold at any scale: whatever text a label shows is a verbatim prefix of
+     * the author's title, with the ellipsis the only thing this app added.
+     */
+    const titles = new Map(LEAVES.map((entry) => [entry.id, entry.title]));
+    const rendered = LEAVES.map((entry) => ({
+      id: entry.id,
+      node: view.queryByTestId(`roadmap-label-${entry.id}`),
+    })).filter((entry) => entry.node !== null);
+
+    expect(rendered.length).toBeGreaterThan(0);
+
+    for (const entry of rendered) {
+      const shown = (entry.node?.props['children'] as string)
+        .replace(/…$/u, '')
+        .replace(/\n/gu, ' ');
+
+      expect(titles.get(entry.id)?.startsWith(shown)).toBe(true);
+    }
   });
 
   it('opens the next Leaf from the node and from Continue alike', async () => {

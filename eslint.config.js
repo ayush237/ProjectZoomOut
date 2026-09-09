@@ -31,6 +31,14 @@ export default tseslint.config(
       // Emitted by `payload generate:types`. It ships its own eslint-disable banner,
       // but the file is build output either way and has no business being linted.
       'packages/shared/src/cms-generated.ts',
+      // Design source, not application code: the Claude Design exports tracked in WP23.1
+      // (`e9d13d0`) include a vendored design-system bundle and a browser web-component
+      // helper, and eslint has been failing the root gate on both ever since — 53 errors
+      // in `image-slot.js` alone, all `no-undef` on browser globals it has every right to
+      // use. Same category as `apps/pipeline/**` above: a directory this repo reads from
+      // rather than builds. Added in WP22.2 because the red gate predates that package
+      // and blocked it; revert if the intent was for these to be linted.
+      'design/**',
     ],
   },
 

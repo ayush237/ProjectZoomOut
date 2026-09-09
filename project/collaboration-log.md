@@ -815,6 +815,187 @@ Reading (handoff, three mockup sources, existing components, the achievement/ses
 
 ---
 
+### Completed: WP22.2 — port the roadmap's visuals from `graph.jsx` — 2026-09-09
+
+**What changed:** The Track roadmap now reads as `graph.jsx` renders it. Four node states instead of three (`revisit` included), the source's arbor density in place of our sparse fields, uppercased letter-spaced labels with leader lines in real gutters, the Leaf number on the next cell, and the whole book on about one screen instead of a two-thousand-point scroll. The layout is still generated; what moved is appearance plus two composition constants the appearance could not survive without.
+
+**Files touched:**
+- `apps/mobile/src/screens/track/roadmapGeometry.ts` — substantially rewritten
+- `apps/mobile/src/screens/track/roadmapLabels.ts` — **new**
+- `apps/mobile/src/screens/track/roadmapLabels.test.ts` — **new**
+- `apps/mobile/src/screens/track/TrackRoadmap.tsx`
+- `apps/mobile/src/screens/track/roadmapModel.ts`, `roadmapModel.test.ts`
+- `apps/mobile/src/screens/track/roadmapGeometry.test.ts`
+- `apps/mobile/src/screens/trackDetail.test.tsx`
+- `eslint.config.js` — **outside the stated scope; see "Decisions Architect should rule on", item 3**
+
+---
+
+#### The long-label problem, and what I decided
+
+The handoff called this the judgement the package was buying, so it gets the most space.
+
+**The mechanical cause was not the type treatment.** `graph.jsx` keeps its 18 nodes between x=149 and x=244 of a 390-wide frame — a band under a quarter of the width — which leaves about 125pt of clear gutter on each side. Our band was two thirds of a 354pt frame, leaving about **37pt**. The screen did not look different from the mockup because the labels were styled differently. It looked different because there was nowhere to put them. Narrowing `spineBand` from `2/3` to `0.25` is the single change that made every other label decision possible, and it is why the fix is partly a geometry change rather than a typography one.
+
+**With the gutter open, the decision has three parts:**
+
+1. **Two lines, wrapped on word boundaries; truncated only when two will not hold the title.** The mockup already wraps — its `lines` fixture is a pre-split array and two is the most any of them uses. One line is what produced *"Real wealth comes from…"*; two produce *"REAL WEALTH COMES / FROM CREATING…"*. Past two the gutter becomes a column of prose and the graph disappears behind it.
+2. **The character budget is computed per node** from the gutter that node actually has and from the OS text scale — never a constant. `DONE_LABEL_CHARS` and `LOCKED_LABEL_CHARS` are deleted rather than retuned: a fixed budget chosen before anyone knew the available width is the thing that was wrong.
+3. **Under a legibility floor (`MIN_LABEL_CHARS`, 8) the label is dropped, not shrunk to a stub.** At the accessibility text sizes the gutter holds four or five characters, and four characters of an uppercased sentence is noise that also collides with its neighbours.
+
+**Nothing is reworded, and nothing is uppercased in the string.** The capitals are `textTransform` on the `caption` token, so the screen reader, the test tree and any future copy audit still see the author's own casing — an uppercased string is a modified string. Every visible line is a verbatim prefix of the title plus an ellipsis, and `wrapTitle`'s Tier A tests assert exactly that across every budget a real gutter can produce.
+
+**The claim that makes dropping a label safe:** the title is never lost, only the decoration is. Every node is an accessibility node carrying its full untruncated title at every text size, and the next Leaf's card shows the title whole. `trackDetail.test.tsx` now asserts the accessibility-label guarantee directly rather than asserting a label per Leaf.
+
+**This reverses WP22's `small`-not-`caption` ruling, and that ruling was right about the screen it was made on.** WP22 observed on a device that eighteen shouting fragments read as signage rather than a table of contents. That was a correct observation about *one-line stubs in a 37pt gutter*. With the band narrowed and the labels wrapped, they read as a margin. I would not have overruled it on reasoning alone.
+
+---
+
+#### Itemised comparison against `graph.jsx` at 18 Leaves
+
+The handoff asked for differences named rather than a summary. Compared side by side against the prototype running `proto/graph.jsx` (served locally and driven to the Track screen at 7/18) and our build on Track 42.
+
+**Ported and matching**
+
+| | |
+|---|---|
+| Four node states | `R={next:15,done:6.5,revisit:12,locked:11}`, transcribed |
+| `done` / `revisit` | page-coloured body, reward ring, reward bud at 2.9 |
+| `revisit` ring | dashed `3.5 4`, opacity 0.85 — photographed, see below |
+| `next` | aura fill 0.07 + ring 0.32 at r=25, filled body at r=15, Leaf number |
+| Labels | display semibold, 12px, 0.8 tracking, uppercase, `text-secondary` |
+| Label sides | split on the frame's centre line, stacked with a 7pt gap |
+| Leader lines | drawn when a label drifts >9pt, 0.8 wide at 0.55 |
+| Arbors | 6 on the next cell, 4 elsewhere; depth 4/3; terminal sprays with buds |
+| Axon | four tapering segments thrown *across* the spine, plus a tuft |
+| Ambient mesh | scattered dots at `surface-3`, bowed arcs + wisps at `graph-edge` |
+| Spine | travelled in `primary` at 1.75, ahead in `border` at 2 |
+| Tissue opacity | reached `primary` @0.44, unreached `graph-edge` @0.8 |
+| Composition | the whole book in about one screen |
+
+**Deliberate differences, with the reason**
+
+1. **Curves have a minimum bow; `graph.jsx`'s do not.** Its `bend` is `(rand()-0.5)*k`, which passes through zero and can emit a straight segment. The floor (`minBend`) is kept because the founder's "constellation, not a neuron" ruling predates the mockup. Mutation-checked: restoring `graph.jsx`'s own form reddens *curves every connection* at every Leaf count and nothing else.
+2. **Positions are generated, not hardcoded.** The point of the package.
+3. **Labels wrap to two lines on a width-and-scale budget, and drop under a floor.** The section above.
+4. **The Leaf number is a React Native `Text`, not SVG `<text>` at a fixed 15px** — `Text.tsx` is the only component allowed to touch `allowFontScaling` and never disables it, so this glyph scales like every other. It is *dropped* once it outgrows its cell (`showsLeafNumber`), same rule as the labels.
+5. **The card is placed under the node, not searched.** `placeCard` scores six candidate heights against both sides; I ported the term doing the work — which side buries fewer labels — and left the vertical position under the cell, where a reader looking at their own Leaf will look for it.
+6. **The card widens with the text scale**, up to the full frame. Fixed at 45% it truncated its title to two characters at the accessibility sizes, beside two empty gutters.
+7. **The spine's bow sign follows the local turn** rather than the PRNG, and is much gentler (0.12 of the gap). At the new node spacing a randomly-signed third-of-a-gap bow is a zigzag.
+8. **Ambient dot count is derived from area**, not fixed at 58, so a 30-Leaf Track's background is not sparser than an 18-Leaf one's.
+
+**Remaining differences — not closed**
+
+1. **Not full-bleed.** `graph.jsx`'s SVG spans the full 390; ours sits inside `Screen`'s 24pt horizontal padding, so the frame is 354 and the drawing never reaches the screen edge. **`Screen.tsx` and `TrackDetailScreen.tsx` are outside this package's stated scope** (`screens/track/`). This is the largest single remaining visual gap and it is a one-line change in someone else's file.
+2. **No gradient scrims.** The mockup fades the graph under a 236pt header gradient and above a 186pt bottom gradient. Ours has hard edges — the tissue starts abruptly under the Continue button. Same scope boundary.
+3. **Different screen architecture.** The mockup is a fixed 844pt screen with pinned header, progress bar, CTA and tab bar over the graph. Ours is a scrolling page with the legal pair and progress above the graph — `TrackLegal` above the fold is WP10's obligation and was not touched.
+4. **Every node has a 44pt touch target; the mockup gives one only to the next node.** Ours is the accessibility requirement, kept.
+5. **Left/right label balance is 11/6 on Track 42, against the mockup's roughly 9/8.** A consequence of a generated meander rather than hand-placed nodes; it varies by seed and Leaf count.
+6. **The spine is C0 at the nodes, not C1.** The mockup runs Catmull-Rom through the centres; ours is per-gap bowed segments, which is what keeps the minimum-bow guarantee in item 1 above.
+7. **`revisit` is unreachable.** Below.
+
+---
+
+#### `revisit` is built, tested, photographed, and unreachable — deliberately
+
+The handoff said to build the state and its visual and leave it unreachable until something populates it. Done: `LeafNodeState` has four members, geometry sizes it at 12, paint gives it the dashed reward ring, and `roadmapModel.test.ts` asserts that `buildRoadmapModel` never returns it **at any completion count and on the no-rollup branch** — so the unreachability is a decision with a test on it, and a future package wiring recall data in will fail that test and have to update it deliberately.
+
+Nothing the client receives says a Leaf is due for review: `TrackProgressSummary` carries counts and a `nextLeafId`, `LeafSummary` carries no completion or recall data. WP22's ruling was about the data and still stands; it was never about the drawing.
+
+**Verified on a device by a temporary local patch** (`stateAt` forced index 1 to `revisit`), screenshotted at full resolution, then reverted and the revert confirmed by grep and by re-reading `stateAt`. The dashed amber ring at r=12 sits clearly distinct from the small solid `done` ring above it.
+
+---
+
+#### Density: the number, and how it is bounded
+
+Transcribing `arbors()` literally emits **about 8,700 stroked paths at 18 Leaves** — measured by running the source's own recursion in Node before writing any TypeScript, not estimated. Our previous field was ~450. That is the twentyfold gap the founder was seeing as "sparse".
+
+The shared `dendriteBudget` was raised from 380 to 8,800, and **the way the budget bites changed**: it now scales the terminal spray rather than truncating the recursion. A hard counter spends the whole allowance on whichever branch depth-first recursion walks first and leaves the rest of the field bald; scaling `tips` degrades it evenly, and does so exactly where the paths are.
+
+Measured across the range, at a 354×874 viewport:
+
+| Leaves | height | total paths | generation |
+|---|---|---|---|
+| 15 | 564 | 10,867 | 23ms |
+| 18 | 564 | 9,921 | 19ms |
+| 22 | 614 | 10,826 | 26ms |
+| 26 | 710 | 10,626 | 24ms |
+| 30 | 806 | 10,121 | 23ms |
+
+Flat across the range (ratio 1.10), and the budget test's ceiling moved from 560 to 12,000. **The element count did not move**: those ~10,000 subpaths batch into a few dozen `<Path>` elements, which is why density could go up twentyfold without touching what React renders.
+
+---
+
+#### Assumptions made
+
+1. **`spineBand` 2/3 → 0.25 and the vertical rhythm 104–152pt → 24–40pt are "tuning constants if composition needs it"**, which the handoff explicitly permitted. They are the two changes that make the screen match; without them the port is a repaint of a differently-shaped screen. Both are asserted by tests that state the consequence rather than the constant.
+2. **`done` and `revisit` use the reward colour.** This reverses WP22's written rationale that amber is reserved for something won and a finished Leaf is progress rather than a prize. `graph.jsx` uses it for both, the handoff made `graph.jsx` the source of truth, and the founder has called our screen wrong twice. Recorded in `TrackRoadmap.tsx`'s docstring rather than quietly flipped.
+3. **`layoutRoadmap` now takes the Leaves' *states*, not a count.** Radius, arbor count and reach are all state-keyed in the source, so geometry has to know. It stays pure, seeded and checkable across 15–30 from an array of string literals; the "geometry does not know about progress" principle in the old docstring is gone and the docstring says why.
+4. **The next Leaf's card is not in the handoff's criteria, and I changed it anyway.** Full-width and pinned under the node, it sat on top of four labels at once on real content. `placeCard` exists precisely to stop that.
+
+---
+
+#### Findings worth knowing
+
+**1. The root lint gate is red on `main` today, and it is not from this package.** `design/claude_design/image-slot.js` (53 errors) and the vendored `_ds_bundle.js` fail `no-undef` on browser globals, and `design/` is not in `eslint.config.js`'s ignore list. Both files arrived in `e9d13d0` ("Change the method: port from Claude Design's source, not from pictures"). Confirmed not mine: `git status` shows `design/` untouched by this branch. I added `design/**` to the ignore list — same category as the `apps/pipeline/**` entry already there — because the acceptance criteria require a green root lint and I could not otherwise meet them. **This is the one edit outside the stated scope and it is Architect's to accept or revert.**
+
+**2. React Native's jest preset reports `fontScale: 2`.** Every screen test in this repo therefore renders as though the reader had doubled their text size — so screen tests exercise the *degraded* layout path, not the default one. This cost me a confusing failure: a test naming `roadmap-label-leaf-3` passed, then failed after an unrelated change to card width, with no defect involved. Any future screen test that asserts on default-size layout is testing something else. Worth carrying forward.
+
+**3. A mutation survived, and the test it exposed was wrong.** "Gives every Leaf but the next one a label, **on both sides of the spine**" stayed green when I flipped `labelSide` back to WP22's inward direction — because there are nodes on both sides of the centre line whichever way the labels point, so the assertion did not test the rule it was written beside. Added *sends every label outward, to the gutter on its own node's side of the spine*, which reddens on that mutation. This is the second time in this project a test's name has claimed more than its assertion.
+
+**4. A real bug found by a test I wrote, not by looking.** `wrapTitle` returned a single word longer than the line budget untouched — it would have rendered straight out of the gutter and across the graph. Fixed: an over-long line is the last one shown, truncated.
+
+**5. Metro had been running 26 hours** at the start of this package. Restarted the app rather than the packager and confirmed a fresh bundle by seeing the new drawing; no time lost, recorded because the standing note says this has cost time three times.
+
+**6. Track 42's progress moved from 1/18 to 2/18 partway through** the session, across a multi-hour interruption. Not something this package did — noting it so a future reader does not treat the differing screenshots as a rendering inconsistency.
+
+---
+
+#### Device gate
+
+Simulator: iPhone 16 Pro, iOS 26.3, existing prebuild + Metro. Theme and text size switched with `simctl ui`, per WP24's finding.
+
+| Check | Result |
+|---|---|
+| Track 42, 18 Leaves, dark, default size | Pass — screenshotted |
+| Track 42, light | Pass — reward reads as deep amber, primary as deep green |
+| Dark at `accessibility-extra-extra-extra-large` | Pass — labels drop, card goes full width, number drops |
+| Light at the same | Pass |
+| 20-Leaf placeholder Track (dark) | Pass — all 20 labels placed, leaders drawn, **no card** (no next Leaf), stacking holds |
+| All four node states in one frame | Pass — photographed at full resolution via the temporary patch |
+
+Two defects were found *by* the device gate and fixed in it: the card burying four labels, and the card plus Leaf number becoming illegible at the accessibility sizes. Neither was visible to a unit test before I wrote tests for them.
+
+**Not measured: frame rate.** I scrolled the 18- and 20-Leaf graphs repeatedly and rendering stayed intact and responsive, but I did not instrument it, and ~10,000 subpaths is a real increase. If anyone reports scroll stutter on this screen, `GRAPH.dendriteBudget` is the single constant to turn down; the tip-scaling degradation is designed for exactly that and needs no other change.
+
+**Not re-checked: the `design/typography.ts` font-scaling clip.** Present as always at the top text sizes on the progress caption and the Continue button. Logged in `launch-blockers.md`, deliberately not fixed, not re-raised.
+
+---
+
+#### Tests added/updated
+
+- **`roadmapLabels.test.ts` (new, 26 tests).** Tier A on `wrapTitle` — the verbatim-prefix property across every budget, word-boundary breaks, the overflow fold, the line budget, the over-long word. Tier B on placement, the card, and the two degradations.
+- **`roadmapGeometry.test.ts`** — reworked for the states signature; new coverage for the four states, the aura's exclusivity to `next`, terminal buds, per-generation fade, the narrow band's gutter consequence, one-screen composition, and ambient density across book lengths. 241 tests.
+- **`roadmapModel.test.ts`** — `revisit` unreachable at every completion count and on the no-rollup branch.
+- **`trackDetail.test.tsx`** — the accessibility-label guarantee per Leaf; the prefix property over every rendered label.
+
+**Twelve mutations, all precise** (each reddened its own test and only its own, across every parameterised Leaf count): the over-long-word guard; the card's label suppression; `showsLeafNumber`; `MIN_LABEL_CHARS`; the card's scale-widening; `labelSide` outward (survived once — see finding 3 — then reddened after the test was fixed); `spineBand`; the vertical rhythm; terminal buds; the aura's exclusivity; `revisit`'s radius; the minimum-bow floor.
+
+**Cannot be mutation-checked, and saying so:** *"never lets two labels in the same gutter overlap"* and *"keeps each label inside its own gutter"* assert the absence of a collision. Breaking the stacking does redden the first, but both guard a future regression more than they prove present behaviour.
+
+**Deferred to WP14:** component render tests for the four paint branches; theme permutations of `paintFor`; the `inconsistent`/`unknown` progress branches rendered on a device rather than in jsdom; `dotPath`'s circle approximation.
+
+---
+
+#### Follow-ups / tech debt for Architect
+
+1. **Rule on the `eslint.config.js` change** (finding 1). Either `design/**` stays ignored, or the two files need fixing and the root gate is red until then.
+2. **Full-bleed and the gradient scrims** are the largest remaining visual gap and both live outside `screens/track/`. Worth a small follow-up package if the founder still sees a difference — it is the difference between a graph on a page and the mockup's graph *as* the page.
+3. **`revisit` has no data source.** Whenever spaced repetition, a failed payoff, or an author correction lands, the rendering is waiting and `roadmapModel.test.ts`'s unreachability test is the one to update.
+4. **The mockup prototype is worth serving locally for WP25/WP27**, which port from the same source. `design/claude_design/ZoomOut prototype.html` loads `proto/*.jsx` and needs a static server rooted at `design/claude_design` (its stylesheets are relative); the jump bar at the bottom of the prototype goes straight to any screen. I used a throwaway node server and removed it rather than leave an untracked file failing the root lint — worth ten lines in a future package rather than rediscovering it.
+
+**Time:** implementation ~35%; tests and the twelve mutation checks ~20%; the device gate ~25% (of which the two defects it caught and their fixes were most of it); the cold gate ~5%; this write-up ~15%.
+
 #### Addendum to WP23.1, below — added before push, not before sign-off
 
 Between finishing the device pass and pushing this branch, `origin/main` picked up **"Record the PayoffSlide ruling the WP23.1 row already pointed at"** (`b28db6c`), folding an actual Payoff re-skin into WP22.2. It corrects this report's Payoff section in one place and confirms it in another, and I'd rather say so than let a PR stand next to reasoning that's already half-superseded:

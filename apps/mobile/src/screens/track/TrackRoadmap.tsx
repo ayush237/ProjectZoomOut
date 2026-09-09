@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   ReduceMotion,
   useAnimatedStyle,
@@ -19,12 +19,21 @@ import {
   type Theme,
 } from '../../design';
 import {
+  HALO_RADIUS,
+  SPINE_WIDTH,
   curvePath,
   layoutRoadmap,
   type Curve,
+  type Dot,
   type RoadmapGeometry,
   type RoadmapNodeGeometry,
 } from './roadmapGeometry';
+import {
+  layoutRoadmapLabels,
+  showsLeafNumber,
+  type RoadmapCard,
+  type RoadmapLabel,
+} from './roadmapLabels';
 import { labelFor, type LeafNodeState, type RoadmapModel, type RoadmapNode } from './roadmapModel';
 
 /**
@@ -36,16 +45,32 @@ import { labelFor, type LeafNodeState, type RoadmapModel, type RoadmapNode } fro
  * device — see `roadmapGeometry.ts` for why that mattered enough to structure the
  * package around it.
  *
- * **Roughly 450 curves are drawn as about two dozen native paths.** SVG path data takes
- * many subpaths in one `d` string, so every curve sharing a colour and a stroke width is
- * concatenated into a single `<Path>`. One React element per curve would mean ~450
- * native views inside a scroll view, which is where a screen like this stutters; this is
- * the reason density did not have to be cut to keep the scroll smooth.
+ * **Roughly nine thousand curves are drawn as about three dozen native paths.** SVG path
+ * data takes many subpaths in one `d` string, so every curve sharing a colour, a stroke
+ * width and an opacity is concatenated into a single `<Path>`. One React element per
+ * curve would mean thousands of native views inside a scroll view, which is where a
+ * screen like this stops being a screen; this is the reason WP22.2 could raise density
+ * twentyfold without touching the element count.
  *
- * **The three states differ by more than hue**, because colour alone is not a state
- * indicator for every reader: a done cell is a *filled* body, a locked cell is a
- * *hollow* outline, and the next cell is the only one wearing a ring and the only one
- * showing its full title. Greyscale still reads.
+ * **The four states differ by more than hue**, because colour alone is not a state
+ * indicator for every reader:
+ *
+ * | state | body | outline | centre |
+ * |---|---|---|---|
+ * | `next` | filled, largest, aura behind it, carries its Leaf number | — | the number |
+ * | `done` | page-coloured, smallest | solid reward ring | reward bud |
+ * | `revisit` | page-coloured, middling | **dashed** reward ring | reward bud |
+ * | `locked` | page-coloured | hairline border ring | — |
+ *
+ * Greyscale still reads: size, fill, dash and the presence of a bud are four independent
+ * signals before colour is consulted at all.
+ *
+ * **Amber arrived here in WP22.2 and it is a reversal worth naming.** WP22 wrote that
+ * the reward colour is reserved for something won and a finished Leaf is progress rather
+ * than a prize. `graph.jsx` uses it for both `done` and `revisit`, the founder compared
+ * the two screens and called ours wrong, and the design source now outranks that
+ * reasoning. Recorded rather than quietly flipped, because the argument was sound and
+ * only the ruling changed.
  */
 
 export interface TrackRoadmapProps {
@@ -59,8 +84,8 @@ export interface TrackRoadmapProps {
   readonly testID?: string;
 }
 
-/** The pulsing ring that marks where the reader is. Sized off the touch target. */
-const RING_SIZE = MIN_TOUCH_TARGET - 4;
+/** The breathing ring around the next cell, sized to the aura it sits on. */
+const RING_SIZE = HALO_RADIUS * 2;
 
 export function TrackRoadmap({
   model,
@@ -71,13 +96,34 @@ export function TrackRoadmap({
   testID = 'track-roadmap',
 }: TrackRoadmapProps): React.JSX.Element {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+
+  const states = useMemo(() => model.nodes.map((node) => node.state), [model.nodes]);
 
   const geometry = useMemo(
-    () => layoutRoadmap(model.nodes.length, { width, height: viewportHeight }, seed),
-    [model.nodes.length, width, viewportHeight, seed],
+    () => layoutRoadmap(states, { width, height: viewportHeight }, seed),
+    [states, width, viewportHeight, seed],
   );
 
-  const layers = useMemo(() => buildLayers(geometry, model, theme), [geometry, model, theme]);
+  const margin = useMemo(
+    () =>
+      layoutRoadmapLabels({
+        nodes: geometry.nodes,
+        titles: model.nodes.map((node) => node.title),
+        frameWidth: geometry.width,
+        fontScale,
+        fontSize: theme.typography.caption.fontSize ?? 12,
+        lineHeight: theme.typography.caption.lineHeight ?? 16,
+        cardFontSize: theme.typography.h3.fontSize ?? 18,
+        cardLineHeight: theme.typography.h3.lineHeight ?? 24,
+      }),
+    [geometry, model.nodes, fontScale, theme],
+  );
+
+  const layers = useMemo(
+    () => buildLayers(geometry, margin.labels, theme),
+    [geometry, margin.labels, theme],
+  );
 
   return (
     <View testID={testID} style={{ width: geometry.width, height: geometry.height }}>
@@ -92,6 +138,7 @@ export function TrackRoadmap({
               fill={layer.fill}
               stroke={layer.stroke}
               strokeWidth={layer.strokeWidth}
+              {...(layer.dash === undefined ? {} : { strokeDasharray: layer.dash })}
               strokeLinecap="round"
               strokeLinejoin="round"
               opacity={layer.opacity}
@@ -108,7 +155,8 @@ export function TrackRoadmap({
             key={leaf.leafId}
             leaf={leaf}
             geometry={node}
-            frameWidth={geometry.width}
+            label={margin.labels.find((candidate) => candidate.index === node.index) ?? null}
+            card={margin.card}
             onOpenLeaf={onOpenLeaf}
           />
         );
@@ -123,16 +171,20 @@ export function TrackRoadmap({
  * Text is React Native's, not SVG's, deliberately: `Text.tsx` is the only component
  * allowed to touch `allowFontScaling` and it never disables it, and `<Svg><Text>` would
  * be a second text system in the app that quietly opts out of the OS font size setting.
+ * That applies to the Leaf number on the next cell too, which `graph.jsx` draws as an
+ * SVG `<text>` and this file draws as an absolutely-positioned `Text`.
  */
 function RoadmapNodeOverlay({
   leaf,
   geometry,
-  frameWidth,
+  label,
+  card,
   onOpenLeaf,
 }: {
   readonly leaf: RoadmapNode;
   readonly geometry: RoadmapNodeGeometry;
-  readonly frameWidth: number;
+  readonly label: RoadmapLabel | null;
+  readonly card: RoadmapCard | null;
   readonly onOpenLeaf: (node: RoadmapNode) => void;
 }): React.JSX.Element {
   const theme = useTheme();
@@ -150,7 +202,7 @@ function RoadmapNodeOverlay({
     <>
       {leaf.state === 'next' ? <NextNodeRing centre={geometry.centre} /> : null}
 
-      <NodeLabel leaf={leaf} geometry={geometry} frameWidth={frameWidth} />
+      <NodeLabel leaf={leaf} geometry={geometry} label={label} card={card} />
 
       {/**
        * **Only the next Leaf opens from the map.** A locked one has not been earned,
@@ -202,6 +254,10 @@ function RoadmapNodeOverlay({
  * move. Caught by measuring the pixels across six frames, not by looking. The decision
  * about what a reduced-motion reader gets is `motionPlan`'s and has already been made
  * by the time this runs; Reanimated must not make it a second time.
+ *
+ * **WP22.2 sized it to `graph.jsx`'s aura** rather than to the touch target, and dropped
+ * its opacity to the source's 0.32, so the ring and the filled aura behind it are the
+ * same object rather than two concentric circles at different radii.
  */
 function NextNodeRing({ centre }: { readonly centre: { x: number; y: number } }): React.JSX.Element {
   const theme = useTheme();
@@ -209,12 +265,15 @@ function NextNodeRing({ centre }: { readonly centre: { x: number; y: number } })
   const plan = motionPlan(reducedMotion, duration.celebration);
 
   const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
+  const opacity = useSharedValue(HALO_STROKE_OPACITY);
 
   useEffect(() => {
     if (plan.kind === 'fade') {
       opacity.value = withRepeat(
-        withTiming(0.4, { duration: plan.durationMs, reduceMotion: ReduceMotion.Never }),
+        withTiming(HALO_STROKE_OPACITY * 0.4, {
+          duration: plan.durationMs,
+          reduceMotion: ReduceMotion.Never,
+        }),
         -1,
         true,
         undefined,
@@ -244,7 +303,7 @@ function NextNodeRing({ centre }: { readonly centre: { x: number; y: number } })
           width: RING_SIZE,
           height: RING_SIZE,
           borderRadius: theme.radius.full,
-          borderWidth: theme.borderWidth.focus,
+          borderWidth: theme.borderWidth.hairline,
           borderColor: theme.palette.primary,
         },
       ]}
@@ -255,96 +314,133 @@ function NextNodeRing({ centre }: { readonly centre: { x: number; y: number } })
 /**
  * What a node says.
  *
- * The next Leaf keeps its full title, beneath the node and on a card so it stays legible
- * over the dendrites. Everything else carries a short truncated label to the side —
- * enough to see the shape of the book without opening it, and shorter still when locked
- * so the map does not spoil what is ahead.
+ * The Leaf the reader is up to shows its number inside the cell and its full title on a
+ * card beneath — the one place on this screen a whole sentence has room. Everything else
+ * carries a wrapped, uppercased label in the gutter, laid out by `roadmapLabels.ts`,
+ * which decides how much of the title fits and whether it is worth drawing at all.
  *
- * The text is always the Leaf's own title, cut but never reworded. See `truncateTitle`.
+ * The text is always the Leaf's own title, cut but never reworded, and the capitals are
+ * a style rather than a transformation of the string. See `roadmapLabels.ts`.
  */
 function NodeLabel({
   leaf,
   geometry,
-  frameWidth,
+  label,
+  card,
 }: {
   readonly leaf: RoadmapNode;
   readonly geometry: RoadmapNodeGeometry;
-  readonly frameWidth: number;
-}): React.JSX.Element {
+  readonly label: RoadmapLabel | null;
+  readonly card: RoadmapCard | null;
+}): React.JSX.Element | null {
   const theme = useTheme();
-  const label = labelFor(leaf);
+  const { fontScale } = useWindowDimensions();
 
   if (leaf.state === 'next') {
     return (
-      <View
-        pointerEvents="none"
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: geometry.centre.y + RING_SIZE / 2 + theme.spacing.sm,
-          alignItems: 'center',
-          paddingHorizontal: theme.spacing.lg,
-        }}
-      >
-        <View
-          style={{
-            maxWidth: '100%',
-            paddingVertical: theme.spacing.xs,
-            paddingHorizontal: theme.spacing.md,
-            borderRadius: theme.radius.md,
-            backgroundColor: theme.surfaceFor('card'),
-            borderWidth: theme.borderWidth.hairline,
-            borderColor: theme.palette.border,
-          }}
-        >
-          <Text
-            variant="small"
-            align="center"
-            numberOfLines={3}
-            testID={`roadmap-label-${leaf.leafId}`}
+      <>
+        {/* Inside the cell, on the fill. `onPrimary` is the token that exists for text
+            sitting on `primary`, and it is the only pairing checked for contrast.
+            Dropped rather than clipped once the OS text size outgrows the cell — see
+            `showsLeafNumber`. */}
+        {showsLeafNumber(
+          geometry.radius,
+          theme.typography.h3.fontSize ?? 18,
+          fontScale,
+        ) ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: geometry.centre.x - MIN_TOUCH_TARGET / 2,
+              top: geometry.centre.y - MIN_TOUCH_TARGET / 2,
+              width: MIN_TOUCH_TARGET,
+              height: MIN_TOUCH_TARGET,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            {label}
-          </Text>
-        </View>
-      </View>
+            <Text
+              variant="h3"
+              align="center"
+              numberOfLines={1}
+              style={{ color: theme.palette.onPrimary }}
+              testID={`roadmap-number-${leaf.leafId}`}
+            >
+              {String(leaf.orderIndex + 1)}
+            </Text>
+          </View>
+        ) : null}
+
+        {card === null ? null : (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: card.x,
+              top: card.y,
+              width: card.width,
+              paddingVertical: theme.spacing.sm,
+              paddingHorizontal: theme.spacing.md,
+              borderRadius: theme.radius.md,
+              backgroundColor: theme.surfaceFor('raised'),
+              borderWidth: theme.borderWidth.hairline,
+              borderColor: theme.palette.border,
+            }}
+          >
+            <Text variant="caption" tone="primary" testID={`roadmap-next-eyebrow-${leaf.leafId}`}>
+              {`Leaf ${String(leaf.orderIndex + 1)} · next`}
+            </Text>
+            <Text
+              variant="h3"
+              numberOfLines={3}
+              testID={`roadmap-label-${leaf.leafId}`}
+            >
+              {labelFor(leaf)}
+            </Text>
+          </View>
+        )}
+      </>
     );
   }
 
-  const gap = geometry.radius + theme.spacing.sm;
-  const side =
-    geometry.labelSide === 'right'
-      ? { left: geometry.centre.x + gap, right: theme.spacing.xs }
-      : { left: theme.spacing.xs, right: frameWidth - (geometry.centre.x - gap) };
+  if (label === null) {
+    return null;
+  }
 
   return (
     <View
       pointerEvents="none"
       style={{
         position: 'absolute',
-        ...side,
-        // Centred on the node rather than hung from its top, so a label and its cell
-        // read as one thing at any OS text size. `TextStyle.lineHeight` is optional in
-        // React Native's type even though every variant in the scale sets one, so the
-        // fallback is the token that variant actually uses rather than a bare number.
-        top: geometry.centre.y - (theme.typography.small.lineHeight ?? theme.spacing.xl) / 2,
+        top: label.top,
+        // Anchored to the frame edge rather than sized to the text, so the block can be
+        // right-aligned into the left gutter without measuring it first.
+        ...(label.side === 'left'
+          ? { left: 0, width: label.x }
+          : { left: label.x, right: 0 }),
       }}
     >
       {/**
-       * `small`, not `caption`. `caption` is the right weight for a label but it
-       * uppercases and letter-spaces, and these labels are **book content** — seen on
-       * device, eighteen shouting fragments of a real author's chapter titles read as
-       * signage rather than as a table of contents, and are materially harder to scan.
-       * Truncating a title is a space decision; restyling its capitalisation is not.
+       * `caption`, which is exactly `graph.jsx`'s label: display semibold, twelve point,
+       * 0.8 of tracking, uppercased.
+       *
+       * **This reverses WP22's ruling**, which chose `small` on the grounds that these
+       * are book content and eighteen shouting fragments of a real author's chapter
+       * titles read as signage. That observation was correct about *one-line stubs in a
+       * 37-point gutter*, which is what the screen had. With the meander narrowed and
+       * the labels wrapped to two lines in the gutter that opens up, they read as a
+       * table of contents — which is what the source draws and what the founder asked
+       * for twice. The capitals remain a style: the string is never uppercased, so the
+       * screen reader and the accessibility label still get the author's own casing.
        */}
       <Text
-        variant="small"
-        tone={leaf.state === 'done' ? 'textPrimary' : 'textMuted'}
-        align={geometry.labelSide === 'right' ? 'left' : 'right'}
-        numberOfLines={1}
+        variant="caption"
+        tone={leaf.state === 'locked' ? 'textMuted' : 'textPrimary'}
+        align={label.side === 'left' ? 'right' : 'left'}
         testID={`roadmap-label-${leaf.leafId}`}
       >
-        {label}
+        {label.lines.join('\n')}
       </Text>
     </View>
   );
@@ -355,15 +451,23 @@ function NodeLabel({
  *
  * A screen reader gets no benefit from a filled body versus a hollow one, so the thing
  * the shapes encode is spelled out here instead. The title is read in full even where
- * the visible label is truncated — truncation is a space constraint, not an editorial one.
+ * the visible label is truncated or dropped entirely — truncation is a space constraint,
+ * not an editorial one, and this is the guarantee that makes dropping a label at large
+ * text sizes safe.
  */
 function accessibilityLabelFor(leaf: RoadmapNode): string {
   const position = `Leaf ${String(leaf.orderIndex + 1)}`;
-  const state =
-    leaf.state === 'done' ? 'Completed' : leaf.state === 'next' ? 'Up next' : 'Not yet unlocked';
+  const state = STATE_WORDS[leaf.state];
 
   return `${position}: ${leaf.title}. ${state}.`;
 }
+
+const STATE_WORDS: Record<LeafNodeState, string> = {
+  done: 'Completed',
+  next: 'Up next',
+  revisit: 'Completed, worth revisiting',
+  locked: 'Not yet unlocked',
+};
 
 /* -------------------------------------------------------------------------- */
 /* Drawing layers                                                              */
@@ -376,96 +480,135 @@ interface DrawLayer {
   readonly stroke: string;
   readonly strokeWidth: number;
   readonly opacity: number;
+  readonly dash?: readonly number[] | undefined;
 }
 
 interface StatePaint {
+  /** What this cell's processes and its outline are drawn in. */
   readonly colour: string;
   readonly processOpacity: number;
   readonly somaFill: string;
   readonly somaStroke: string;
+  readonly somaStrokeWidth: number;
+  readonly dash?: readonly number[] | undefined;
+  /** The bud at the centre of a read cell, in the reward colour. Null when there is none. */
+  readonly core: string | null;
 }
 
+/** The aura behind the next cell: a wash, and a ring at the same radius. */
+const HALO_FILL_OPACITY = 0.07;
+const HALO_STROKE_OPACITY = 0.32;
+/** `graph.jsx`: reached tissue is drawn back, unreached tissue forward. */
+const REACHED_PROCESS_OPACITY = 0.44;
+const UNREACHED_PROCESS_OPACITY = 0.8;
+const LEADER_OPACITY = 0.55;
+const LEADER_WIDTH = 0.8;
+const REVISIT_DASH = [3.5, 4] as const;
+const REVISIT_RING_OPACITY = 0.85;
+
 /**
- * How each state is drawn.
+ * How each state is drawn — transcribed from `graph.jsx`'s `GraphNode`.
  *
- * Amber is untouched on purpose: `design-direction.md` reserves the reward colour for
- * something won, and a finished Leaf on a map is progress rather than a prize.
+ * The body is page-coloured rather than transparent on three of the four states, and
+ * that is load-bearing rather than cosmetic: the dendritic fields are dense enough now
+ * that a hollow outline over them is unreadable. The fill is what punches the cell out
+ * of the tissue.
  */
 function paintFor(state: LeafNodeState, theme: Theme): StatePaint {
-  if (state === 'locked') {
+  const page = theme.surfaceFor('page');
+
+  if (state === 'next') {
     return {
-      colour: theme.palette.textMuted,
-      processOpacity: 0.28,
-      // Hollow. This is the state difference that survives greyscale and colour
-      // blindness alike — it is a different shape, not a different hue.
-      somaFill: 'none',
-      somaStroke: theme.palette.textMuted,
+      colour: theme.palette.primary,
+      processOpacity: REACHED_PROCESS_OPACITY,
+      somaFill: theme.palette.primary,
+      somaStroke: 'none',
+      somaStrokeWidth: 0,
+      core: null,
+    };
+  }
+
+  if (state === 'done') {
+    return {
+      colour: theme.palette.primary,
+      processOpacity: REACHED_PROCESS_OPACITY,
+      somaFill: page,
+      somaStroke: theme.palette.reward,
+      somaStrokeWidth: theme.borderWidth.hairline,
+      core: theme.palette.reward,
+    };
+  }
+
+  if (state === 'revisit') {
+    return {
+      colour: theme.palette.primary,
+      processOpacity: REACHED_PROCESS_OPACITY,
+      somaFill: page,
+      somaStroke: theme.palette.reward,
+      somaStrokeWidth: theme.borderWidth.hairline,
+      // The one state whose outline is broken rather than solid. Independent of hue, so
+      // it survives greyscale and it survives the light theme's much darker amber.
+      dash: REVISIT_DASH,
+      core: theme.palette.reward,
     };
   }
 
   return {
-    colour: theme.palette.primary,
-    processOpacity: state === 'next' ? 0.85 : 0.5,
-    somaFill: theme.palette.primary,
-    somaStroke: 'none',
+    colour: theme.palette.border,
+    processOpacity: UNREACHED_PROCESS_OPACITY,
+    somaFill: page,
+    somaStroke: theme.palette.border,
+    somaStrokeWidth: theme.borderWidth.hairline,
+    core: null,
   };
 }
 
 /**
- * Collapses every curve into a handful of paths, one per colour-and-width combination.
+ * Collapses every curve into a few dozen paths, one per distinct paint.
  *
  * The ordering of the returned layers is the paint order: the faint web first, then the
- * dendritic fields, then the spine the eye follows, then the cell bodies on top.
+ * dendritic fields and their buds, then the spine the eye follows, then the leader
+ * lines, then the cell bodies on top of everything.
  */
 function buildLayers(
   geometry: RoadmapGeometry,
-  model: RoadmapModel,
+  labels: readonly RoadmapLabel[],
   theme: Theme,
 ): readonly DrawLayer[] {
-  const layers: DrawLayer[] = [];
-  const strokes = new Map<string, { d: string; layer: Omit<DrawLayer, 'd'> }>();
-
-  const addStroke = (
-    bucket: string,
-    curve: Curve,
-    colour: string,
-    opacity: number,
-    strokeWidth: number,
-  ): void => {
-    const rounded = Math.round(strokeWidth * 100) / 100;
-    const key = `${bucket}|${colour}|${String(opacity)}|${String(rounded)}`;
-    const existing = strokes.get(key);
-    const d = curvePath(curve);
-
-    if (existing === undefined) {
-      strokes.set(key, {
-        d,
-        layer: { key, fill: 'none', stroke: colour, strokeWidth: rounded, opacity },
-      });
-      return;
-    }
-
-    existing.d = `${existing.d} ${d}`;
-  };
+  const batch = new Batch();
 
   for (const curve of geometry.web) {
-    addStroke('web', curve, theme.palette.border, 0.45, curve.strokeWidth);
+    batch.stroke('web', curvePath(curve), theme.palette.border, 0.4, curve.strokeWidth);
+  }
+
+  for (const dot of geometry.webDots) {
+    batch.fill('web-dot', dotPath(dot), theme.palette.surface3, 1);
   }
 
   for (const node of geometry.nodes) {
-    const leaf = model.nodes[node.index];
-
-    if (leaf === undefined) {
-      continue;
-    }
-
-    const paint = paintFor(leaf.state, theme);
+    const paint = paintFor(node.state, theme);
 
     for (const dendrite of node.dendrites) {
-      addStroke('dendrite', dendrite, paint.colour, paint.processOpacity, dendrite.strokeWidth);
+      batch.stroke(
+        'dendrite',
+        curvePath(dendrite),
+        paint.colour,
+        paint.processOpacity * dendrite.opacity,
+        dendrite.strokeWidth,
+      );
     }
 
-    addStroke('axon', node.axon, paint.colour, paint.processOpacity, node.axon.strokeWidth);
+    batch.stroke(
+      'axon',
+      curvePath(node.axon),
+      paint.colour,
+      paint.processOpacity * node.axon.opacity,
+      node.axon.strokeWidth,
+    );
+
+    for (const bud of node.tips) {
+      batch.fill('bud', dotPath(bud), paint.colour, paint.processOpacity * bud.opacity);
+    }
   }
 
   /**
@@ -475,57 +618,196 @@ function buildLayers(
    * one leading to where they are now, and it should not already look walked.
    */
   for (const [index, curve] of geometry.spine.entries()) {
-    const travelled = model.nodes[index]?.state === 'done';
+    const travelled = isRead(geometry.nodes[index]?.state);
 
-    addStroke(
+    batch.stroke(
       'spine',
-      curve,
+      curvePath(curve),
       travelled ? theme.palette.primary : theme.palette.border,
       travelled ? 0.75 : 0.6,
-      curve.strokeWidth,
+      travelled ? SPINE_WIDTH.travelled : SPINE_WIDTH.ahead,
     );
   }
 
-  for (const [key, entry] of strokes) {
-    layers.push({ ...entry.layer, key, d: entry.d });
-  }
-
-  // Cell bodies last, so nothing is drawn over them. Fills and outlines are separate
-  // buckets because a hollow locked body and a filled done body cannot share a path.
-  const bodies = new Map<string, { d: string; layer: Omit<DrawLayer, 'd'> }>();
-
-  for (const node of geometry.nodes) {
-    const leaf = model.nodes[node.index];
-
-    if (leaf === undefined) {
+  for (const label of labels) {
+    if (label.leader === null) {
       continue;
     }
 
-    const paint = paintFor(leaf.state, theme);
-    const key = `soma|${paint.somaFill}|${paint.somaStroke}`;
-    const d = curvePath(node.soma);
-    const existing = bodies.get(key);
+    const node = geometry.nodes.find((candidate) => candidate.index === label.index);
+
+    batch.stroke(
+      'leader',
+      label.leader,
+      isRead(node?.state) ? theme.palette.primary : theme.palette.border,
+      LEADER_OPACITY,
+      LEADER_WIDTH,
+    );
+  }
+
+  // Cell bodies last, so nothing is drawn over them. The aura goes underneath its own
+  // body but on top of every process, which is what gives the next cell its clearing.
+  for (const node of geometry.nodes) {
+    if (node.halo !== null) {
+      const halo = curvePath(node.halo);
+
+      batch.fill('halo', halo, theme.palette.primary, HALO_FILL_OPACITY);
+      batch.stroke('halo-ring', halo, theme.palette.primary, HALO_STROKE_OPACITY, 1.5);
+    }
+  }
+
+  for (const node of geometry.nodes) {
+    const paint = paintFor(node.state, theme);
+    const body = curvePath(node.soma);
+
+    if (paint.somaFill !== 'none') {
+      batch.fill('soma', body, paint.somaFill, 1);
+    }
+
+    if (paint.somaStroke !== 'none') {
+      batch.stroke(
+        'soma-ring',
+        body,
+        paint.somaStroke,
+        paint.dash === undefined ? 1 : REVISIT_RING_OPACITY,
+        paint.somaStrokeWidth,
+        paint.dash,
+      );
+    }
+
+    if (paint.core !== null) {
+      batch.fill('core', curvePath(coreBlob(node)), paint.core, 1);
+    }
+  }
+
+  return batch.layers();
+}
+
+function isRead(state: LeafNodeState | undefined): boolean {
+  return state === 'done' || state === 'revisit';
+}
+
+/**
+ * The bud at a read cell's centre.
+ *
+ * Derived from the soma rather than generated, so it stays inside a body that is itself
+ * irregular: scaling the outline down about its own centre keeps the two concentric
+ * however lopsided the cell is, and costs the geometry nothing to carry.
+ */
+function coreBlob(node: RoadmapNodeGeometry): Curve {
+  const factor = CORE_RADIUS / Math.max(node.radius, 0.01);
+  const shrink = (point: { x: number; y: number }): { x: number; y: number } => ({
+    x: node.centre.x + (point.x - node.centre.x) * factor,
+    y: node.centre.y + (point.y - node.centre.y) * factor,
+  });
+
+  return {
+    from: shrink(node.soma.from),
+    segments: node.soma.segments.map((segment) => ({
+      c1: shrink(segment.c1),
+      c2: shrink(segment.c2),
+      to: shrink(segment.to),
+    })),
+    strokeWidth: 0,
+    opacity: 1,
+    closed: true,
+  };
+}
+
+const CORE_RADIUS = 2.9;
+
+/**
+ * A dot as a closed path, so it can share a `<Path>` with everything else its colour.
+ *
+ * `<Circle>` would be a separate element each, and there are a couple of thousand of
+ * them. Four arcs' worth of cubics is the standard circle approximation and is
+ * indistinguishable at these radii.
+ */
+function dotPath(dot: Dot): string {
+  const { centre, radius } = dot;
+  const k = radius * 0.5523;
+
+  return (
+    `M${(centre.x - radius).toFixed(2)},${centre.y.toFixed(2)}` +
+    `C${(centre.x - radius).toFixed(2)},${(centre.y - k).toFixed(2)} ` +
+    `${(centre.x - k).toFixed(2)},${(centre.y - radius).toFixed(2)} ` +
+    `${centre.x.toFixed(2)},${(centre.y - radius).toFixed(2)}` +
+    `C${(centre.x + k).toFixed(2)},${(centre.y - radius).toFixed(2)} ` +
+    `${(centre.x + radius).toFixed(2)},${(centre.y - k).toFixed(2)} ` +
+    `${(centre.x + radius).toFixed(2)},${centre.y.toFixed(2)}` +
+    `C${(centre.x + radius).toFixed(2)},${(centre.y + k).toFixed(2)} ` +
+    `${(centre.x + k).toFixed(2)},${(centre.y + radius).toFixed(2)} ` +
+    `${centre.x.toFixed(2)},${(centre.y + radius).toFixed(2)}` +
+    `C${(centre.x - k).toFixed(2)},${(centre.y + radius).toFixed(2)} ` +
+    `${(centre.x - radius).toFixed(2)},${(centre.y + k).toFixed(2)} ` +
+    `${(centre.x - radius).toFixed(2)},${centre.y.toFixed(2)}Z`
+  );
+}
+
+/**
+ * Accumulates subpaths into one `<Path>` per distinct paint.
+ *
+ * Pulled out of `buildLayers` in WP22.2 because there are now five kinds of thing being
+ * batched rather than two, and the bucket key grew a dash pattern. Insertion order is
+ * the paint order, which `Map` guarantees.
+ */
+class Batch {
+  private readonly buckets = new Map<string, { d: string; layer: Omit<DrawLayer, 'd'> }>();
+
+  stroke(
+    bucket: string,
+    d: string,
+    colour: string,
+    opacity: number,
+    strokeWidth: number,
+    dash?: readonly number[],
+  ): void {
+    const width = round(strokeWidth);
+    const alpha = round(opacity);
+    const key = `${bucket}|${colour}|${String(alpha)}|${String(width)}|${dash?.join(',') ?? ''}`;
+
+    this.add(key, d, {
+      key,
+      fill: 'none',
+      stroke: colour,
+      strokeWidth: width,
+      opacity: alpha,
+      dash,
+    });
+  }
+
+  fill(bucket: string, d: string, colour: string, opacity: number): void {
+    const alpha = round(opacity);
+    const key = `${bucket}|${colour}|${String(alpha)}`;
+
+    this.add(key, d, { key, fill: colour, stroke: 'none', strokeWidth: 0, opacity: alpha });
+  }
+
+  layers(): readonly DrawLayer[] {
+    return [...this.buckets.values()].map((entry) => ({ ...entry.layer, d: entry.d }));
+  }
+
+  private add(key: string, d: string, layer: Omit<DrawLayer, 'd'>): void {
+    const existing = this.buckets.get(key);
 
     if (existing === undefined) {
-      bodies.set(key, {
-        d,
-        layer: {
-          key,
-          fill: paint.somaFill,
-          stroke: paint.somaStroke,
-          strokeWidth: theme.borderWidth.focus,
-          opacity: 1,
-        },
-      });
-      continue;
+      this.buckets.set(key, { d, layer });
+      return;
     }
 
     existing.d = `${existing.d} ${d}`;
   }
+}
 
-  for (const [key, entry] of bodies) {
-    layers.push({ ...entry.layer, key, d: entry.d });
-  }
-
-  return layers;
+/**
+ * Two decimal places, which is what collapses thousands of curves into dozens of paths.
+ *
+ * Each generation of a dendritic tree fades by a factor of 0.94 and thins by 0.58, so
+ * the raw values are a long tail of distinct floats; rounding them is what makes two
+ * curves from different nodes land in the same bucket. Coarser than this and the fade
+ * banding becomes visible; finer and the element count climbs back toward the curve
+ * count, which is the thing batching exists to prevent.
+ */
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
