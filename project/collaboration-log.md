@@ -152,7 +152,28 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ### Handoff: 2026-09-09 — WP25: the reward and failure moments
 
-*Manager. **Suggested model: Sonnet** — four surfaces that exist, three specs in the repo, no new mechanism. The choreography is specified rather than left to you.*
+*Manager. **Suggested model: Sonnet** — four surfaces that exist, and the port is composition rather than animation. Reasoning in the revision note.*
+
+> **REVISED 2026-09-09, after WP22.2. Read this block before the body below it — the method changed and parts of the original text are now wrong.**
+>
+> **1. Port from source, do not build from the specs.** The body below says "follow the three specs". That instruction produced the roadmap drift the founder rejected: a screen built from a written description looked nothing like the design. **The Claude Design export is now in the repo and it is the source of truth.** The `design/prompts/*.txt` files remain useful for the *reasoning* behind each "Do not" — keep reading them for that — but the visual answer comes from the code.
+>
+> | Surface | Source of truth |
+> |---|---|
+> | Report-error + failure states | `design/claude_design/proto/support.jsx` |
+> | Session end, cap-hit, streak | `design/claude_design/proto/leaf.jsx` (`SessionEnd`) |
+> | Achievement unlock | `design/claude_design/Achievement unlock.html` |
+> | The end-of-day screen, as drafted | `design/claude_design/Done for today.html` and `Done for today v2.html` |
+>
+> **2. Why this is still Sonnet, checked rather than assumed.** I expected the achievement unlock's four-frame sequence to be CSS keyframes needing translation into Reanimated, which would have made it Opus work. **It is not: `Achievement unlock.html` contains no `@keyframes` — five `transform:` rules and one `transition:`.** The four frames are four *stills* showing the stages, not a running animation. **The app's existing unlock animation stays exactly as it is**; only its presentation changes. That removes the one genuinely hard thing this package looked like it had.
+>
+> **3. To view the mockups** (Manager's own finding, carried so it is not rediscovered): `design/claude_design/ZoomOut prototype.html` loads `proto/*.jsx` and **needs a static server rooted at `design/claude_design`** — its stylesheets are relative. The jump bar at the bottom goes straight to any screen.
+>
+> **4. `RN`'s jest preset reports `fontScale: 2`.** Every screen test in this repo renders as though the reader doubled their text size, so **a passing screen test says nothing about the default rendering.** Found in WP22.2 after a confusing failure with no defect behind it.
+>
+> **5. Amber has a boundary now, ruled 2026-09-09, and this package is where it matters most.** *Outline for what you have done; fill for what you have just won.* The roadmap outlines completed nodes in amber. **The achievement badge is the fill case** — this is the reward moment the palette reserves the colour for, and it should read as heavier than anything on the roadmap.
+>
+> **6. Check geometry before you conclude it is content.** WP22.2's stated hard problem was long labels. It was a symptom: the node band spanned two thirds of the frame instead of a quarter, leaving 37pt of gutter where the source leaves 125. **Every label was a stub because the gutter was a stub.** If something here looks like a copy or content problem, measure the space it is being asked to fit into first.
 
 > **Read:** this handoff · **`design/prompts/screen-10-session-end-and-cap.txt`**, **`screen-11-achievement-unlock.txt`**, **`screen-12-report-error-and-failure.txt`** (all three are in the repo; I read them before writing this) · `apps/mobile/src/components/AchievementUnlock.tsx` · `apps/mobile/src/screens/share/WrapUpScreen.tsx` · `apps/mobile/src/screens/leaf/ReportErrorSheet.tsx` · `apps/mobile/src/components/{ErrorState,EmptyState,StatusMessage}.tsx` · `apps/mobile/src/design/motion.ts` · `agents/manager.md`.
 > **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
