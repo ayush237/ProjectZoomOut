@@ -1,4 +1,5 @@
 import {
+  HALO_RADIUS,
   curvePath,
   dendriteBudgetPerNode,
   layoutRoadmap,
@@ -7,6 +8,7 @@ import {
   type Point,
   type RoadmapGeometry,
 } from './roadmapGeometry';
+import type { LeafNodeState } from './roadmapModel';
 
 /**
  * Tier A, and the reason is the whole point of the package.
@@ -19,8 +21,15 @@ import {
  * count in the range, not at the one that happens to be seeded.
  */
 
-const VIEWPORT = { width: 354, height: 740 } as const;
+const VIEWPORT = { width: 354, height: 874 } as const;
 const COUNTS = Array.from({ length: 16 }, (_, index) => index + 15);
+
+/** A reader a third of the way through a book: some done, one next, the rest locked. */
+function statesFor(count: number, done = Math.floor(count / 3)): LeafNodeState[] {
+  return Array.from({ length: count }, (_, index) =>
+    index < done ? 'done' : index === done ? 'next' : 'locked',
+  );
+}
 
 /** Every stroked connection: the web, the spine, and each cell's processes. */
 function connections(geometry: RoadmapGeometry): Curve[] {
@@ -62,8 +71,8 @@ describe('seedFromTrackId', () => {
 
 describe('determinism', () => {
   it('produces identical geometry across repeated calls with the same input', () => {
-    const first = layoutRoadmap(18, VIEWPORT, seedFromTrackId('42'));
-    const second = layoutRoadmap(18, VIEWPORT, seedFromTrackId('42'));
+    const first = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
+    const second = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
 
     // Deep equality over the whole structure — every control point of every path, not a
     // spot check on the node centres. A graph that reshuffles any of its curves between
@@ -74,23 +83,38 @@ describe('determinism', () => {
   it('produces identical geometry on a third call after a different Track was laid out', () => {
     // Catches a generator held in module scope: the second call below would advance it
     // and the third would differ. The PRNG is per-call, and this is what says so.
-    const first = layoutRoadmap(18, VIEWPORT, seedFromTrackId('42'));
-    layoutRoadmap(23, VIEWPORT, seedFromTrackId('99'));
-    const third = layoutRoadmap(18, VIEWPORT, seedFromTrackId('42'));
+    const first = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
+    layoutRoadmap(statesFor(23), VIEWPORT, seedFromTrackId('99'));
+    const third = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
 
     expect(third).toEqual(first);
   });
 
   it('gives different Tracks different graphs', () => {
-    const a = layoutRoadmap(18, VIEWPORT, seedFromTrackId('42'));
-    const b = layoutRoadmap(18, VIEWPORT, seedFromTrackId('43'));
+    const a = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
+    const b = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('43'));
 
     expect(b.nodes.map((node) => node.centre)).not.toEqual(a.nodes.map((node) => node.centre));
+  });
+
+  it('redraws when progress moves, because appearance follows state', () => {
+    // The consequence of WP22.2's signature change, stated so it is not mistaken for a
+    // regression: the same Track at a different point in the book is a different
+    // drawing, because the cell the reader is up to is larger and grows more.
+    const early = layoutRoadmap(statesFor(18, 2), VIEWPORT, seedFromTrackId('42'));
+    const later = layoutRoadmap(statesFor(18, 9), VIEWPORT, seedFromTrackId('42'));
+
+    expect(later.nodes[2]?.radius).not.toBe(early.nodes[2]?.radius);
+    expect(later.nodes.map((node) => node.centre)).toEqual(early.nodes.map((node) => node.centre));
   });
 });
 
 describe.each(COUNTS)('at %i Leaves', (count) => {
-  const geometry = layoutRoadmap(count, VIEWPORT, seedFromTrackId(`track-${String(count)}`));
+  const geometry = layoutRoadmap(
+    statesFor(count),
+    VIEWPORT,
+    seedFromTrackId(`track-${String(count)}`),
+  );
 
   it('draws one node per Leaf, in order', () => {
     expect(geometry.nodes).toHaveLength(count);
@@ -108,16 +132,24 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
     }
   });
 
-  it('keeps the spine inside the middle two thirds', () => {
-    // The founder's first correction: the meander swung to both edges. The band is a
-    // sixth of the frame in from each side, and it holds by construction rather than by
-    // clamping — the two waves' amplitudes sum to exactly one.
-    const low = geometry.width / 6;
-    const high = (geometry.width * 5) / 6;
+  it('keeps the spine in a narrow central band, leaving a gutter for labels on both sides', () => {
+    // **Tightened in WP22.2, and this is the assertion that changed.** It used to be the
+    // middle two thirds, which was the founder's first correction to a meander that swung
+    // to both edges. Two thirds still left only ~37pt of gutter, which is not enough for
+    // a label — see `roadmapLabels.ts`. The band is now a quarter of the frame, as in
+    // `graph.jsx`, and this asserts the *consequence* rather than the constant: whatever
+    // the band is, every node must leave a usable gutter on each side of it.
+    const centre = geometry.width / 2;
+    const halfBand = (geometry.width * 0.25) / 2;
 
     for (const node of geometry.nodes) {
-      expect(node.centre.x).toBeGreaterThanOrEqual(low - 0.5);
-      expect(node.centre.x).toBeLessThanOrEqual(high + 0.5);
+      expect(node.centre.x).toBeGreaterThanOrEqual(centre - halfBand - 0.5);
+      expect(node.centre.x).toBeLessThanOrEqual(centre + halfBand + 0.5);
+
+      const leftGutter = node.centre.x - node.radius;
+      const rightGutter = geometry.width - node.centre.x - node.radius;
+
+      expect(Math.min(leftGutter, rightGutter)).toBeGreaterThan(100);
     }
   });
 
@@ -127,7 +159,15 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
     const xs = geometry.nodes.map((node) => node.centre.x);
     const spread = Math.max(...xs) - Math.min(...xs);
 
-    expect(spread).toBeGreaterThan((geometry.width * 2) / 3 / 2);
+    expect(spread).toBeGreaterThan((geometry.width * 0.25) / 2);
+  });
+
+  it('fits the whole book in about one screen rather than a long scroll', () => {
+    // WP22.2's other composition change. `graph.jsx` puts all 18 Leaves inside one
+    // 844-tall screen; ours ran 104–152pt per Leaf and produced a graph two thousand
+    // points tall, which is both a different screen from the mockup and far too sparse
+    // for neighbouring dendritic fields to touch.
+    expect(geometry.height).toBeLessThan(VIEWPORT.height * 1.2);
   });
 
   it('has one spine curve per gap between Leaves', () => {
@@ -139,6 +179,9 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
     // a neuron, because almost every connection is a straight line." A straight segment
     // is one whose control points lie on the chord, so that is what is asserted — for
     // every path in the drawing, not for a sample.
+    //
+    // **`graph.jsx` would fail this**, and knowingly: its bend is `(rand()-0.5)*k`,
+    // which passes through zero. The floor in `signedBend` is the deliberate difference.
     for (const curve of connections(geometry)) {
       let start = curve.from;
 
@@ -171,6 +214,32 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
 
       for (let index = 1; index < widths.length; index += 1) {
         expect(widths[index]).toBeLessThan(widths[index - 1] ?? Infinity);
+      }
+    }
+  });
+
+  it('ends its dendritic tips in a spray of fine buds', () => {
+    // The single biggest visual difference WP22.2 closed: our fields were trunks with no
+    // terminal detail, and the terminal detail is four fifths of what reads as tissue.
+    for (const node of geometry.nodes) {
+      expect(node.tips.length).toBeGreaterThan(0);
+
+      for (const bud of node.tips) {
+        expect(bud.radius).toBeGreaterThan(0);
+        expect(bud.radius).toBeLessThan(node.radius);
+      }
+    }
+  });
+
+  it('fades each generation against its parent rather than drawing them all alike', () => {
+    for (const node of geometry.nodes) {
+      const opacities = new Set(node.dendrites.map((curve) => curve.opacity));
+
+      expect(opacities.size).toBeGreaterThanOrEqual(3);
+
+      for (const opacity of opacities) {
+        expect(opacity).toBeGreaterThan(0);
+        expect(opacity).toBeLessThanOrEqual(1);
       }
     }
   });
@@ -233,6 +302,66 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
   });
 });
 
+/**
+ * The four node states, and the fact that all four are drawings rather than three
+ * drawings and a plan. `revisit` is unreachable through `buildRoadmapModel` by design —
+ * see `roadmapModel.ts` — so this is the only place its geometry is exercised at all.
+ */
+describe('the four node states', () => {
+  const states: LeafNodeState[] = ['done', 'revisit', 'next', 'locked', 'locked'];
+  const geometry = layoutRoadmap(states, VIEWPORT, seedFromTrackId('42'));
+
+  it('sizes each state differently, next largest and done smallest', () => {
+    const radiusOf = (state: LeafNodeState): number =>
+      geometry.nodes.find((node) => node.state === state)?.radius ?? 0;
+
+    expect(radiusOf('next')).toBeGreaterThan(radiusOf('revisit'));
+    expect(radiusOf('revisit')).toBeGreaterThan(radiusOf('locked'));
+    expect(radiusOf('locked')).toBeGreaterThan(radiusOf('done'));
+  });
+
+  it('renders a revisit cell rather than skipping or collapsing it into done', () => {
+    const revisit = geometry.nodes.find((node) => node.state === 'revisit');
+
+    expect(revisit).toBeDefined();
+    expect(revisit?.soma.closed).toBe(true);
+    expect(revisit?.dendrites.length).toBeGreaterThan(0);
+    // Its own radius, not a done cell's — the dashed ring is drawn at this radius and a
+    // revisit cell collapsed onto `done`'s 6.5 would be a dash pattern on a speck.
+    expect(revisit?.radius).not.toBe(geometry.nodes.find((node) => node.state === 'done')?.radius);
+  });
+
+  it('gives the aura to the next cell and to nothing else', () => {
+    for (const node of geometry.nodes) {
+      expect(node.halo === null).toBe(node.state !== 'next');
+    }
+
+    const halo = geometry.nodes.find((node) => node.state === 'next')?.halo;
+
+    expect(halo?.closed).toBe(true);
+
+    const radii = (halo?.segments ?? []).map((segment) =>
+      Math.hypot(
+        segment.to.x - (geometry.nodes.find((node) => node.state === 'next')?.centre.x ?? 0),
+        segment.to.y - (geometry.nodes.find((node) => node.state === 'next')?.centre.y ?? 0),
+      ),
+    );
+
+    // Drawn at the aura's radius, not the body's, so the ring has a clearing inside it.
+    expect(Math.max(...radii)).toBeGreaterThan(HALO_RADIUS * 0.8);
+  });
+
+  it('grows the next cell more than any other', () => {
+    const next = geometry.nodes.find((node) => node.state === 'next');
+    const locked = geometry.nodes.find((node) => node.state === 'locked');
+
+    // `graph.jsx`: six arbors on the next cell, four everywhere else, and a deeper
+    // recursion on top. The reader's position is found by density before it is found by
+    // colour, which is what makes it findable at a glance.
+    expect(next?.dendrites.length ?? 0).toBeGreaterThan(locked?.dendrites.length ?? 0);
+  });
+});
+
 describe('density budget', () => {
   it('spends fewer dendrites per node as a Track gets longer', () => {
     // "Density degrades before frame rate does." A per-node budget would make the
@@ -243,7 +372,7 @@ describe('density budget', () => {
 
   it('keeps the total path count roughly flat across the whole range', () => {
     const counts = COUNTS.map(
-      (count) => layoutRoadmap(count, VIEWPORT, seedFromTrackId('42')).pathCount,
+      (count) => layoutRoadmap(statesFor(count), VIEWPORT, seedFromTrackId('42')).pathCount,
     );
 
     const smallest = Math.min(...counts);
@@ -253,22 +382,49 @@ describe('density budget', () => {
   });
 
   it('never asks the renderer for more paths than it was budgeted', () => {
+    // **Raised from 560 to 12,000 in WP22.2**, which is a real change in what this screen
+    // costs and not a threshold nudged to make a test pass. Transcribing `graph.jsx`'s
+    // `arbors()` is what produced it: ten thousand subpaths, batched into a few dozen
+    // `<Path>` elements by `TrackRoadmap.tsx`. The number that matters for frame rate is
+    // the element count, which did not move; this one is bounded so that a change to the
+    // recursion cannot quietly multiply it again.
     for (const count of COUNTS) {
-      const geometry = layoutRoadmap(count, VIEWPORT, seedFromTrackId('42'));
+      const geometry = layoutRoadmap(statesFor(count), VIEWPORT, seedFromTrackId('42'));
 
-      expect(geometry.pathCount).toBeLessThanOrEqual(560);
+      expect(geometry.pathCount).toBeLessThanOrEqual(12000);
       expect(geometry.pathCount).toBe(
         geometry.web.length +
+          geometry.webDots.length +
           geometry.spine.length +
-          geometry.nodes.reduce((total, node) => total + node.dendrites.length + 2, 0),
+          geometry.nodes.reduce(
+            (total, node) =>
+              total + node.dendrites.length + node.tips.length + 2 + (node.halo === null ? 0 : 1),
+            0,
+          ),
       );
     }
+  });
+
+  it('draws an ambient mesh whose density does not change with book length', () => {
+    // `graph.jsx` scatters a fixed 58 dots over a fixed frame. Ours is a frame whose
+    // height depends on the book, so a fixed count would make a long Track's background
+    // sparse and a short one's crowded — the count is derived from area instead.
+    const densities = [15, 22, 30].map((count) => {
+      const geometry = layoutRoadmap(statesFor(count), VIEWPORT, seedFromTrackId('42'));
+
+      return (geometry.webDots.length / (geometry.width * geometry.height)) * 1e5;
+    });
+
+    const smallest = Math.min(...densities);
+    const largest = Math.max(...densities);
+
+    expect(largest / smallest).toBeLessThan(1.25);
   });
 });
 
 describe('degenerate Leaf counts', () => {
   it('draws nothing for a Track with no visible Leaves', () => {
-    const geometry = layoutRoadmap(0, VIEWPORT, seedFromTrackId('42'));
+    const geometry = layoutRoadmap([], VIEWPORT, seedFromTrackId('42'));
 
     expect(geometry.nodes).toHaveLength(0);
     expect(geometry.spine).toHaveLength(0);
@@ -276,15 +432,19 @@ describe('degenerate Leaf counts', () => {
   });
 
   it('draws a single Leaf with no spine', () => {
-    const geometry = layoutRoadmap(1, VIEWPORT, seedFromTrackId('42'));
+    const geometry = layoutRoadmap(['next'], VIEWPORT, seedFromTrackId('42'));
 
     expect(geometry.nodes).toHaveLength(1);
     expect(geometry.spine).toHaveLength(0);
     expect(geometry.nodes[0]?.dendrites.length).toBeGreaterThan(0);
   });
 
-  it('ignores a fractional or negative count rather than producing NaN geometry', () => {
-    expect(layoutRoadmap(-3, VIEWPORT, 1).nodes).toHaveLength(0);
-    expect(layoutRoadmap(17.6, VIEWPORT, 1).nodes).toHaveLength(17);
+  it('cannot be handed a fractional or negative Leaf count at all', () => {
+    // The previous version of this file asserted that `layoutRoadmap(17.6, …)` produced
+    // 17 nodes and `layoutRoadmap(-3, …)` produced none. Taking an array of states
+    // instead of a count makes both unrepresentable, which is a better outcome than a
+    // guard — kept as a note rather than deleted silently, because "that test vanished"
+    // and "that test was deleted" look identical in a diff a month later.
+    expect(layoutRoadmap([], VIEWPORT, 1).nodes).toHaveLength(0);
   });
 });
