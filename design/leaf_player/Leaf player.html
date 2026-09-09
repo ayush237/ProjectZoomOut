@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Leaf player</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0}body{background:var(--surface-page);min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}
+.rail{display:flex;gap:40px;padding:40px;align-items:flex-start;width:max-content}
+.col{display:flex;flex-direction:column;gap:var(--space-md)}
+.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}
+.body{flex:1;display:flex;flex-direction:column;min-height:0;padding:0 var(--gutter)}
+.foot{padding:var(--space-lg) var(--gutter) var(--space-xl);display:flex;flex-direction:column;gap:var(--space-md)}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="image-slot.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,Icon,IconButton,Badge,SlideProgress,SlideFrame,OptionButton,FeedbackNote,StickyNote,XpChip}=window.ZoomOutDesignSystem_442bf9;
+const OPTIONS=['You learned what the job actually costs.','The opening figure reset the range you judged later offers against.','You gave ground to keep the relationship comfortable.'];
+function Chrome({slide,children,label}){return<div className="col">
+<span className="zo-caption">{label}</span>
+<div className="screen" data-screen-label={label}>
+<header style={{padding:'8px var(--gutter) var(--space-md)',display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'var(--space-sm)',minHeight:44}}>
+<IconButton icon="x" label="Close leaf" style={{marginLeft:-10}}/>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Leaf 8 · 3 min</span>
+<IconButton icon="sticky-note" label="Your notes" style={{marginRight:-10}}/></div>
+<SlideProgress current={slide}/></header>
+{children}</div></div>}
+/* Slide 1 — Summary */
+function Summary(){return<Chrome slide={0} label="Slide 1 · Summary">
+<div className="body">
+<SlideFrame title="The first number sets the range" style={{flex:1}}>
+<div style={{height:172,borderRadius:'var(--radius-md)',overflow:'hidden'}}>
+<image-slot id="leaf8-summary" shape="rounded" radius="12" placeholder="Optional illustration"></image-slot></div>
+<p className="zo-body" style={{margin:0,textWrap:'pretty'}}>Whoever names a number first quietly draws the range everyone else argues inside. You judge each later figure against that first one — how far above it, how far below — instead of against what the thing is worth to you.</p>
+<p className="zo-body" style={{margin:0,color:'var(--text-secondary)',textWrap:'pretty'}}>It holds even when you know the number was arbitrary, and even when you were the one who called it arbitrary.</p>
+</SlideFrame></div>
+<div className="foot"><Button fullWidth size="lg" icon="chevron-right" iconPosition="right">Continue</Button></div></Chrome>}
+/* Slide 2 — Scenario, three states */
+function Scenario({state,label}){const chosen=2;const correct=1;
+return<Chrome slide={1} label={label}>
+<div className="body">
+<SlideFrame style={{flex:1,gap:'var(--space-lg)',padding:'var(--space-lg)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>The situation</span>
+<p className="zo-small" style={{margin:0,color:'var(--text-secondary)',textWrap:'pretty'}}>A supplier opens at 40,000 for a job you valued at 22,000. You counter at 24,000 and settle at 31,000.</p></div>
+<h2 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h3-size)',lineHeight:'var(--text-h3-leading)',color:'var(--text-heading)',textWrap:'pretty'}}>Why did you settle 9,000 above your own valuation?</h2>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+{OPTIONS.map((o,i)=><OptionButton key={i} index={i} state={state==='wrong'&&i===chosen?'incorrect':state==='correct'&&i===correct?'correct':'default'}>{o}</OptionButton>)}</div>
+{state==='wrong'&&<FeedbackNote kind="incorrect" style={{padding:'var(--space-md) var(--space-lg)'}}>You did give ground — but ask what set the range you gave ground inside. Pick again, retries cost nothing.</FeedbackNote>}
+{state==='correct'&&<FeedbackNote kind="correct" style={{padding:'var(--space-md) var(--space-lg)'}}>The opening figure moved the whole range, so your own number began to look like the low end.</FeedbackNote>}
+</SlideFrame></div>
+<div className="foot">
+{state==='correct'
+?<Button fullWidth size="lg" icon="lock-open">Unlock payoff</Button>
+:<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'var(--space-sm)',minHeight:56,color:'var(--text-secondary)'}}>
+<Icon name="lock" size={18}/><span className="zo-caption">Answer the scenario to unlock the payoff</span></div>}
+</div></Chrome>}
+/* Slide 3 — Payoff. The text IS the screen: no card, longer measure, 17/30. */
+function Payoff(){return<Chrome slide={2} label="Slide 3 · Payoff">
+<div className="body" style={{gap:'var(--space-lg)',paddingTop:'var(--space-sm)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:'var(--primary)'}}>Payoff</span>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h2-size)',lineHeight:'var(--text-h2-leading)',color:'var(--text-heading)',textWrap:'pretty'}}>Why the first number wins</h1></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-lg)'}}>
+<p className="zo-payoff" style={{margin:0,textWrap:'pretty'}}>An anchor works by giving you something to adjust from. Faced with 40,000, you stop asking what the job is worth and start asking how far down from 40,000 you can get. The question has quietly changed, and the new one has a much smaller answer.</p>
+<p className="zo-payoff" style={{margin:0,textWrap:'pretty'}}>Adjustment is also lazy. You move away from the anchor until the number stops feeling outrageous, then stop — which is almost always too early. Both sides feel they worked hard, because they did: they just worked inside a range one of them chose.</p>
+<p className="zo-payoff" style={{margin:0,textWrap:'pretty'}}>Knowing this does not switch it off. What helps is naming your own number before you hear theirs, in writing, with the reasoning attached. Then their opening is a data point about them rather than a starting line for you.</p></div>
+</div>
+<div className="foot"><Button fullWidth size="lg" icon="chevron-right" iconPosition="right">Next</Button></div></Chrome>}
+/* Slide 4 — Sticky notes, with the one sanctioned graphic: a small graph diagram. */
+function Diagram(){return<svg viewBox="0 0 330 118" width="100%" height="118" role="img" aria-label="Diagram: the first number sets a range, and every later offer is judged inside it">
+<line x1="44" y1="30" x2="164" y2="59" stroke="var(--primary)" strokeWidth="1.75"/>
+<line x1="164" y1="59" x2="286" y2="30" stroke="var(--graph-edge)" strokeWidth="1.25"/>
+<line x1="164" y1="59" x2="120" y2="100" stroke="var(--graph-edge)" strokeWidth="1.25"/>
+<line x1="164" y1="59" x2="228" y2="98" stroke="var(--graph-edge)" strokeWidth="1.25"/>
+<circle cx="44" cy="30" r="5" fill="var(--primary)"/>
+<circle cx="164" cy="59" r="5" fill="none" stroke="var(--primary)" strokeWidth="1.5"/>
+<circle cx="286" cy="30" r="2.2" fill="var(--graph-node-unreached)"/>
+<circle cx="120" cy="100" r="2.2" fill="var(--graph-node-unreached)"/>
+<circle cx="228" cy="98" r="2.2" fill="var(--graph-node-unreached)"/>
+<text x="44" y="16" textAnchor="middle" fill="var(--primary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>First number</text>
+<text x="196" y="76" fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>Later offers</text>
+<text x="164" y="46" textAnchor="middle" fill="var(--text-body)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>The range</text>
+</svg>}
+function Notes(){const notes=['Whoever speaks first draws the range.','You adjust from the anchor, not from value.','Adjustment stops early, at the first number that feels defensible.','Write your own number down before the conversation starts.'];
+return<Chrome slide={3} label="Slide 4 · Sticky notes">
+<div className="body">
+<SlideFrame title="Four things to keep" style={{flex:1,gap:'var(--space-md)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+{notes.map((t,i)=><StickyNote key={i} index={i+1} style={{padding:'var(--space-md) var(--space-lg)'}}>{t}</StickyNote>)}</div>
+<Diagram/>
+</SlideFrame></div>
+<div className="foot"><Button fullWidth size="lg" icon="chevron-right" iconPosition="right">Next</Button></div></Chrome>}
+/* Slide 5 — Takeaway */
+function Takeaway(){return<Chrome slide={4} label="Slide 5 · Takeaway">
+<div className="body">
+<SlideFrame style={{flex:1,gap:'var(--space-xl)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Remember this</span>
+<p style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:'var(--text-h1-leading)',color:'var(--text-heading)',textWrap:'pretty'}}>People told in advance to ignore an opening figure still settle close to it.</p></div>
+<div style={{height:1,background:'var(--border-hairline)'}}></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:'var(--primary)'}}>Do this today</span>
+<p className="zo-body" style={{margin:0,textWrap:'pretty'}}>Pick one thing you are about to negotiate — a fee, a deadline, a salary — and write your number and your reason in one line before anyone else names theirs.</p></div>
+<div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'center',gap:'var(--space-sm)'}}><XpChip amount={40} animate/><Badge tone="neutral" icon="check">Leaf 8 complete</Badge></div>
+<p className="zo-small" style={{margin:0,color:'var(--text-secondary)'}}>One more node on the graph. Next up: leaf 9.</p></div>
+</SlideFrame></div>
+<div className="foot"><Button fullWidth size="lg" icon="check">Finish leaf</Button></div></Chrome>}
+function Rail(){return<div className="rail">
+<Summary/>
+<Scenario state="unanswered" label="Slide 2 · Scenario — unanswered"/>
+<Scenario state="wrong" label="Slide 2 · Scenario — wrong, retryable"/>
+<Scenario state="correct" label="Slide 2 · Scenario — correct"/>
+<Payoff/><Notes/><Takeaway/></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Rail/>);
+</script>
+</body></html>

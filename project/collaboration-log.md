@@ -24,8 +24,14 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 *Manager. **Suggested model: Sonnet** — the spec is now a set of screenshots of the real mockup rather than prose, which is more precise, not less. Four things in it would be wrong if transcribed faithfully; all four are named below.*
 
-> **Read:** this handoff · **`design/leaf_player/`** — nine screenshots walking the five slides in several states. **This is the spec.** · `apps/mobile/src/screens/leaf/` · `apps/mobile/src/components/SlideImage.tsx` · `apps/mobile/src/design/palette.ts` (the `correct`/`incorrect` tokens) · `agents/manager.md`.
+> **Read:** this handoff · **`design/leaf_player/`** — nine screenshots walking the five slides in several states. **The screenshots are the spec.** · `design/leaf_player/Leaf player.html` — **reference only, see below** · `apps/mobile/src/screens/leaf/` · `apps/mobile/src/components/SlideImage.tsx` · `apps/mobile/src/design/palette.ts` (the `correct`/`incorrect` tokens) · `agents/manager.md`.
 > **`design/leaf_player/Library.html` is not part of this package** — it is the Library screen, captured by mistake. Ignore it here; it is kept for WP27.
+>
+> **On `Leaf player.html`: useful, but an earlier draft. Where it and the screenshots disagree, the screenshots win.** It is the superseded standalone version, not the integrated prototype the screenshots came from, and **the divergence is measured rather than assumed**: it contains "THE SITUATION", "retries cost nothing" and "UNLOCK THE PAYOFF", but **not** "Not quite" or the `1 / 5` counter — both of which the screenshots show.
+>
+> **What it is genuinely good for is exact values.** It carries **23 distinct design-system CSS custom properties** — `var(--space-lg)`, `var(--radius-md)`, `var(--primary)`, `var(--font-display)` and so on — and **WP21 measured the token diff between that system and `src/design/` at zero**, so each maps 1:1 onto a real token. That makes it a precise record of spacing and radius decisions that a screenshot cannot give you. Read it for values; read the screenshots for composition.
+>
+> **One caveat on that mapping, checked and confirmed:** the file also uses `var(--graph-edge)` and `var(--graph-node-unreached)`, and **neither exists in `apps/mobile/src/design/palette.ts`** — the design system has gained tokens since WP21's zero-diff measurement. **Map them onto existing app tokens; do not add new colour values**, per the criterion below. If nothing maps cleanly, say so rather than inventing one.
 > **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
 >
 > **The screenshots are reference, not source. Do not transcribe them.** WP22 is the cautionary case: that mockup hardcoded geometry for exactly 18 nodes and Track 42 has exactly 18 Leaves, so a faithful copy would have looked perfect and been wrong for every other Track. **Read them for intent, then build against real data.**
