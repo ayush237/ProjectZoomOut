@@ -20,6 +20,80 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-10 — WP26: Track complete, and the share card
+
+*Manager. **Suggested model: Sonnet** — one net-new screen whose layout is given and whose data already exists, plus a card whose architecture is already correct. Checked: neither mockup contains a single CSS keyframe, so there is no web-to-Reanimated animation port hiding in here.*
+
+> **⛔ DO NOT START UNTIL PR #37 IS MERGED. This is a hard dependency, verified across both branches.**
+> `layoutRoadmap`'s signature changes in that PR:
+> `main` → `layoutRoadmap(leafCount: number, viewport, seed)`
+> PR #37 → `layoutRoadmap(states: readonly LeafNodeState[], viewport, seed)`
+> **This package consumes that function.** Branching from today's `main` means writing against a signature that breaks the moment #37 lands. If #37 is still open, say so and stop.
+>
+> **Read:** this handoff · **`design/claude_design/Track complete.html`** and **`design/claude_design/Share card.html`** — the sources of truth · `design/prompts/screen-03-track-complete.txt` and `screen-06-share-card.txt` for the *reasoning* behind each "Do not" · `apps/mobile/src/screens/share/ShareCard.tsx` — **read its docstrings before changing anything** · `apps/mobile/src/screens/track/roadmapGeometry.ts` · `apps/mobile/src/components/TrackLegal.tsx` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, the rest of this log.
+>
+> **Inherited, so a `/clear` does not lose it:** to view the mockups, `ZoomOut prototype.html` needs a static server rooted at `design/claude_design` (relative stylesheets); the jump bar reaches any screen. **RN's jest preset reports `fontScale: 2`, so a passing screen test says nothing about the default rendering.** Amber's boundary, ruled 2026-09-09: *outline for what you have done, fill for what you have just won* — **finishing a book is unambiguously the second**, so fill is right here. Batch SVG curves sharing colour and stroke width; route animation through `motionTimingConfig`; `small` not `caption`.
+
+### Task: WP26 — Track complete, and the share card
+
+**Suggested model:** Sonnet.
+
+**Context:** Finishing an entire book is the largest reward in the product **and the app has no screen for it at all** — `screens/share/` holds only the achievement share and the daily wrap-up. The share card is the growth mechanic `PRODUCT.md` leans on, and its component is already sound; what it lacks is the constellation.
+
+**Objective:** Finishing a Track produces a moment worth the work, and a card worth posting — and the *captured file* is what proves the second, not the rendered screen.
+
+**Scope:** a new Track-complete screen under `apps/mobile/src/screens/share/`, plus `ShareCard.tsx`.
+
+**Track complete — a build, not a re-skin**
+
+- **Consume `layoutRoadmap`; do not re-derive geometry.** WP22 built it for this: it is pure and **seeded from the Track id**, so the finished constellation and the roadmap screen agree on shape for free. Re-deriving guarantees they disagree.
+- **Verify each stat exists before rendering it.** The spec asks for XP earned, day streak and first-try count. `screen-10`'s rule — *"do not invent a metric the product does not track"* — applies here too, and the standing rule of 2026-09-09 says check at the point of use. **If first-try count is not obtainable, say so rather than approximating it.**
+- **The legal pair is required on this screen and `TrackLegal` already exists** — WP24 restyled it. **Reuse it; do not rebuild it.** `PRODUCT.md` requires a non-endorsement disclaimer and a purchase-forward link on Track completion, and this is the completion surface.
+- Primary action *"Share your constellation"*, secondary *"Find your next book"*. **No confetti, no trophy, no medal, no full-screen modal that traps the reader.**
+- **Amber may lead here** — it is the reward moment the palette reserves the colour for — **but the spec says it is still an accent and must not flood the screen.**
+
+**The share card — its architecture is already right, so change less than you expect**
+
+- **Read `ShareCard.tsx`'s docstrings first.** It is already forced-light for exactly the reason `screen-06` gives, and already brutal about thumbnail legibility because a real capture at 130px proved it had to be. **Do not re-litigate either.**
+- **`MascotSlot` is where the constellation fragment goes.** Its docstring states the intent outright: an illustration should arrive by *"replacing the contents of `MascotSlot` and nothing else."* That is the whole change.
+- Square **and** 9:16. Three pieces of information, no more. The wordmark is a brand mark and does not count as a fourth.
+- **Do not change the shared `achievement` icon.** It is a trophy, the mockups use an organic glyph, and that divergence is real — **but it is rendered by Profile's badge grid too, and WP27 owns the swap across all three consumers** (ruled 2026-09-10). Changing it here would alter a surface this package cannot verify.
+
+**The risk that actually matters, and where this package can ship a silent failure**
+
+**The criterion is the captured image, not the card on screen.** `captureRef` photographs the rendered tree, and `collapsable={false}` on the outer `View` is load-bearing on Android — without it the view is flattened out of the native hierarchy and there is nothing to photograph. **That guard has not been exercised since WP9.** A card that looks perfect on screen and captures blank or clipped is exactly the defect this package is positioned to ship, and no test in this repo can see it.
+
+**Also landing here: a reader may re-open a finished Leaf.** Ruled 2026-09-09. It is safe — `completeLeaf` is idempotent and awards 0 XP on replay. **It counts for nothing, and it is explicitly not the answer to the streak-versus-library-size question**, which stays open. Wire the affordance; do not let it earn anything.
+
+**Out of scope**
+- **Profile's badge grid and the shared icon swap** — WP27.
+- The roadmap screen itself, Explore, Library, Journey.
+- Anything that makes re-completion count toward a streak, XP or an achievement.
+
+**Constraints:** tokens only. Do not run `git add -A`; stage by path.
+
+**Device gate**
+- **Producing a finished Track takes setup** — Track 42 is 18 Leaves. You will likely need a seeded or near-complete account rather than playing to it. **Say how you produced it**; if you could not, say that rather than implying you saw it.
+- **Capture the card and open the resulting file** — both aspect ratios. **Inspect the image, not the preview**, and view it at thumbnail scale: if the headline number and the book are not readable shrunk, the card has failed its only job.
+- Track complete in **both themes** at accessibility-max. The share card is forced-light by design in both — that is correct, not a bug.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Track complete exists, consumes `layoutRoadmap`, and its constellation matches the roadmap's shape for the same Track
+- [ ] Every stat shown is sourced from real data — **any that is not obtainable is reported, not approximated**
+- [ ] The legal pair renders via the existing `TrackLegal`
+- [ ] The constellation fragment arrives by replacing `MascotSlot`'s contents, and nothing else in the card's structure moves
+- [ ] Both aspect ratios produced
+- [ ] **The captured file is opened and inspected, at full size and at thumbnail scale** — evidence is the image
+- [ ] The shared `achievement` icon is unchanged in the diff
+- [ ] Re-opening a finished Leaf works and awards nothing — verified by checking XP before and after
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier B, plus **Tier A on anything pure** — a stat-availability predicate and any constellation-fragment selection belong in a tested module, following `roadmapGeometry` and `stickyNotesLayout`. **Be explicit that the capture path is untestable here** and that the opened file is the evidence; do not write a test that asserts `collapsable` is set and call that verification.
+
+---
+
 ### Handoff: 2026-09-09 — WP22.2: port the roadmap's visuals from `graph.jsx`
 
 *Manager. **Suggested model: Opus** — the port itself is mechanical, but there is one unsolved design problem in it that the mockup cannot answer, and the founder has now twice said this screen does not match. A second miss costs their attention, which is the scarce thing.*
@@ -152,7 +226,28 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ### Handoff: 2026-09-09 — WP25: the reward and failure moments
 
-*Manager. **Suggested model: Sonnet** — four surfaces that exist, three specs in the repo, no new mechanism. The choreography is specified rather than left to you.*
+*Manager. **Suggested model: Sonnet** — four surfaces that exist, and the port is composition rather than animation. Reasoning in the revision note.*
+
+> **REVISED 2026-09-09, after WP22.2. Read this block before the body below it — the method changed and parts of the original text are now wrong.**
+>
+> **1. Port from source, do not build from the specs.** The body below says "follow the three specs". That instruction produced the roadmap drift the founder rejected: a screen built from a written description looked nothing like the design. **The Claude Design export is now in the repo and it is the source of truth.** The `design/prompts/*.txt` files remain useful for the *reasoning* behind each "Do not" — keep reading them for that — but the visual answer comes from the code.
+>
+> | Surface | Source of truth |
+> |---|---|
+> | Report-error + failure states | `design/claude_design/proto/support.jsx` |
+> | Session end, cap-hit, streak | `design/claude_design/proto/leaf.jsx` (`SessionEnd`) |
+> | Achievement unlock | `design/claude_design/Achievement unlock.html` |
+> | The end-of-day screen, as drafted | `design/claude_design/Done for today.html` and `Done for today v2.html` |
+>
+> **2. Why this is still Sonnet, checked rather than assumed.** I expected the achievement unlock's four-frame sequence to be CSS keyframes needing translation into Reanimated, which would have made it Opus work. **It is not: `Achievement unlock.html` contains no `@keyframes` — five `transform:` rules and one `transition:`.** The four frames are four *stills* showing the stages, not a running animation. **The app's existing unlock animation stays exactly as it is**; only its presentation changes. That removes the one genuinely hard thing this package looked like it had.
+>
+> **3. To view the mockups** (Manager's own finding, carried so it is not rediscovered): `design/claude_design/ZoomOut prototype.html` loads `proto/*.jsx` and **needs a static server rooted at `design/claude_design`** — its stylesheets are relative. The jump bar at the bottom goes straight to any screen.
+>
+> **4. `RN`'s jest preset reports `fontScale: 2`.** Every screen test in this repo renders as though the reader doubled their text size, so **a passing screen test says nothing about the default rendering.** Found in WP22.2 after a confusing failure with no defect behind it.
+>
+> **5. Amber has a boundary now, ruled 2026-09-09, and this package is where it matters most.** *Outline for what you have done; fill for what you have just won.* The roadmap outlines completed nodes in amber. **The achievement badge is the fill case** — this is the reward moment the palette reserves the colour for, and it should read as heavier than anything on the roadmap.
+>
+> **6. Check geometry before you conclude it is content.** WP22.2's stated hard problem was long labels. It was a symptom: the node band spanned two thirds of the frame instead of a quarter, leaving 37pt of gutter where the source leaves 125. **Every label was a stub because the gutter was a stub.** If something here looks like a copy or content problem, measure the space it is being asked to fit into first.
 
 > **Read:** this handoff · **`design/prompts/screen-10-session-end-and-cap.txt`**, **`screen-11-achievement-unlock.txt`**, **`screen-12-report-error-and-failure.txt`** (all three are in the repo; I read them before writing this) · `apps/mobile/src/components/AchievementUnlock.tsx` · `apps/mobile/src/screens/share/WrapUpScreen.tsx` · `apps/mobile/src/screens/leaf/ReportErrorSheet.tsx` · `apps/mobile/src/components/{ErrorState,EmptyState,StatusMessage}.tsx` · `apps/mobile/src/design/motion.ts` · `agents/manager.md`.
 > **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
@@ -626,6 +721,99 @@ WITH ABSOLUTE URLS            : OK
 ---
 
 ## Completions (Manager → Architect)
+
+### Completed: WP25 — the reward and failure moments — 2026-09-10
+
+**Eight of nine acceptance criteria met with direct evidence; the ninth (achievement unlock, live, under Reduce Motion) is code-verified and partially device-observed, not fully device-observed — detail below, not glossed over.** Root `lint`, `typecheck` (4 workspaces), `test` (1,240 passing: shared 71, admin 198, backend 477, mobile 494 — 480 + 14 new) and `build` (backend/mobile/admin outputs confirmed present on disk after a `dist`/`.next`/reinstall) are clean from a cold gate. Branched from `origin/main` (`b655f0e`, which carries the REVISED handoff) as `wp25-reward-failure-moments`; pushed, not yet a PR.
+
+#### What changed, per surface
+
+**`AchievementUnlock.tsx` — the flat icon becomes a badge.** Ported `Achievement unlock.html`'s `blobPath` formula into a new pure module, `achievementBadge.ts` (`badgeBlobPath(cx, cy, radius, wobble)` — deterministic, no `Math.random`, Tier A with 5 mutation-checked tests), and render it as an SVG blob filled solid `reward` amber with the existing `achievement` glyph centred on top via `theme.palette.onReward`. This is the fill case for the outline/fill boundary ruled 2026-09-09 alongside the roadmap's completed-node ring ("outline for what you have done, fill for what you have just won"). The card's left-accent bar becomes a plain hairline-bordered `surfaceFor('raised')` card — the badge itself now carries the amber weight, so the border no longer needs to. **The entrance animation is untouched, deliberately**: the REVISED handoff's own finding held up on inspection — `Achievement unlock.html` has no `@keyframes`, and its four "frames" are four stills of one moment (mid-Leaf, entering, resolved, handed back), not a running animation. WP22.1's `motionPlan`/`REDUCE_MOTION_OVERRIDE` mechanism needed no changes; only what it reveals changed.
+
+*One tension named rather than quietly resolved:* screen-11's Do-Not list says no trophy or medal. The badge glyph inside the blob is the app's existing `achievement` icon, which maps to Ionicons' `trophy` — pre-existing, not introduced here, and shared with `ProfileScreen`'s grid and `ShareCard`'s mascot slot (both out of scope; `ShareCard.tsx` is a named acceptance criterion to leave untouched). Changing the underlying icon would change `ShareCard`'s rendered output without touching its file, which felt like the wrong way to satisfy "unchanged in the diff." I read the Do-Not as aimed at the *ceremony* (confetti, medals, a podium) rather than at this specific glyph in isolation — the mockup itself nests a small icon inside the same blob shape — but this is a judgement call, not a certainty, and whoever next touches `Icon.tsx`'s icon set (Profile's own badge rework is the obvious moment) should treat it as open.
+
+**`WrapUpScreen.tsx` — caption, a real stat row, and a stronger proof of the one invariant that matters.** The "Today" caption becomes "Session complete", static across both endings, matching the mock's IA. A new three-stat row (leaves / XP / streak) renders `SessionSummary` fields the screen already had but never showed (`xpEarned`, `streak.current`) — pulled into a pure, exported `wrapUpStats()` (Tier A, 2 tests, mutation-checked), including the mockup's "Day one" fallback for a zero streak. Hidden entirely on the zero-Leaf day, since there's nothing to show yet and showing zeroes next to "Nothing yet today" read as a non-sequitur. **Did not** add the mockup's own decorative mini-diagram (`Fragment2`) or a track-progress bar — the latter specifically because `SessionSummary` carries no total-Leaf-count field, and adding one would have violated screen-10's "do not invent a metric the product does not track." The cap-hit/voluntary acceptance criterion — one layout, one line of copy differs — is proven by a test that diffs every string of text in the rendered tree between the two states, not a handful of named assertions: **the first version of that test only checked specific testIDs, passed, and then passed again after I deliberately forked the H1 headline on `capReached` as a mutation check.** Rewrote it to diff the whole tree; it then caught the same mutation. Left both versions' reasoning in the test file's comments because the near-miss is the useful part.
+
+**`ReportErrorSheet.tsx` — from a full-screen page to an actual bottom sheet.** The previous build used `presentationStyle="pageSheet"`, which is a full screen on this stack — exactly what screen-12 rules out ("do not make the report form a full-screen takeover of the Leaf they were reading"). Rebuilt on a `transparent` `Modal` with a scrim and the sheet as siblings, anchored to the bottom, `maxHeight` capped at 85% of window height with its own internal scroll — verified live on a real Leaf (see device section): the Leaf's header stays dimly visible behind the sheet. **A real bug surfaced and fixed along the way, not just a test inconvenience:** my first attempt nested the sheet *inside* the scrim's `Pressable`, and the scrim's own `accessibilityElementsHidden` / `importantForAccessibility="no-hide-descendants"` — meant only to keep the empty scrim itself out of the accessibility tree — hid every descendant, which meant the entire sheet (title, reasons, text field, submit button) was invisible to VoiceOver and to every accessibility-tree-based test query alike. Restructured scrim and sheet as siblings; the sheet is now fully reachable. Kept the reason list: it shows full sentences a reader picks between ("Something here is factually wrong"), never the internal category codes (`factual_error`) the Do-Not is aimed at, and the fix queue genuinely needs the category to be sortable by a human — removing it would have been an architecture change the handoff didn't ask for, not a restyle.
+
+**`ErrorState.tsx` / `StatusMessage.tsx` — calm, not alarming.** `tone="incorrect"` (red) becomes `theme.palette.primary` (teal); a new `unresolved` icon key (Ionicons `pulse-outline`, not `alert-circle`) replaces the alert glyph — "a connection that has not resolved yet, not a broken one," per screen-12. `StatusMessage`'s public `tone="error"` prop is unchanged; only what it renders under that tone changed, which is the entire point of it being shared — one change reaches its twelve consumers rather than needing one each. `EmptyState.tsx` needed no changes: it already used `tone="primary"`, no red, nothing to fix.
+
+**Infrastructure, not scope, but load-bearing:**
+- `eslint.config.js` gains a `design/**` ignore entry. This was **already broken on `origin/main` before this branch touched anything** — the collaboration log's own WP22.2 sign-off (`0626f4e`) says "design/\*\* joins eslint's ignore list," but the actual diff of that commit only touched `projectRoadmap.md`; the config change was never made. Root `lint` failed with ~327 errors from `design/claude_design/**`'s vendored JS/JSX until I added the entry the sign-off had already ruled on. Not my ruling to make, just the one already on record that hadn't landed.
+- `jest.setup.js` gains a `Modal` mock. RN's real `Modal` presents its children through a native root the test renderer has no way to attach to; `getByTestId`/`getByText`/`screen.*` could not find *any* element inside it, even though `toJSON()`'s debug-dump output could still print the whole tree — the query engine and the debug dump traverse differently. `ReportErrorSheet` is this app's first `Modal` consumer (grepped for other usages: none), so nothing had hit this before. The mock renders `Modal`'s children inline exactly when `visible`, which is all any test here needs; the real presentation is Apple's/Android's code and belongs to the device check above, not a unit test.
+
+#### Files touched
+- `apps/mobile/src/components/Icon.tsx` — `error` icon key renamed to `unresolved`, Ionicons glyph changed
+- `apps/mobile/src/components/StatusMessage.tsx` — error tone: `incorrect` → `primary`; icon key updated
+- `apps/mobile/src/components/ErrorState.tsx` — same recolour
+- `apps/mobile/src/components/achievementBadge.ts` (new) — `badgeBlobPath`, pure
+- `apps/mobile/src/components/achievementBadge.test.ts` (new) — 5 tests
+- `apps/mobile/src/components/AchievementUnlock.tsx` — badge render, card restyle, doc comments
+- `apps/mobile/src/screens/share/WrapUpScreen.tsx` — caption, `wrapUpStats()`, stat row
+- `apps/mobile/src/screens/share/WrapUpScreen.test.tsx` (new) — 5 tests
+- `apps/mobile/src/screens/leaf/ReportErrorSheet.tsx` — bottom-sheet restructure
+- `apps/mobile/src/screens/leaf/ReportErrorSheet.test.tsx` (new) — 4 tests
+- `apps/mobile/jest.setup.js` — `Modal` mock, documented
+- `eslint.config.js` — `design/**` ignore
+- `.claude/launch.json` — added a `mobile` (Expo/Metro) entry; the file predates this session (admin/backend/admin-wp15.7 entries already there, untracked) and had never been committed by anyone, so I committed it as found plus my addition rather than leaving it permanently untracked
+
+**`ShareCard.tsx` is unchanged** — confirmed by `git diff --stat`, empty. **`EmptyState.tsx` is unchanged** — read, found nothing to fix, left alone.
+
+#### Tests added/updated
+14 new tests across 3 new files, all passing, mutation-checked wherever they assert pure/structural behaviour:
+
+| Test | What it proves | Mutation check |
+|---|---|---|
+| `achievementBadge.test.ts` (5) | The blob path is deterministic, centre-dependent, bounded by radius+wobble, and a valid octagon at wobble=0 | Dropped the vertex count 8→6; the vertex-count assertion caught it |
+| `wrapUpStats` unit tests (2) | Leaves/XP/streak map correctly; zero streak falls back to "Day one" | Removed the fallback; the dedicated test caught it |
+| `WrapUpScreen` render tests (3) | Real data renders; the zero-Leaf day hides the stat row; **cap-hit and voluntary share every string of text except the eyebrow** | Forked the H1 on `capReached` — the *first* version of this test (named-field checks) missed it; the rewritten full-tree-diff version caught it. Both kept in the file, on purpose |
+| `ReportErrorSheet` tests (4) | End-to-end happy path to confirmation; the sheet stays open (not confirmed) on a failed submit; close button and scrim both dismiss without submitting | Made a failed submit still advance to "sent" — caught by the failure-path test |
+
+All four `ReportErrorSheet` tests use `userEvent`, not `fireEvent` + a hand-rolled `act()` — the latter reliably left a *later*, unrelated test in the same file unable to find elements plainly present in its own tree (confirmed by direct debug inspection: the element was in `toJSON()`'s output, `getByTestId` still threw "not found"). `leafPlayer.test.tsx` had already settled on `userEvent` for exactly this kind of interaction; this file follows it rather than re-litigating the choice. Worth carrying forward for any future test that both fires an interaction and needs the update to be visible before the next assertion.
+
+**No `AchievementUnlock` component-level test was added.** It has zero pre-existing coverage and none of its scope is a pure predicate — it always renders every achievement it's given as earned (never the locked/unearned case; that's Profile's grid, a later package), so there's no earned/unearned branch to test here. The badge geometry it depends on is the piece that's actually pure, and that's covered.
+
+#### Device verification — exactly what was seen, and in what state
+
+Built via the documented `xcodebuild` route (`-allowProvisioningUpdates CODE_SIGN_STYLE=Automatic`, signed "Sign to Run Locally"), ran on a booted iPhone 16 Pro simulator against the real backend and Payload, not a stand-in.
+
+**Confirmed live, with a screenshot at each step:**
+- **Report-error, end to end:** flag-equivalent affordance → bottom sheet opens with the Leaf dimmed and visible behind it → reason selected (border + check icon) → submit → "Thank you — we have this." confirmation → Done closes back to the Leaf. Dark theme, default text size.
+- **Both failure frames**, both arising from real conditions, not simulated props: Payload down (`ContentUnavailableError`, "Content is temporarily unavailable") on first launch when I hadn't yet started the admin/Payload dev server, and the backend itself stopped mid-session (`NetworkError`, "Could not reach ZoomOut. Check your connection and try again.") — both rendered the calm pulse icon in `primary` teal, no red anywhere, and "Try again" recovered correctly once the server(s) were back. Dark theme, default text size.
+- **Achievement unlock, settled state:** "Called It a Day" (the wrap-up achievement) fired live on this account's first "Wrap up today" tap, rendering the new blob badge exactly as designed — amber fill, trophy centred in `onReward`, hairline-bordered card. Re-observed in **both themes** (dark and light, via `simctl ui appearance`) and at **large text** (the largest *standard*, non-accessibility size) with no new overflow or clipping from anything I added.
+- **WrapUpScreen, voluntary ending, zero-Leaf state:** "Session complete" caption, "Nothing yet today" heading, stat row correctly absent, ShareCard rendering correctly (forced-light, as designed) — in both themes, at large text.
+
+**Not observed live — stated plainly rather than implied:**
+- **The achievement sequence's actual transition under Reduce Motion.** I turned Reduce Motion on (confirmed via Settings → Accessibility → Motion, toggle green) and re-observed the *already-fired* "Called It a Day" card in its settled state — fully opaque, fully present, nothing missing. I could not trigger a *fresh* unlock with Reduce Motion on to watch the swap-not-disappear transition itself, because doing so needs completing a Leaf, and the Leaf player's "Next" button would not register a tap after roughly fifteen attempts (plain taps, long-presses, `touch_path`, different X/Y offsets, a fresh app relaunch, a fresh Leaf on a different Track) while other buttons on the very same screens (the close X, the report-sheet's buttons, tab-bar items) worked normally. This matches a finding already on record in this log from an earlier package — "reliably tapping this app's primary pill-shaped CTA buttons... took many attempts... not a code defect" — so I'm treating it as the same known tooling friction, not a new one, and not spending further budget forcing it. What I have instead: the reduce-motion *code* is untouched from WP22.1 (verified by reading the diff — zero lines changed in the animation `useEffect`), and WP22.1's own device pass already exercised this exact mechanism.
+- **The cap-hit ending, live.** The handoff itself anticipated this ("producing the cap-hit state on device takes setup... say in your report how you produced it — if you could not, say that"). I could not: no seeded already-capped account was available, and reaching the real cap needs 15 minutes or 500 XP genuinely elapsed. The invariant is proven by the full-tree-diff test above instead — code evidence, not a device observation, and I'm not presenting it as the latter.
+- **Report-error and the two failure frames, specifically in light theme, and specifically at large text.** I'm confident by construction (same `theme.palette`/`theme.surfaceFor` tokens the achievement badge and WrapUpScreen used, both confirmed correct in light theme and at large text above) but did not re-open those three specific screens under those specific conditions to look.
+- **Accessibility-max text size, literally.** Tried it once, on WrapUpScreen: it reproduces the known, already-logged `design/typography.ts` fixed-`lineHeight` clipping — not a new defect, and per this project's standing testing bar ("do not check extra-large text sizes... do not re-raise it") I stepped back down rather than re-report it. Everything above the accessibility range (`large` through `extra-extra-large`, the largest non-accessibility size) rendered cleanly for every surface this package touched.
+
+#### Shared failure components — checked vs. not, named exactly (per the handoff's explicit ask)
+
+| Component | Consumers | Checked live this package | Not checked |
+|---|---|---|---|
+| `ErrorState` (6) | Explore, Journey, Library, TrackDetail, LeafPlayer, WrapUp | **Explore** (content-unavailable), **Journey** (no-network) | Library, TrackDetail, LeafPlayer, WrapUp |
+| `StatusMessage` (12) | Explore, Journey, Library, Profile, TrackDetail, AgeGate, ProviderEmailMissing, SignIn, LeafPlayer, ReportErrorSheet, AchievementShare, WrapUp | **ReportErrorSheet** (submit failure) | Explore, Journey, Library, Profile, TrackDetail, AgeGate, ProviderEmailMissing, SignIn, LeafPlayer, AchievementShare, WrapUp (own instance) |
+| `EmptyState` (3) | Explore, Journey, Library | none | Explore, Journey, Library |
+
+All 21 consumers combined are exercised by the full test suite (they're what makes it 494 mobile tests), which is why nothing regressed — but a passing test suite is not the same claim as a device observation, and I'm not conflating them here.
+
+#### Assumptions made
+- **"Session complete" as a static caption, replacing "Today"**, and the stat row's placement/labels, are visual-layer judgement calls extrapolated from the mockups, not literal requirements in the acceptance criteria. If either reads wrong to you, they're cheap to revert — nothing else depends on them.
+- **Achievement count verified as nineteen**, from `packages/shared/src/gamification.ts`'s own comment ("The catalogue is not defined here. The nineteen definitions... live in `apps/backend/src/achievements/registry.ts`") — an allowed file, not `apps/backend` itself, which I did not read. **"Six categories" is not verifiable and not implemented**: the client-facing `achievementStatusSchema` carries only `tier` (`common` | `rare` | `milestone`, three values), no category field at all. I designed the badge around tier, not a fabricated category label — the mockup's category line (e.g. "Streaks") has no client-side data source to honestly populate.
+- **Did not thread a leaf-identifying subtitle into the report sheet's header** (the mockup shows "Leaf 12 · Payoff" under "Report a problem") — doing so would need a new prop threaded from `LeafPlayerScreen.tsx`, which is outside scope. The Do-Not this addresses ("identified automatically rather than asked for") is satisfied regardless: the sheet never asks the reader which Leaf it's about.
+
+#### Follow-ups / tech debt for Architect
+1. **The trophy-glyph tension named above** — a real open question about whether screen-11's Do-Not is satisfied by construction (a small icon inside a badge shape) or needs a bespoke, non-trophy glyph. Cheapest to resolve whenever Profile's own badge grid gets its package.
+2. **`wp22.2-roadmap-visual-port` is signed off in the log but not merged to `main`.** I checked before branching: `origin/main`'s WP22.2 sign-off commit (`0626f4e`) only touches `projectRoadmap.md`; the actual `TrackRoadmap.tsx`/`roadmapGeometry.ts` code from that branch (2,268 insertions) isn't in `main` yet. Unrelated to WP25 — I branched this package from `main` directly rather than from that branch — but flagging it since "signed off" reading as "merged" would be a reasonable but wrong assumption for whoever picks up track-roadmap work next.
+3. **Tier C, deferred, per the testing bar:** every consumer of the three shared components not listed as "checked live" above; light-theme and large-text passes on the report-error flow and the two failure frames specifically; the achievement-unlock transition itself under Reduce Motion (code-verified, not device-observed — see above).
+4. **The tap-resistant primary-CTA issue is still present**, now specifically localised to the Leaf player's slide-advance button and reproduced independently of screen or Track. Not something this package caused or can fix (no code path found that would explain it — every other control on the same screens works), but it's now blocking device verification twice across two packages. Worth investigating directly if a future package needs to progress through a Leaf on-device rather than reach a screen via a shortcut (as this one did via Journey's "See today's summary").
+
+#### Time, roughly
+Reading (handoff, three mockup sources, existing components, the achievement/session data model): the largest single share — this package touches four surfaces and the REVISED handoff explicitly asked for verification-before-assumption on several points (the animation, the achievement count) that paid off. Implementation itself was comparatively quick. A real chunk went to test debugging: the `Modal`-in-tests investigation and the `fireEvent`-vs-`userEvent` cross-test-pollution chase, both of which turned into fixes worth keeping (the `jest.setup.js` mock, the accessibility bug in the scrim), not wasted time, but not fast either. Device verification was the other large share, most of it the CTA-tap troubleshooting described above before I routed around it via Journey's shortcut. Write-up: modest.
+
+---
 
 ### Completed: WP22.2 — port the roadmap's visuals from `graph.jsx` — 2026-09-09
 

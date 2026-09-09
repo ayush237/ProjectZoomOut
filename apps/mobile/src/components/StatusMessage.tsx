@@ -12,12 +12,18 @@ import { Text } from './Text';
  * and the fact that `correct` green and `primary` teal are adjacent in hue — a reader
  * must never have to distinguish them to know whether something went right.
  *
+ * **`error` is not `incorrect` (WP25/screen-12).** This tone reports that something did
+ * not happen — a save failed, a request could not complete — never that the reader did
+ * something wrong, so it does not borrow the wrong-answer red. `incorrect` stays reserved
+ * for scenario feedback. Twelve screens read this component, several of them still in the
+ * old visual language; changing the tone here changes all of them at once, which is the
+ * point of it being shared.
  */
 
 export type StatusTone = 'error' | 'success' | 'info';
 
 const ICONS: Record<StatusTone, IconName> = {
-  error: 'error',
+  error: 'unresolved',
   success: 'success',
   info: 'info',
 };
@@ -33,7 +39,7 @@ export function StatusMessage({ tone, message, testID }: StatusMessageProps): Re
 
   const colour =
     tone === 'error'
-      ? theme.palette.incorrect
+      ? theme.palette.primary
       : tone === 'success'
         ? theme.palette.correct
         : theme.palette.textMuted;
