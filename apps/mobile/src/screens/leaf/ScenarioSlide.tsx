@@ -19,6 +19,7 @@ import {
   useReducedMotion,
   useTheme,
 } from '../../design';
+import { SlideFrame } from './SlideFrame';
 
 const OPTION_LABELS = ['A', 'B', 'C'] as const;
 
@@ -112,96 +113,109 @@ export function ScenarioSlide({
 
   return (
     <View style={{ gap: theme.spacing.xl }}>
-      <View style={{ gap: theme.spacing.lg }}>
-        <Text variant="caption" tone="textMuted">
-          Your turn
-        </Text>
-
-        {/**
-         * The illustration, above the prompt (WP15).
-         *
-         * Absent on every Leaf authored before Leaf v2, and the slide must look exactly
-         * as it did for those — so this renders nothing at all when there is no image,
-         * rather than reserving an empty box.
-         */}
-        {data.image === undefined ? null : (
-          <SlideImage asset={data.image} testID="scenario-image" />
-        )}
-
-        <Text variant="h3">{data.prompt}</Text>
-      </View>
-
-      <View style={{ gap: theme.spacing.md }}>
-        {data.options.map((option, index) => {
-          const isWrong = wrongOptionIds.includes(option.id);
-          const isCorrect = correctOptionId === option.id;
-          const isSelected = liveSelection === option.id;
-
-          return (
-            <Pressable
-              key={option.id}
-              testID={`scenario-option-${option.id}`}
-              disabled={isWrong || answered || busy}
-              onPress={() => {
-                setSelected(option.id);
-              }}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: isSelected, disabled: isWrong || answered }}
-              accessibilityLabel={`Option ${OPTION_LABELS[index] ?? ''}. ${option.text}`}
-              {...(isWrong ? { accessibilityHint: 'Already tried, and not correct' } : {})}
-              style={({ pressed }) => ({
-                minHeight: MIN_TOUCH_TARGET,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: theme.spacing.md,
-                padding: theme.spacing.lg,
-                borderRadius: theme.radius.lg,
-                backgroundColor: pressed ? theme.surfaceFor('pressed') : theme.surfaceFor('card'),
-                borderWidth: isSelected ? theme.borderWidth.focus : theme.borderWidth.hairline,
-                borderColor: borderFor({ isCorrect, isWrong, isSelected, theme }),
-                // Struck-through rather than hidden: a ruled-out option is information.
-                opacity: isWrong ? 0.55 : 1,
-              })}
-            >
-              <Text
-                variant="caption"
-                tone={isCorrect ? 'correct' : isWrong ? 'incorrect' : 'textMuted'}
-              >
-                {OPTION_LABELS[index]}
-              </Text>
-
-              <Text variant="body" style={{ flex: 1 }}>
-                {option.text}
-              </Text>
-
-              {/* Shape, not just tint — the §6 rule made concrete. */}
-              {isCorrect ? <Icon name="success" size={22} color={theme.palette.correct} /> : null}
-              {isWrong ? <Icon name="incorrect" size={22} color={theme.palette.incorrect} /> : null}
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {wrongCount > 0 && !answered ? (
-        <Animated.View
-          testID="scenario-retry-message"
-          style={[
-            feedbackStyle,
-            {
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: theme.spacing.sm,
-            },
-          ]}
-        >
-          <Icon name="info" size={18} color={theme.palette.textMuted} />
-          {/* Deliberately mild, and never a count of failures. "You have got this wrong
-              four times" is accurate and is exactly the rebuke the ruling forbids. */}
-          <Text variant="small" tone="textMuted" style={{ flex: 1 }}>
-            Not that one. Have another look — there is no limit on tries.
+      <SlideFrame>
+        <View style={{ gap: theme.spacing.lg }}>
+          <Text variant="caption" tone="textMuted">
+            Your turn
           </Text>
-        </Animated.View>
-      ) : null}
+
+          {/**
+           * The illustration, above the prompt (WP15).
+           *
+           * Absent on every Leaf authored before Leaf v2, and the slide must look exactly
+           * as it did for those — so this renders nothing at all when there is no image,
+           * rather than reserving an empty box. `design/leaf_player/`'s dashed "Optional
+           * illustration — or browse files" box is an editor affordance captured by
+           * accident (WP23.1); it has no reader-facing equivalent and none is added here.
+           */}
+          {data.image === undefined ? null : (
+            <SlideImage asset={data.image} testID="scenario-image" />
+          )}
+
+          <Text variant="h3">{data.prompt}</Text>
+        </View>
+
+        <View style={{ gap: theme.spacing.md }}>
+          {data.options.map((option, index) => {
+            const isWrong = wrongOptionIds.includes(option.id);
+            const isCorrect = correctOptionId === option.id;
+            const isSelected = liveSelection === option.id;
+
+            return (
+              <Pressable
+                key={option.id}
+                testID={`scenario-option-${option.id}`}
+                disabled={isWrong || answered || busy}
+                onPress={() => {
+                  setSelected(option.id);
+                }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected, disabled: isWrong || answered }}
+                accessibilityLabel={`Option ${OPTION_LABELS[index] ?? ''}. ${option.text}`}
+                {...(isWrong ? { accessibilityHint: 'Already tried, and not correct' } : {})}
+                style={({ pressed }) => ({
+                  minHeight: MIN_TOUCH_TARGET,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: theme.spacing.md,
+                  padding: theme.spacing.lg,
+                  borderRadius: theme.radius.lg,
+                  backgroundColor: pressed ? theme.surfaceFor('pressed') : theme.surfaceFor('card'),
+                  borderWidth: isSelected ? theme.borderWidth.focus : theme.borderWidth.hairline,
+                  borderColor: borderFor({ isCorrect, isWrong, isSelected, theme }),
+                })}
+              >
+                <Text
+                  variant="caption"
+                  tone={isCorrect ? 'correct' : isWrong ? 'incorrect' : 'textMuted'}
+                >
+                  {OPTION_LABELS[index]}
+                </Text>
+
+                <Text variant="body" style={{ flex: 1 }}>
+                  {option.text}
+                </Text>
+
+                {/* Shape, not just tint — the §6 rule made concrete. */}
+                {isCorrect ? <Icon name="success" size={22} color={theme.palette.correct} /> : null}
+                {isWrong ? <Icon name="incorrect" size={22} color={theme.palette.incorrect} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {wrongCount > 0 && !answered ? (
+          <Animated.View
+            testID="scenario-retry-message"
+            style={[
+              feedbackStyle,
+              {
+                gap: theme.spacing.xs,
+                padding: theme.spacing.md,
+                borderRadius: theme.radius.md,
+                borderWidth: theme.borderWidth.hairline,
+                borderColor: theme.palette.incorrect,
+              },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+              <Icon name="incorrect" size={18} color={theme.palette.incorrect} />
+              <Text variant="caption" tone="incorrect">
+                Not quite
+              </Text>
+            </View>
+            {/* Deliberately mild, and never a count of failures. "You have got this wrong
+                four times" is accurate and is exactly the rebuke the ruling forbids. Copy
+                unchanged from before WP23.1 — `design/leaf_player/`'s per-scenario
+                explanation ("ask what set the range you gave ground inside") is invented
+                mockup content with no field in `scenarioOptionSchema` to source it from,
+                so this stays the generic message rather than fabricating a specific one. */}
+            <Text variant="small" tone="textMuted">
+              Not that one. Have another look — there is no limit on tries.
+            </Text>
+          </Animated.View>
+        ) : null}
+      </SlideFrame>
 
       {answered ? null : (
         <Button

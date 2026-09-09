@@ -52,6 +52,19 @@ export interface PayoffSlideProps {
  *  - **Reduced motion fades; it never skips.** Removing the feedback would leave a
  *    reader who needs the accommodation with no signal that anything was earned — worse
  *    than the animation, and the mistake §6 calls out by name.
+ *
+ * **Audited against `design/leaf_player/` and deliberately left unchanged (WP23.1).**
+ * The mockup's Payoff screenshot renders as plain text — no card, no amber, a teal
+ * "Payoff" label instead of an amber "Unlocked" one, and a bold heading above the body.
+ * None of that was adopted, for two independent reasons rather than one judgement call:
+ * (1) `payoffSlideSchema` is `{ body, audio? }` — there is no heading field, so the
+ * mockup's "Why the first number wins" has no source and would be fabricated content on
+ * exactly the slide LEGAL.md cares most about; (2) the amber "Unlocked" treatment and its
+ * spring animation are this file's own "most crafted animation in the app" per
+ * `design-direction.md` §6, extensively reasoned above, and reserving amber for reward
+ * moments is the same rule this package's cork board follows in the other direction. A
+ * plain-text mockup built without this slide's reward psychology in mind is read for
+ * intent — the reward *should* feel earned — not transcribed.
  */
 export function PayoffSlide({ data, justUnlocked }: PayoffSlideProps): React.JSX.Element {
   const theme = useTheme();

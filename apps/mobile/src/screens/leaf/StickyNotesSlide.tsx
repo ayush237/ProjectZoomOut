@@ -1,4 +1,5 @@
-import { useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import type { StickyNotesSlide as StickyNotesSlideData } from '@zoomout/shared';
 
 import { Icon, SlideImage, Text } from '../../components';
@@ -8,11 +9,13 @@ import { boardLayout } from './stickyNotesLayout';
 /**
  * Slide 4 of 5. Two to six notes, pinned to a board.
  *
- * **The board is a solid panel, not a literal cork/felt/wood texture.** `design/`
- * carries no texture asset and the constraint is tokens only — a repeating pattern
- * would mean either a new image asset or an SVG generator for a decorative surface
- * nothing else in the app needs. A distinct, bordered, generously-rounded panel one
- * elevation step off the page reads as "a board" without either.
+ * **The board now carries a real cork texture, drawn as a repeating SVG pattern
+ * (ruled 2026-09-09, built in WP23.1).** The reasoning this docstring gave for a flat
+ * panel — no texture asset, tokens only, a bordered rounded surface reads as "a board"
+ * without either — is superseded, not deleted: an SVG `<Pattern>` needs no image asset
+ * to license, ship or scale, so it satisfies the same tokens-only constraint the flat
+ * panel was chosen for. `CorkTexture` below draws it from `theme.palette.border` alone
+ * — no new colour value, same as the rest of this file.
  *
  * **No drop shadow, by the same rule every other surface in this app follows**
  * (`design/layout.ts`: *"there is no `shadowOpacity` anywhere in this app by
@@ -67,8 +70,13 @@ export function StickyNotesSlide({
           borderColor: theme.palette.border,
           padding: theme.spacing.lg,
           paddingTop: theme.spacing.xl,
+          // Clips the texture's rectangular fill to the board's rounded corners —
+          // without it the pattern's `Rect` can show past the curve at each corner.
+          overflow: 'hidden',
         }}
       >
+        <CorkTexture color={theme.palette.border} />
+
         <View
           accessibilityRole="list"
           style={{
@@ -93,6 +101,53 @@ export function StickyNotesSlide({
         </View>
       </View>
     </View>
+  );
+}
+
+/** The tile side, in points. A decorative constant, not a token — same precedent as
+ * `PROGRESS_DOT_SIZE` on the Leaf player chrome. */
+const CORK_TILE_SIZE = 28;
+
+/**
+ * Small, irregular flecks tiled behind the notes — cork, not a grid of dots.
+ *
+ * **Fixed coordinates, not generated.** WP22's determinism rule ("never `Math.random()`
+ * at render time") was written for the roadmap, but the same reason applies here: a
+ * texture that reshuffles on every re-render would be a distraction on a slide the
+ * reader is meant to read notes on, not the pattern behind them. Varying radius and
+ * opacity on a handful of hand-placed circles per tile is what keeps it reading as
+ * texture rather than as a repeating dot grid — see the device-gate criterion that it
+ * "must read as texture, not noise."
+ *
+ * One colour, `theme.palette.border`, at low opacity — the same token the board's own
+ * hairline border already uses, so this adds no new colour value in either theme.
+ */
+function CorkTexture({ color }: { readonly color: string }): React.JSX.Element {
+  return (
+    <Svg
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Defs>
+        <Pattern
+          id="stickynotes-cork"
+          width={CORK_TILE_SIZE}
+          height={CORK_TILE_SIZE}
+          patternUnits="userSpaceOnUse"
+        >
+          <Circle cx={4} cy={6} r={1.4} fill={color} fillOpacity={0.55} />
+          <Circle cx={14} cy={3} r={1} fill={color} fillOpacity={0.4} />
+          <Circle cx={22} cy={9} r={1.7} fill={color} fillOpacity={0.5} />
+          <Circle cx={9} cy={16} r={1.1} fill={color} fillOpacity={0.45} />
+          <Circle cx={19} cy={19} r={1.3} fill={color} fillOpacity={0.35} />
+          <Circle cx={2} cy={23} r={0.9} fill={color} fillOpacity={0.5} />
+          <Circle cx={25} cy={24} r={1.2} fill={color} fillOpacity={0.4} />
+        </Pattern>
+      </Defs>
+      <Rect x={0} y={0} width="100%" height="100%" fill="url(#stickynotes-cork)" />
+    </Svg>
   );
 }
 

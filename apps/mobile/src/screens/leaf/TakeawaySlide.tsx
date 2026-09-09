@@ -4,6 +4,7 @@ import type { TakeawaySlide as TakeawaySlideData } from '@zoomout/shared';
 
 import { Icon, Text } from '../../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../../design';
+import { SlideFrame } from './SlideFrame';
 
 /**
  * Slide 5 of 5. The one line to leave with, plus an optional fact.
@@ -36,12 +37,15 @@ export function TakeawaySlide({
   const fact = data.dinnerTableKnowledge;
 
   return (
-    <View style={{ gap: theme.spacing.xl }}>
+    <SlideFrame>
       <View style={{ gap: theme.spacing.lg }}>
         <Text variant="caption" tone="textMuted">
           Takeaway
         </Text>
-        <Text variant="h2">{data.body}</Text>
+        {/* h1, not h2 (WP23.1) — `design/leaf_player/`'s HTML draft sets this line in
+            `--text-h1-size` specifically, and it is "the one line to leave with" per
+            this slide's own reason for existing. Real data (`data.body`), just bigger. */}
+        <Text variant="h1">{data.body}</Text>
       </View>
 
       {/**
@@ -141,6 +145,6 @@ export function TakeawaySlide({
           ) : null}
         </View>
       )}
-    </View>
+    </SlideFrame>
   );
 }

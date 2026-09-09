@@ -627,6 +627,105 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+#### Addendum to WP23.1, below — added before push, not before sign-off
+
+Between finishing the device pass and pushing this branch, `origin/main` picked up **"Record the PayoffSlide ruling the WP23.1 row already pointed at"** (`b28db6c`), folding an actual Payoff re-skin into WP22.2. It corrects this report's Payoff section in one place and confirms it in another, and I'd rather say so than let a PR stand next to reasoning that's already half-superseded:
+
+**Confirmed:** no schema field backs the mockup's heading — that half of the reasoning below holds, and the ruling keeps it.
+**Corrected:** *"the existing animation is well-reasoned work"* is not, on its own, a reason to leave a slide's whole visual treatment untouched — that would exempt anything ever built carefully, including the surfaces most worth getting right. Preserving the amber unlock behaviour and restyling around it were never actually in tension.
+
+**No code changed as a result.** The scope outcome — `PayoffSlide` untouched in this package — still stands; the ruling moves the actual re-skin to WP22.2 rather than asking for it here. Leaving the addendum at the reasoning level rather than editing the section below, since the report should show what I actually knew when I wrote it, not a quietly corrected version of it. Left `project/projectRoadmap.md` alone — that entry is Architect's.
+
+---
+
+### Completed: WP23.1 — the four remaining Leaf slides, and the cork board — 2026-09-09
+
+**All nine acceptance criteria met; the payoff gate and the wrong/correct-answer behaviour were verified by exercising them on a real Track 42 Leaf, not by reading the diff.** Root `lint`, `typecheck` (4 workspaces), `test` (1,226 passing: shared 71, admin 198, backend 477, mobile 480 — unchanged from WP24, no new tests added) and `build` (backend/mobile/admin outputs confirmed present on disk after a `dist`/`.next`/reinstall) are clean from a cold gate. Branched from `origin/main` — which now carries WP24 merged, WP25's handoff, and the cork-board ruling — as `wp23.1-leaf-slides-cork-board`, since `main` itself was checked out in a separate worktree by the Architect session running concurrently.
+
+**What changed:** Summary, Scenario and Takeaway now share `SlideFrame`, a small new colocated component — the rounded/bordered/padded card `design/leaf_player/`'s screenshots use consistently across four of five slides, built entirely from tokens already in use elsewhere (`StickyNotesSlide`'s board, `TakeawaySlide`'s apply-in-life panel). `ScenarioSlide`'s wrong-answer treatment now matches the mockup's visual weight: the red-bordered option no longer dims (the `opacity: 0.55` is gone — the border plus the shaped incorrect-icon already carry the signal without it), and the retry message is now a bordered card with a "Not quite" label instead of a bare icon-and-text row. `TakeawaySlide`'s body line is `h1` now, not `h2`, matching the mockup's weight for "the one line to leave with." `StickyNotesSlide`'s board draws a real cork texture — a repeating SVG `<Pattern>` of small irregular flecks in `theme.palette.border`, no image asset, no new colour value. `PayoffSlide` was read closely against the mockup and **deliberately left unchanged** — the audit and the reasoning are recorded in its own docstring, not just here.
+
+**Files touched:**
+- `apps/mobile/src/screens/leaf/SlideFrame.tsx` (new) — the shared card wrapper. No logic, no test: decorative composition, same precedent as `PROGRESS_DOT_SIZE`
+- `apps/mobile/src/screens/leaf/SummarySlide.tsx` — wrapped in `SlideFrame`; docstring records why no illustration slot was added
+- `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` — wrapped in `SlideFrame`; opacity dimming removed from wrong options; retry feedback upgraded to a bordered card
+- `apps/mobile/src/screens/leaf/TakeawaySlide.tsx` — wrapped in `SlideFrame`; body `h2` → `h1`
+- `apps/mobile/src/screens/leaf/StickyNotesSlide.tsx` — `CorkTexture` added behind the notes; docstring's superseded "flat panel" reasoning replaced with the 2026-09-09 ruling and why it still holds the tokens-only line
+- `apps/mobile/src/screens/leaf/PayoffSlide.tsx` — docstring only; no functional or visual change
+
+---
+
+#### Six things that would have been wrong if the mockup had been copied literally — the four named, and two more found by reading the schemas
+
+The four the handoff named were all real and all avoided: the dashed illustration placeholder (never built — `SlideImage` already renders nothing when there's no asset), the "no red" rule (this is a wrong-answer state, not a system failure, so the incorrect treatment stayed), the report-an-error flag (never at risk, since the chrome that carries it was out of scope and untouched), and the invented Leaf duration (no field exists anywhere in the schema — `durationSeconds` is `audioRefSchema`'s reserved Phase-2 voiceover metadata, unrelated, and no header field was added since the chrome stayed untouched).
+
+**Two more, found by reading `content.ts` rather than assuming the mockup's content was real:**
+
+1. **The slide headings.** `design/leaf_player/`'s Summary ("The first number sets the range") and Payoff ("Why the first number wins") each carry a bold heading above the body. Neither `summarySlideSchema` nor `payoffSlideSchema` has a field for one — both are exactly `{ body, audio? }`. There is nowhere to source that text from except inventing it, which is the fabrication risk the source-reference mechanism and `LEGAL.md` exist to prevent. Neither slide gained a heading.
+2. **Per-option scenario feedback.** The mockup's wrong/correct states show specific explanatory text ("ask what set the range you gave ground inside…," "The opening figure moved the whole range…"). `scenarioOptionSchema` is `{ id, text, isCorrect }` — no explanation field. The generic pre-existing copy ("Not that one. Have another look — there is no limit on tries.") stayed generic; only its visual weight changed.
+
+**A third, not fabrication but a genuine interaction-model mismatch:** the mockup's Scenario has no separate submit control — tapping an option answers it immediately. The real app deliberately separates select from check (`ScenarioSlide`'s own docstring: "a mis-tap that silently spends that bonus is a bad trade for one saved gesture"), which is product logic, not chrome, and stayed exactly as built. I considered and rejected adding the mockup's "Answer the scenario to unlock the payoff" hint text for the same reason — it answers a question ("why can't I proceed") the real two-tap flow doesn't actually pose, since a visible, always-available "Check answer" button already answers it.
+
+**A fourth, in Takeaway:** the mockup folds an XP chip, a "Leaf 8 complete" badge and a "next up" hint into the takeaway card itself. In the real app that is a different screen — `CompletionSummary` in `LeafPlayerScreen.tsx`, reached after "Finish," with considerably more careful reasoning already built around XP display, first-try-bonus ordering and the daily cap. None of that was transplanted into `TakeawaySlide`; the XP amount in particular isn't even known until `complete()` resolves, so it couldn't have been rendered there regardless.
+
+#### The screenshot set itself: two of nine aren't the spec
+
+The handoff says "nine screenshots walking the five slides in several states." Two of the nine — `Screenshot 2026-09-08 at 10.33.49 AM.png` and `...10.33.57 AM.png` — are not Leaf player content at all. They're the age-gate screen mid a `SecureStore`/Keychain error, from a different, unrelated debugging session, dated the day before this package's own screenshots. The remaining seven cover Summary, Scenario (unanswered / wrong / correct), Payoff, Sticky notes and Takeaway — five slide types, which is what the handoff actually needed. Flagged the way WP23 and WP24 each flagged their own stale citations: worth being precise about, not blocking anything, since the seven real ones were sufficient on their own.
+
+#### The one deliberate judgement call: Payoff stays exactly as it was
+
+`design/leaf_player/`'s Payoff screenshot renders as plain text on the page background — no card, a teal "Payoff" label, a bold heading. None of that was adopted. Beyond the missing-heading problem above, the amber "Unlocked" treatment and its spring animation are this file's own most-reasoned piece of work — explicitly cited from `design-direction.md` §6 as "the most crafted animation in the app," with the amber-is-reserved-for-reward rule stated and justified at length, the same rule the cork board's "no amber" line follows in the other direction. A plain-text mockup built without this slide's reward psychology in mind reads as showing the destination's *layout*, not overriding its *feel* — so it was read for intent (the reward should look earned) rather than transcribed. Recorded in `PayoffSlide.tsx`'s own docstring, flagged here rather than decided silently either way.
+
+#### What's device-verified vs reasoned
+
+**Device-verified this session, on a real Track 42 Leaf ("The Science of Getting Rich"), with screenshots at each step:**
+- All five slides, dark theme, full pass, real content throughout — a real scenario illustration, a real 3-note board with its real two-column diagram
+- Wrong answer (option A) → red border, no dimming, the upgraded "Not quite" card. Second wrong answer (option B) → same treatment, `Check answer` correctly disarmed while B was the live (wrong) selection. Correct answer (option C) → payoff gate unlocked, auto-advanced to slide 3, amber "Unlocked" treatment rendered
+- The report-an-error affordance, visible and unchanged, on slide 1
+- Cork board and Takeaway, light theme — the palette-only theme switch confirmed correct, no layout drift
+- **The cork board specifically, at true accessibility-max text size** (`accessibility-extra-extra-extra-large` — the genuine maximum, one step past the standard XXXL WP23's debt note refers to) **in light theme:** the single-column collapse fired correctly, all three notes render in full with no clipped text (confirmed by scrolling the entire board), board and note corners stay clean
+
+**Reasoned, not separately re-observed:** dark theme at accessibility-max on the board. Theme is a palette swap only — spacing, radius and the type scale are identical in both modes by construction (`theme.ts`) — so an accessibility-max clipping question is layout-only and theme-independent; light-theme-at-max is sufficient evidence dark-theme-at-max holds too, the same reasoning WP24 used for its own theme/size intersection gap. Summary, Scenario and Payoff at accessibility-max and in light theme weren't separately screenshotted either; their new `SlideFrame` wrapper is the identical padding/radius/border combination already verified clean on the board and on Takeaway, and neither slide carries size-dependent layout logic (unlike the board's collapse threshold) for a text-size change to interact with.
+
+#### A genuine, reproducible tooling finding — related to, but distinct from, the one WP24 already logged
+
+WP24 logged dropped/truncated keystrokes as a known simulator-input issue (an email lost its last four characters once). This package hit the same *family* of bug on the age-gate's date-of-birth field specifically, twice, in a shape worth distinguishing: **a freshly-typed, visually-correct `YYYY-MM-DD` value repeatedly failed the exact-format validation that should have accepted it** — not a rendering glitch, a real validation rejection. Confirmed the typed value was genuinely correct two independent ways: zoomed into a full-resolution `simctl` screenshot and read the glyphs directly (the hyphens matched the format-hint text's character-for-character), and round-tripped the identical string through the backend's real `/auth/signup` endpoint via `curl`, which accepted it without complaint. So the string itself was valid; whatever the client held at submit time either wasn't, or wasn't what the screen showed. Worked around twice, two different ways: for the main verification pass, created the test account directly via the backend API and signed in through the UI instead (sign-in has no date field to hit); for the age-refused screenshot specifically — where the client-side check has to be exercised, since it fires and redirects before any server call — a second, slower, more careful single type-and-submit succeeded cleanly. **Root cause unidentified. Noting the shape** (a `TextField` with `autoComplete="birthdate-full"`, validated by an exact-match regex) **in case it recurs** — it reads as a different failure mode from WP24's dropped-character finding (that one was visibly wrong on screen; this one looked right and was rejected anyway), so I'm not folding it into the same line item.
+
+**Two reusable techniques worth carrying into WP25/WP26, alongside WP24's coordinate-space and `simctl` findings:**
+1. **Compute tap coordinates from the component's own source** — `Screen.tsx`'s padding, `Button.tsx`'s height, the token values stacked in between — **rather than estimating pixel positions from a screenshot.** Every miscalibration this session traced back to eyeballing an image; every analytically-derived coordinate landed correctly on the first attempt.
+2. **The iOS edge-swipe-back gesture** (a `swipe` starting within ~4pt of the screen's left edge) reliably backs out of a pushed screen and needs no target coordinate at all. Faster and more robust than locating a specific "Back" control, and the one technique that got me off `TrackDetailScreen` after its own Back button resisted several analytically-reasonable coordinate guesses in a row.
+
+#### Mutation-checked
+
+No new tests. Tier B, and the changed surface here is genuinely thin by construction: `SlideFrame` and the cork pattern are both non-conditional decorative composition — a `View` with fixed style props; seven fixed-coordinate `Circle` elements in one `Pattern` — the same category WP21/22/23 have each noted has nothing for a unit test to assert beyond "the string is present." The one behavioural change, removing the wrong-option's opacity dimming, is covered by the existing `ScenarioSlide` interaction tests in `leafPlayer.test.tsx`, all of which still pass unmodified; none of them asserted on the removed style, so there was nothing to mutation-check there either. The evidence for this package is the device pass above, not a test suite — consistent with how WP21–23 each characterised their own re-skin work.
+
+#### Time
+
+Roughly: a fifth on implementation (the five files), a fifth reading `content.ts`'s schemas and the mockup HTML/screenshots to separate real content from mockup invention, and **three-fifths on the device session** — signup/age-gate friction (including the date-field finding above), working out reliable tap coordinates from source rather than screenshots, and the five-slide interaction pass itself, including the bonus WP24 screenshots below. That last share is the highest of any package logged so far; the coordinate-from-source technique is the concrete thing that should bring it down next time.
+
+**Assumptions made:**
+1. `SlideFrame` colocated under `apps/mobile/src/screens/leaf/` rather than promoted to `apps/mobile/src/components/` — the handoff's scope line names only the leaf screens directory, and a component used by exactly one screen family doesn't yet meet the shared-library bar `components/index.ts`'s own docstring states.
+2. Cork texture drawn as a single fixed 28×28pt tile with seven hand-placed circles, not a generated or randomised pattern — matches WP22's determinism rule (never reshuffle on re-render) and needs no seed or parameter, since the tile repeats identically regardless of board size or note count.
+3. Removed the wrong option's `opacity: 0.55` rather than keeping it alongside the new red border — the mockup shows full-opacity wrong options, and the border-plus-shaped-icon pair already satisfies "never signalled by colour alone" without the dimming.
+
+**Follow-ups / tech debt for Architect:**
+1. **The six mockup-fidelity traps above (headings, per-option feedback, the one-tap interaction model, Takeaway's XP transplant, Payoff's plain treatment, and the two stray screenshots) are worth a line wherever `design/leaf_player/` gets cited again** — a future session reading only the screenshots without also reading the schemas would plausibly reintroduce two or three of these.
+2. **The age-gate date-field validation finding above is unresolved, and I'd flag it above the "known flaky input" line, not below it** — WP24's dropped-keystroke finding was cosmetic (a lost character, visibly wrong on screen); this one is a value that renders correctly and is rejected anyway, which is a different and less obviously-tooling shape. Worth someone with more time than this package had confirming it's actually the simulator and not a real edge case in the field's own handling.
+3. No component-level render test exists for `SummarySlide`, `ScenarioSlide`, `PayoffSlide` or `TakeawaySlide` in isolation — Tier C, consistent with the same pre-existing gap WP24 logged for the auth screens.
+
+---
+
+### WP24 follow-up — its two open criteria closed, with screenshots — 2026-09-09
+
+Per the founder's request, captured opportunistically while the device session above was already up. WP24's completion report left three things "reasoned from an unchanged diff, not observed": `AgeGateScreen`, `AgeRefusedScreen`, and `TrackDetailScreen`'s legal pair. All three now observed directly, dark theme, on a real device:
+
+- **`AgeGateScreen`** — clean, unanswered state. No functional diff exists against WP24's own audit, and this simply confirms it renders the way that audit described.
+- **`AgeRefusedScreen`** — reached via the client-side check (`meetsAssumedAgeThreshold`), the same path a real underage reader hits, not the server's separate refusal. The copy reads "Not quite yet… Come back when you are old enough — the books will still be here," which is the kind-not-punitive tone WP24's docstring audit claimed for it. Confirmed by looking at the actual screen, not by re-reading that claim.
+- **`TrackDetailScreen`'s legal pair** — on a real Track (42, "The Science of Getting Rich"), the non-endorsement disclaimer and the Gutenberg purchase link render inside one card, above the fold, legible without zooming, exactly where `TrackLegal.tsx`'s WP24 restyle and the WP10/WP22 placement ruling put them. WP22's knowledge-graph roadmap below it is confirmed intact and unaffected.
+
+Screenshots sent to the founder alongside this session's Leaf-player evidence.
+
+---
+
 ### Completed: WP24 — the account and age-gate screens, and the legal surface — 2026-09-11
 
 **6 of 8 acceptance criteria device-verified with screenshots, not just tests; the other two are reasoned from an unchanged diff rather than observed.** Root `lint`, `typecheck` (4 workspaces), `test` (1,226 passing: shared 71, admin 198, backend 477, mobile 480 — 455 + 25 new) and `build` (backend/mobile/admin outputs all present) are clean from a cleaned `dist`/`.next`/reinstall. Unlike WP23, this package got a real device session — see "The simulator worked this time" below for why, since it changes what future packages should try first.
