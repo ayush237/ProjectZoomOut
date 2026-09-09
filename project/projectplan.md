@@ -2,7 +2,7 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: the visual redesign, WP21–WP26 — approved 2026-09-06
+## Active: the visual redesign, WP21–WP27 — approved 2026-09-06, extended 2026-09-09
 
 The design exploration is complete: all 14 app surfaces exist as clickable mockups in Claude Design plus a published design system. Entry point `design/RESUME-HERE.md`. **Nothing in `apps/mobile` has changed yet.** This plan turns those mockups into the app, and was approved by the founder on 2026-09-06 including both rulings below.
 
@@ -16,8 +16,9 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | **Layer 3** | WP23 — the sticky-notes board | Delivered. The re-skin half did not — no spec | Sonnet | ⚠️ **Partial, 2026-09-11**, PR #34 |
 | | WP23.1 — re-skin the other four slides | Blocked on a spec that does not exist in the repo | Sonnet | 🔒 **Blocked on a founder export** |
 | | WP24 — auth, age gate, legal surface | Re-skin; all five surfaces exist | Sonnet | ✅ **Signed off (6/8 observed)**, PR #35 |
-| | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | Not written |
+| | WP25 — achievement unlock, session-end/cap, report-error, failure states | Re-skin; all four exist | Sonnet | 📤 **Handed off 2026-09-09** |
 | | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | Not written |
+| | **WP27 — Explore, Library, Journey, Profile** | **A gap in this plan, found 2026-09-09.** The four tab screens were never assigned to a package. Specs exist: `screen-04`, `screen-05` | Sonnet | Not written |
 
 Layer 1 is additive and invisible. Layer 3 is screen-by-screen and independently reversible. **Layer 2 is the only genuinely hard package**, and it is the centrepiece of the visual language.
 

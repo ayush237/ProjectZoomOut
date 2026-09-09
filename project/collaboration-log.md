@@ -20,6 +20,69 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-09 — WP25: the reward and failure moments
+
+*Manager. **Suggested model: Sonnet** — four surfaces that exist, three specs in the repo, no new mechanism. The choreography is specified rather than left to you.*
+
+> **Read:** this handoff · **`design/prompts/screen-10-session-end-and-cap.txt`**, **`screen-11-achievement-unlock.txt`**, **`screen-12-report-error-and-failure.txt`** (all three are in the repo; I read them before writing this) · `apps/mobile/src/components/AchievementUnlock.tsx` · `apps/mobile/src/screens/share/WrapUpScreen.tsx` · `apps/mobile/src/screens/leaf/ReportErrorSheet.tsx` · `apps/mobile/src/components/{ErrorState,EmptyState,StatusMessage}.tsx` · `apps/mobile/src/design/motion.ts` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/backend`, `apps/admin`, the rest of this log.
+>
+> **Inherited knowledge — your own, from WP24, carried forward so it is not lost to a `/clear`:**
+> - **Screenshot pixels are not the tool's tap-point space.** That mismatch was the real cause of most of WP21–23's tap failures. Correct for it first and taps are reliable.
+> - There is a working **`xcodebuild` invocation that routes around the `expo run:ios` signing bug**.
+> - **`simctl` switches theme and text size with zero taps.** **This is the most valuable of the three for this package** — every criterion below gates on both themes at accessibility-max.
+>
+> **Also inherited:** route animation through `motionTimingConfig`; `small` not `caption` for small text; batch SVG curves sharing a colour and stroke width into one `d`.
+
+### Task: WP25 — the reward and failure moments
+
+**Suggested model:** Sonnet — settled specs, existing surfaces.
+
+**Context:** These are the two ends of the app's emotional range — the moment something is won, and the moment something breaks. Both are currently in the old visual language. **This is also the package that would have shipped WP22's reduce-motion defect four more times** had WP22.1 not landed first; the achievement sequence is the largest animation in the app.
+
+**Objective:** The achievement unlock, the end-of-session screen in both its states, the report-error flow and the failure states all read in the new visual language — the reward moments as rewards, the failures as calm.
+
+**Scope:** `AchievementUnlock.tsx`, `WrapUpScreen.tsx`, `ReportErrorSheet.tsx`, and the shared `ErrorState` / `EmptyState` / `StatusMessage`.
+
+**Requirements**
+
+- **Follow the three specs including their "Do not" lists.** Between them they rule out confetti, a trophy or medal, a full-screen modal that traps the reader, a queue of unlocks dismissed one at a time, a lock icon or barrier or countdown or paywall pattern at the cap, red or any warning colour, a warning triangle, a bug icon, a dropdown that makes the reader categorise a problem in our terms, and a report form that takes over the Leaf.
+- **The cap-hit state already exists and is already right. Preserve it — do not rebuild it.** `WrapUpScreen.tsx` states the design outright: *"The cap leads here rather than to a second ending"*, and it swaps the eyebrow to *"That is today done"* when `capReached`. **The spec and the code independently arrived at the same answer** — two states, one layout, differing in copy and not in tone. That agreement is easy to break by accident during a re-skin, so verify it survives.
+- **Producing the cap-hit state on device takes setup.** The cap is 15 minutes or 500 XP; you will likely need a seeded or already-capped account rather than playing to it. **Say in your report how you produced it** — if you could not, say that instead of implying you saw it.
+- **Do not touch `ShareCard.tsx`.** WP26 owns it under `screen-06`. Both `WrapUpScreen` and `AchievementShareScreen` render it — **restyle the screens, not the card.**
+- **Every animation goes through `motionTimingConfig`, and reduced motion swaps rather than removes.** The achievement unlock's four-frame sequence is the biggest motion surface in the app and the exact shape of thing WP22.1 was built for.
+- **Verify the spec's "nineteen achievements across six categories" against the real catalogue before designing to it.** I could not confirm those numbers from `packages/shared` and I am not asserting them. Per the standing rule of 2026-09-09, a cited figure gets checked at the point of use — and if the number is wrong, the earned/unearned grid is designed to the wrong scale.
+- **The report affordance already exists** as the flag icon in the Leaf header, placed by WP23 and deliberately left there. Restyle the sheet it opens; do not relocate the entry point without saying why.
+
+**Out of scope**
+- `ShareCard.tsx`, Track-complete, and the share card's own design — all WP26.
+- **The full achievement list on Profile.** `screen-11` is explicit: *"the full list lives on Profile and this is not it."* Profile belongs to a later package.
+- Explore, Library, Journey, Profile themselves — **not yet covered by any package; I am adding WP27 for them.**
+
+**Constraints:** tokens only. **The shared failure components reach far further than this package verifies: `StatusMessage` has twelve consumers including screens still in the old language, `ErrorState` six, `EmptyState` three.** Restyle them — the failure design is this package's job — **but you cannot verify twelve screens and should not pretend to.** Verify the ones in your scope, and **name in your report exactly which consumers you looked at and which you did not**; the cross-screen check belongs to WP27, which re-skins those screens and will be looking at them anyway. Do not run `git add -A`; stage by path.
+
+**Device gate — use the zero-tap `simctl` route for theme and text size:**
+- An **achievement unlock, mid-Leaf**, with Reduce Motion **off and on**. Off: the sequence resolves and hands the screen back. On: the feedback is **swapped, not absent**.
+- The end-of-session screen in **both** states — voluntary, and cap-hit.
+- **Report an error end to end**: affordance → sheet → submit → confirmation.
+- **Both failure frames** — content failed to load, and no network.
+- All of it in **both themes at accessibility-max**.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four surfaces re-skinned; the three specs' "Do not" lists all hold
+- [ ] **The cap-hit state still shares one layout with the voluntary ending and differs only in copy** — verified after the re-skin, not assumed
+- [ ] **Observed with Reduce Motion on: the achievement sequence swaps rather than disappears**
+- [ ] `ShareCard.tsx` is unchanged in the diff
+- [ ] The achievement count is verified against the real catalogue, and stated
+- [ ] Report-error runs end to end to its confirmation
+- [ ] Both failure frames observed, in both themes at accessibility-max
+- [ ] **Consumers of the shared failure components are listed as checked or not checked** — no silent claim of coverage
+
+**Testing expectations:** Tier B, plus **Tier A on anything pure you extract** — the achievement earned/unearned predicate and any cap/end-state selector are unit-testable, and both `roadmapGeometry` and `stickyNotesLayout` are precedent that moving the decision into a pure module is the highest-value thing you can do here. Say plainly which evidence is a test and which is an observation.
+
+---
+
 ### Handoff: 2026-09-11 — WP24: the account and age-gate screens, and the legal surface
 
 *Manager. **Suggested model: Sonnet** — four screens and one component that all already exist, against two specs that are both in the repo. Unlike WP23, I have read them and confirmed they cover what this package needs.*
