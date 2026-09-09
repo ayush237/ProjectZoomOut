@@ -1,0 +1,39 @@
+/* Spring physics, never linear easing — linear reads as corporate and kills the
+   register instantly. Overshoot is reserved for reward moments; on an ordinary button
+   press it reads as sloppy rather than lively.
+   The app uses Reanimated springs (damping/stiffness/mass); these cubic-beziers are the
+   CSS equivalents for web mocks, plus the spring params as reference tokens. */
+:root{
+  /* taps, toggles, state flips */
+  --duration-tap:150ms; /* @kind other */
+  /* screen and layout transitions */
+  --duration-transition:280ms; /* @kind other */
+  /* achievement, session wrap */
+  --duration-celebration:900ms; /* @kind other */
+
+  /* damping 20 / stiffness 300 / mass 1 */
+  --ease-snappy:cubic-bezier(0.2,0.8,0.2,1)/* @kind other */;
+  /* damping 18 / stiffness 180 / mass 1 */
+  --ease-standard:cubic-bezier(0.32,0.72,0,1)/* @kind other */;
+  /* damping 10 / stiffness 200 — deliberately underdamped */
+  --ease-reward:cubic-bezier(0.34,1.56,0.64,1)/* @kind other */;
+
+  /* Reanimated params: damping,stiffness,mass */
+  --spring-snappy:20,300,1; /* @kind other */
+  --spring-standard:18,180,1; /* @kind other */
+  --spring-reward:10,200,1; /* @kind other */
+}
+
+@keyframes zo-reward-pop{0%{transform:scale(0.86)}100%{transform:scale(1)}}
+@keyframes zo-unlock-rise{0%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}
+@keyframes zo-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-5px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes zo-fade-in{0%{opacity:0}100%{opacity:1}}
+@keyframes zo-edge-draw{0%{stroke-dashoffset:var(--zo-edge-len,200)}100%{stroke-dashoffset:0}}
+
+/* Swap, never remove. A reduced-motion reader gets an opacity fade — removing the
+   feedback leaves someone who needs the accommodation with no confirmation of the tap. */
+@media (prefers-reduced-motion:reduce){
+  :root{--ease-reward:linear/* @kind other */;--ease-snappy:linear/* @kind other */;--ease-standard:linear/* @kind other */}
+  *{animation-duration:var(--duration-tap)!important}
+  .zo-reward-pop,.zo-unlock-rise,.zo-shake{animation-name:zo-fade-in!important}
+}

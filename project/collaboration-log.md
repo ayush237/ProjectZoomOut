@@ -20,6 +20,68 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-09 — WP22.2: port the roadmap's visuals from `graph.jsx`
+
+*Manager. **Suggested model: Opus** — the port itself is mechanical, but there is one unsolved design problem in it that the mockup cannot answer, and the founder has now twice said this screen does not match. A second miss costs their attention, which is the scarce thing.*
+
+> **Read:** this handoff · **`design/claude_design/proto/graph.jsx`** — the current roadmap renderer. **This is the spec now, not a reference.** · `design/claude_design/_ds/*/tokens/colors.css` · the founder's two screenshots (the Claude Design target, and our build) in the conversation that produced this · `apps/mobile/src/screens/track/` (`TrackRoadmap.tsx`, `roadmapGeometry.ts`) · `apps/mobile/src/design/palette.ts` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, the rest of this log.
+
+### Task: WP22.2 — port the roadmap's visual treatment, keep the generated layout
+
+**Suggested model:** Opus.
+
+**Context:** **The method changed on 2026-09-09 and this package is the first under it.** WP22 built the roadmap from a written description, and it drifted — the founder compared it to Claude Design's output and the two are visibly different screens. **That drift is my fault, not WP22's:** I required a generated layout algorithm, correctly, and then wrote no criterion about matching the mockup at all. WP22 built exactly what was asked.
+
+**The split I missed, and which this package exists to correct:** a node's *position* must be generated, because 15–30 Leaves cannot use hand-tuned coordinates. A node's *appearance* need not be — glyph, stroke, colour, label treatment and dendrite construction are all independent of where a node sits. **Port the appearance; keep the generation.**
+
+**Objective:** At 18 Leaves the screen reads as `graph.jsx` renders it. At any other count it still holds together.
+
+**Scope:** `apps/mobile/src/screens/track/`.
+
+**The port — `graph.jsx` is the source of truth for all of this**
+
+- **Four node states, not three.** `graph.jsx` line 4–5: `R={next:15,done:6.5,revisit:12,locked:11}`, and `stateOf` returns `revisit` for indices in `REVISIT`. **WP22 built three because I ruled `revisit` out for lack of data — that ruling stands for the *data*, not the *rendering*.** Build the state and its visual; leave it unreachable until something populates it, and say so in your report.
+- **`revisit` is the dashed amber outline** the founder's mockup screenshot shows: `blob(x,y,12,rand,0.15)`, `stroke="var(--reward)"`, `strokeDasharray="3.5 4"`, opacity `0.85`.
+- **The `next` node carries its Leaf number** — a filled circle with the number in `--text-on-primary`, `--font-display`, weight 700, 15px.
+- **Labels are uppercase, letter-spaced, and have leader lines.** `12px`, weight 600, `--font-display`, `letterSpacing: 0.8px`, `textTransform: uppercase`, fill `--text-secondary`, laid out left or right of the spine by `n.x<195`, **each joined to its node by a thin `lead` path** at `strokeWidth 0.8`, opacity `0.55`. Our build has none of this.
+- **Dendrite density comes from `arbors()`** — `count = 6` for the `next` node, `4` otherwise, with per-state base radii. Ours is visibly sparser than the target.
+
+**The three "missing" tokens are aliases and resolve cleanly — checked, so you do not have to:**
+`--graph-edge` → `var(--border)` → `theme.palette.border` · `--graph-edge-reached` → `var(--primary)` → `theme.palette.primary` · `--graph-node-unreached` → `var(--surface-3)` → `theme.palette.surface3`. **No new colour values are needed and none should be added.**
+
+**The one thing `graph.jsx` cannot tell you, and the reason this is Opus**
+
+**The mockup's label treatment assumes short labels, and real content does not have them.** Its fixtures are two and three words — *"First numbers"*, *"Opening moves"*, *"Arbitrary anchors"*. **Track 42's real Leaf titles are full sentences** — *"Give every person more in use value than you take in cash value"*. Our build truncates them to `"Real wealth comes from…"`, and uppercasing plus letter-spacing a truncated sentence will read worse, not better.
+
+**So a faithful port makes this screen worse unless you solve it.** You may not invent or paraphrase titles — generated content is traceable by design and rewording it in the UI manufactures unsourced text. Everything else is open: a different treatment for long labels, a length threshold that changes layout, labels only on some states, wrapping. **Decide, implement, and explain the reasoning in your report** — this is the judgement this package is buying.
+
+**Out of scope**
+- `roadmapGeometry.ts`'s algorithm — **keep it.** Tune constants if composition needs it; do not replace generation with hardcoded coordinates.
+- Every other screen. The legal pair stays above the graph, untouched.
+
+**Constraints:** tokens only. Reuse WP22's curve batching — do not regress ~450 curves into individual `<Path>` elements. Do not run `git add -A`; stage by path.
+
+**Device gate — use the zero-tap `simctl` route for theme and text size:**
+- **Track 42, 18 Leaves, dark theme, beside `graph.jsx`'s output.** **Enumerate every remaining difference in your report** rather than declaring a match — that list is the deliverable as much as the code is.
+- The **20-Leaf placeholder Track**, to confirm the layout still holds away from 18.
+- Both themes at accessibility-max, with the long-label treatment you chose.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four node states render, `revisit` included, with the dashed amber treatment
+- [ ] The `next` node shows its Leaf number
+- [ ] Labels are uppercase, letter-spaced, with leader lines
+- [ ] **The long-label problem is solved, and the reasoning is stated** — no invented or reworded titles
+- [ ] The layout is still generated; `roadmapGeometry.ts` still passes its 15–30 tests
+- [ ] **A written, itemised comparison against `graph.jsx` at 18 Leaves** — differences named, not summarised
+- [ ] No new colour, spacing, radius or duration values
+- [ ] Curve batching is preserved
+
+**Testing expectations:** Tier B, plus Tier A on anything pure you add — a label-treatment predicate keyed on title length and text scale is exactly the shape of `stickyNotesLayout`, and belongs in a tested module rather than inline.
+
+---
+
 ### Handoff: 2026-09-09 — WP23.1: the four remaining Leaf slides, and the cork board
 
 *Manager. **Suggested model: Sonnet** — the spec is now a set of screenshots of the real mockup rather than prose, which is more precise, not less. Four things in it would be wrong if transcribed faithfully; all four are named below.*

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — achievement unlock</title>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<style>
+body{background:var(--surface-page)}
+.lbl{position:absolute;top:-30px;left:0;font-family:var(--font-display);font-weight:600;font-size:12px;letter-spacing:0.6px;text-transform:uppercase;color:var(--text-secondary)}
+.frame{position:absolute}
+.phone{width:390px;height:844px;background:var(--surface-page);border:1px solid var(--border-hairline);border-radius:20px;overflow:hidden}
+.leaf-bg{position:relative;width:100%;height:100%;display:flex;flex-direction:column}
+.leaf-hd{padding:28px 24px 0;display:flex;align-items:center;justify-content:space-between}
+.leaf-hd .dot{color:var(--text-secondary);font-family:var(--font-display);font-weight:600;font-size:11px;letter-spacing:0.6px;text-transform:uppercase}
+.leaf-progress{margin:16px 24px 0;height:4px;background:var(--border-hairline);border-radius:2px;overflow:hidden}
+.leaf-progress i{display:block;width:60%;height:100%;background:var(--primary)}
+.leaf-body{flex:1;padding:28px 24px;display:flex;flex-direction:column;gap:14px}
+.leaf-body h2{margin:0;font-family:var(--font-display);font-weight:700;font-size:22px;line-height:1.25;color:var(--text-heading)}
+.leaf-body p{margin:0;font-family:var(--font-body);font-size:15px;line-height:1.5;color:var(--text-secondary)}
+.chip{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:8px 14px;border-radius:999px;background:var(--surface-raised);border:1px solid var(--border-hairline);color:var(--correct);font-family:var(--font-display);font-weight:600;font-size:13px}
+.toast{position:absolute;left:20px;right:20px;z-index:2;background:var(--surface-card);border:1px solid var(--border-hairline);border-radius:16px;box-shadow:0 12px 28px rgba(0,0,0,0.35);padding:16px;display:flex;align-items:center;gap:14px;transition:all .3s}
+.toast .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.toast .name{font-family:var(--font-display);font-weight:700;font-size:16px;color:var(--text-heading)}
+.toast .why{font-family:var(--font-body);font-size:13px;color:var(--text-secondary)}
+.toast .cat{font-family:var(--font-display);font-weight:600;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;color:var(--reward)}
+.share-btn{flex:0 0 auto;width:40px;height:40px;border-radius:999px;background:var(--surface-raised);border:1px solid var(--border-hairline);display:grid;place-items:center;color:var(--text-body)}
+.badge{width:72px;height:72px;flex:0 0 72px}
+.badge-card{width:260px;background:var(--surface-card);border:1px solid var(--border-hairline);border-radius:16px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.badge-card .badge{width:88px;height:88px}
+.badge-card .cat{font-family:var(--font-display);font-weight:600;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;color:var(--text-secondary)}
+.badge-card .name{font-family:var(--font-display);font-weight:700;font-size:17px;color:var(--text-heading)}
+.badge-card .why{font-family:var(--font-body);font-size:13px;color:var(--text-secondary);line-height:1.45}
+.badge-card .tag{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-family:var(--font-display);font-weight:600;font-size:11px;letter-spacing:0.4px;text-transform:uppercase}
+.tag.earned{background:rgba(255,176,32,0.16);color:var(--reward)}
+.tag.locked{background:var(--surface-raised);color:var(--text-secondary);border:1px solid var(--border-hairline)}
+.still{width:380px;background:var(--surface-page)}
+</style>
+<template id="__bundler_thumbnail"><svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#0B0F12"/><circle cx="50" cy="50" r="26" fill="#FFB020"/><path d="M50 34 L58 46 L46 46 Z" fill="#0B0F12"/></svg></template>
+</head><body>
+<div class="frame" style="left:40px;top:70px"><span class="lbl">Badge — earned</span>
+<div class="badge-card"><div data-badge="earned" data-size="88"></div>
+<span class="cat">Streaks</span><span class="name">Seven days running</span>
+<span class="why">Seven days without missing one.</span>
+<span class="tag earned">Unlocked</span></div></div>
+
+<div class="frame" style="left:340px;top:70px"><span class="lbl">Badge — unearned</span>
+<div class="badge-card"><div data-badge="locked" data-size="88"></div>
+<span class="cat">Streaks</span><span class="name">Seven days running</span>
+<span class="why">Keep a streak for seven days to earn this.</span>
+<span class="tag locked">Not yet</span></div></div>
+
+<div class="frame still" style="left:660px;top:70px"><span class="lbl">Still — the unlock, resolved</span>
+<div class="toast" style="position:relative;left:0;right:0">
+<div data-badge="earned" data-size="72"></div>
+<div class="txt"><span class="cat">Streaks</span><span class="name">Seven days running</span><span class="why">Seven days without missing one.</span></div>
+<div class="share-btn" aria-label="Share"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg></div>
+</div></div>
+
+<div class="frame" style="left:40px;top:1000px"><span class="lbl">1 — mid-leaf</span>
+<div class="phone"><div class="leaf-bg">
+<div class="leaf-hd"><span class="dot">Leaf 12 · Payoff</span><span class="dot">3 min</span></div>
+<div class="leaf-progress"><i></i></div>
+<div class="leaf-body">
+<span class="chip">✓ Correct — the anchor set the whole range</span>
+<h2>The first number spoken sets the frame for every offer after it.</h2>
+<p>Once a range is anchored, later numbers get judged against it — even numbers that have nothing to do with the original one.</p>
+</div></div></div></div>
+
+<div class="frame" style="left:460px;top:1000px"><span class="lbl">2 — enters</span>
+<div class="phone"><div class="leaf-bg">
+<div class="leaf-hd"><span class="dot">Leaf 12 · Payoff</span><span class="dot">3 min</span></div>
+<div class="leaf-progress"><i></i></div>
+<div class="leaf-body">
+<span class="chip">✓ Correct — the anchor set the whole range</span>
+<h2>The first number spoken sets the frame for every offer after it.</h2>
+<p>Once a range is anchored, later numbers get judged against it — even numbers that have nothing to do with the original one.</p>
+</div>
+<div class="toast" style="top:-86px;opacity:0.55">
+<div data-badge="earned" data-size="52"></div>
+<div class="txt"><span class="cat">Streaks</span><span class="name">Seven days running</span></div></div>
+</div></div></div>
+
+<div class="frame" style="left:880px;top:1000px"><span class="lbl">3 — resolves</span>
+<div class="phone"><div class="leaf-bg">
+<div class="leaf-hd"><span class="dot">Leaf 12 · Payoff</span><span class="dot">3 min</span></div>
+<div class="leaf-progress"><i></i></div>
+<div class="leaf-body">
+<span class="chip">✓ Correct — the anchor set the whole range</span>
+<h2>The first number spoken sets the frame for every offer after it.</h2>
+<p>Once a range is anchored, later numbers get judged against it — even numbers that have nothing to do with the original one.</p>
+</div>
+<div class="toast" style="top:76px">
+<div data-badge="earned" data-size="52"></div>
+<div class="txt"><span class="cat">Streaks</span><span class="name">Seven days running</span><span class="why">Seven days without missing one.</span></div>
+<div class="share-btn" style="width:34px;height:34px" aria-label="Share"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="10.5" x2="15.4" y2="6.5"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/></svg></div>
+</div></div></div></div>
+
+<div class="frame" style="left:1300px;top:1000px"><span class="lbl">4 — hands back</span>
+<div class="phone"><div class="leaf-bg">
+<div class="leaf-hd"><span class="dot">Leaf 12 · Takeaway</span><span class="dot">3 min</span></div>
+<div class="leaf-progress"><i style="width:80%"></i></div>
+<div class="leaf-body">
+<span class="cat" style="color:var(--primary)">Remember this</span>
+<h2 style="font-size:26px">Anchors move judgment, not just prices.</h2>
+</div>
+<div class="toast" style="top:-70px;opacity:0">
+<div data-badge="earned" data-size="52"></div>
+<div class="txt"><span class="cat">Streaks</span><span class="name">Seven days running</span></div></div>
+</div></div></div>
+
+<script>
+function blobPath(cx,cy,r,wobble){const pts=8,step=Math.PI*2/pts;let d='';const P=[];
+for(let i=0;i<pts;i++){const a=i*step,rr=r*(1+Math.sin(i*2.7+cx)*wobble);P.push([cx+Math.cos(a)*rr,cy+Math.sin(a)*rr])}
+d='M '+P[0][0].toFixed(1)+' '+P[0][1].toFixed(1)+' ';
+for(let i=0;i<pts;i++){const p1=P[i],p2=P[(i+1)%pts],mx=(p1[0]+p2[0])/2,my=(p1[1]+p2[1])/2;d+='Q '+p1[0].toFixed(1)+' '+p1[1].toFixed(1)+' '+mx.toFixed(1)+' '+my.toFixed(1)+' '}
+return d+'Z'}
+function badgeSvg(size,earned){const p=blobPath(size/2,size/2,size*0.42,0.16),icon='<path d="M'+(size*0.5)+' '+(size*0.28)+' c'+(size*0.1)+' '+(size*0.14)+' '+(size*0.16)+' '+(size*0.2)+' '+(size*0.1)+' '+(size*0.32)+' c-'+(size*0.02)+' '+(size*0.05)+' -'+(size*0.08)+' '+(size*0.08)+' -'+(size*0.14)+' '+(size*0.08)+' c-'+(size*0.09)+' 0 -'+(size*0.16)+' -'+(size*0.07)+' -'+(size*0.16)+' -'+(size*0.16)+' c0-'+(size*0.08)+' '+(size*0.05)+' -'+(size*0.13)+' '+(size*0.09)+' -'+(size*0.18)+' c'+(size*0.02)+' '+(size*0.06)+' '+(size*0.06)+' '+(size*0.08)+' '+(size*0.11)+' '+(size*0.06)+' Z" fill="'+(earned?'var(--on-reward)':'var(--text-secondary)')+'"/>';
+return '<svg class="badge" viewBox="0 0 '+size+' '+size+'" role="img" aria-label="'+(earned?'Achievement earned: seven day streak':'Achievement locked: seven day streak')+'">'
++'<path d="'+p+'" fill="'+(earned?'var(--reward)':'var(--surface-raised)')+'" stroke="'+(earned?'var(--reward-soft)':'var(--border-hairline)')+'" stroke-width="'+(earned?2:1.5)+'"'+(earned?'':' stroke-dasharray="3 4"')+'/>'+icon+'</svg>'}
+document.querySelectorAll('[data-badge]').forEach(el=>{el.innerHTML=badgeSvg(parseInt(el.dataset.size||72),el.dataset.badge==='earned')})
+</script>
+</body></html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Track roadmap</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}#root{display:grid;place-items:center}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline)}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,IconButton,ProgressBar,TabBar}=window.ZoomOutDesignSystem_442bf9;
+/* Spine kept inside the middle two thirds of the frame: every x sits between 114 and 274. */
+const NODES=[
+{n:1,x:150,y:212,state:'done',lines:['First numbers']},
+{n:2,x:216,y:236,state:'done',lines:['Opening moves']},
+{n:3,x:258,y:264,state:'revisit',lines:['Arbitrary','anchors']},
+{n:4,x:224,y:296,state:'done',lines:['Rounding down']},
+{n:5,x:164,y:320,state:'done',lines:['Two numbers']},
+{n:6,x:128,y:350,state:'revisit',lines:['Value first']},
+{n:7,x:154,y:384,state:'done',lines:['Naming yours']},
+{n:8,x:172,y:424,state:'next',title:'When the range is set'},
+{n:9,x:248,y:458,state:'locked',lines:['Prep work']},
+{n:10,x:274,y:486,state:'locked',lines:['On paper']},
+{n:11,x:246,y:514,state:'locked',lines:['Long pauses']},
+{n:12,x:208,y:538,state:'locked',lines:['Second offers']},
+{n:13,x:152,y:562,state:'locked',lines:['Halfway offers']},
+{n:14,x:120,y:578,state:'locked',lines:['Deadlines']},
+{n:15,x:158,y:600,state:'locked',lines:['Walking away']},
+{n:16,x:224,y:612,state:'locked',lines:['Reading a room']},
+{n:17,x:252,y:634,state:'locked',lines:['Follow-up']},
+{n:18,x:190,y:650,state:'locked',lines:['Your anchors']}];
+const NEXT_I=7,R={next:15,done:6.5,revisit:12,locked:11};
+function prng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+/* Every connection in this screen is a bezier. Nothing is drawn with <line>. */
+function curve(x,y,ang,len,bend){const ex=x+Math.cos(ang)*len,ey=y+Math.sin(ang)*len,nx=-Math.sin(ang),ny=Math.cos(ang),o=len*bend;
+return{ex,ey,d:'M '+x.toFixed(1)+' '+y.toFixed(1)+' C '+(x+Math.cos(ang)*len*0.34+nx*o*0.3).toFixed(1)+' '+(y+Math.sin(ang)*len*0.34+ny*o*0.3).toFixed(1)+', '+(x+Math.cos(ang)*len*0.68+nx*o*0.46).toFixed(1)+' '+(y+Math.sin(ang)*len*0.68+ny*o*0.46).toFixed(1)+', '+ex.toFixed(1)+' '+ey.toFixed(1)}}
+function segments(pts){const s=[];for(let i=0;i<pts.length-1;i+=1){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||pts[i+1];
+s.push('C '+(p1.x+(p2.x-p0.x)/6).toFixed(1)+' '+(p1.y+(p2.y-p0.y)/6).toFixed(1)+', '+(p2.x-(p3.x-p1.x)/6).toFixed(1)+' '+(p2.y-(p3.y-p1.y)/6).toFixed(1)+', '+p2.x+' '+p2.y)}return s}
+function subPath(from,to){const segs=segments(NODES);let d='M '+NODES[from].x+' '+NODES[from].y;for(let i=from;i<to;i+=1)d+=' '+segs[i];return d}
+function tangent(i){const a=NODES[Math.max(0,i-1)],b=NODES[Math.min(NODES.length-1,i+1)],dx=b.x-a.x,dy=b.y-a.y,m=Math.hypot(dx,dy)||1;return Math.atan2(dy,dx)}
+/* Irregular cell body: jittered radii closed with a Catmull-Rom loop, so no node is a perfect circle. */
+function blob(cx,cy,r,rand,jitter){const n=9,p=[];for(let i=0;i<n;i+=1){const a=i/n*Math.PI*2+(rand()-0.5)*0.18,rr=r*(1-jitter+rand()*jitter*2);p.push({x:cx+Math.cos(a)*rr,y:cy+Math.sin(a)*rr})}
+let d='M '+p[0].x.toFixed(1)+' '+p[0].y.toFixed(1);
+for(let i=0;i<n;i+=1){const p0=p[(i-1+n)%n],p1=p[i],p2=p[(i+1)%n],p3=p[(i+2)%n];
+d+=' C '+(p1.x+(p2.x-p0.x)/6).toFixed(1)+' '+(p1.y+(p2.y-p0.y)/6).toFixed(1)+', '+(p2.x-(p3.x-p1.x)/6).toFixed(1)+' '+(p2.y-(p3.y-p1.y)/6).toFixed(1)+', '+p2.x.toFixed(1)+' '+p2.y.toFixed(1)}
+return d+' Z'}
+/* Recursive tapering arbor: each level thinner, shorter, and bent the other way. Terminals get a fine tuft. */
+function grow(out,rand,st){const{x,y,ang,len,w,depth,color,op,k}=st;const bend=(rand()-0.5)*1.5,c=curve(x,y,ang,len,bend);
+out.push(<path key={k} d={c.d} fill="none" stroke={color} strokeWidth={w.toFixed(2)} opacity={op.toFixed(2)}/>);
+if(depth<=0){const tips=2+Math.floor(rand()*3);
+for(let i=0;i<tips;i+=1){const t=curve(c.ex,c.ey,ang+bend*0.8+(rand()-0.5)*1.7,len*(0.16+rand()*0.26),(rand()-0.5)*2.4);
+out.push(<path key={k+'t'+i} d={t.d} fill="none" stroke={color} strokeWidth={Math.max(0.35,w*0.52).toFixed(2)} opacity={(op*0.9).toFixed(2)}/>);
+if(rand()>0.55)out.push(<circle key={k+'e'+i} cx={t.ex.toFixed(1)} cy={t.ey.toFixed(1)} r="0.85" fill={color} opacity={(op*0.8).toFixed(2)}/>)}return}
+const kids=rand()>0.72?3:2;
+for(let i=0;i<kids;i+=1){const spread=(i-(kids-1)/2)*(0.48+rand()*0.5)+(rand()-0.5)*0.28;
+grow(out,rand,{x:c.ex,y:c.ey,ang:ang+bend*0.85+spread,len:len*(0.5+rand()*0.24),w:Math.max(0.42,w*0.6),depth:depth-1,color,op:op*0.94,k:k+'-'+i})}}
+function Arbors(){const rand=prng(70241),out=[];
+NODES.forEach((node,i)=>{const reached=i<=NEXT_I,color=reached?'var(--primary)':'var(--graph-edge)',op=reached?0.44:0.8,
+big=node.state==='next',count=big?5:3,base=R[node.state],bias=rand()*Math.PI*2,arc=2.0+rand()*1.5;for(let kk=0;kk<count;kk+=1){const ang=bias+((count===1?0:kk/(count-1))-0.5)*arc+(rand()-0.5)*0.3,
+len=(big?26:13)+rand()*(big?14:8);
+grow(out,rand,{x:node.x+Math.cos(ang)*base*0.8,y:node.y+Math.sin(ang)*base*0.8,ang,len,w:big?1.6:1,depth:big?3:2,color,op,k:'a'+i+'-'+kk})}
+/* One axon per cell: longer, thinner, gently curved, so the cell has a direction. */
+const axAng=tangent(i)+(rand()>0.5?1:-1)*(1.9+rand()*0.9);let ax=node.x+Math.cos(axAng)*base*0.85,ay=node.y+Math.sin(axAng)*base*0.85,a=axAng,w=big?1.2:0.8;
+for(let s=0;s<3;s+=1){const seg=curve(ax,ay,a,(big?34:24)-s*4,(rand()-0.5)*0.7);
+out.push(<path key={'ax'+i+s} d={seg.d} fill="none" stroke={color} strokeWidth={w.toFixed(2)} opacity={(op*0.9).toFixed(2)}/>);
+ax=seg.ex;ay=seg.ey;a+=(rand()-0.5)*0.5;w=Math.max(0.4,w*0.72)}
+const tuft=3+Math.floor(rand()*3);
+for(let i2=0;i2<tuft;i2+=1){const t=curve(ax,ay,a+(rand()-0.5)*2.1,5+rand()*8,(rand()-0.5)*2.6);
+out.push(<path key={'axt'+i+i2} d={t.d} fill="none" stroke={color} strokeWidth="0.5" opacity={(op*0.85).toFixed(2)}/>)}});
+return <g>{out}</g>}
+/* Ambient web: knowledge not yet reached. Curved arcs only — depth from density, not mass. */
+function AmbientWeb(){const rand=prng(31877),pts=[];for(let i=0;i<58;i+=1)pts.push({x:8+rand()*374,y:10+rand()*824,r:0.8+rand()*0.9});
+const arcs=[];pts.forEach((p,i)=>{for(let j=i+1;j<pts.length;j+=1){const q=pts[j];if(Math.hypot(p.x-q.x,p.y-q.y)<74&&rand()>0.5){
+const mx=(p.x+q.x)/2,my=(p.y+q.y)/2,nx=-(q.y-p.y),ny=q.x-p.x,m=Math.hypot(nx,ny)||1,o=(rand()-0.5)*0.34;
+arcs.push('M '+p.x.toFixed(1)+' '+p.y.toFixed(1)+' Q '+(mx+nx/m*m*o).toFixed(1)+' '+(my+ny/m*m*o).toFixed(1)+', '+q.x.toFixed(1)+' '+q.y.toFixed(1))}}});
+const wisps=[];for(let i=0;i<26;i+=1){const p=pts[Math.floor(rand()*pts.length)],c=curve(p.x,p.y,rand()*Math.PI*2,10+rand()*22,(rand()-0.5)*2.2);wisps.push(c.d)}
+return <g>{arcs.map((d,i)=><path key={'w'+i} d={d} fill="none" stroke="var(--graph-edge)" strokeWidth="0.9" opacity="0.4"/>)}
+{wisps.map((d,i)=><path key={'v'+i} d={d} fill="none" stroke="var(--graph-edge)" strokeWidth="0.65" opacity="0.36"/>)}
+{pts.map((p,i)=><circle key={'n'+i} cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={p.r.toFixed(1)} fill="var(--graph-node-unreached)"/>)}</g>}
+function Node({node,rand}){const{x,y,state,n}=node;
+if(state==='next')return<g>
+<path d={blob(x,y,25,rand,0.07)} fill="var(--primary)" opacity="0.07"/>
+<path d={blob(x,y,25,rand,0.07)} fill="none" stroke="var(--primary)" strokeWidth="1.5" opacity="0.32"/>
+<path d={blob(x,y,15,rand,0.11)} fill="var(--primary)"/>
+<text x={x} y={y+5.5} textAnchor="middle" fill="var(--text-on-primary)" style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:'15px'}}>{n}</text></g>;
+if(state==='done')return<g>
+<path d={blob(x,y,6.5,rand,0.16)} fill="var(--surface-page)" stroke="var(--reward)" strokeWidth="1.5"/>
+<path d={blob(x,y,2.9,rand,0.2)} fill="var(--reward)"/></g>;
+if(state==='revisit')return<g>
+<path d={blob(x,y,12,rand,0.13)} fill="var(--surface-page)"/>
+<path d={blob(x,y,12,rand,0.13)} fill="none" stroke="var(--reward)" strokeWidth="1.5" strokeDasharray="3.5 4" opacity="0.85"/>
+<path d={blob(x,y,2.9,rand,0.2)} fill="var(--reward)"/></g>;
+return<g>
+<path d={blob(x,y,11,rand,0.14)} fill="var(--surface-page)"/>
+<path d={blob(x,y,11,rand,0.14)} fill="none" stroke="var(--border-hairline)" strokeWidth="1.25"/>
+<text x={x} y={y+4.2} textAnchor="middle" fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px'}}>{n}</text></g>}
+/* Leaf previews: each node carries a short label, pushed just enough to never collide. */
+function labelLayout(){const sides={left:[],right:[]},out={};
+NODES.forEach((n,i)=>{if(n.state==='next')return;sides[n.x<195?'left':'right'].push({i,n})});
+Object.keys(sides).forEach(side=>{let prev=-1e9;sides[side].sort((a,b)=>a.n.y-b.n.y).forEach(({i,n})=>{
+const h=n.lines.length*15;let top=n.y-h/2;if(top<prev+7)top=prev+7;prev=top+h;out[i]={side,top,h}})});
+return out}
+function Labels(){const L=labelLayout();
+return<g>{NODES.map((n,i)=>{const l=L[i];if(!l)return null;const reached=i<=NEXT_I,r=R[n.state],
+lx=l.side==='left'?n.x-r-11:n.x+r+11,cy=l.top+l.h/2,drift=Math.abs(cy-n.y)>9,
+lead=drift?'M '+(l.side==='left'?n.x-r*0.9:n.x+r*0.9).toFixed(1)+' '+n.y+' Q '+(l.side==='left'?lx+6:lx-6).toFixed(1)+' '+((n.y+cy)/2).toFixed(1)+', '+(l.side==='left'?lx+2:lx-2).toFixed(1)+' '+cy.toFixed(1):null;
+return<g key={'l'+i}>
+{lead&&<path d={lead} fill="none" stroke={reached?'var(--primary)':'var(--graph-edge)'} strokeWidth="0.8" opacity="0.55"/>}
+<text x={lx.toFixed(1)} y={(l.top+11).toFixed(1)} textAnchor={l.side==='left'?'end':'start'} fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>
+{n.lines.map((t,j)=><tspan key={j} x={lx.toFixed(1)} dy={j?15:0}>{t}</tspan>)}</text></g>})}</g>}
+function TrackRoadmap(){const bodyRand=prng(9051);
+return<div className="screen" data-screen-label="Track roadmap">
+<svg viewBox="0 0 390 844" width="390" height="844" style={{position:'absolute',inset:0}} role="img" aria-label="Track roadmap: 7 of 18 leaves complete, leaf 8 next">
+<AmbientWeb/>
+<path d={subPath(NEXT_I,NODES.length-1)} fill="none" stroke="var(--graph-edge)" strokeWidth="2"/>
+<path d={subPath(0,NEXT_I)} fill="none" stroke="var(--graph-edge-reached)" strokeWidth="1.75"/>
+<Arbors/>
+{NODES.map(nd=><Node key={nd.n} node={nd} rand={bodyRand}/>)}
+<Labels/>
+<path d="M 158 436 Q 134 452, 112 458" fill="none" stroke="var(--primary)" strokeWidth="1" opacity="0.45"/>
+</svg>
+<div style={{position:'absolute',left:0,right:0,top:0,height:236,background:'linear-gradient(to bottom, var(--surface-0) 0%, var(--surface-0) 54%, rgba(11,15,18,0.84) 76%, rgba(11,15,18,0) 100%)',pointerEvents:'none'}}></div>
+<header style={{position:'absolute',left:0,right:0,top:0,padding:'8px var(--gutter) var(--space-lg)',display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',minHeight:44}}>
+<IconButton icon="chevron-left" label="Back" style={{marginLeft:-10}}/>
+<IconButton icon="bookmark" label="Save track" style={{marginRight:-10}}/></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-xs)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Track</span>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h2-size)',lineHeight:1.25,color:'var(--text-heading)'}}>The quiet arithmetic</h1>
+<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>Marisol Vane</span></div>
+<ProgressBar value={7/18} valueLabel="7 of 18" label="Leaves" height={6} style={{marginTop:'var(--space-xs)'}}/>
+</header>
+<div style={{position:'absolute',left:20,top:454,width:174,padding:'var(--space-md) var(--space-lg)',borderRadius:'var(--radius-md)',background:'var(--surface-raised)',border:'1px solid var(--border-hairline)',display:'flex',flexDirection:'column',gap:'var(--space-xs)',pointerEvents:'none'}}>
+<span className="zo-caption" style={{color:'var(--primary)'}}>Leaf 8 · next</span>
+<span style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h3-size)',lineHeight:'var(--text-h3-leading)',color:'var(--text-heading)',textWrap:'pretty'}}>When the range is set</span></div>
+<div style={{position:'absolute',left:0,right:0,bottom:0}}>
+<div style={{position:'absolute',left:0,right:0,bottom:0,height:186,background:'linear-gradient(to top, var(--surface-0) 0%, var(--surface-0) 48%, rgba(11,15,18,0.82) 74%, rgba(11,15,18,0) 100%)',pointerEvents:'none'}}></div>
+<div style={{position:'relative',padding:'0 var(--gutter) var(--space-lg)'}}>
+<Button fullWidth size="lg" icon="play">Continue leaf 8</Button></div>
+<TabBar activeKey="journey" style={{position:'relative'}} items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<TrackRoadmap/>);
+</script>
+</body></html>

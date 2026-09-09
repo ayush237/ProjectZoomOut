@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Notes</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0}body{background:var(--surface-page);min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}
+.rail{display:flex;gap:40px;padding:40px;align-items:flex-start;width:max-content}
+.col{display:flex;flex-direction:column;gap:12px}
+.col>.zo-caption{color:var(--text-secondary)}
+.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--space-lg);padding:var(--space-lg) var(--gutter) var(--space-lg)}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,Card,Icon,IconButton,Input,StickyNote,TabBar,TopBar}=window.ZoomOutDesignSystem_442bf9;
+const FILTERS=['All notes','Yours','The quiet arithmetic','Rooms that decide'];
+const GROUPS=[
+{track:'The quiet arithmetic',leaf:'Leaf 8 · The first number sets the range',notes:[
+{t:'Whoever speaks first draws the range.'},
+{t:'Ask for their band before I name mine. Works on renewals too.',mine:true}]},
+{track:'The quiet arithmetic',leaf:'Leaf 6 · Costs you have already paid',notes:[
+{t:'Money already spent is not a reason to spend more.'}]},
+{track:'Rooms that decide',leaf:'Leaf 3 · Who is actually deciding',notes:[
+{t:'The person asking the questions is rarely the one signing.'}]}];
+const SHEET=[
+{t:'Whoever speaks first draws the range.'},
+{t:'Adjustment stops early, at the first number that feels defensible.'},
+{t:'Ask for their band before I name mine. Works on renewals too.',mine:true}];
+function Chip({label,selected}){return<span style={{display:'inline-flex',alignItems:'center',height:36,padding:'0 var(--space-md)',borderRadius:'var(--radius-sm)',background:selected?'var(--surface-raised)':'var(--surface-card)',border:(selected?'var(--border-width-focus)':'var(--border-width-hairline)')+' solid '+(selected?'var(--primary)':'var(--border-hairline)'),color:selected?'var(--primary)':'var(--text-secondary)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase',whiteSpace:'nowrap'}}>{label}</span>}
+function Frame({label,children}){return<div className="col"><span className="zo-caption">{label}</span>{children}</div>}
+/* A note the reader wrote is marked by a caption, never by colour alone. */
+function Note({index,t,mine}){return<div style={{display:'flex',flexDirection:'column',gap:'var(--space-xs)'}}>
+<StickyNote index={index} style={{padding:'var(--space-md) var(--space-lg)'}}>{t}</StickyNote>
+{mine&&<span className="zo-caption" style={{color:'var(--text-secondary)',paddingLeft:'var(--space-lg)'}}>Your note</span>}</div>}
+/* 1 — The collection, reached from Profile and from inside a leaf. */
+function Collection(){return<Frame label="1 · Your notes">
+<div className="screen" data-screen-label="Your notes">
+<TopBar title="Your notes" subtitle="34 notes · 11 leaves" onBack={()=>{}} actionIcon="settings" actionLabel="Note settings"/>
+<div className="body" style={{gap:'var(--space-md)',overflow:'hidden'}}>
+<Input placeholder="Search your notes"/>
+<div style={{display:'flex',gap:'var(--space-sm)',overflow:'hidden',margin:'0 calc(var(--gutter) * -1)',padding:'0 var(--gutter)'}}>
+{FILTERS.map((f,i)=><Chip key={f} label={f} selected={i===0}/>)}</div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-lg)',minHeight:0}}>
+{GROUPS.map(g=><section key={g.leaf} style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:2}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>{g.track}</span>
+<span className="zo-h3">{g.leaf}</span></div>
+{g.notes.map((n,i)=><Note key={i} index={i+1} {...n}/>)}</section>)}
+<span style={{display:'inline-flex',alignItems:'center',gap:'var(--space-xs)',height:44,color:'var(--primary)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase'}}>Show all 34 notes<Icon name="chevron-right" size={14}/></span></div></div>
+<TabBar activeKey="profile" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div></Frame>}
+/* 2 — The sheet the leaf's note button opens. No tab bar: still inside the lesson. */
+function Sheet(){return<Frame label="2 · In-leaf sheet">
+<div className="screen" data-screen-label="Leaf notes sheet">
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-md)',padding:'8px var(--gutter) 0',opacity:0.45}} aria-hidden="true">
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',minHeight:44}}>
+<Icon name="x" size={24} color="var(--text-secondary)"/>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Leaf 8 · 3 min</span>
+<Icon name="sticky-note" size={24} color="var(--primary)"/></div>
+<Card style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Sticky notes</span>
+<span className="zo-h3">Four things to keep</span></Card></div>
+<div style={{position:'absolute',left:0,right:0,bottom:0,background:'var(--surface-card)',borderTop:'1px solid var(--border-hairline)',borderRadius:'var(--radius-lg) var(--radius-lg) 0 0',padding:'var(--space-md) var(--gutter) var(--space-xl)',display:'flex',flexDirection:'column',gap:'var(--space-md)',maxHeight:620}}>
+<div style={{width:40,height:4,borderRadius:999,background:'var(--border-hairline)',alignSelf:'center'}}></div>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:2}}>
+<span className="zo-h2">This leaf</span>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>3 notes kept</span></div>
+<IconButton icon="x" label="Close notes" style={{marginRight:-10}}/></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+{SHEET.map((n,i)=><Note key={i} index={i+1} {...n}/>)}</div>
+<div style={{height:1,background:'var(--border-hairline)'}}></div>
+<Input label="Add your own" placeholder="What do you want to keep?"/>
+<Button fullWidth size="lg" icon="check">Save note</Button></div>
+</div></Frame>}
+/* 3 — Empty, before the first leaf is finished. */
+function Empty(){return<Frame label="3 · No notes yet">
+<div className="screen" data-screen-label="Notes empty">
+<TopBar title="Your notes" onBack={()=>{}}/>
+<div className="body" style={{justifyContent:'center',alignItems:'center',gap:'var(--space-lg)',textAlign:'center'}}>
+<span style={{width:56,height:56,borderRadius:'var(--radius-md)',background:'var(--surface-raised)',border:'1px solid var(--border-hairline)',display:'grid',placeItems:'center'}}>
+<Icon name="sticky-note" size={24} color="var(--text-secondary)"/></span>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)',maxWidth:280}}>
+<span className="zo-h2">Nothing kept yet</span>
+<span className="zo-body" style={{color:'var(--text-secondary)',textWrap:'pretty'}}>The fourth slide of every leaf holds the things worth keeping. Anything you save there shows up here.</span></div>
+<Button size="lg" icon="play">Start a leaf · 3 min</Button></div>
+<TabBar activeKey="profile" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div></Frame>}
+function Rail(){return<div className="rail"><Collection/><Sheet/><Empty/></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Rail/>);
+</script>
+</body></html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — clickable prototype</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0}body{background:var(--surface-page);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px 12px}
+a{color:var(--text-link)}a:hover{color:var(--primary-hover)}
+.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;gap:var(--space-lg);padding:var(--space-lg) var(--gutter) 0}
+.foot{padding:var(--space-lg) var(--gutter) var(--space-xl);display:flex;flex-direction:column;gap:var(--space-sm)}
+.scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.scroll::-webkit-scrollbar{width:0}
+.fade{animation:zo-fade var(--duration-transition) var(--ease-standard)}
+@keyframes zo-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.jump{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:420px}
+.jump button{min-height:32px;padding:0 12px;border-radius:var(--radius-full);background:var(--surface-card);border:1px solid var(--border-hairline);color:var(--text-secondary);font-family:var(--font-display);font-weight:600;font-size:var(--text-caption-size);letter-spacing:var(--text-caption-tracking);text-transform:uppercase;cursor:pointer}
+.jump button:hover{background:var(--surface-raised);color:var(--text-body)}
+.zo-board{position:relative;background:var(--surface-card);border-radius:var(--radius-md);padding:22px 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:26px 14px;background-image:repeating-linear-gradient(38deg, transparent 0 6px, color-mix(in srgb, var(--border-hairline) 35%, transparent) 6px 7px),repeating-linear-gradient(-31deg, transparent 0 9px, color-mix(in srgb, var(--border-hairline) 20%, transparent) 9px 10px)}
+.zo-board.single{grid-template-columns:1fr;max-width:200px}
+.zo-board>*:nth-child(2n){margin-top:16px}
+.zo-board>*:nth-child(3n){margin-top:-6px}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script src="image-slot.js"></script>
+<script type="text/babel" src="proto/data.jsx"></script>
+<script type="text/babel" src="proto/graph.jsx"></script>
+<script type="text/babel" src="proto/tabs.jsx"></script>
+<script type="text/babel" src="proto/leaf.jsx"></script>
+<script type="text/babel" src="proto/support.jsx"></script>
+<script type="text/babel" src="proto/onboarding.jsx"></script>
+<script type="text/babel" src="proto/auth.jsx"></script>
+<script type="text/babel" src="proto/notes.jsx"></script>
+<script type="text/babel">
+const KEY='zoomout-proto-v1';
+/* Two starting points: a first run, and a reader four days in. */
+const FRESH={route:'onboarding',obStep:0,tab:'journey',leavesDone:0,leavesToday:0,xpToday:0,lifetime:0,lifetimeXp:0,streak:0,capMin:15,minsLeft:15,topics:['Decisions','Money'],remind:true,saved:false,notes:[],leafN:1,since:'today'};
+const RETURNING={route:'tabs',obStep:0,tab:'journey',leavesDone:7,leavesToday:3,xpToday:120,lifetime:135,lifetimeXp:1760,streak:12,capMin:15,minsLeft:6,topics:['Decisions','Money'],remind:true,saved:false,notes:SEED_NOTES,leafN:8,since:'March'};
+function load(){try{const raw=localStorage.getItem(KEY);return raw?JSON.parse(raw):null}catch(e){return null}}
+function App(){const [st,setSt]=React.useState(()=>load()||FRESH);
+const [stack,setStack]=React.useState([]);
+React.useEffect(()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}},[st]);
+const patch=p=>setSt(s=>Object.assign({},s,typeof p==='function'?p(s):p));
+const push=route=>{setStack(k=>k.concat(st.route));patch({route})};
+const app=Object.assign({},st,{
+go:push,
+back:()=>{setStack(k=>{const last=k[k.length-1];patch({route:last||'tabs'});return k.slice(0,-1)})},
+setTab:tab=>{setStack([]);patch({route:'tabs',tab})},
+setObStep:obStep=>patch({obStep}),
+setRemind:remind=>patch({remind}),
+toggleSaved:()=>patch(s=>({saved:!s.saved})),
+startLeaf:n=>{setStack(k=>k.concat(st.route==='leaf'?'track':st.route));patch({route:'leaf',leafN:n})},
+saveNote:note=>patch(s=>({notes:s.notes.concat(note)})),
+endSession:()=>{setStack([]);patch({route:'done',endReason:'voluntary'})},
+finishOnboarding:({topics,cap,remind},dest)=>{setStack([]);
+patch({topics,capMin:cap,minsLeft:cap,remind,route:dest==='leaf'?'leaf':'tabs',tab:dest==='leaf'?'journey':'explore',leafN:1})},
+finishLeaf:n=>{setStack([]);patch(s=>{const mins=Math.max(0,s.minsLeft-3),xp=s.xpToday+40,done=Math.max(s.leavesDone,n),capped=mins<=0||xp>=500;
+return{leavesDone:done,leavesToday:s.leavesToday+1,xpToday:xp,lifetime:s.lifetime+1,lifetimeXp:s.lifetimeXp+40,
+streak:s.leavesToday===0?s.streak+1:s.streak,minsLeft:mins,route:capped?'done-cap':'track',endReason:capped?(mins<=0?'time':'xp'):s.endReason,leafN:done+1}})},
+reset:()=>{setStack([]);setSt(FRESH)},
+demo:()=>{setStack([]);setSt(RETURNING)}});
+const screen=st.route==='signin'?<SignInScreen app={app}/>
+:st.route==='signup'?<SignUpScreen app={app}/>
+:st.route==='load-failed'?<LoadFailedScreen app={app}/>
+:st.route==='offline'?<OfflineScreen app={app}/>
+:st.route==='onboarding'?<OnboardingScreen app={app}/>
+:st.route==='track'?<TrackScreen app={app}/>
+:st.route==='leaf'?<LeafScreen app={app} leafN={st.leafN}/>
+:st.route==='done'?<DoneScreen app={app}/>
+:st.route==='done-cap'?<CapScreen app={app}/>
+:st.route==='notes'?<NotesScreen app={app}/>
+:st.tab==='explore'?<ExploreScreen app={app}/>
+:st.tab==='library'?<LibraryScreen app={app}/>
+:st.tab==='profile'?<ProfileScreen app={app}/>
+:<JourneyScreen app={app}/>;
+const key=st.route+'-'+st.tab+'-'+st.leafN;
+return<React.Fragment>
+<div className="fade" key={key}>{screen}</div>
+<div className="jump">
+<button type="button" onClick={()=>app.go('signin')}>Sign in</button>
+<button type="button" onClick={()=>app.go('signup')}>Sign up</button>
+<button type="button" onClick={app.reset}>Restart first run</button>
+<button type="button" onClick={app.demo}>Reader, four days in</button>
+<button type="button" onClick={()=>app.setTab('explore')}>Explore</button>
+<button type="button" onClick={()=>app.setTab('library')}>Library</button>
+<button type="button" onClick={()=>app.setTab('journey')}>Journey</button>
+<button type="button" onClick={()=>app.setTab('profile')}>Profile</button>
+<button type="button" onClick={()=>push('track')}>Track</button>
+<button type="button" onClick={()=>app.startLeaf(st.leavesDone+1||1)}>Leaf</button>
+<button type="button" onClick={()=>push('notes')}>Notes</button>
+<button type="button" onClick={()=>push('load-failed')}>Content failed</button>
+<button type="button" onClick={()=>push('offline')}>No network</button>
+<button type="button" onClick={()=>push('done')}>Session end · chosen</button>
+<button type="button" onClick={()=>push('done-cap')}>Session end · cap hit</button>
+</div></React.Fragment>}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body></html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Journey</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,Card,Icon,IconButton,ProgressBar,StreakBadge,XpChip,TabBar}=window.ZoomOutDesignSystem_442bf9;
+const WEEK=[{d:'M',state:'done'},{d:'T',state:'done'},{d:'W',state:'done'},{d:'T',state:'done'},{d:'F',state:'today'},{d:'S',state:'ahead'},{d:'S',state:'ahead'}];
+const NEXT=[
+{track:'The quiet arithmetic',leaf:'Leaf 8',title:'When the range is set'},
+{track:'The cost of certainty',leaf:'Leaf 4',title:'Confidence is not accuracy'},
+{track:'Rooms that decide',leaf:'Leaf 2',title:'Who speaks first'}];
+function Day({d,state}){const done=state==='done',today=state==='today';
+return<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'var(--space-sm)'}}>
+<span className="zo-caption" style={{color:today?'var(--primary)':'var(--text-secondary)'}}>{d}</span>
+<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+{today&&<circle cx="13" cy="13" r="12" fill="none" stroke="var(--primary)" strokeWidth="1.75"/>}
+{done&&<circle cx="13" cy="13" r="9" fill="none" stroke="var(--reward)" strokeWidth="1.5"/>}
+{done&&<circle cx="13" cy="13" r="3.5" fill="var(--reward)"/>}
+{today&&<circle cx="13" cy="13" r="4.5" fill="var(--primary)"/>}
+{!done&&!today&&<circle cx="13" cy="13" r="9" fill="none" stroke="var(--border-hairline)" strokeWidth="1.25"/>}
+</svg></div>}
+function NextRow({track,leaf,title,first}){return<Card interactive padding="var(--space-md)" radius="var(--radius-md)" style={{display:'flex',alignItems:'center',gap:'var(--space-md)'}}>
+<div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}}>
+<span className="zo-caption" style={{color:first?'var(--primary)':'var(--text-secondary)'}}>{leaf} · 3 min</span>
+<span style={{fontFamily:'var(--font-display)',fontWeight:'var(--weight-bold)',fontSize:'var(--text-h3-size)',lineHeight:1.25,color:'var(--text-heading)',textWrap:'pretty'}}>{title}</span>
+<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>{track}</span></div>
+<IconButton icon="play" label={'Start '+leaf} variant="secondary"/></Card>}
+function Journey(){return<div className="screen" data-screen-label="Journey">
+<header style={{padding:'var(--space-xl) var(--gutter) var(--space-md)',display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:1.2,color:'var(--text-heading)'}}>Journey</h1>
+<StreakBadge days={12}/></header>
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-lg)',padding:'var(--space-sm) var(--gutter) var(--space-lg)'}}>
+<Card style={{display:'flex',flexDirection:'column',gap:'var(--space-lg)'}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Today</span>
+<XpChip amount={120}/></div>
+<div style={{display:'flex',gap:'var(--space-xs)'}}>{WEEK.map((w,i)=><Day key={i} {...w}/>)}</div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<ProgressBar value={3/15} valueLabel="12 min left today" label="Session" height={6}/></div>
+</Card>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-md)',minHeight:0}}>
+<div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Next leaves</span>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>3 tracks</span></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+{NEXT.map((n,i)=><NextRow key={n.title} {...n} first={i===0}/>)}</div>
+</section>
+<div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<Button fullWidth size="lg" icon="play">Continue leaf 8</Button>
+<span className="zo-caption" style={{color:'var(--text-secondary)',textAlign:'center'}}>4 leaves this week · 1 track finished</span></div>
+</div>
+<TabBar activeKey="journey" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Journey/>);
+</script>
+</body></html>

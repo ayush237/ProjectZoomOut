@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Done for today</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,Card,Icon,ProgressBar,StreakBadge,XpChip,TabBar}=window.ZoomOutDesignSystem_442bf9;
+/* Same neural language as the track roadmap, one session's worth: curves only, no straight segments. */
+const FRAG=[{x:26,y:86,state:'past'},{x:96,y:58,state:'today'},{x:168,y:78,state:'today'},{x:240,y:50,state:'today'},{x:300,y:74,state:'tomorrow'}];
+function prng(seed){let s=seed>>>0;return()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296}}
+function curve(x,y,a,len,bend){const ex=x+Math.cos(a)*len,ey=y+Math.sin(a)*len,nx=-Math.sin(a),ny=Math.cos(a),o=len*bend;
+return{ex,ey,d:'M '+x.toFixed(1)+' '+y.toFixed(1)+' C '+(x+Math.cos(a)*len*0.34+nx*o*0.3).toFixed(1)+' '+(y+Math.sin(a)*len*0.34+ny*o*0.3).toFixed(1)+', '+(x+Math.cos(a)*len*0.68+nx*o*0.46).toFixed(1)+' '+(y+Math.sin(a)*len*0.68+ny*o*0.46).toFixed(1)+', '+ex.toFixed(1)+' '+ey.toFixed(1)}}
+function spine(from,to){let d='M '+FRAG[from].x+' '+FRAG[from].y;
+for(let i=from;i<to;i+=1){const p0=FRAG[i-1]||FRAG[i],p1=FRAG[i],p2=FRAG[i+1],p3=FRAG[i+2]||FRAG[i+1];
+d+=' C '+(p1.x+(p2.x-p0.x)/6).toFixed(1)+' '+(p1.y+(p2.y-p0.y)/6).toFixed(1)+', '+(p2.x-(p3.x-p1.x)/6).toFixed(1)+' '+(p2.y-(p3.y-p1.y)/6).toFixed(1)+', '+p2.x+' '+p2.y}return d}
+function blob(cx,cy,r,rand){const n=9,p=[];for(let i=0;i<n;i+=1){const a=i/n*Math.PI*2+(rand()-0.5)*0.2,rr=r*(0.86+rand()*0.28);p.push({x:cx+Math.cos(a)*rr,y:cy+Math.sin(a)*rr})}
+let d='M '+p[0].x.toFixed(1)+' '+p[0].y.toFixed(1);
+for(let i=0;i<n;i+=1){const p0=p[(i-1+n)%n],p1=p[i],p2=p[(i+1)%n],p3=p[(i+2)%n];
+d+=' C '+(p1.x+(p2.x-p0.x)/6).toFixed(1)+' '+(p1.y+(p2.y-p0.y)/6).toFixed(1)+', '+(p2.x-(p3.x-p1.x)/6).toFixed(1)+' '+(p2.y-(p3.y-p1.y)/6).toFixed(1)+', '+p2.x.toFixed(1)+' '+p2.y.toFixed(1)}return d+' Z'}
+function Fragment(){const rand=prng(5521),arbor=[];
+FRAG.forEach((nd,i)=>{const reached=nd.state!=='tomorrow',color=reached?'var(--primary)':'var(--graph-edge)',op=reached?0.4:0.7;
+for(let k=0;k<3;k+=1){const a=(rand()*2-1)*Math.PI,c1=curve(nd.x,nd.y,a,10+rand()*12,(rand()-0.5)*1.4);
+arbor.push(<path key={'b'+i+k} d={c1.d} fill="none" stroke={color} strokeWidth="1" opacity={op}/>);
+for(let j=0;j<2;j+=1){const c2=curve(c1.ex,c1.ey,a+(j?0.6:-0.55)+(rand()-0.5)*0.4,5+rand()*7,(rand()-0.5)*2);
+arbor.push(<path key={'b'+i+k+j} d={c2.d} fill="none" stroke={color} strokeWidth="0.55" opacity={op*0.9}/>)}}});
+return<svg viewBox="0 0 338 118" width="100%" height="118" role="img" aria-label="Three leaves completed today, the next opens tomorrow">
+<path d={spine(3,4)} fill="none" stroke="var(--graph-edge)" strokeWidth="1.75"/>
+<path d={spine(0,3)} fill="none" stroke="var(--graph-edge-reached)" strokeWidth="1.75"/>
+{arbor}
+{FRAG.map((nd,i)=>{if(nd.state==='past')return<g key={i}><path d={blob(nd.x,nd.y,5.5,rand)} fill="none" stroke="var(--reward)" strokeWidth="1.25" opacity="0.6"/></g>;
+if(nd.state==='today')return<g key={i}><path d={blob(nd.x,nd.y,8,rand)} fill="var(--surface-page)" stroke="var(--reward)" strokeWidth="1.75"/><path d={blob(nd.x,nd.y,3.4,rand)} fill="var(--reward)"/></g>;
+return<g key={i}><path d={blob(nd.x,nd.y,11,rand)} fill="var(--surface-page)"/><path d={blob(nd.x,nd.y,11,rand)} fill="none" stroke="var(--border-hairline)" strokeWidth="1.25"/>
+<text x={nd.x} y={nd.y+4.2} textAnchor="middle" fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px'}}>11</text></g>})}
+<text x="240" y="24" textAnchor="middle" fill="var(--reward)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>Today</text>
+<text x="336" y="104" textAnchor="end" fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'12px',letterSpacing:'0.8px',textTransform:'uppercase'}}>Tomorrow</text>
+</svg>}
+function Done(){return<div className="screen" data-screen-label="Done for today">
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-xl)',padding:'var(--space-xl) var(--gutter) var(--space-lg)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Session complete</span>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:1.2,color:'var(--text-heading)',textWrap:'pretty'}}>That is your 15 minutes for today.</h1>
+<p className="zo-body" style={{margin:0,color:'var(--text-secondary)',textWrap:'pretty'}}>Three leaves, and the anchoring track is past halfway. Sleep does the rest of the work on it.</p></div>
+<Card style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{background:'var(--surface-page)',border:'1px solid var(--border-hairline)',borderRadius:'var(--radius-md)',padding:'var(--space-sm)'}}><Fragment/></div>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<StreakBadge days={12}/><XpChip amount={120}/></div></Card>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'center',gap:'var(--space-sm)'}}>
+<Icon name="check" size={18} color="var(--reward)"/>
+<span className="zo-body" style={{color:'var(--text-body)'}}>3 leaves · The quiet arithmetic</span></div>
+<div style={{display:'flex',alignItems:'center',gap:'var(--space-sm)'}}>
+<Icon name="lock" size={18} color="var(--text-secondary)"/>
+<span className="zo-body" style={{color:'var(--text-secondary)'}}>Leaf 11 opens tomorrow morning</span></div>
+<ProgressBar value={10/18} valueLabel="10 of 18" label="Track" height={6} style={{marginTop:'var(--space-xs)'}}/></div>
+<div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<Button fullWidth size="lg" icon="check">Done for today</Button>
+<Button fullWidth size="lg" variant="ghost">Add five more minutes</Button></div>
+</div>
+<TabBar activeKey="journey" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Done/>);
+</script>
+</body></html>

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Profile</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Card,Icon,IconButton,ProgressBar,StreakBadge,Switch,XpChip,TabBar}=window.ZoomOutDesignSystem_442bf9;
+function Stat({value,label}){return<div style={{flex:1,display:'flex',flexDirection:'column',gap:2}}>
+<span style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h2-size)',lineHeight:1.1,color:'var(--text-heading)'}}>{value}</span>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>{label}</span></div>}
+function LinkRow({label,value,last}){return<div role="button" tabIndex="0" style={{display:'flex',alignItems:'center',gap:'var(--space-md)',minHeight:'var(--touch-target-min)',borderBottom:last?'none':'1px solid var(--border-hairline)'}}>
+<span style={{flex:1,fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-h3-size)',color:'var(--text-body)'}}>{label}</span>
+{value&&<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>{value}</span>}
+<Icon name="chevron-right" size={20} color="var(--text-secondary)"/></div>}
+function Profile(){return<div className="screen" data-screen-label="Profile">
+<header style={{padding:'var(--space-xl) var(--gutter) var(--space-md)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-xs)'}}>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:1.2,color:'var(--text-heading)'}}>Ada Okonjo</h1>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Reading since March</span></div>
+<IconButton icon="settings" label="Settings" style={{marginRight:-10}}/></header>
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-lg)',padding:'var(--space-sm) var(--gutter) var(--space-lg)'}}>
+<Card style={{display:'flex',flexDirection:'column',gap:'var(--space-lg)'}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<StreakBadge days={12}/><XpChip amount={1840} label="XP"/></div>
+<div style={{display:'flex',gap:'var(--space-md)'}}>
+<Stat value="142" label="Leaves"/><Stat value="2" label="Tracks done"/><Stat value="5" label="In progress"/></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+<ProgressBar value={4/5} valueLabel="4 of 5 days" label="This week" height={6}/></div>
+</Card>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Session</span>
+<Card padding="var(--space-lg)" style={{display:'flex',flexDirection:'column'}}>
+<LinkRow label="Daily cap" value="15 min"/>
+<LinkRow label="Leaves per session" value="5"/>
+<div style={{borderBottom:'1px solid var(--border-hairline)'}}><Switch checked label="Reminders" description="One nudge, at 8 pm"/></div>
+<Switch checked={false} label="Sound" description="Off during lessons"/>
+</Card></section>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>App</span>
+<Card padding="var(--space-lg)" style={{display:'flex',flexDirection:'column'}}>
+<LinkRow label="Appearance" value="System"/>
+<LinkRow label="Text size" value="Default"/>
+<LinkRow label="Sign out" last/></Card></section>
+</div>
+<TabBar activeKey="profile" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Profile/>);
+</script>
+</body></html>

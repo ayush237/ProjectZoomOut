@@ -1,0 +1,10 @@
+/* ZoomOut ships exactly two families: Nunito (display/UI) and Nunito Sans (body).
+   Weights 400 / 600 / 700 only — nothing else is licensed for use in the product.
+   The mobile app loads these via expo-google-fonts (Nunito_400Regular, …); on the web
+   they come from Google Fonts. No binaries are vendored in this repo — see readme.md. */
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Nunito+Sans:wght@400;600;700&display=swap");
+
+/* Added for the sticky-notes moment only (Leaf slide 4 + the notes collection) — a real
+   addition to the system, not a one-off. Do not use Caveat anywhere else; every other
+   surface stays on Nunito / Nunito Sans. */
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap");

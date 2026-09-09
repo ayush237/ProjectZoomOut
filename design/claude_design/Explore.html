@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Explore</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline);display:flex;flex-direction:column}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Card,Icon,Input,ProgressBar,TrackCard,TrackGraph,TabBar}=window.ZoomOutDesignSystem_442bf9;
+const CHIPS=['All','Decisions','Money','Habits','Teams','Attention'];
+const NEW=[
+{title:'Rooms that decide',author:'Idris Fennimore',done:0,total:14},
+{title:'Nothing is standard',author:'Petra Oyelaran',done:0,total:11},
+{title:'The cost of certainty',author:'Tobias Renner',done:3,total:16}];
+function nodesFor(done,total){const n=7,d=Math.round(done/total*n);return Array.from({length:n}).map((_,i)=>({id:'n'+i,state:i<d?'done':i===d?'current':'locked'}))}
+function Chip({label,selected}){return<span style={{display:'inline-flex',alignItems:'center',height:36,padding:'0 var(--space-md)',borderRadius:'var(--radius-sm)',background:selected?'var(--surface-raised)':'var(--surface-card)',border:(selected?'var(--border-width-focus)':'var(--border-width-hairline)')+' solid '+(selected?'var(--primary)':'var(--border-hairline)'),color:selected?'var(--primary)':'var(--text-secondary)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase',whiteSpace:'nowrap'}}>{label}</span>}
+function TrackRow({title,author,done,total}){return<Card interactive padding="var(--space-md)" radius="var(--radius-md)" style={{display:'flex',alignItems:'center',gap:'var(--space-md)'}}>
+<div aria-hidden="true" style={{flex:'0 0 100px',background:'var(--surface-page)',border:'1px solid var(--border-hairline)',borderRadius:'var(--radius-sm)',padding:4}}>
+<TrackGraph nodes={nodesFor(done,total)} width={92} height={48} ambientDensity={6} showCurrentLabel={false}/></div>
+<div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}}>
+<span style={{fontFamily:'var(--font-display)',fontWeight:'var(--weight-bold)',fontSize:'var(--text-h3-size)',lineHeight:1.25,color:'var(--text-heading)',textWrap:'pretty'}}>{title}</span>
+<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>{author}</span>
+<span className="zo-caption" style={{color:'var(--text-secondary)',marginTop:2}}>{done?done+' / '+total+' leaves':total+' leaves · 3 min each'}</span></div>
+<Icon name="chevron-right" size={20} color="var(--text-secondary)"/></Card>}
+function Explore(){return<div className="screen" data-screen-label="Explore">
+<header style={{padding:'var(--space-xl) var(--gutter) var(--space-md)',display:'flex',flexDirection:'column',gap:'var(--space-lg)'}}>
+<div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:'var(--space-md)'}}>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h1-size)',lineHeight:1.2,color:'var(--text-heading)'}}>Explore</h1>
+<span className="zo-caption" style={{color:'var(--text-secondary)',paddingBottom:4}}>12 min left today</span></div>
+<Input placeholder="Search tracks and ideas"/>
+<div style={{display:'flex',gap:'var(--space-sm)',overflow:'hidden',margin:'0 calc(var(--gutter) * -1)',padding:'0 var(--gutter)'}}>
+{CHIPS.map((c,i)=><Chip key={c} label={c} selected={i===1}/>)}</div>
+</header>
+<div style={{flex:1,minHeight:0,display:'flex',flexDirection:'column',gap:'var(--space-lg)',padding:'var(--space-md) var(--gutter) var(--space-lg)'}}>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Pick up where you stopped</span>
+<span className="zo-caption" style={{color:'var(--primary)'}}>7 of 18</span></div>
+<TrackCard title="The quiet arithmetic" author="Marisol Vane" leavesDone={7} leavesTotal={18}/>
+</section>
+<section style={{display:'flex',flexDirection:'column',gap:'var(--space-md)',minHeight:0}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>New this week</span>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-sm)'}}>
+{NEW.slice(0,1).map(t=><TrackRow key={t.title} {...t}/>)}
+<span style={{display:'inline-flex',alignItems:'center',gap:'var(--space-xs)',flex:'0 0 44px',height:44,color:'var(--primary)',fontFamily:'var(--font-display)',fontWeight:'var(--weight-semibold)',fontSize:'var(--text-caption-size)',letterSpacing:'var(--text-caption-tracking)',textTransform:'uppercase'}}>Browse all 24 tracks<Icon name="chevron-right" size={14}/></span></div>
+</section></div>
+<TabBar activeKey="explore" items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<Explore/>);
+</script>
+</body></html>

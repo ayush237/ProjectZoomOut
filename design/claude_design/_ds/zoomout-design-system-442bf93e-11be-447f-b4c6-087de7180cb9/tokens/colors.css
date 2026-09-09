@@ -1,0 +1,79 @@
+/* Dark is the default theme AND the fallback. Light is supported, never default.
+   Nothing is shared between the themes but the token names: a colour tuned for a dark
+   background is the wrong colour on a light one. Values are the shipping values from
+   apps/mobile/design/palette.ts — do not invent new ones. */
+:root{
+  color-scheme:dark;
+
+  /* Elevation is a surface, never a shadow. On dark each level is LIGHTER than the last. */
+  --surface-0:#0B0F12;   /* app background */
+  --surface-1:#141A1E;   /* cards */
+  --surface-2:#1C242A;   /* raised, inputs */
+  --surface-3:#26313A;   /* pressed */
+  --border:#2E3A44;      /* hairline that does the work a shadow would */
+
+  /* Teal is the interface: navigation, buttons, links, progress. */
+  --primary:#3DDCC8;
+  --primary-hover:#5FE6D5;
+  --primary-press:#26B8A6;
+  --on-primary:#0B0F12;
+
+  /* Amber is REWARD MOMENTS ONLY — XP, streaks, achievements, completion.
+     Never navigation, buttons, links or brand. */
+  --reward:#FFB020;
+  --reward-soft:#FFC44D;
+  --on-reward:#0B0F12;
+
+  /* Never signalled by colour alone: correct/incorrect always carry an icon + motion. */
+  --correct:#4ADE80;
+  --incorrect:#FF6B6B;
+
+  --text:#F2F5F7;
+  --text-muted:#A7B6C0;
+
+  /* Semantic aliases — what a component should reach for. */
+  --surface-page:var(--surface-0);
+  --surface-card:var(--surface-1);
+  --surface-raised:var(--surface-2);
+  --surface-pressed:var(--surface-3);
+  --surface-input:var(--surface-2);
+  --border-hairline:var(--border);
+  --border-focus:var(--primary);
+  --text-body:var(--text);
+  --text-heading:var(--text);
+  --text-secondary:var(--text-muted);
+  --text-link:var(--primary);
+  --text-on-primary:var(--on-primary);
+  --text-on-reward:var(--on-reward);
+  --graph-edge:var(--border);
+  --graph-edge-reached:var(--primary);
+  --graph-node-unreached:var(--surface-3);
+}
+
+/* Light theme. Same rule, opposite sign: the page is already white, so each elevation
+   level is DARKER than the last. Accents are independently chosen — #3DDCC8 is 1.6:1
+   on white and effectively invisible, so the teal here is deep enough to carry white text. */
+[data-theme="light"]{
+  color-scheme:light;
+
+  --surface-0:#FFFFFF;
+  --surface-1:#F1F5F8;
+  --surface-2:#E6EDF1;
+  --surface-3:#D8E2E8;
+  --border:#C3D1DA;
+
+  --primary:#006A5E;
+  --primary-hover:#00584E;
+  --primary-press:#00443C;
+  --on-primary:#FFFFFF;
+
+  --reward:#8A5200;
+  --reward-soft:#FFC44D;
+  --on-reward:#FFFFFF;
+
+  --correct:#0F7038;
+  --incorrect:#B3261E;
+
+  --text:#0B1519;
+  --text-muted:#4C5C66;
+}

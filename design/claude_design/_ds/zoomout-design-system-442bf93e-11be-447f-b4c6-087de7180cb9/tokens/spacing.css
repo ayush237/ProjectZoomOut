@@ -1,0 +1,25 @@
+/* 4pt base. Anything not on this scale is a mistake, not a refinement. */
+:root{
+  --space-xs:4px;
+  --space-sm:8px;
+  --space-md:12px;
+  --space-lg:16px;
+  --space-xl:24px;
+  --space-xxl:32px;
+  --space-xxxl:48px;
+
+  /* Generous radii carry most of the playful register on their own. */
+  --radius-sm:8px;    /* chips, inputs */
+  --radius-md:12px;   /* the default for anything not named */
+  --radius-lg:20px;   /* cards, sheets, slide containers */
+  --radius-full:999px;/* buttons, pills, streak badges */
+
+  --border-width-hairline:1px;
+  --border-width-focus:2px;
+
+  /* Below this, a control is a bug on a real device. */
+  --touch-target-min:44px;
+
+  /* Screen gutter for the mobile app. */
+  --gutter:20px;
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ZoomOut — Track roadmap</title>
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/colors.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/typography.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/motion.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/tokens/base.css">
+<link rel="stylesheet" href="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/styles.css">
+<style>html,body{margin:0;height:100%}body{background:var(--surface-page);display:grid;place-items:center;min-height:100vh}a{color:var(--text-link)}a:hover{color:var(--primary-hover)}#root{display:grid;place-items:center}.screen{position:relative;width:390px;height:844px;overflow:hidden;background:var(--surface-page);border:1px solid var(--border-hairline)}</style>
+</head><body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lucide@0.544.0/dist/umd/lucide.js"></script>
+<script src="_ds/zoomout-design-system-442bf93e-11be-447f-b4c6-087de7180cb9/_ds_bundle.js"></script>
+<script type="text/babel">
+const {Button,IconButton,ProgressBar,TabBar}=window.ZoomOutDesignSystem_442bf9;
+const NODES=[
+{n:1,x:58,y:248,state:'done'},{n:2,x:162,y:264,state:'done'},{n:3,x:272,y:282,state:'revisit'},
+{n:4,x:330,y:320,state:'done'},{n:5,x:236,y:348,state:'done'},{n:6,x:128,y:364,state:'revisit'},
+{n:7,x:58,y:394,state:'done'},{n:8,x:150,y:436,state:'next',title:'When the range is set'},
+{n:9,x:300,y:452,state:'locked'},{n:10,x:334,y:512,state:'locked'},{n:11,x:240,y:538,state:'locked'},
+{n:12,x:128,y:550,state:'locked'},{n:13,x:58,y:582,state:'locked'},{n:14,x:144,y:612,state:'locked'},
+{n:15,x:256,y:628,state:'locked'},{n:16,x:332,y:654,state:'locked'},{n:17,x:248,y:676,state:'locked'},
+{n:18,x:140,y:686,state:'locked'}];
+const NEXT_I=7;
+function prng(seed){let s=seed;return()=>{s=(s*1103515245+12345)%2147483648;return s/2147483648}}
+/* Catmull-Rom → cubic bezier, so the spine is one smooth meander and every node sits exactly on it. */
+function segments(pts){const s=[];for(let i=0;i<pts.length-1;i+=1){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||pts[i+1];s.push('C '+(p1.x+(p2.x-p0.x)/6).toFixed(1)+' '+(p1.y+(p2.y-p0.y)/6).toFixed(1)+', '+(p2.x-(p3.x-p1.x)/6).toFixed(1)+' '+(p2.y-(p3.y-p1.y)/6).toFixed(1)+', '+p2.x+' '+p2.y)}return s}
+function subPath(from,to){const segs=segments(NODES);let d='M '+NODES[from].x+' '+NODES[from].y;for(let i=from;i<to;i+=1)d+=' '+segs[i];return d}
+function tangent(i){const a=NODES[Math.max(0,i-1)],b=NODES[Math.min(NODES.length-1,i+1)];const dx=b.x-a.x,dy=b.y-a.y,m=Math.hypot(dx,dy)||1;return{x:dx/m,y:dy/m}}
+/* Dendrites: fine branches off each leaf node, stepped down in width and opacity so they taper. */
+function Dendrites(){const rand=prng(4177);const out=[];
+NODES.forEach((node,i)=>{const t=tangent(i),reached=i<=NEXT_I;const count=node.state==='next'?3:2;
+const side=rand()>0.5?1:-1;const base=Math.atan2(t.y,t.x)+side*(Math.PI/2)+(rand()-0.5)*0.5;
+for(let k=0;k<count;k+=1){let ang=base+(k-(count-1)/2)*0.5+(rand()-0.5)*0.3;
+const len=(node.state==='next'?30:20)+rand()*20;const bend=(rand()-0.5)*1.4;
+let px=node.x,py=node.y;const steps=[[0.5,1.4],[0.32,0.85],[0.18,0.5]];
+steps.forEach((st,si)=>{const seg=len*st[0];ang+=bend*0.34;const nx=px+Math.cos(ang)*seg,ny=py+Math.sin(ang)*seg;
+out.push(<line key={'d'+i+k+si} x1={px} y1={py} x2={nx} y2={ny} stroke={reached?'var(--primary)':'var(--graph-edge)'} strokeWidth={st[1]} opacity={(reached?0.4:0.75)-si*0.1}/>);
+px=nx;py=ny});
+if(rand()>0.4)out.push(<circle key={'dn'+i+k} cx={px} cy={py} r="1.1" fill={reached?'var(--primary)':'var(--graph-node-unreached)'} opacity={reached?0.35:0.85}/>)}});
+return <g>{out}</g>}
+/* Ambient web: knowledge not yet reached. Depth from density, never mass. */
+function AmbientWeb(){const rand=prng(90211);const pts=[];for(let i=0;i<64;i+=1)pts.push({x:8+rand()*374,y:8+rand()*828,r:0.9+rand()*0.9});
+const edges=[];pts.forEach((p,i)=>{for(let j=i+1;j<pts.length;j+=1){const q=pts[j];if(Math.hypot(p.x-q.x,p.y-q.y)<62&&rand()>0.42)edges.push([p,q])}});
+return <g>{edges.map((e,i)=><line key={'w'+i} x1={e[0].x} y1={e[0].y} x2={e[1].x} y2={e[1].y} stroke="var(--graph-edge)" strokeWidth="1" opacity="0.5"/>)}
+{pts.map((p,i)=><circle key={'wn'+i} cx={p.x} cy={p.y} r={p.r} fill="var(--graph-node-unreached)"/>)}</g>}
+function Node({node}){const{x,y,state,n}=node;
+if(state==='next')return<g>
+<circle cx={x} cy={y} r="25" fill="var(--primary)" opacity="0.07"/>
+<circle cx={x} cy={y} r="25" fill="none" stroke="var(--primary)" strokeWidth="1.5" opacity="0.32"/>
+<circle cx={x} cy={y} r="15" fill="var(--primary)"/>
+<text x={x} y={y+5.5} textAnchor="middle" fill="var(--text-on-primary)" style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:'15px'}}>{n}</text></g>;
+if(state==='done')return<g>
+<circle cx={x} cy={y} r="6.5" fill="none" stroke="var(--reward)" strokeWidth="1.5"/>
+<circle cx={x} cy={y} r="2.75" fill="var(--reward)"/></g>;
+if(state==='revisit')return<g>
+<circle cx={x} cy={y} r="12" fill="var(--surface-page)"/>
+<circle cx={x} cy={y} r="12" fill="none" stroke="var(--reward)" strokeWidth="1.5" strokeDasharray="3 3.5" opacity="0.5"/>
+<circle cx={x} cy={y} r="2.75" fill="var(--reward)"/></g>;
+return<g>
+<circle cx={x} cy={y} r="11" fill="var(--surface-page)"/>
+<circle cx={x} cy={y} r="11" fill="none" stroke="var(--border-hairline)" strokeWidth="1.25"/>
+<text x={x} y={y+3.8} textAnchor="middle" fill="var(--text-secondary)" style={{fontFamily:'var(--font-display)',fontWeight:600,fontSize:'11px'}}>{n}</text></g>}
+function TrackRoadmap(){const next=NODES[NEXT_I];
+return<div className="screen">
+<svg viewBox="0 0 390 844" width="390" height="844" style={{position:'absolute',inset:0}} role="img" aria-label="Track roadmap: 7 of 18 leaves complete, leaf 8 next">
+<AmbientWeb/>
+<path d={subPath(NEXT_I,NODES.length-1)} fill="none" stroke="var(--graph-edge)" strokeWidth="1.25"/>
+<path d={subPath(0,NEXT_I)} fill="none" stroke="var(--graph-edge-reached)" strokeWidth="1.75"/>
+<Dendrites/>
+{NODES.map(nd=><Node key={nd.n} node={nd}/>)}
+</svg>
+<div style={{position:'absolute',left:0,right:0,top:0,height:230,background:'linear-gradient(to bottom, var(--surface-0) 0%, var(--surface-0) 52%, rgba(11,15,18,0.82) 74%, rgba(11,15,18,0) 100%)',pointerEvents:'none'}}></div>
+<header style={{position:'absolute',left:0,right:0,top:0,padding:'8px var(--gutter) var(--space-lg)',display:'flex',flexDirection:'column',gap:'var(--space-md)'}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',minHeight:44}}>
+<IconButton icon="chevron-left" label="Back" style={{marginLeft:-10}}/>
+<IconButton icon="bookmark" label="Save track" style={{marginRight:-10}}/></div>
+<div style={{display:'flex',flexDirection:'column',gap:'var(--space-xs)'}}>
+<span className="zo-caption" style={{color:'var(--text-secondary)'}}>Track</span>
+<h1 style={{margin:0,fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h2-size)',lineHeight:1.25,color:'var(--text-heading)'}}>The quiet arithmetic</h1>
+<span style={{fontFamily:'var(--font-body)',fontSize:'var(--text-small-size)',color:'var(--text-secondary)'}}>Marisol Vane</span></div>
+<ProgressBar value={7/18} valueLabel="7 of 18" label="Leaves" height={6} style={{marginTop:'var(--space-xs)'}}/>
+</header>
+<div style={{position:'absolute',left:0,top:next.y+34,width:390,display:'flex',justifyContent:'center',pointerEvents:'none'}}>
+<div style={{maxWidth:230,padding:'10px var(--space-lg)',borderRadius:'var(--radius-md)',background:'var(--surface-raised)',border:'1px solid var(--border-hairline)',display:'flex',flexDirection:'column',gap:2}}>
+<span className="zo-caption" style={{color:'var(--primary)'}}>Leaf 8 · next</span>
+<span style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:'var(--text-h3-size)',lineHeight:1.3,color:'var(--text-heading)',textWrap:'pretty'}}>{next.title}</span></div></div>
+<div style={{position:'absolute',left:0,right:0,bottom:0}}>
+<div style={{position:'absolute',left:0,right:0,bottom:0,height:220,background:'linear-gradient(to top, var(--surface-0) 0%, var(--surface-0) 46%, rgba(11,15,18,0.8) 72%, rgba(11,15,18,0) 100%)',pointerEvents:'none'}}></div>
+<div style={{position:'relative',padding:'0 var(--gutter) var(--space-lg)'}}>
+<Button fullWidth size="lg" icon="play">Continue leaf 8</Button></div>
+<TabBar activeKey="journey" style={{position:'relative'}} items={[{key:'explore',label:'Explore',icon:'compass'},{key:'library',label:'Library',icon:'book-open'},{key:'journey',label:'Journey',icon:'network'},{key:'profile',label:'Profile',icon:'user'}]}/>
+</div></div>}
+ReactDOM.createRoot(document.getElementById('root')).render(<TrackRoadmap/>);
+</script>
+</body></html>
