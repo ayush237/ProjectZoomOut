@@ -565,6 +565,17 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+#### Addendum to WP23.1, below — added before push, not before sign-off
+
+Between finishing the device pass and pushing this branch, `origin/main` picked up **"Record the PayoffSlide ruling the WP23.1 row already pointed at"** (`b28db6c`), folding an actual Payoff re-skin into WP22.2. It corrects this report's Payoff section in one place and confirms it in another, and I'd rather say so than let a PR stand next to reasoning that's already half-superseded:
+
+**Confirmed:** no schema field backs the mockup's heading — that half of the reasoning below holds, and the ruling keeps it.
+**Corrected:** *"the existing animation is well-reasoned work"* is not, on its own, a reason to leave a slide's whole visual treatment untouched — that would exempt anything ever built carefully, including the surfaces most worth getting right. Preserving the amber unlock behaviour and restyling around it were never actually in tension.
+
+**No code changed as a result.** The scope outcome — `PayoffSlide` untouched in this package — still stands; the ruling moves the actual re-skin to WP22.2 rather than asking for it here. Leaving the addendum at the reasoning level rather than editing the section below, since the report should show what I actually knew when I wrote it, not a quietly corrected version of it. Left `project/projectRoadmap.md` alone — that entry is Architect's.
+
+---
+
 ### Completed: WP23.1 — the four remaining Leaf slides, and the cork board — 2026-09-09
 
 **All nine acceptance criteria met; the payoff gate and the wrong/correct-answer behaviour were verified by exercising them on a real Track 42 Leaf, not by reading the diff.** Root `lint`, `typecheck` (4 workspaces), `test` (1,226 passing: shared 71, admin 198, backend 477, mobile 480 — unchanged from WP24, no new tests added) and `build` (backend/mobile/admin outputs confirmed present on disk after a `dist`/`.next`/reinstall) are clean from a cold gate. Branched from `origin/main` — which now carries WP24 merged, WP25's handoff, and the cork-board ruling — as `wp23.1-leaf-slides-cork-board`, since `main` itself was checked out in a separate worktree by the Architect session running concurrently.
