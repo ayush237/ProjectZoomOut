@@ -13,6 +13,11 @@ import { Text } from './Text';
  * get by rendering a null list; raw is what you get by putting `error.message` on
  * screen. This component is the third option, and every screen that fetches uses it so
  * none of them can drift into either failure.
+ *
+ * **Calm, not alarming (WP25/screen-12).** The product is online-only by design, so a
+ * dropped connection or a slow content fetch is a routine, frequent state rather than
+ * an emergency — "a connection that has not resolved yet, not a broken one." No red, no
+ * warning triangle: the retry button is the call to action, not the icon's colour.
  */
 
 export interface ErrorStateProps {
@@ -27,7 +32,7 @@ export function ErrorState({ message, onRetry, testID }: ErrorStateProps): React
 
   return (
     <View testID={testID} style={[styles.container, { gap: theme.spacing.lg }]}>
-      <Icon name="error" tone="incorrect" size={48} />
+      <Icon name="unresolved" tone="primary" size={48} />
 
       <Text variant="h2" align="center">
         That did not load

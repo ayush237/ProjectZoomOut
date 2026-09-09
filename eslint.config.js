@@ -23,6 +23,11 @@ export default tseslint.config(
       // (WP16). Nothing in it is JavaScript — but its virtualenv contains Python packages
       // that ship .js assets, and eslint was linting those and failing the root gate.
       'apps/pipeline/**',
+      // Claude Design's export, tracked for reference (WP23.1/WP25) — a directory the
+      // repo reads from rather than builds, the same justification as `apps/pipeline/**`
+      // above. Ruled 2026-09-09; e9d13d0 added the export without this entry, which is
+      // what actually reddened the gate, not the branch that first tripped over it.
+      'design/**',
       // Emitted by `payload generate:types`. It ships its own eslint-disable banner,
       // but the file is build output either way and has no business being linted.
       'packages/shared/src/cms-generated.ts',
