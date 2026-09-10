@@ -5,6 +5,8 @@
  * navigators, which would make every screen a cycle back to the tree that renders it.
  */
 
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
@@ -43,7 +45,13 @@ export type TabParamList = {
  * when they finish.
  */
 export type AppStackParamList = {
-  Tabs: undefined;
+  /**
+   * Undefined keeps every existing call working as it always has — `navigate('Tabs')`
+   * returns to whichever tab was already focused. The nested form (WP26) is additive:
+   * `navigate('Tabs', { screen: 'Explore' })` is how "Find your next book" reaches
+   * Explore specifically rather than wherever the reader was before the Leaf player.
+   */
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   /**
    * **Ids and a title only.** React Navigation's state is serialisable and may be
    * persisted or attached to a crash report, so route params carry references, never
@@ -83,4 +91,11 @@ export type AppStackParamList = {
     readonly description: string;
     readonly tier: 'common' | 'rare' | 'milestone';
   };
+  /**
+   * Finishing an entire book (WP26). Id only, same reasoning as `TrackDetail`: the
+   * screen fetches the Track, its Leaves and the reader's standing fresh rather than
+   * trusting whatever the player already held, so a completion reached by any other
+   * route than "just finished the last Leaf" still renders correctly.
+   */
+  TrackComplete: { readonly trackId: string };
 };

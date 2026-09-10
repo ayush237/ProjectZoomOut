@@ -175,6 +175,13 @@ function LeafSessionView({
           onShareAchievement={(achievement) => {
             navigation.navigate('AchievementShare', achievement);
           }}
+          onViewTrackComplete={() => {
+            // Same `pop`-then-`navigate` shape as `onWrapUp`, and for the same reason:
+            // going back from the constellation must not drop the reader into a Leaf
+            // screen they have already left.
+            navigation.pop();
+            navigation.navigate('TrackComplete', { trackId: leaf.trackId });
+          }}
         />
       </PlayerFrame>
     );
@@ -296,6 +303,7 @@ function CompletionSummary({
   onDone,
   onWrapUp,
   onShareAchievement,
+  onViewTrackComplete,
 }: {
   readonly xpAwarded: number;
   readonly firstTryCorrect: boolean;
@@ -306,6 +314,7 @@ function CompletionSummary({
   readonly onDone: () => void;
   readonly onWrapUp: () => void;
   readonly onShareAchievement: (achievement: UnlockedAchievement) => void;
+  readonly onViewTrackComplete: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
 
@@ -387,7 +396,9 @@ function CompletionSummary({
        * a book is rare — one extra request on the rarest event in the app is cheaper
        * than carrying a Track through the player for every Leaf that is not the last.
        */}
-      {trackCompleted ? <TrackCompletedPanel trackId={trackId} /> : null}
+      {trackCompleted ? (
+        <TrackCompletedPanel trackId={trackId} onView={onViewTrackComplete} />
+      ) : null}
 
       {capReached ? (
         <View
@@ -449,8 +460,20 @@ function CompletionSummary({
  * Failure is silent. The reader has just finished a book; an error box about a Track
  * fetch would be a poor reward, and the same links remain one tap away on the book's
  * detail page.
+ *
+ * **`onView` (WP26) is additive, not a replacement.** The legal pair still renders here,
+ * unconditionally — this is the completion surface `PRODUCT.md` requires it on, and nothing
+ * about that changed. The button is the new screen's only entry point: without it,
+ * `TrackComplete` would be unreachable from the one place a reader actually finishes a
+ * Track.
  */
-function TrackCompletedPanel({ trackId }: { readonly trackId: string }): React.JSX.Element | null {
+function TrackCompletedPanel({
+  trackId,
+  onView,
+}: {
+  readonly trackId: string;
+  readonly onView: () => void;
+}): React.JSX.Element | null {
   const api = useApi();
   const theme = useTheme();
 
@@ -466,6 +489,7 @@ function TrackCompletedPanel({ trackId }: { readonly trackId: string }): React.J
       <Text variant="h3" align="center" testID="leaf-track-complete">
         That is the whole book.
       </Text>
+      <Button label="See your finished book" onPress={onView} testID="leaf-view-track-complete" />
       <TrackLegal track={track.data} testID="leaf-track-legal" />
     </View>
   );

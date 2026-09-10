@@ -23,11 +23,24 @@ import { ThemeProvider, useTheme } from '../../design';
  *
  * **The mascot slot (§9)** is the band above the headline. It is filled here by
  * oversized type and the reward-coloured rule; dropping an illustration in later should
- * be replacing the contents of `MascotSlot` and nothing else.
+ * be replacing the contents of `MascotSlot` and nothing else — see the `mascot` prop.
  */
 
 /** Fixed aspect, so the capture is the same shape whatever the device. */
 const CARD_WIDTH = 320;
+
+/**
+ * `'auto'` keeps every existing caller's behaviour exactly as it was — height follows
+ * content, as it always has. `'square'` and `'vertical'` (9:16) are WP26's addition for
+ * the Track-complete card, added here rather than in a wrapper because the fixed height
+ * has to land on the same `View` `captureRef` photographs.
+ */
+export type ShareCardAspect = 'auto' | 'square' | 'vertical';
+
+const ASPECT_HEIGHT: Record<Exclude<ShareCardAspect, 'auto'>, number> = {
+  square: CARD_WIDTH,
+  vertical: Math.round((CARD_WIDTH * 16) / 9),
+};
 
 export interface ShareCardProps {
   /** Small label above the headline — "Today", "Achievement unlocked". */
@@ -38,6 +51,15 @@ export interface ShareCardProps {
   readonly subtitle: string;
   /** Optional detail lines, rendered small. First to become texture at thumbnail size. */
   readonly detail?: readonly string[] | undefined;
+  /**
+   * Overrides the mascot slot's contents — see `MascotSlot` below. Omitted, the slot
+   * renders exactly what it always has: the reward-coloured band and the achievement
+   * glyph. This is the only way the slot's contents change; nothing else about the
+   * card's structure does.
+   */
+  readonly mascot?: ReactNode;
+  /** Defaults to `'auto'` — existing callers are unaffected. */
+  readonly aspect?: ShareCardAspect;
   readonly children?: ReactNode;
 }
 
@@ -47,7 +69,7 @@ export interface ShareCardProps {
  * ref on anything inside would produce an image with a transparent margin.
  */
 export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
-  { eyebrow, headline, subtitle, detail, children },
+  { eyebrow, headline, subtitle, detail, mascot, aspect = 'auto', children },
   ref,
 ) {
   return (
@@ -57,7 +79,9 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
         eyebrow={eyebrow}
         headline={headline}
         subtitle={subtitle}
+        aspect={aspect}
         {...(detail === undefined ? {} : { detail })}
+        {...(mascot === undefined ? {} : { mascot })}
       >
         {children}
       </ShareCardBody>
@@ -73,10 +97,11 @@ export const ShareCard = forwardRef<View, ShareCardProps>(function ShareCard(
  * light colours drawn from the dark palette.
  */
 const ShareCardBody = forwardRef<View, ShareCardProps>(function ShareCardBody(
-  { eyebrow, headline, subtitle, detail, children },
+  { eyebrow, headline, subtitle, detail, mascot, aspect = 'auto', children },
   ref,
 ) {
   const theme = useTheme();
+  const fixedHeight = aspect === 'auto' ? undefined : ASPECT_HEIGHT[aspect];
 
   return (
     <View
@@ -94,9 +119,17 @@ const ShareCardBody = forwardRef<View, ShareCardProps>(function ShareCardBody(
         gap: theme.spacing.lg,
         borderWidth: theme.borderWidth.hairline,
         borderColor: theme.palette.border,
+        // Only set for `'square'`/`'vertical'`: a fixed height needs the column's
+        // children spread across it, or everything would stack at the top and leave the
+        // wordmark stranded mid-card instead of anchored to the bottom edge. `'auto'`
+        // (every existing caller) gets neither property, unchanged from before this prop
+        // existed.
+        ...(fixedHeight === undefined
+          ? {}
+          : { height: fixedHeight, justifyContent: 'space-between' as const }),
       }}
     >
-      <MascotSlot />
+      <MascotSlot>{mascot}</MascotSlot>
 
       <View style={{ gap: theme.spacing.xs }}>
         <Text variant="caption" tone="reward">
@@ -142,12 +175,26 @@ const ShareCardBody = forwardRef<View, ShareCardProps>(function ShareCardBody(
 /**
  * The reserved mascot slot, §9.
  *
- * A band of reward colour and a single glyph stands in for the character that has not
- * been drawn yet. It occupies the space an illustration would, so adding one later is an
- * asset swap rather than a re-layout — which is the whole point of reserving it now.
+ * **Without `children`:** a band of reward colour and a single glyph stands in for the
+ * character that has not been drawn yet. It occupies the space an illustration would, so
+ * adding one later is an asset swap rather than a re-layout — which is the whole point of
+ * reserving it now.
+ *
+ * **With `children` (WP26):** the override *replaces* the band rather than sitting inside
+ * it. The reward-tinted box was always a placeholder standing in for a real illustration
+ * — once one exists (the Track-complete constellation fragment), nesting it inside the
+ * placeholder it was standing in for would draw the placeholder *and* the real thing.
  */
-function MascotSlot(): React.JSX.Element {
+function MascotSlot({ children }: { readonly children?: ReactNode }): React.JSX.Element {
   const theme = useTheme();
+
+  if (children !== undefined) {
+    return (
+      <View testID="share-mascot-slot" style={{ height: 64 }}>
+        {children}
+      </View>
+    );
+  }
 
   return (
     <View
