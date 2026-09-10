@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { LeafPlayerScreen } from '../screens/leaf/LeafPlayerScreen';
 import { TrackDetailScreen } from '../screens/TrackDetailScreen';
 import { AchievementShareScreen } from '../screens/share/AchievementShareScreen';
+import { TrackCompleteScreen } from '../screens/share/TrackCompleteScreen';
 import { WrapUpScreen } from '../screens/share/WrapUpScreen';
 import { TabShell } from './TabShell';
 import type { AppStackParamList } from './types';
@@ -51,6 +52,7 @@ export function AppStack(): React.JSX.Element {
       <Stack.Screen name="TrackDetail" component={TrackDetailScreen} />
       <Stack.Screen name="WrapUp" component={WrapUpScreen} />
       <Stack.Screen name="AchievementShare" component={AchievementShareScreen} />
+      <Stack.Screen name="TrackComplete" component={TrackCompleteScreen} />
     </Stack.Navigator>
   );
 }
