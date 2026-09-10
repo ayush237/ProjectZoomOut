@@ -209,7 +209,18 @@ describe('label placement', () => {
   });
 
   it('draws a leader only for the labels that had to move', () => {
-    const labels = labelsFor();
+    // **`fontScale: 1.5`, not the default (WP22.3).** `nodesFor()` always lays out the
+    // fixture geometry at `fontScale` 1 — it takes no scale parameter — while this reads
+    // the labels at a scale of its own choosing, same as "degrading under the OS text
+    // size" below. Before WP22.3, node spacing at 18 Leaves (~27pt) was already tighter
+    // than a two-line label (~32pt) even at the *default* scale, so leaders were needed
+    // there for free. WP22.3's floor closes exactly that gap — deliberately, it is the
+    // fix — so producing a label taller than its node's *own* spacing now needs asking
+    // for labels at a scale the fixture's geometry was not built for. 1.5 is chosen to
+    // clear that (`minStepForLabels` needs roughly 1.36) without also crossing the
+    // horizontal `MIN_LABEL_CHARS` floor and dropping labels instead of merely stacking
+    // them, which is a different, already-tested degradation.
+    const labels = labelsFor({ fontScale: 1.5 });
     const withLeaders = labels.filter((label) => label.leader !== null);
 
     // Some, not all: a leader on a label that is still level with its cell is a tick

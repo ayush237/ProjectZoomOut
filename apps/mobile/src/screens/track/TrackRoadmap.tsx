@@ -101,8 +101,8 @@ export function TrackRoadmap({
   const states = useMemo(() => model.nodes.map((node) => node.state), [model.nodes]);
 
   const geometry = useMemo(
-    () => layoutRoadmap(states, { width, height: viewportHeight }, seed),
-    [states, width, viewportHeight, seed],
+    () => layoutRoadmap(states, { width, height: viewportHeight, fontScale }, seed),
+    [states, width, viewportHeight, fontScale, seed],
   );
 
   const margin = useMemo(
