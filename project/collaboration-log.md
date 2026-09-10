@@ -20,6 +20,75 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-10 — WP27: the four tab screens, and the icon swap two packages deferred
+
+*Manager. **Suggested model: Sonnet** — four screens that all exist, one source file, an established method. **The last package of the redesign.***
+
+> **Read:** this handoff · **`design/claude_design/proto/tabs.jsx`** — all four screens in one file, and the source of truth · `design/prompts/screen-04-journey-explore-library.txt` and `screen-05-profile-and-progress.txt` — **read both in full; they are short and unusually specific** · `apps/mobile/src/screens/{ExploreScreen,LibraryScreen,JourneyScreen,ProfileScreen}.tsx` · `apps/mobile/src/components/{Icon,ErrorState,EmptyState,StatusMessage}.tsx` · `apps/mobile/src/screens/track/roadmapGeometry.ts` · `agents/manager.md`.
+> The standalone `Explore.html` / `Journey.html` / `Library.html` / `Profile.html` in `design/claude_design/` are **earlier drafts** — `tabs.jsx` wins where they disagree.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, the rest of this log.
+>
+> **Inherited, so a `/clear` does not lose it:**
+> - **Reduce Motion ON makes the simulator swallow every touch in the bottom ~15% of the screen — the tab bar included — behind an invisible debugger banner.** Found in WP26. **This package is four screens whose primary navigation lives exactly there.** Turn it off with `xcrun simctl spawn <udid> defaults write com.apple.Accessibility ReduceMotionEnabled -bool NO`, and turn it back on deliberately when you verify motion. It is also the leading suspect for WP25's unresolved "Next button won't tap".
+> - **Screenshot pixels are not the tool's tap-point space** (WP24) — the other independent cause of tap failure.
+> - **RN's jest preset reports `fontScale: 2`, so a passing screen test says nothing about the default rendering.**
+> - `simctl` switches theme and text size with zero taps. Batch SVG curves sharing colour and stroke width. Route animation through `motionTimingConfig`. `small` not `caption`. Amber: outline for what you have done, fill for what you have just won.
+
+### Task: WP27 — Explore, Library, Journey, Profile, and the shared icon
+
+**Suggested model:** Sonnet.
+
+**Context:** These four are the surfaces a reader touches most, and **they were the gap in my own plan** — WP21–WP26 never assigned them to a package. Every other screen is now in the new language; these are the last ones that are not.
+
+**Objective:** All four tabs read in the new visual language, the trophy is gone from every surface that renders it, and WP25's deferred cross-screen check is closed.
+
+**Scope:** the four screen files, `Icon.tsx`, and the three shared state components.
+
+**Requirements**
+
+- **Port from `tabs.jsx`.** All four screens are in that one file.
+- **Journey's progress indicator is a compressed strip of the Track's graph, not a bar.** `screen-04` is explicit. **Consume `layoutRoadmap` — do not re-derive.** WP22 designed for exactly this and WP26 already did it for the finished-Track constellation; because the function is seeded from the Track id, the strip and the full roadmap agree on shape for free. **Note the signature is now `layoutRoadmap(states, viewport, seed)`** — Journey has per-Track progress, so it can supply states.
+- **Explore needs a real pagination affordance.** `screen-04` calls this out itself: *"the real screen currently stops at twenty with no sign more exists"*, against a corpus of 28 Tracks. **Check what is actually there before building** — `ExploreScreen.tsx` already contains paging-related code, so the question may be an affordance rather than a mechanism.
+- **Empty states for all three browse surfaces.** `screen-04`'s second row is nothing-in-progress, nothing-added, nothing-found. **This is also where WP25's deferred obligation lands:** it restyled `ErrorState`, `EmptyState` and `StatusMessage` but could only verify its own screens — `StatusMessage` alone has twelve consumers. **You are the package that can finally see them. Report which you checked.**
+- **Swap the achievement icon, and you are the first package able to do it safely.** `Icon.tsx:83` reads `achievement: 'trophy'` — literally the banned glyph. The mockups use an organic blob-and-circle mark. **Three surfaces render it: Profile's badge grid (yours), `ShareCard` (WP26, merged), and the unlock badge (WP25, merged).** WP25 and WP26 both correctly refused to touch it because neither could verify the others. **Verify all three.**
+- **The four tabs stay four.** `RESUME-HERE.md` records that the design tool reverted to three once already.
+- **Do not hardcode the mockup's sample titles.** These screens bind to real Tracks. The mockup's invented books exist because using real in-copyright titles was ruled against.
+
+**Two data questions to answer before building, not after**
+
+1. **The activity heatmap on Profile.** `screen-05` asks for a contribution-graph heatmap using the reward ramp. **Nothing in `api/client.ts` exposes per-day activity** — I checked and found no history endpoint. The server has `daily_session` rows, but reaching them is a backend change. **Verify, then report — do not approximate a heatmap from a streak count.** This is exactly the shape that cost WP26 a follow-up package: build the rest, state plainly what the data cannot support.
+2. **`screen-05`'s "whole history as one accumulated constellation across every book"** is phrased as *"consider"*, not as a requirement, and it is the largest unbounded idea in either spec. **Treat it as out of scope** unless it falls out of what you already have. Say so either way.
+
+**Out of scope**
+- The backend. Both data questions above are reports, not fixes.
+- Every other screen. Track detail, the Leaf player, auth, the share surfaces are all done.
+- `screen-05`'s Do-nots are absolute: **no leaderboard or social comparison, and no invented metrics** — no time saved, no percentile, no books-per-month.
+
+**Constraints:** tokens only. `screen-04`'s Do-nots: no carousel, no more than one primary action per card, **no rating, review count or trending badge — the product tracks none of them** — and no bottom sheet for filters. `screen-05`'s: no circular progress ring for XP, no dashed ring on the avatar. Do not run `git add -A`; stage by path.
+
+**Device gate**
+- **All four tabs, both themes, at default and accessibility-max.** Turn Reduce Motion **off** first or the tab bar will not respond.
+- **All three empty states**, reached for real.
+- **Explore scrolled past twenty**, with whatever affordance you built.
+- **The icon swap on all three surfaces** — Profile's grid, an unlock, and a captured share card. **The share card means opening the captured file, not the preview.**
+- Reduce Motion **on**, deliberately, at the end: motion swaps rather than disappears.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four screens ported from `tabs.jsx`; the tab bar still has four items
+- [ ] **Journey's progress strip consumes `layoutRoadmap` and matches the roadmap's shape for the same Track**
+- [ ] Explore has a working pagination affordance past twenty
+- [ ] All three empty states render
+- [ ] **The trophy is gone from all three consumers, each verified — the share card by opening the captured image**
+- [ ] **Consumers of the three shared state components are listed as checked or not checked** — closing WP25's deferred obligation
+- [ ] **Both data questions answered in the report**, with what is and is not reachable
+- [ ] No new colour, spacing, radius or duration values
+- [ ] No invented metrics anywhere on Profile
+
+**Testing expectations:** Tier B, plus **Tier A on anything pure** — a pagination predicate and the strip's node-selection both belong in tested modules, following `roadmapGeometry`, `stickyNotesLayout`, `roadmapLabels` and `constellationFragment`. **When this lands the redesign is complete**, so say plainly in your report which surfaces you consider done and which you would still change.
+
+---
+
 ### Handoff: 2026-09-10 — WP26: Track complete, and the share card
 
 *Manager. **Suggested model: Sonnet** — one net-new screen whose layout is given and whose data already exists, plus a card whose architecture is already correct. Checked: neither mockup contains a single CSS keyframe, so there is no web-to-Reanimated animation port hiding in here.*

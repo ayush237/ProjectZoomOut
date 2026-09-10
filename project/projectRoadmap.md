@@ -84,7 +84,7 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | WP25 | Achievement unlock, session-end/cap, report-error, failure states | Manager | ✅ **Signed off 2026-09-10 (8/9)** — 9th is code-verified only; the one-shot-transition limit WP22.1 established makes it unbracketable. Also fixed a real pre-existing a11y bug: the report sheet's scrim was hiding the whole sheet from assistive tech | ✅ **Merged as PR #38** (verified 2026-09-10). It carried the `design/**` eslint fix, so `main`'s lint gate is green again |
 | WP26 | Track complete + share card | Manager | ✅ **Signed off 2026-09-10** — verified against the diff: consumes `layoutRoadmap` with `seedFromTrackId` so the constellation matches the roadmap for free, `MascotSlot` preserved, the aspect change deliberately lands on the same `View` `captureRef` photographs, `Icon.tsx` untouched | **PR #39 open as of 2026-09-10** |
 | WP26.1 | Track-scoped XP and first-try count on the read path, then three stats on Track complete | Manager | ⬜ **Proposed — needs the founder's go** | Backend + a small mobile follow-up |
-| WP27 | **Explore, Library, Journey, Profile** — the four tab screens | Manager | ⬜ **not written — a gap in the 2026-09-06 plan, found 2026-09-09** | Specs `screen-04`/`screen-05` exist |
+| WP27 | **Explore, Library, Journey, Profile** + the shared icon swap — **the last redesign package** | Manager | 📤 **Handed off 2026-09-10** | — |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 
 ### Blocked on the founder
