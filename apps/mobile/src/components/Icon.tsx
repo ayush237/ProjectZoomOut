@@ -79,8 +79,16 @@ const ICONS = {
    * Tier drives visual weight through colour and the card, per the proposal — an icon
    * per achievement would be nineteen shapes to design and to keep meaningful, and a
    * grid of nineteen different glyphs reads as noise rather than as a collection.
+   *
+   * **Not a trophy (WP27).** The mockups pair an organic blob (`badgeBlobPath`) with a
+   * small mark inside it, never the trophy this used to be — screen-11 bans a trophy or
+   * medal outright. `leaf` is the closest the app's closed Ionicons vocabulary comes to
+   * "organic," and it is the product's own unit of content: earning an achievement is
+   * earning Leaves. A bespoke illustration is still a real gap — see `AchievementBadge`'s
+   * blob, which exists precisely because one glyph was never going to carry "a thing you
+   * were given" on its own — but that is a future design asset, not an icon-map entry.
    */
-  achievement: 'trophy',
+  achievement: 'leaf',
 } as const;
 
 export type IconName = keyof typeof ICONS;
