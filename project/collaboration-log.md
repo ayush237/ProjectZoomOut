@@ -20,6 +20,99 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-10 — WP28: diagnose the tap failure and Reanimated's reduce-motion disagreement
+
+*Manager. **Suggested model: Opus** — **the finding is the deliverable.** There is no design here and no feature; the output is an explanation, and a wrong one costs a fifth package.*
+
+> **Read:** this handoff · `apps/mobile/src/design/motion.ts` · the three call sites using `motionTimingConfig` (`PayoffSlide`, `ScenarioSlide`, `AchievementUnlock`) · `apps/mobile/src/screens/track/TrackRoadmap.tsx` · your own WP25, WP26 and WP27 completion reports in this log — **the three tap reports are the evidence base and you wrote all of them** · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, `design/`.
+
+### Task: WP28 — diagnose, do not work around
+
+**Suggested model:** Opus.
+
+**Context:** The Leaf-player tap failure has **three independent reports across three packages**, and each was met with a different workaround. **A fourth workaround costs more than an explanation.** While eliminating the Reduce Motion banner as the cause, WP27 found something else: **Reanimated reports reduce-motion as ON while the OS reports OFF.**
+
+**Objective:** An explanation, with evidence. A fix if the explanation yields one cheaply — but **an accurate "here is what it is and here is what it costs to fix" is a complete result**, and a plausible-sounding guess is a failure.
+
+**Scope:** diagnosis. Any fix must be justified by the diagnosis, not by making a symptom stop.
+
+**The three questions, in this order**
+
+1. **Is Reanimated's reduce-motion reading actually wrong?** Verify independently of WP27's observation. Is it permanent, or does it depend on app state, a stale listener, or the simulator? **`useReducedMotion` in `motion.ts` reads the OS via `AccessibilityInfo` — Reanimated maintains its own separate notion.** If those genuinely disagree, establish which is right and why.
+2. **If it is wrong, what is the blast radius?** `REDUCE_MOTION_OVERRIDE` exists precisely so our swap survives Reanimated's suppression. **Only three surfaces route through `motionTimingConfig` today** — `PayoffSlide`, `ScenarioSlide`, `AchievementUnlock` — while every animated surface added since WP22.1 (the roadmap, the slides, Track complete, the tabs) either sets the flag inline or does not carry it. **`TrackRoadmap.tsx` sets `ReduceMotion.Never` inline rather than through the helper**, which means WP22.1's "the flag lives in one place" guarantee is not actually holding. **Enumerate every animated surface and state, for each, whether it carries the flag by any route.** If Reanimated is permanently suppressing, anything without it has been running degraded and nobody knows.
+3. **Is any of that connected to the tap failure?** It is a lead, not an assumption. **Say so if it is unrelated** — eliminating it is a real result.
+
+**Reproduce before theorising.** Three reports, three packages, intermittent each time. **A deterministic reproduction is worth more than a hypothesis**, and if you cannot get one, that is itself the finding: report what correlates with it and what does not.
+
+**Two causes are already known and must be excluded first, so you are not rediscovering them:**
+- **Coordinate space** — screenshot pixels are not the tool's tap-point space (WP24).
+- **The Reduce Motion banner** — with that setting on, an invisible debugger banner swallows touches in the bottom ~15% (WP26). WP27 already eliminated it as *this* bug's cause; confirm that independently rather than inheriting it.
+
+**Out of scope**
+- **A fourth workaround.** If you find yourself adding a coordinate nudge or a retry, stop and report instead.
+- **Changing app code to suit the automation.** Standing rule, ruled 2026-09-08. If the defect is in the tooling, the finding is that the defect is in the tooling.
+- Any redesign work. The redesign is complete.
+
+**Time-box it and say so.** Diagnosis rat-holes. **If the root cause is not found within a reasonable effort, report what was eliminated, what was observed, and what you would try next.** That is a genuinely useful package and a far better outcome than a confident wrong answer — this project has recorded five stale claims that were confident when written.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass (or are untouched, if the package ships no code)
+- [ ] **Question 1 answered with evidence** — does Reanimated disagree with the OS, and is it permanent
+- [ ] **Question 2 answered as an enumeration** — every animated surface, and whether it carries the override by any route
+- [ ] **Question 3 answered either way** — connected, or explicitly eliminated
+- [ ] Either a deterministic reproduction, **or** a written account of what correlates and what does not
+- [ ] The two known causes are independently excluded
+- [ ] **No workaround added**
+- [ ] If a fix ships, it is justified by the diagnosis and its scope is stated
+
+**Testing expectations:** whatever the diagnosis supports. **If the answer is "Reanimated's reading is wrong and the flag is load-bearing everywhere", the valuable artefact is a test that fails when the override is removed from a surface that needs it** — the guard WP22.1 asked for and could not write. Say plainly which evidence is measurement and which is inference.
+
+---
+
+### Handoff: 2026-09-10 — WP22.3: give the roadmap room to breathe
+
+*Manager. **Suggested model: Sonnet** — one constant family, a clear target, and the failing condition is named.*
+
+> **Read:** this handoff · `apps/mobile/src/screens/track/roadmapGeometry.ts` (`GRAPH`, `spineBand`, the vertical rhythm) · `apps/mobile/src/screens/track/roadmapLabels.ts` · `agents/manager.md`.
+> **Inherited:** Reduce Motion ON makes the simulator swallow touches in the bottom ~15% — turn it off with `xcrun simctl spawn <udid> defaults write com.apple.Accessibility ReduceMotionEnabled -bool NO`. RN's jest preset reports `fontScale: 2`, so screen tests exercise the degraded path only.
+
+### Task: WP22.3 — vertical rhythm derived from label height
+
+**Suggested model:** Sonnet.
+
+**Context:** The founder finds the roadmap congested. **This is not a porting error — WP22.2 matched the source exactly**: `graph.jsx`'s fixture spaces nodes 24–32pt apart and WP22.2 set 24–40pt. **It reads congested for us because our labels are taller.** The mockup's are two or three words on one line; ours are real Leaf titles, wrapped to two lines by `roadmapLabels.ts`. **Two-line labels at 24–32pt gaps crowd where single-line labels do not** — the same short-label assumption that caused the original drift, showing up in the vertical dimension after WP22.2 fixed the horizontal one.
+
+**Objective:** The roadmap is comfortable to read at every Leaf count and text size, and a longer scroll is an acceptable price.
+
+**Scope:** `roadmapGeometry.ts`'s vertical rhythm.
+
+**Requirements**
+
+- **Derive vertical spacing from the actual label box height** rather than a fixed range — the same move `roadmapLabels.ts` already makes for the horizontal budget. A node whose label wraps to two lines needs more room beneath it than one that does not, and **that varies with the OS text scale.**
+- **Do not touch `spineBand` (0.25).** That constant is what gives labels their ~125pt gutter, and widening it is what caused the original stub-label problem. **This package changes the vertical dimension only.**
+- **Scroll length is explicitly not a target.** WP22.2 treated collapsing a ~2000pt scroll into one screen as a win. **The founder has ruled otherwise: vertical scrolling to explore the roadmap is fine; unreadable density is not.**
+- **This is a deliberate departure from the source, and the first one the redesign has made on purpose.** `graph.jsx` is compact because its content is short. Record it in the file so nobody later "corrects" it back toward the mockup.
+
+**Out of scope:** the label treatment itself, node glyphs, dendrites, `spineBand`, and every other screen.
+
+**Constraints:** `roadmapGeometry.ts` stays pure and seeded; its 15–30 tests must still pass. Tokens only.
+
+**Device gate:** **Track 42 (18 Leaves) and the 20-Leaf placeholder**, both themes, at **default and accessibility-max**. At accessibility-max labels wrap more, so that is the case most likely to crowd. **Then look at it and say whether it reads comfortably** — the founder's judgement is final, but yours is the first pass.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Vertical spacing responds to label height and text scale — **asserted by a test, since the function is pure**
+- [ ] `spineBand` is unchanged
+- [ ] `roadmapGeometry`'s existing 15–30 range tests still pass
+- [ ] **Observed at 18 and 20 Leaves, both themes, default and accessibility-max: no label collides with a node or another label**
+- [ ] The deliberate departure from the source is recorded in the file
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier A on the rhythm function — it is pure, so "does spacing grow when the label wraps" is directly assertable. **Mutation-check it.**
+
+---
+
 ### Handoff: 2026-09-10 — WP27: the four tab screens, and the icon swap two packages deferred
 
 *Manager. **Suggested model: Sonnet** — four screens that all exist, one source file, an established method. **The last package of the redesign.***
