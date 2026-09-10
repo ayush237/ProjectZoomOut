@@ -886,6 +886,114 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP28 — diagnose the tap failure and Reanimated's reduce-motion disagreement — 2026-09-10
+
+**Bottom line first:** All eight acceptance criteria met. **The tap failure is not a bug, and it is not one cause — it is two, both in the app's own correct behaviour, and both reproduced deterministically with same-coordinate controls.** **Reanimated's reduce-motion reading is not wrong**; it is a launch-time snapshot, and the disagreement WP27 saw is what staleness looks like. The two known causes are independently excluded and characterised. No workaround added. Ships one test (the guard WP22.1 asked for), mutation-checked three ways. Root `lint`, `typecheck` (4 workspaces), `test` (1,348 passing: shared 71, admin 198, backend 477, mobile 602 — 599 existing + 3 new) and `build` all clean from a genuine cold gate — `dist`/`.next` deleted across all four workspaces, `npm install`, then all four commands, with build outputs confirmed present on disk afterwards rather than inferred from an exit code. Branched from `origin/main` (`bbd5410`, which carries this handoff and the fourth data point) as `wp28-tap-diagnosis`; pushed, not yet a PR.
+
+---
+
+#### Question 3 first, because it is the one that cost four packages
+
+**The Leaf player's "Next" button was disabled, not unresponsive.** On the scenario slide, `Next` is `disabled` until the scenario is answered. `Button` renders a disabled control at `opacity: 0.5` — on a teal pill against a near-black page, that still reads as a teal pill. The real action, `Check answer`, lives **inside the `ScrollView`, below the fold**, while `Next` sits in the pinned footer where a primary CTA always sits. A session that does not scroll sees only the footer, taps the obvious continue affordance, and gets nothing — forever, at any coordinate, however precisely aimed.
+
+That is WP25's report almost word for word: *"would not register a tap after roughly fifteen attempts … while other buttons on the very same screens worked normally."* The other buttons worked because they were not disabled.
+
+**Proven, not inferred.** Three taps at (252, 815) on the unanswered scenario: nothing, four times over including varied offsets. Selected an option, scrolled, tapped `Check answer`, payoff unlocked. Then **one tap at the identical (252, 815)**: advanced to slide 4. Same control, same coordinates, same session, same build — dead when `disabled`, alive when not. The variable is the prop, and coordinates are eliminated by construction.
+
+**The Library card is a second, unrelated cause — the fourth data point.** `TrackCard`'s `Pressable` wraps **only the cover + title row**. `children` (the progress bar, the "Finished" marker) and `action` are rendered as siblings *outside* it. Everything below the title row is a dead zone. On a **finished** Track there is no `action` button at all — `LibraryScreen` omits it deliberately when `nextLeafId === null` — so the card is mostly dead zone with no button to aim at, which is exactly the state WP22.3 hit on Track 42.
+
+Verified on device on the Library card: tap at y=355 (inside the card, below the title row) — nothing. Tap at y=269 (the title row) — navigates to TrackDetail. 86pt apart, same card.
+
+**So "something about the Leaf player" was never the right framing**, and the handoff was right to say so. Two independent causes that both present as "this control ignores taps."
+
+**What I could not reproduce: WP27's header close button.** I tapped it once, at (28, 97), and it closed the Leaf immediately. I have no explanation for WP27's report of it being unresponsive and I am not going to invent one. Two possibilities I can neither confirm nor rule out: the `ReportErrorSheet` scrim was open (WP25 rebuilt that sheet with a full-screen scrim, and WP27 reports the report-link tap working immediately in the same session — an open sheet would swallow header and footer taps alike while the mid-screen link that opened it had already been hit), or it was the LogBox banner below plus coordinate estimation at the top edge. **Named as unexplained rather than folded into the tidy answer.**
+
+**Tap tally for this session: 20 taps, 20 first-attempt hits**, excluding the four deliberate negative-control taps on the disabled `Next` and the one on the card dead zone. That includes every pill CTA the earlier reports named — Sign in, Try again, Add to library, Start reading, Check answer, Next, Back — plus tab-bar items, text fields, the header ×, and a Track card. **There is no general tap-precision problem in this app or this tool.** WP15.8's and WP21's "many attempts across a wide, reasonable-looking coordinate range" almost certainly has the same explanation: `Continue`/`Next`/`Check answer` are all controls that are disabled until their precondition is met.
+
+---
+
+#### Question 1 — is Reanimated's reduce-motion reading wrong?
+
+**No. It is correct at every launch, and it is a snapshot rather than a subscription.** Measured four times, both directions.
+
+Both libraries call the **identical** API, `UIAccessibilityIsReduceMotionEnabled()`:
+- Reanimated — `apple/reanimated/apple/REAReducedMotion.h`, called once from `NativeProxy.mm` at proxy construction, stored as the `const` member `isReducedMotion_`, published to JS as `global._REANIMATED_IS_REDUCED_MOTION` by `RNRuntimeDecorator.cpp`, then frozen again on the JS side in a module-level `const` in `src/ReducedMotion.ts`. Reanimated's own `useReducedMotion()` returns that constant and its docstring says so outright: *"whether the reduced motion setting was enabled when the app started."*
+- React Native — `RCTAccessibilityManager.mm` reads the same function, **and subscribes to `UIAccessibilityReduceMotionStatusDidChangeNotification`**, updating on every change. `motion.ts`'s `useReducedMotion` sits on top of that via `AccessibilityInfo`, and is live.
+
+**So the two can disagree in exactly one window: after the setting changes while the app is running.** RN updates; Reanimated cannot, until the native process is cold-started. Nothing is broken — they answer different questions, and only one of them is documented as doing so.
+
+**Measurements (all on iPhone 16 Pro, `com.zoomout.app`, dev build):**
+
+| # | OS setting at launch | Cold launch? | Reanimated warning | Meaning |
+|---|---|---|---|---|
+| 1 | OFF | yes | absent | tracks OFF correctly |
+| 2 | ON | yes | present | tracks ON correctly |
+| 3 | OFF (turned off while PID 62299 ran) | no — same process | n/a | snapshot cannot change |
+| 4 | OFF | yes (new PID 62782) | absent | a real cold start clears it |
+| 5 | ON | yes (new PID 64284) | present | reproducible |
+
+I also wrote a throwaway Objective-C probe (`axprobe`, scratchpad only, never in the repo) run via `simctl spawn`, reporting `UIAccessibilityIsReduceMotionEnabled()`, libAccessibility's `_AXSReduceMotionEnabled()`, and the raw plist **side by side**. All three agreed at every point. **`xcrun simctl spawn … defaults write com.apple.Accessibility ReduceMotionEnabled` does move the real UIKit API** for any freshly launched process — so WP27's method of *reading* the state was sound; what it could not see is that the running process had already sampled it.
+
+**Why WP27 saw the disagreement, most likely:** the setting was turned ON deliberately during WP26 to verify motion, and WP27's `defaults write … NO` plus "a full app relaunch" did not actually cold-start the native process — a Metro/JS reload does not re-run native init. **`xcrun simctl terminate <udid> com.zoomout.app` then `launch` is the reliable clear**, measured above. I could not demonstrate the stale case live: Metro's `reload` broadcast turned out to do an HMR-style update that re-evaluates only changed modules, so Reanimated's module never re-initialised, and macOS blocked `osascript` from sending Cmd+R. **That specific step is inference from source, not measurement, and I am labelling it as such** — everything in the table above is measurement.
+
+---
+
+#### Question 2 — the blast radius, as an enumeration
+
+**The app has exactly four animated surfaces.** Definitive sweep for `react-native-reanimated`, `LayoutAnimation` and `Animated.` across `apps/mobile/src`:
+
+| Surface | Reduced-motion branch | Full-motion branch |
+|---|---|---|
+| `PayoffSlide` | `motionTimingConfig` → **override ✓** | `withSequence`/`withDelay`/`withTiming`/`withSpring` — **no override** |
+| `ScenarioSlide` | `motionTimingConfig` on `feedbackOpacity` → **override ✓** | `withSequence` + 2×`withTiming` + `withSpring` — **no override** |
+| `AchievementUnlock` | `motionTimingConfig` **and** explicit `REDUCE_MOTION_OVERRIDE` on the wrapping `withDelay` → **override ✓ at both levels** | `withDelay` + `withTiming`/`withSpring` — **no override** |
+| `TrackRoadmap` → `NextNodeRing` | `ReduceMotion.Never` **written inline**, on both the `withTiming` and the `withRepeat` → **override ✓** | `withRepeat(withTiming(…))` — **no override** |
+
+**Every reduced-motion branch is correctly flagged.** The accommodation is safe today, on all four.
+
+**The handoff's specific suspicion is confirmed:** `TrackRoadmap.tsx` imports `ReduceMotion` from `react-native-reanimated` directly and writes `ReduceMotion.Never` inline twice, bypassing `REDUCE_MOTION_OVERRIDE`/`motionTimingConfig`. It is *correct*, but it is a second copy of the decision, so WP22.1's "the flag lives in one place" guarantee is not holding.
+
+**Its other worry dissolves:** "the roadmap, the slides, Track complete, the tabs." **Track complete, the share card, and all four tab screens contain no animation whatsoever** — zero Reanimated, zero `Animated.`, zero `LayoutAnimation`. There is nothing there to run degraded. Only the roadmap and the two slides are real. (`AuthStack` calls `useReducedMotion` to pick React Navigation's own `animation` option — not Reanimated, no override applicable.)
+
+**The one genuine latent defect, and it is not the reduced-motion branch.** Every **full-motion** branch is unflagged, which is normally right — that branch only runs when the OS says motion is fine, and Reanimated agrees because it read the same value. **But in the staleness window it does not agree**, and then the full-motion branch is suppressed while the fade branch was never taken. Reanimated's suppression jumps an animation to its final value, so on three of the four surfaces this costs only the motion. On `TrackRoadmap` it costs more: `NextNodeRing`'s pulse is the only thing marking **which node to tap next on a long scrolling graph**, and the file's own docstring says a still ring is *"indistinguishable from a ring that was never meant to move."* **Latent, not observed** — it needs the setting toggled mid-session — but it is real and it is the most consequential item here.
+
+---
+
+#### The two known causes, independently excluded
+
+**Coordinate space (WP24) — excluded, by construction rather than by care.** Same-coordinate pairs settle it twice over: (252, 815) missed while `disabled` and hit while enabled; (150, 832) was swallowed while the LogBox banner was up and switched tabs once it was gone. Coordinates held constant; only app state changed. Twenty first-attempt hits across the full screen height (y=97 to y=832) confirm the mapping is sound. Converting screenshot pixels to the tool's 402×874 point space proportionally works reliably.
+
+**The Reduce Motion banner (WP26) — confirmed, reproduced, and corrected in one detail.** With reduce motion ON at launch, Reanimated emits its dev warning, RN's LogBox raises a notification, and it sits directly over the tab bar. **It is not invisible** — it reads "Open debugger to view warnings." with the tab labels showing beneath it. And it does not silently absorb taps indefinitely: **the first tap dismisses the banner instead of reaching the app, and the next tap works.** Screenshotted and verified both halves.
+
+The chain is worth stating once, since it links two of this package's threads: *reduce motion ON at native launch → Reanimated dev warning → LogBox banner → the next tap in the bottom strip goes to the banner.* It is a **dev-build-only** artefact, and it has nothing to do with the disabled-button cause.
+
+---
+
+#### What shipped
+
+**One file: `apps/mobile/src/design/reduceMotionCallSites.test.tsx`** (3 tests). The guard WP22.1 asked for and could not write: `motion.test.ts` pins the helper, and nothing could fail when a *caller* dropped the flag.
+
+It spies on Reanimated's animation factories rather than asserting on the rendered tree, and the reason is the whole difficulty: **suppression makes an animation jump to its final value, which is exactly where a correctly-animated element ends up** — the rendered output is identical either way, which is why WP22.1 had to measure pixels across six frames. The flag is only observable at the moment it is passed.
+
+**Mutation-checked in all three directions**, each time confirming that only the matching test went red: drop `PayoffSlide`'s override; drop `ScenarioSlide`'s; and the hard one — drop **only the outer `withDelay` flag** on `AchievementUnlock` while leaving the inner `withTiming` correct. That last is the case the count assertion (`>= 2`) exists for, and it is the precise shape of WP22.1's original bug. Assertions use exact sets, not `arrayContaining`, so a stray `ReduceMotion.System` fails rather than hiding.
+
+**No production code changed.** `git status` clean apart from this file.
+
+---
+
+#### Follow-ups / tech debt for Architect
+
+1. **The full-motion branches carry no override — a real latent defect, and I did not fix it.** The fix is four one-line additions and is safe in all three states (OS off: no change; stale disagreement: correct behaviour restored; OS on: branch not taken). **I left it for your ruling because the handoff scoped this package to diagnosis** and because changing motion on four surfaces without a device pass in the disagreeing state is the kind of unverified change this project has been bitten by. Cheap, but it is a behaviour change and yours to call.
+2. **`TrackRoadmap.tsx` should route through `REDUCE_MOTION_OVERRIDE`** instead of its inline `ReduceMotion.Never`, restoring WP22.1's single-source guarantee. Doing that would also make it renderable-in-isolation enough to close the test gap below.
+3. **Test gap, named: `NextNodeRing` is not covered by the new guard** — it is private and rendering the roadmap needs a full graph fixture. It is also the surface with the most to lose. Worth WP14.
+4. **`Button`'s disabled state is a UX finding, not a bug, and it cost four packages of engineering time.** `opacity: 0.5` on a saturated teal pill against a near-black page is a weak signal, and the disabled control sits in the footer position that reads as "the way forward" while the live control (`Check answer`) is below the fold. Real readers will hit this. Not mine to redesign, but it is the actual product consequence of this package.
+5. **The simulator's text injection drops characters.** Typing `wp28-…@example.com` in one call produced `wp28-…`; a second call for `@example.com` produced `@example`. Needed three calls to enter one email. Inconsistent across runs, so it looks like a race between injection and the controlled `TextInput`'s state. **Type into fields in short chunks and screenshot to confirm.**
+6. **The Payload CMS on :3001 is required for any device pass that touches content** — the backend returns 503 `CONTENT_UNAVAILABLE` without it and the app shows "That did not load." Not obvious from the mobile side; cost a few minutes.
+
+**Time:** reading the handoff, the four prior reports (one of which had to be recovered from git — see below) and the Reanimated/RN native sources: roughly a third, and it is where the answer to Question 1 actually came from. Device reproduction: another third, most of it the environment (backend, Payload, seeding an account, the `@`-dropping text injection) rather than the diagnosis itself, which was quick once the app was reachable. The guard test plus its three mutation checks and two lint rounds: about a fifth. Cold gate and this write-up: the rest.
+
+**One process note.** **WP27's completion report was not in `collaboration-log.md`** — the four-most-recent pruning at sign-off had dropped it, and the handoff names it as required reading and as a third of the evidence base. I recovered it with `git log -S` (commit `a7cea6b`) and read it there. **The pruning rule and the practice of citing prior reports as evidence are in conflict**; a handoff that points at a report should probably check it is still in the file, or cite the commit.
+
 ### Completed: WP22.3 — give the roadmap room to breathe — 2026-09-10
 
 **Bottom line first:** All acceptance criteria met, device-verified in both themes at default and accessibility-max text size on the 20-Leaf placeholder — comfortable at every combination, no label colliding with a node or another label. **One gap named rather than hidden:** I did not get an on-device look at Track 42 specifically (below). Root `lint`, `typecheck` (4 workspaces), `test` (1,345 passing: shared 71, admin 198, backend 477, mobile 599 — 578 existing + 21 new) and `build` (backend/mobile/admin all produced real output) are clean from a genuine cold gate — `dist`/`.next` deleted across all four workspaces, `npm install`, then all four commands fresh. Branched from `origin/main` (`787a168`, which carries both this handoff and WP28's) as `wp22.3-roadmap-vertical-rhythm`; pushed, not yet a PR.
