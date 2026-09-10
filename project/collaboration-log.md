@@ -45,6 +45,8 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 **Reproduce before theorising.** Three reports, three packages, intermittent each time. **A deterministic reproduction is worth more than a hypothesis**, and if you cannot get one, that is itself the finding: report what correlates with it and what does not.
 
+**A fourth report arrived after this handoff was written, and it changes the shape of the question.** WP22.3 could not open Track 42 because **its card on the Library screen did not respond to tap.** Every previous report was the Leaf player — the Next button, the pill CTAs. **This one is a different screen and a different control type**, so "something about the Leaf player" is no longer a safe framing. **Treat the surface commonality as unproven** and let the reproduction tell you the boundary.
+
 **Two causes are already known and must be excluded first, so you are not rediscovering them:**
 - **Coordinate space** — screenshot pixels are not the tool's tap-point space (WP24).
 - **The Reduce Motion banner** — with that setting on, an invisible debugger banner swallows touches in the bottom ~15% (WP26). WP27 already eliminated it as *this* bug's cause; confirm that independently rather than inheriting it.
