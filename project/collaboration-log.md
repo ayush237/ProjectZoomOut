@@ -20,6 +20,49 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-11 — WP29: the Leaf player's footer hosts the live action
+
+*Manager. **Suggested model: Sonnet** — one flow change, ruled and scoped. You found this; this is the fix.*
+
+> **Read:** this handoff · your own WP28 completion report — **commit `02f8e31`**, cited by hash because a pruned pointer is what cost WP28 time · `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` · `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` · `apps/mobile/src/components/Button.tsx` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `projectRoadmap.md`, `design/`, `apps/pipeline`, `apps/admin`, `apps/backend`.
+> **Inherited:** Reduce Motion changed mid-session leaves Reanimated stale — relaunch, don't reload, if you gate on motion. RN's jest preset reports `fontScale: 2`, so screen tests exercise the degraded path only.
+
+### Task: WP29 — the footer carries whatever is actionable
+
+**Suggested model:** Sonnet.
+
+**Context:** WP28 established that the Leaf player pins a **disabled** *Next* in the footer — the position a reader's eye goes to for the primary action — while the live control, *Check answer*, sits below the fold inside the ScrollView. **This cost four packages of engineering time** from people who could read the source; a reader cannot. **The founder ruled 2026-09-11 for the footer fix rather than restyling the disabled state**, because making a dead button look dead still leaves a dead button where the live one should be.
+
+**Objective:** On every slide, the pinned footer holds the action that is currently available. A reader never scrolls to find the primary control, and never sees a prominent control that does nothing.
+
+**Scope:** `LeafPlayerScreen.tsx` and the slides' relationship to the footer.
+
+**Requirements**
+- **The footer hosts the currently-live action.** On the scenario slide before an answer that is *Check answer*; once answered it becomes *Next*. Other slides keep whatever they have today if it is already the live action.
+- **Do not restyle `Button`'s disabled state.** It is a real finding — `opacity: 0.5` on a teal pill against near-black still reads as live — but it is a design-system change touching every consumer, it is logged separately, and this package must not wait on it.
+- **The payoff gate does not change.** The rule that the payoff stays locked until a correct answer is the product's central guarantee. This moves a control; it does not alter when the control becomes available.
+- **If a disabled control genuinely must appear in the footer** in some state you find, say so rather than forcing the pattern — and report which state.
+
+**Out of scope:** `Button` itself, the other four slides' content, the report sheet, every other screen.
+
+**Constraints:** tokens only. Do not run `git add -A`; stage by path.
+
+**Device gate:** **play a Leaf end to end.** On the scenario slide, *before answering*, **the footer's control is the one that works** — press it and something happens. Answer wrongly, answer correctly, and confirm the footer follows the state. **Both themes, and at accessibility-max**, where the ScrollView is most likely to push content around.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] **On the scenario slide, the footer's control is live at every point** — never a disabled primary
+- [ ] The payoff still unlocks only after a correct answer — verified by exercising it
+- [ ] **Observed on a device: no scrolling is required to reach the primary action on any slide**
+- [ ] Both themes at accessibility-max
+- [ ] `Button.tsx` is unchanged in the diff
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier B, plus **Tier A on the footer-action selector** — "which action is live for this slide and state" is a pure function of slide index and answer state, and belongs in a tested module like `roadmapLabels` and `stickyNotesLayout` before it. Mutation-check it.
+
+---
+
 ### Handoff: 2026-09-11 — WP28.1: the override on the full-motion branches
 
 *Manager. **Suggested model: Sonnet** — four one-line additions and one substitution. You diagnosed it, sized it, and declined to ship it inside a diagnosis package; that was right, and this is the package it belongs in.*
