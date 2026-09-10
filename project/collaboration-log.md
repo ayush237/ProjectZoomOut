@@ -20,6 +20,47 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-11 — WP28.1: the override on the full-motion branches
+
+*Manager. **Suggested model: Sonnet** — four one-line additions and one substitution. You diagnosed it, sized it, and declined to ship it inside a diagnosis package; that was right, and this is the package it belongs in.*
+
+> **Read:** this handoff · your own WP28 completion report — **at the top of the Completions section in `project/collaboration-log.md`, commit `02f8e31`** (cited by commit, not by position, because a pruned pointer is exactly what cost WP28 time) · `apps/mobile/src/design/motion.ts` · `apps/mobile/src/screens/track/TrackRoadmap.tsx` · the three `motionTimingConfig` call sites · `apps/mobile/src/design/reduceMotionCallSites.test.tsx` — **your own guard; extend it** · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `projectRoadmap.md`, `design/`, `apps/pipeline`, `apps/admin`, `apps/backend`.
+
+### Task: WP28.1 — close the staleness window
+
+**Suggested model:** Sonnet.
+
+**Context:** WP28 established that Reanimated freezes the OS reduce-motion value at native init while RN stays live, so the two disagree only when the setting changes mid-session. **Every reduced-motion branch is correctly flagged and accessibility is safe today. The full-motion branches are not flagged** — so inside that window the full-motion animation is suppressed while the fade branch was never taken, and nothing runs. **On `TrackRoadmap` that silences `NextNodeRing`, the only marker for which node to tap next on a long scrolling graph.**
+
+**Objective:** No branch of any animated surface can be silently suppressed, and the override lives in one place.
+
+**Scope:** the four animated surfaces and `motion.ts`.
+
+**Requirements**
+- **Add the override to the full-motion branch of all four surfaces.** You sized this at four one-line additions and judged it safe in all three states; that assessment stands.
+- **Route `TrackRoadmap.tsx` through `REDUCE_MOTION_OVERRIDE` instead of writing `ReduceMotion.Never` inline.** WP22.1's guarantee was that the flag lives in exactly one place, and an inline copy is that guarantee quietly not holding — **which is why it took a diagnosis package to notice.**
+- **Extend `reduceMotionCallSites.test.tsx` to cover the full-motion branches.** The guard currently proves the reduced branches are flagged; it should fail if a full-motion branch loses its override too.
+
+**Out of scope:** `NextNodeRing`'s own coverage — it needs a full graph fixture and is logged for WP14. Any redesign. Any other screen.
+
+**Device gate — and the procedure matters more than usual here.** The bug only exists inside the staleness window, and **WP28 established exactly how to create it: change the OS reduce-motion setting *while the app is running*, and do not relaunch.** A `simctl terminate` + launch clears the state and would show you a passing app that proves nothing. **A Metro or JS reload does not clear it, so that is your tool.**
+- **In the disagreeing state, on the roadmap: `NextNodeRing` still animates.** That is the criterion.
+- Then relaunch and confirm both ordinary states — reduce-motion genuinely on, genuinely off — still behave.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four full-motion branches carry the override
+- [ ] `TrackRoadmap` uses `REDUCE_MOTION_OVERRIDE`; no inline `ReduceMotion.Never` remains
+- [ ] The guard covers full-motion branches and **fails when one loses its flag** — mutation-checked
+- [ ] **Observed in the disagreeing state: `NextNodeRing` animates**
+- [ ] Observed after relaunch: both ordinary states unchanged
+- [ ] No production behaviour changes outside motion flags
+
+**Testing expectations:** extend the existing guard. **Say plainly which evidence is the test and which is the device observation** — the staleness window is not reproducible in Jest, so the device pass is the only proof of the case this package exists for.
+
+---
+
 ### Handoff: 2026-09-10 — WP28: diagnose the tap failure and Reanimated's reduce-motion disagreement
 
 *Manager. **Suggested model: Opus** — **the finding is the deliverable.** There is no design here and no feature; the output is an explanation, and a wrong one costs a fifth package.*
