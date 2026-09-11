@@ -20,7 +20,7 @@ the reasoning behind it.
 from __future__ import annotations
 
 from zoomout_pipeline.cost import TokenSpend
-from zoomout_pipeline.llm.client import LLMError, StructuredClient
+from zoomout_pipeline.llm.client import LLMSchemaError, StructuredClient
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import GeneratedLeafRecord, ScenePlan
 from zoomout_pipeline.prompts import render_prompt
@@ -96,9 +96,14 @@ def derive_scene_plan(
             result = llm.generate_structured(
                 prompt=prompt, schema=ScenePlan, model=model, node="scene_settings"
             )
-        except LLMError as error:
-            # Includes the Pydantic message naming which places repeated, which is precisely
-            # what the next attempt needs to be told.
+        except LLMSchemaError as error:
+            # **Only a shape failure is retried here.** It carries the Pydantic message naming
+            # which places repeated, which is precisely what the next attempt needs to be told.
+            #
+            # Everything else — a 403, an exhausted quota, a model that does not exist —
+            # propagates untouched. Retrying those spends the attempt budget on a request that
+            # cannot succeed and then blames the model's output for a credentials problem,
+            # which is exactly what this loop did the first time it met a permission error.
             reason = str(error)
             _log.warning(
                 "scene.rejected", attempt=attempt, leaves=len(records), reason=reason[:300]

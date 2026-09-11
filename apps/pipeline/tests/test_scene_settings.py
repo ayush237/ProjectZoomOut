@@ -23,7 +23,7 @@ from zoomout_pipeline.graph.scene_settings import (
     derive_scene_plan,
     scenario_block,
 )
-from zoomout_pipeline.llm.client import GenerationResult, LLMError
+from zoomout_pipeline.llm.client import GenerationResult, LLMError, LLMSchemaError
 from zoomout_pipeline.models import (
     GeneratedExtras,
     GeneratedLeafRecord,
@@ -110,7 +110,7 @@ class FakeSceneLLM:
         self.prompts.append(prompt)
         if self.failures > 0:
             self.failures -= 1
-            raise LLMError(
+            raise LLMSchemaError(
                 f"{node}: {model} returned JSON that is not a valid {schema.__name__}: "
                 "Value error, These places are used more than once: ['desk dim room']"
             )
@@ -315,3 +315,29 @@ def test_alt_text_does_not_claim_a_person_who_is_not_there() -> None:
     alt = scenario_alt_text(a_setting(0, "an empty loading bay", figures=0))
 
     assert "No one is present" in alt
+
+
+def test_a_permission_failure_is_not_retried_as_a_bad_answer() -> None:
+    """**Found by meeting one.** A 403 is not a plan the model got wrong.
+
+    Retrying it spends the whole attempt budget on a request that cannot succeed and then
+    reports "no usable scene plan", which sends whoever reads it looking at prompts when the
+    problem is credentials. The client already separates the two — this asserts the node
+    respects the separation.
+    """
+
+    class Forbidden:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate_structured(self, **kwargs: Any) -> GenerationResult[Any]:
+            self.calls += 1
+            raise LLMError("scene_settings: model call to m failed: 403 PERMISSION_DENIED")
+
+    llm = Forbidden()
+    records = [a_record(index, f"Scenario {index}") for index in range(10)]
+
+    with pytest.raises(LLMError, match="403"):
+        derive_scene_plan(llm=llm, records=records, model="test-model")
+
+    assert llm.calls == 1, "a permission error must be raised on the first attempt, not retried"
