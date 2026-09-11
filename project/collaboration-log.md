@@ -20,6 +20,71 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-11 — WP30: Ikigai end to end, with scenario images that match their scenarios
+
+*Pipeline Manager. **Suggested model: Opus** — the finding is the deliverable on the first half. "The images vary now" is exactly the claim that can be asserted green while being false; it took the founder's eye to catch the current state.*
+
+> **Read:** this handoff · `apps/pipeline/src/zoomout_pipeline/graph/asset_nodes.py` (`scenario_image_prompt`) · `apps/pipeline/src/zoomout_pipeline/prompts/asset_style.md` · `apps/pipeline/src/zoomout_pipeline/assets/images.py` · `apps/pipeline/assets/anchors/` · `project/proposals/design-direction.md` · your own WP18 and WP20 completion reports in this log · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP30 — Ikigai end to end, with scenario images that match their scenarios
+
+**Suggested model:** Opus.
+
+**Context:** Track 42's eighteen scenario images are all a seated figure at a table in a dim interior. **Verified on the published record, not reported** — Architect pulled Leaves 0, 5, 9 and 13 from the live CMS and looked at them. Leaf 13's scenario is *"you want to buy a new house for your family"* and the image is a man alone at a desk at night with a calculator. The house style is working — the library does look like one product — but it is holding the **environment** constant along with the palette, and that is not what it was for. Book #2 is Ikigai, and generating it before this is fixed means paying for eighteen images twice.
+
+**Four causes were identified, and none is the scenario text:**
+1. **The prompt never names a place.** `scenario_image_prompt()` is scenario prose + "illustrate as a single quiet moment" + the style contract. The prose describes a situation and a feeling; it contains no location, so the model invents one and defaults to the safest interior.
+2. **The style contract's subject list is table-first.** *"Ordinary modern life: a desk, a commute, a kitchen table, a shop counter, a conversation"* — four of five are people at tables, phrased as a menu of examples rather than an instruction to vary.
+3. **Five of the six committed anchors are seated interiors.** A reference image carries environment and composition, not only palette and technique, so the anchors are teaching "seated person, table, dim room" as if it were style.
+4. **Nothing sees the set.** Each Leaf generates independently, so "they are all the same" is structurally undetectable.
+
+*Secondary, already forbidden by the contract: Leaf 13's papers carry arrow and line glyphs that read as writing.*
+
+**Objective:** Two things, in this order. **(A)** Scenario images keep one visual identity — medium, palette, figure treatment — while their *setting* is driven by the scenario, proven by a before/after on identical scenario text. **(B)** Ikigai is onboarded end to end with the fixed generator and lands in the CMS as a reviewed draft.
+
+**Scope:** `apps/pipeline` only — `graph/asset_nodes.py`, `prompts/asset_style.md`, `assets/` and the anchor set, plus tests.
+
+**Requirements — Half A, the generator**
+- **Derive a concrete setting per Leaf from the scenario, and name it in the image prompt.** The scenario implies a place even when it does not state one; the generator should decide it explicitly rather than leave the model to default.
+- **This must not require a schema change.** The setting is a generation artifact — recorded in the run, visible in logs — not a new field on the Leaf. Anything touching `packages/shared` or the Payload collections is out of scope and belongs to Manager.
+- **Split `asset_style.md` into what is fixed and what must vary.** Fixed: medium, palette, the teal-accent rule, the amber prohibition, depth-from-lightness, non-identifiable figures, every content guardrail. Varying: setting, interior/exterior, time of day, camera distance, number of figures, whether a figure appears at all.
+- **Re-examine the anchor set.** Decide whether to recut anchors spanning environments or to reduce their pull on composition — **this is the judgement call of the package**, because the anchors are what make the library cohere and a careless change trades one problem for the AI-slop drift the founder ruled against. Say what you chose and why.
+- **A Track-level variety check.** Something that looks at the whole set and fails when it has collapsed. Design it yourself; a setting-label distribution is a supporting signal, not the check, because a label can read "construction site" over a picture of a desk.
+
+**Requirements — Half B, the book**
+- **Ingest `/Users/ayushgupta/Documents/ZoomOut/ZO-admin/booksSource/Ikigai.pdf`** and run through gate 1, generation, grounding, assets and gate 2.
+- **`acquisition` must be `undocumented`** — the honest value for a downloaded PDF. Not `purchased`, not `licensed`. The point of the field is that "which Tracks need regenerating" stays a query.
+- **Ikigai lands as a draft and is not published.** It is in copyright; building against it was ruled acceptable 2026-08-13, and what ships at launch is still open.
+- **15–30 Leaves**, and **no 1:1 reproduction of the book's chapter structure or its named framework** — a hard legal constraint, not editorial taste.
+- **Source references need a locator, not only a note.** Ikigai is a PDF and `ingest/pdf.py` reads page by page, so **page locators may be achievable for the first time** — every prior Track used chapter/quote because EPUBs have no pages. Report whether page locators actually survive into references; if they do not, say so plainly rather than inventing them.
+- **State the image budget before the run and make it halt, not warn.** WP18's reported $2.34/Track was computed at the wrong per-image rate; the real rate is `gemini-3-pro-image` at $0.134.
+
+**Out of scope**
+- **Track 42's existing published images.** Regenerating them is a separate founder decision, deliberately deferred until this package's before/after exists. Do not touch the published record.
+- `apps/mobile`, `apps/backend`, `apps/admin`, any Payload collection change, any shared-type change.
+- Publishing Ikigai live. Draft only.
+- The curation policy itself — a founder decision, still open.
+
+**Constraints:** Half A ships and is proven before Half B's run starts. The option shuffle (`shuffle_options`, WP17) must be exercised — Track 42 predates it and carries the correct answer in position B for 15 of 18 Leaves; Ikigai is the first chance to confirm the shuffle works on real content. Raw text is purged after the run, as a deliberate command.
+
+**Device gate:** open an Ikigai Leaf in the app on a device and look at the scenario illustrations across **at least six** Leaves. **What to observe: the settings differ from one another and each one plausibly belongs to its own scenario** — not that the images are pretty, and not that the run exited zero.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `typecheck`, `test` pass
+- [ ] **Before/after on identical scenario text:** Track 42's Leaves 0, 5, 9 and 13 regenerated as *candidates only* with the new generator, presented beside the current published images. **The four new settings are visibly distinct from each other, and Leaf 13 is no longer a person at a desk**
+- [ ] `asset_style.md` separates fixed identity from varying environment, and the fixed half still forbids amber, text/symbols, identifiable people, and book branding
+- [ ] The variety check **fails against Track 42's current eighteen images and passes against Ikigai's** — run it both ways and show both results
+- [ ] Ikigai is in the CMS as a **draft**, 15–30 Leaves, `acquisition: undocumented`, `isPlaceholder` off
+- [ ] Every Leaf's source references carry a note **plus at least one locator**; report whether page locators were achievable
+- [ ] Correct-answer positions across Ikigai's Leaves are not concentrated in one position
+- [ ] **Observed on a device: six Leaves, six settings that belong to their scenarios**
+- [ ] Raw text purged after publish-to-draft, and the run's total cost reported
+
+**Testing expectations:** unit coverage on the setting derivation and the variety check, including a mutation — break the setting derivation and confirm the variety check goes red. **Say plainly which evidence is a test and which is a human looking at pictures**; the variety claim is not fully testable and the before/after is the real proof.
+
+---
+
 ### Handoff: 2026-09-11 — WP29: the Leaf player's footer hosts the live action
 
 *Manager. **Suggested model: Sonnet** — one flow change, ruled and scoped. You found this; this is the fix.*

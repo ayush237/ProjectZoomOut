@@ -2,7 +2,25 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: the visual redesign, WP21–WP27 — approved 2026-09-06, extended 2026-09-09
+## Active: WP30 — Ikigai end to end, and the scenario-image fix — handed off 2026-09-11
+
+**Book #2 is the active feature.** *Ikigai* (`ZO-admin/booksSource/Ikigai.pdf`) goes through the existing pipeline, and it carries a defect fix the founder found by looking at the app: **Track 42's eighteen scenario images are all a seated figure at a table in a dim interior**, whatever the scenario.
+
+**One package, two halves, sequenced — and the sequence is the point.** Half A fixes and *proves* the image generator on a four-image before/after against Track 42's own scenario text, where the content already exists and only image spend is at risk. Half B then runs Ikigai once, with a generator that is known to work. Reversed, the eighteen-image spend gets paid twice.
+
+**The diagnosis, verified against the live CMS rather than inferred.** Four causes, none of them the scenario prose: the image prompt never names a *place*; `asset_style.md`'s subject list is four-fifths people-at-tables; five of the six committed anchors are seated interiors, and a reference image carries environment as well as palette; and nothing in the pipeline ever sees the whole set, so collapse is structurally undetectable.
+
+**The judgement call inside it is the anchor set** — it is what makes the library cohere, and a careless change trades sameness for the AI-slop drift the founder ruled against. That is why this is an Opus package.
+
+**Two founder rulings carried into the handoff.** Ikigai lands as a **draft, not published** — it is in copyright, building against it was ruled acceptable 2026-08-13, and what ships at launch is still open. And **Track 42's published images are left alone** until the before/after exists, because that comparison is what answers whether to regenerate them.
+
+**Still open alongside it:** WP29 (Manager, the Leaf player's footer) · WP26.1 (proposed, unanswered) · WP27's PR #40, signed off but unmerged.
+
+---
+
+## Completed: the visual redesign, WP21–WP27 — approved 2026-09-06, extended 2026-09-09
+
+*Kept for its two rulings, which still constrain the app.*
 
 The design exploration is complete: all 14 app surfaces exist as clickable mockups in Claude Design plus a published design system. Entry point `design/RESUME-HERE.md`. **Nothing in `apps/mobile` has changed yet.** This plan turns those mockups into the app, and was approved by the founder on 2026-09-06 including both rulings below.
 
