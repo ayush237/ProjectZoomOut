@@ -14,7 +14,9 @@ import {
   MIN_TOUCH_TARGET,
   duration,
   motionPlan,
+  motionSpringConfig,
   motionTimingConfig,
+  REDUCE_MOTION_OVERRIDE,
   spring,
   useReducedMotion,
   useTheme,
@@ -98,10 +100,15 @@ export function ScenarioSlide({
     );
 
     if (!reducedMotion) {
+      // Every nesting level carries the override too (WP28.1) — `withSequence`
+      // resolves reduce-motion independently of the animations it wraps, so a stale
+      // disagreement between Reanimated and the OS (see `motion.ts`) cannot silently
+      // cancel this nudge, the confirmatory signal for a full-motion reader, either.
       nudge.value = withSequence(
-        withTiming(-6, { duration: 60 }),
-        withTiming(6, { duration: 60 }),
-        withSpring(0, spring.snappy),
+        REDUCE_MOTION_OVERRIDE,
+        withTiming(-6, { duration: 60, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+        withTiming(6, { duration: 60, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+        withSpring(0, motionSpringConfig(spring.snappy)),
       );
     }
   }, [wrongCount, reducedMotion, nudge, feedbackOpacity]);

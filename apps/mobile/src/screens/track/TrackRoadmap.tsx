@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -14,6 +13,7 @@ import {
   MIN_TOUCH_TARGET,
   duration,
   motionPlan,
+  REDUCE_MOTION_OVERRIDE,
   useReducedMotion,
   useTheme,
   type Theme,
@@ -246,14 +246,25 @@ function RoadmapNodeOverlay({
  * would leave the one node that has to be findable on a long scrolling graph looking
  * exactly like a completed one.
  *
- * **`ReduceMotion.Never` on the fade is load-bearing, not belt-and-braces.** Reanimated
- * reads the OS setting itself and disables animations by default — so with Reduce
- * Motion on it silently cancelled the *replacement* animation too, and the swap became
- * the removal the rule exists to prevent. Nothing failed and nothing warned: the ring
- * simply sat still, which is indistinguishable from a ring that was never meant to
- * move. Caught by measuring the pixels across six frames, not by looking. The decision
- * about what a reduced-motion reader gets is `motionPlan`'s and has already been made
- * by the time this runs; Reanimated must not make it a second time.
+ * **`REDUCE_MOTION_OVERRIDE` on the fade is load-bearing, not belt-and-braces.**
+ * Reanimated reads the OS setting itself and disables animations by default — so with
+ * Reduce Motion on it silently cancelled the *replacement* animation too, and the swap
+ * became the removal the rule exists to prevent. Nothing failed and nothing warned:
+ * the ring simply sat still, which is indistinguishable from a ring that was never
+ * meant to move. Caught by measuring the pixels across six frames, not by looking. The
+ * decision about what a reduced-motion reader gets is `motionPlan`'s and has already
+ * been made by the time this runs; Reanimated must not make it a second time.
+ *
+ * **The full-motion branch carries it too, and did not always (WP28.1).** This file
+ * used to write `ReduceMotion.Never` inline here instead of importing the shared
+ * `REDUCE_MOTION_OVERRIDE` — a second copy of the same decision, which is exactly how
+ * WP22.1's "the flag lives in one place" guarantee stopped holding without anyone
+ * noticing. It also carried the override on the fade branch only. WP28 found that
+ * Reanimated's reduce-motion reading is a snapshot taken once at native init while the
+ * OS setting this component actually sees (`motionPlan`, via `useReducedMotion`) stays
+ * live — so the two can disagree for the life of a running process, and an *unflagged*
+ * full-motion animation is exactly as silently suppressible as an unflagged fade would
+ * be. There is no branch this is safe to omit from.
  *
  * **WP22.2 sized it to `graph.jsx`'s aura** rather than to the touch target, and dropped
  * its opacity to the source's 0.32, so the ring and the filled aura behind it are the
@@ -272,17 +283,23 @@ function NextNodeRing({ centre }: { readonly centre: { x: number; y: number } })
       opacity.value = withRepeat(
         withTiming(HALO_STROKE_OPACITY * 0.4, {
           duration: plan.durationMs,
-          reduceMotion: ReduceMotion.Never,
+          reduceMotion: REDUCE_MOTION_OVERRIDE,
         }),
         -1,
         true,
         undefined,
-        ReduceMotion.Never,
+        REDUCE_MOTION_OVERRIDE,
       );
       return;
     }
 
-    scale.value = withRepeat(withTiming(1.18, { duration: plan.durationMs }), -1, true);
+    scale.value = withRepeat(
+      withTiming(1.18, { duration: plan.durationMs, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+      -1,
+      true,
+      undefined,
+      REDUCE_MOTION_OVERRIDE,
+    );
   }, [plan.kind, plan.durationMs, scale, opacity]);
 
   const style = useAnimatedStyle(() => ({
