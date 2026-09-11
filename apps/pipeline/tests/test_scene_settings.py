@@ -341,3 +341,32 @@ def test_a_permission_failure_is_not_retried_as_a_bad_answer() -> None:
         derive_scene_plan(llm=llm, records=records, model="test-model")
 
     assert llm.calls == 1, "a permission error must be raised on the first attempt, not retried"
+
+
+def test_an_empty_frame_cannot_have_hands_in_it() -> None:
+    """**Found by looking at the picture, not by a test.**
+
+    The WP30 before/after asked for a wide, unpeopled shot of a house with the focus on "a
+    brass key lying in the palm of an open hand". The model satisfied both instructions
+    literally and drew an enormous disembodied hand across the foreground of an otherwise good
+    illustration. The plan was contradictory; the image model was not wrong.
+    """
+    with pytest.raises(ValidationError, match="a person in the frame"):
+        a_setting(
+            0,
+            "a gravel driveway in front of a Victorian house",
+            figures=0,
+            focus="a brass key lying in the palm of an open hand",
+        )
+
+
+def test_hands_are_fine_when_somebody_is_in_the_frame() -> None:
+    """The rule is about the contradiction, not about hands."""
+    setting = a_setting(
+        0,
+        "a carpentry workshop counter covered in sawdust",
+        figures=1,
+        focus="a hand measuring an oak plank with a brass square",
+    )
+
+    assert setting.figures == 1

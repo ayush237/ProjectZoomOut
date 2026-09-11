@@ -39,7 +39,19 @@ One entry per Leaf, each with:
   immediately around them), or `wide` (a whole room, a street, a yard).
 - **figures** — how many people are in frame, 0 to 3. **Zero is a real answer.** An emptied
   workshop at night carries a situation; so does a single chair.
+
+  **If it is zero, nobody's hands are in the picture either.** A focus naming a hand, a face or
+  a lap contradicts it, and a model given both draws a disembodied one. Keys lying on a
+  doorstep, not keys in a palm.
 - **focus** — the one object or action the eye lands on. Never a person's face.
+
+  **And never a thing whose whole point is its writing.** No forms, no signage, no documents,
+  no price tags, no boarding passes, no screens showing text, no open books being read. The
+  illustrator may not draw a single letter or numeral — that is an absolute prohibition — so a
+  focus like "a printed application form" asks for a picture that cannot be drawn, and what
+  comes back is a form covered in convincing nonsense. Name something with a *shape*: keys on a
+  doorstep, a pair of tweezers over a clock movement, a folded coat, a scoop in a bin of beans.
+  The same applies to the place: a shopfront is fine, a shopfront with its name on it is not.
 
 ## The rules your answer is checked against
 
@@ -55,6 +67,8 @@ cheaper to satisfy them first time.
 4. **Vary the camera.** A Track uses at least two different `shot` values.
 5. **Vary the clock.** A Track of eight or more Leaves uses at least three different `light`
    values.
+6. **Nothing in the frame carries writing.** See `focus` above — this one is a content
+   guardrail rather than a matter of variety, and it is the only rule here with legal weight.
 
 ## How to choose a place
 
@@ -95,7 +109,7 @@ A fictional book, so nothing here belongs to the Track you are working on.
 
 > **Leaf 1** — *"A colleague takes credit for your idea in a meeting. How do you respond?"*
 >
-> **place**: a narrow meeting room with a whiteboard wiped half clean
+> **place**: a narrow meeting room, chairs pushed back at odd angles
 > **vantage**: interior · **light**: afternoon · **shot**: medium · **figures**: 3
 > **focus**: a hand resting flat on the table, mid-sentence
 

@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # PRODUCT.md: a Track has 15–30 Leaves.
 MIN_LEAVES = 15
@@ -401,6 +401,41 @@ def place_words(value: str) -> set[str]:
     return set(normalise_place(value).split())
 
 
+# Body parts are people. A frame with "the palm of an open hand" in it has a person in it,
+# whatever the figure count says, and a model handed both resolves the contradiction by
+# drawing a disembodied one — which it did, filling the lower third of an otherwise good
+# picture of a house with a giant floating hand.
+_BODY_PARTS = frozenset(
+    {
+        "hand",
+        "hands",
+        "palm",
+        "palms",
+        "finger",
+        "fingers",
+        "fist",
+        "arm",
+        "arms",
+        "elbow",
+        "shoulder",
+        "shoulders",
+        "face",
+        "faces",
+        "eye",
+        "eyes",
+        "foot",
+        "feet",
+        "leg",
+        "legs",
+        "knee",
+        "knees",
+        "lap",
+        "wrist",
+        "thumb",
+    }
+)
+
+
 class SceneSetting(BaseModel):
     """Where one Leaf's illustration happens, decided before the image model is asked.
 
@@ -428,6 +463,30 @@ class SceneSetting(BaseModel):
         min_length=1,
         description="The one object or action the eye lands on. Not a person's face.",
     )
+
+    @model_validator(mode="after")
+    def _an_empty_frame_has_no_hands_in_it(self) -> SceneSetting:
+        """`figures: 0` and a focus on somebody's hands are not both true.
+
+        Found by looking at the picture. Leaf 13 of the WP30 before/after asked for a wide,
+        unpeopled shot of a house and a focus on "a brass key lying in the palm of an open
+        hand"; what came back was the house with an enormous disembodied hand across the
+        foreground. The model was not wrong — it was given two incompatible instructions and
+        satisfied both.
+
+        Caught here rather than left to the image model, because this is a contradiction in
+        the *plan* and it is cheap to see in text and expensive to see in an image.
+        """
+        if self.figures > 0:
+            return self
+        found = sorted(_BODY_PARTS & place_words(self.focus))
+        if found:
+            raise ValueError(
+                f"focus names {found} but `figures` is 0. A hand in the frame is a person in "
+                "the frame — either raise `figures`, or choose a focus with nobody attached "
+                "to it (keys on a doorstep rather than keys in a palm)."
+            )
+        return self
 
     @field_validator("place")
     @classmethod
