@@ -20,6 +20,8 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | 📤 **Handed off 2026-09-10**, blocked on PR #37 |
 | | **WP27 — Explore, Library, Journey, Profile** + the icon swap | The gap found 2026-09-09, the last redesign package | Sonnet | ✅ **Signed off 2026-09-10**, PR #40 |
 
+**⚠️ WP27 is signed off but PR #40 is still open as of 2026-09-11**, so the four tab screens on `main` are still the pre-redesign versions — see the roadmap's WP27 row.
+
 **🎨 The redesign is complete as of 2026-09-10** — all fourteen surfaces in the new visual language, seven packages plus four follow-ups. What remains open is listed below, and none of it is redesign work.
 
 Layer 1 is additive and invisible. Layer 3 is screen-by-screen and independently reversible. **Layer 2 is the only genuinely hard package**, and it is the centrepiece of the visual language.
