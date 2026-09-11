@@ -46,7 +46,7 @@ Sequenced 2026-08-13. Five stages, ordered by what blocks what and by lead time 
 ## Part 2 — The five stages
 
 ### Stage 1 · Make it real
-**Manager: WP12 — deployment. Architect: design the content pipeline, in parallel.**
+**Manager: WP12 — deployment.** ~~Architect: design the content pipeline, in parallel.~~ ✅ **The pipeline was designed *and built* — Phase 2 closed 2026-08-29.** This file was sequenced 2026-08-13, before that happened; see the Stage 3 note.
 
 | Item | Note |
 |---|---|
@@ -68,7 +68,7 @@ Needs a transactional email provider, which needs the domain Stage 1 sets up. Ev
 
 | Item | Note |
 |---|---|
-| Build the pipeline | Book → Leaves via Gemini/Vertex. Designed in Stage 1, built here |
+| ~~Build the pipeline~~ | ✅ **Done — Phase 2 closed 2026-08-29** (WP16–WP20), out of sequence and ahead of this plan. *The Science of Getting Rich* is Track 42: 18 Leaves, grounded, illustrated, reviewed at gate 2, published, raw text purged. **So Stage 3 is no longer "build a pipeline", it is "run the one that exists"** — which makes it cheaper than this file assumes, and makes book #2 startable today |
 | Generate and review content | Critic-in-the-Loop: ~15–25 min of founder review per Leaf |
 | Replace all placeholder content | Enforced mechanically — `isPlaceholder` records cannot reach production |
 | Unpublish "The mountain is you" | One minute; carries placeholder prose under a real author's name |
