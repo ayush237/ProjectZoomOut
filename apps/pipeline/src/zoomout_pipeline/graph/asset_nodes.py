@@ -11,6 +11,27 @@ would quietly turn a review into a rubber stamp.
 than a priced image, it re-themes when the design changes, a writer can fix it by editing
 text, and its `alt` is accurate by construction. The rendered diagram *is* attached, because
 there is nothing to choose between.
+
+## Why the prompt now names a place (WP30)
+
+Track 42's eighteen published scenario images are eighteen seated figures at a table in a dim
+interior — including Leaf 13, whose scenario is about buying a family home and which was drawn
+as a man alone at a desk with a calculator. Nothing was wrong with any single picture; the set
+was wrong.
+
+Two causes, both here:
+
+1. **The prompt named no setting**, so each call defaulted independently, and an image model's
+   default is whatever its style anchors show. Five of the six anchors are seated interiors.
+2. **The style contract ended its subject section with a menu** — *ordinary modern life: a
+   desk, a commute, a kitchen table, a shop counter, a conversation* — appended to every prompt
+   in the run, headed by the thing it kept producing.
+
+**That quotation is the last one in this package, and it lives in a docstring on purpose.** The
+first attempt at a fix explained the removal *inside the prompt file*, which put the same five
+words back into every image prompt wrapped in an apology for them. Telling an image model not
+to draw a desk mentions a desk. The model-facing files now name no setting at all, and
+`tests/test_scene_settings.py` fails if one creeps back in.
 """
 
 from __future__ import annotations
@@ -22,7 +43,7 @@ from zoomout_pipeline.assets.diagrams import DiagramRenderError, DiagramSpec, re
 from zoomout_pipeline.assets.images import AnchorSet, ImageClient, ImageGenerationError
 from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.logging import get_logger
-from zoomout_pipeline.models import GeneratedLeafRecord
+from zoomout_pipeline.models import GeneratedLeafRecord, SceneSetting, SceneShot
 from zoomout_pipeline.prompts import load_prompt, render_prompt
 
 _log = get_logger(__name__)
@@ -32,17 +53,84 @@ class OptionalDiagram(DiagramSpec):
     """A spec, or the model's decision that this Leaf does not want one."""
 
 
-def scenario_image_prompt(record: GeneratedLeafRecord) -> str:
-    """The subject, then the house style.
+_SHOT_DIRECTION = {
+    SceneShot.CLOSE: "close — hands, an object, or one figure cropped tight. The place is "
+    "read from a detail of it rather than from the whole room",
+    SceneShot.MEDIUM: "medium — one or two figures and what is immediately around them",
+    SceneShot.WIDE: "wide — the whole room, street or yard, with the figures small in it",
+}
+
+
+def scene_block(setting: SceneSetting) -> str:
+    """The decided setting, written for the image model.
+
+    **Above the style contract, not inside it.** The style contract is what every image in the
+    library shares; this is what this one image does not share with any other, and the two
+    were the same document until Track 42 came back as eighteen of the same picture.
+    """
+    if setting.figures == 0:
+        people = "Nobody is in frame. The place carries the situation on its own."
+    elif setting.figures == 1:
+        people = "One person in frame."
+    else:
+        people = f"{setting.figures} people in frame."
+
+    return (
+        "## Where this happens\n\n"
+        "Decided for this Leaf from its scenario. Draw this place, not a substitute for it.\n\n"
+        f"- **Place:** {setting.place}\n"
+        f"- **Interior or exterior:** {setting.vantage.value}\n"
+        f"- **Time of day:** {setting.light.value} — this changes where the light falls and "
+        "nothing about the palette; the picture stays dark\n"
+        f"- **Camera:** {_SHOT_DIRECTION[setting.shot]}\n"
+        f"- **People:** {people}\n"
+        f"- **The eye should land on:** {setting.focus}\n"
+    )
+
+
+def scenario_image_prompt(record: GeneratedLeafRecord, setting: SceneSetting) -> str:
+    """The subject, then where it happens, then the house style.
 
     Built from the scenario the Leaf already contains rather than invented, so the picture
-    illustrates the situation the reader is about to be asked about.
+    illustrates the situation the reader is about to be asked about — and from a setting
+    derived from that same scenario, so it illustrates it *somewhere in particular*.
+
+    The setting is required rather than optional. An optional one is a default, and the
+    default is what this argument is about.
     """
     return (
         f"{record.leaf.scenario_prompt}\n\n"
         "Illustrate the situation described above as a single quiet moment. Do not depict "
         "the outcome or the answer — only the moment of the decision.\n\n"
+        f"{scene_block(setting)}\n"
         f"{load_prompt('asset_style')}"
+    )
+
+
+def scenario_alt_text(setting: SceneSetting) -> str:
+    """What the picture shows, for a reader who cannot see it.
+
+    **Derived from the setting rather than from the scenario prose**, which fixes two things
+    the previous version got wrong against the rules this project set for itself in WP18: it
+    opened "An illustration of the scenario:" — describing the medium rather than the scene —
+    and then restated the entire scenario prompt, which a screen reader has just read out.
+
+    Accurate by construction in the same sense the diagram alt text is: it describes what was
+    asked for, and the human at gate 2 sees the picture and this sentence side by side and can
+    correct it. Asking a vision model what it drew would cost money and can invent detail.
+    """
+    if setting.figures == 0:
+        who = "No one is present"
+    elif setting.figures == 1:
+        who = "One person is present"
+    else:
+        who = f"{setting.figures} people are present"
+
+    where = setting.place.rstrip(".")
+    focus = setting.focus.rstrip(".")
+    return (
+        f"{setting.light.value.capitalize()} at {where}. {who}; the view settles on {focus}. "
+        "Flat stylised artwork in the app's dark palette; figures are not identifiable."
     )
 
 
@@ -50,6 +138,7 @@ def generate_candidates(
     *,
     client: ImageClient,
     record: GeneratedLeafRecord,
+    setting: SceneSetting,
     anchors: AnchorSet,
     model: str,
     count: int,
@@ -60,11 +149,8 @@ def generate_candidates(
     The budget is charged **before** each call. Charging afterwards would mean the run has
     already spent what it was not allowed to spend.
     """
-    prompt = scenario_image_prompt(record)
-    alt = (
-        f"An illustration of the scenario: {record.leaf.scenario_prompt.rstrip('.')}. "
-        "Stylised flat artwork; the figures are not identifiable."
-    )
+    prompt = scenario_image_prompt(record, setting)
+    alt = scenario_alt_text(setting)
 
     candidates: list[tuple[bytes, str]] = []
     for index in range(count):

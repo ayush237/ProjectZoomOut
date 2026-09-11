@@ -308,6 +308,7 @@ def generate_assets(
         build_diagram,
         generate_candidates,
     )
+    from zoomout_pipeline.graph.scene_settings import derive_scene_plan
 
     settings = get_settings()
     anchors = AnchorSet.load(settings.anchors_dir)
@@ -346,6 +347,29 @@ def generate_assets(
         if limit:
             keys = keys[:limit]
 
+        # Where every Leaf's picture happens, decided once for the whole Track before a single
+        # image is bought — **over every Leaf, not only the ones this invocation will draw.**
+        # A `--limit` run that planned only its own slice would hand the rest of the Track a
+        # second, independently-derived set of places, and two half-plans that never saw each
+        # other are how a Track collapses in the first place.
+        records = [state.generated[key] for key in sorted(state.generated, key=lambda k: int(k))]
+        scene_plan = state.scene_plan
+        if scene_plan is not None and {s.order for s in scene_plan.settings} >= {
+            state.generated[key].order for key in keys
+        }:
+            typer.echo(f"scene plan: reusing {len(scene_plan.settings)} settings from this run")
+        else:
+            scene_plan, scene_spends = derive_scene_plan(
+                llm=deps.llm, records=records, model=settings.draft_model
+            )
+            for spend in scene_spends:
+                state.cost.record(spend)
+            graph.update_state(  # type: ignore[attr-defined]
+                config, {"scene_plan": scene_plan, "cost": state.cost}
+            )
+            typer.echo(f"scene plan: derived {len(scene_plan.settings)} settings")
+        by_order = scene_plan.by_order()
+
         typer.echo(f"{len(keys)} Leaves, {settings.scenario_candidates} candidates each")
         typer.echo(f"anchors: {len(anchors)} | budget: {budget.max_images} images\n")
 
@@ -379,6 +403,7 @@ def generate_assets(
                 candidates = generate_candidates(
                     client=images,
                     record=record,
+                    setting=by_order[record.order],
                     anchors=anchors,
                     model=settings.image_model,
                     count=settings.scenario_candidates,
@@ -399,6 +424,7 @@ def generate_assets(
             typer.echo(
                 f"  leaf {key}: {len(candidates)} candidates"
                 f"{', diagram' if diagram else ', no diagram'}"
+                f"  [{by_order[record.order].place}]"
             )
 
             # Checkpointed per Leaf, not once at the end. Images are the most expensive
@@ -781,6 +807,91 @@ def _echo_choices(choices: list[Any]) -> None:
         typer.echo(f"  {choice.order:>4}  {index:>4}  {choice.title[:70]}")
         detail = choice.alt if choice.alt else f"({choice.reason})"
         typer.echo(f"              {detail[:86]}")
+
+
+@app.command("check-variety")
+def check_variety_command(
+    track_id: Annotated[int, typer.Option(help="A Payload Track to measure.")] = 0,
+    directory: Annotated[
+        str, typer.Option("--dir", help="A directory of PNGs to measure instead of a Track.")
+    ] = "",
+) -> None:
+    """Whether a Track's scenario illustrations are actually different pictures.
+
+    **Measures the pictures, not the settings the run wrote down.** A place label can say
+    "construction site" over a rendering of a desk, so the labels are printed as a supporting
+    signal and the verdict comes from composition — see `assets/variety.py` for why that is
+    edge density and nearest-neighbour distance rather than the two more obvious choices.
+
+    Exits non-zero on a collapsed set, so it can gate something. It cannot un-spend the images
+    it is looking at; what it can do is stop a collapsed Track reaching a human as though
+    nothing were wrong, which is what happened to Track 42.
+
+    `--dir` takes the same measurement over a folder of PNGs, which is what makes a
+    before/after comparable without going through the CMS.
+    """
+    from zoomout_pipeline.assets.variety import NEAR_DUPLICATE_DISTANCE, check_variety
+
+    if bool(track_id) == bool(directory):
+        typer.secho("give exactly one of --track-id or --dir", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    labels: list[str]
+
+    if directory:
+        paths = sorted(Path(directory).glob("*.png"))
+        if not paths:
+            typer.secho(f"no PNGs in {directory}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        images = [path.read_bytes() for path in paths]
+        labels = [path.stem for path in paths]
+    else:
+        from zoomout_pipeline.cms.client import PayloadClient
+
+        settings = get_settings()
+        client = PayloadClient(base_url=settings.payload_url, api_key=settings.payload_api_key)
+        leaves = client.list_leaves(track_id=track_id)
+        images, labels = [], []
+        for leaf in leaves:
+            scenario = leaf.get("scenario") or {}
+            url = ((scenario.get("image") or {}).get("url")) or ""
+            source = "chosen"
+            if not url:
+                candidates = leaf.get("imageCandidates") or []
+                url = (candidates[0] or {}).get("url", "") if candidates else ""
+                source = "candidate 0"
+            if not url:
+                typer.echo(f"  leaf {leaf.get('orderIndex')}: no image, skipped")
+                continue
+            images.append(client.fetch_media(url))
+            labels.append(f"{leaf.get('orderIndex')} ({source})")
+
+    if len(images) < 2:
+        typer.secho(f"only {len(images)} images — nothing to compare", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+    report = check_variety(images)
+    typer.echo("")
+    typer.secho(
+        report.summary(),
+        fg=typer.colors.RED if report.collapsed else typer.colors.GREEN,
+        bold=True,
+    )
+
+    typer.echo("\n  image                          nearest neighbour   distance")
+    typer.echo("  " + "-" * 64)
+    for index, partner, distance in report.nearest_by_index:
+        flag = "  <-- same picture" if distance < NEAR_DUPLICATE_DISTANCE else ""
+        typer.echo(f"  {labels[index][:28]:<30} {labels[partner][:18]:<18} {distance:>7.3f}{flag}")
+
+    if report.collapsed:
+        typer.secho(
+            "\nThis set has collapsed: most of these images have a near twin. Regenerate "
+            "rather than choosing between them.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(1)
 
 
 @app.command("purge-raw-text")

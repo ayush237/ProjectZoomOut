@@ -1,11 +1,11 @@
-# The house style — appended to every image prompt
+# The house style
 
-This is the **style contract**. It is version-controlled because it is the logic that keeps
-eighteen Leaves looking like one product instead of eighteen unrelated stock illustrations,
-and because a change to it changes every image generated afterwards.
+Everything in this file is identical across every illustration in the library. It is what makes
+a Track look like one product rather than a set of unrelated stock pictures.
 
-Everything here derives from `project/proposals/design-direction.md`. Where the two disagree,
-that document is right and this one is stale.
+**Where the scene takes place is not in this file.** The place, whether it is indoors or out,
+the time of day, the camera distance and how many people are in frame are given above this
+text, decided for this Leaf from its own scenario. Draw what they say.
 
 ## Medium and rendering
 
@@ -13,19 +13,16 @@ that document is right and this one is stale.
 gradients beyond a single soft tonal step, no photographic texture, no 3D rendering, no
 painterly brushwork, no glossy highlights.
 
-**Solid filled shapes with no outlines.** Forms are defined by where one colour meets
-another, never by a drawn contour. No line art, no stroked edges, no sketch or ink
-treatment. *(Added after an anchor candidate came back as outlined line art — the technique
-reads as a different illustrator, not a variation.)*
+**Solid filled shapes with no outlines.** Forms are defined by where one colour meets another,
+never by a drawn contour. No line art, no stroked edges, no sketch or ink treatment.
 
 **No lighting effects.** No glow, no light cones or beams, no lens flare, no bloom, no
-volumetric light. A lamp is a shape, and the room around it is a darker shape. *(Added after
-an anchor candidate rendered a lamp as a luminous cone, which contradicts the depth rule
-below and cannot be reproduced consistently.)*
+volumetric light. A lamp is a shape, and the room around it is a darker shape. This holds at
+every time of day: a bright window is a lighter shape, never a shaft of light thrown across a
+surface.
 
-Chosen for legibility at small sizes. A Leaf's illustration is seen on a phone, often at
-thumbnail scale, and WP9 established that legibility beats fidelity there. Detailed or
-photographic work becomes mud at that size; flat shapes survive it.
+Chosen for legibility at small sizes — these are seen on a phone, often at thumbnail scale.
+Flat shapes survive that; detail becomes mud.
 
 ## Palette — narrow on purpose
 
@@ -38,45 +35,57 @@ Backgrounds sit in the app's dark surfaces:
 #26313A   lightest surface
 ```
 
+**The palette does not change with the time of day or with the place.** A midday street and a
+night kitchen are both drawn in these surfaces; what changes is where the lighter shapes sit,
+never how bright the picture is overall. This is the identity the library holds constant, and
+it is what makes everything else free to vary.
+
 The single accent is **teal `#3DDCC8`**, used sparingly — **one small focal element, never a
-large field or background block.** If teal occupies more than roughly a tenth of the frame it
-is being used as a colour scheme rather than an accent, and the illustration will fight the
-interface it sits inside.
-Supporting tones are desaturated slate blues and greys drawn between the surface values.
-Muted warm neutrals are allowed for skin and wood tones.
+large field or background block.** Beyond roughly a tenth of the frame it stops being an accent
+and starts fighting the interface the picture sits inside.
 
-**`#FFB020` amber must never appear.** `design-direction.md` §3 reserves amber for reward
-moments — XP, streaks, achievements — and an illustration using it steals the signal from the
-unlock. This is the one colour rule with a product consequence rather than an aesthetic one.
+Supporting tones are desaturated slate blues and greys drawn between the surface values. Muted
+warm neutrals are allowed for skin and wood.
 
-**Depth comes from surface lightness, not shadow** (§2). A raised element is a lighter shape,
-not a drop shadow. Shadows are invisible on dark backgrounds anyway.
+**`#FFB020` amber must never appear.** That colour is reserved for reward moments elsewhere in
+the product — XP, streaks, achievements — and an illustration using it steals the signal from
+them. This is the one colour rule with a product consequence rather than an aesthetic one.
 
-## Subject treatment
+**Depth comes from surface lightness, not shadow.** A raised element is a lighter shape, not a
+drop shadow. Shadows are invisible on dark backgrounds anyway.
 
-Ordinary modern life: a desk, a commute, a kitchen table, a shop counter, a conversation.
-Concrete situations, never abstract metaphor — no lightbulbs, no ladders to the sky, no
-brains with gears in them.
+## Figures
 
-**People are simplified and non-identifiable.** Figures are stylised and flat, faces either
-turned away, cropped out, or reduced to minimal marks with no distinguishing features. This
-is not only a style choice: it is how the guardrail against identifiable people is satisfied
-by construction rather than by hoping the model behaves.
+**People are simplified and non-identifiable.** Figures are stylised and flat; faces are turned
+away, cropped out, or reduced to minimal marks with no distinguishing features.
+
+How many people are in frame is given above and may be none.
+
+## Subject
+
+**Concrete situations, never abstract metaphor** — no lightbulbs, no ladders to the sky, no
+brains with gears in them, no floating icons or symbolic overlays.
+
+**Draw the place you were given, and only the things that belong in it.** Do not substitute a
+generic workspace for it, and do not add furniture it was not given.
 
 ## Composition
 
-A single clear subject with room around it. One focal point. The image is a backdrop to text,
+A single clear subject with room around it. One focal point. The picture is a backdrop to text,
 so it must read instantly and must not compete with the words on the slide.
+
+How close the camera sits, and whether the subject is a person, a pair of hands, an object or a
+whole room, is given above.
 
 ## Absolute prohibitions
 
-These are content guardrails, ruled and not negotiable:
+These hold regardless of what the place above asks for. A setting that would require any of
+these is drawn without them.
 
-- **No text, letters, numerals or written symbols of any kind.** Image models cannot spell,
+- **No text, letters, numerals or written symbols of any kind.** No signage, no labels, no
+  writing on a screen or a page, no currency symbols, no numbers. Image models cannot spell,
   and any text is untranslatable and unfixable without regenerating.
 - **No identifiable person**, no portrait, no likeness of any real individual — and in
-  particular never the book's author.
-- **No book cover, title treatment, publisher mark, or any branding.** An image implying the
-  author endorses ZoomOut walks straight into the non-endorsement problem `LEGAL.md` is built
-  around, in the most shareable medium in the product.
+  particular never the author of any book.
+- **No book cover, title treatment, publisher mark, or any branding.**
 - **No logos, watermarks or signatures.**
