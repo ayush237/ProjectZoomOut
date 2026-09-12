@@ -83,12 +83,26 @@ def run(
         typer.Option(help="How this file was obtained. Required — see R6."),
     ],
     run_id: Annotated[str | None, typer.Option(help="Defaults to a generated id.")] = None,
+    title: Annotated[
+        str | None, typer.Option(help="The book's title, when the file does not carry one.")
+    ] = None,
+    author: Annotated[
+        str | None,
+        typer.Option(help="The book's author. Required in practice for PDFs — see below."),
+    ] = None,
     cms_track_id: Annotated[
         int | None,
         typer.Option(help="Write into an existing Track instead of creating a new one."),
     ] = None,
 ) -> None:
     """Ingest, analyze, break down, and stop at the human gate.
+
+    **Pass `--author` for a PDF.** EPUBs carry metadata; PDFs routinely do not, and the
+    parser's fallback is the filename and the literal string "Unknown". That string does not
+    stay in the database: it reaches the draft prompts, where the model is asked to attribute
+    the book's claims to an author called Unknown, and it reaches the Track's `author` field,
+    where it breaks the attribution the fair-use position depends on. The CMS write refuses
+    it, so a book ingested without one has to be re-ingested rather than patched.
 
     `--cms-track-id` regenerates a Track that already exists, which is a different thing
     from resuming one. A resumed run reuses the Track it created itself; this seeds the
@@ -106,6 +120,8 @@ def run(
         run_id=resolved_run_id,
         source_path=str(source),
         acquisition=acquisition,
+        book_title=title,
+        book_author=author,
         cms_track_id=cms_track_id,
     )
 

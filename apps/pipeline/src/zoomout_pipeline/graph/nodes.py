@@ -31,6 +31,7 @@ from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import (
     MAX_LEAVES,
     MIN_LEAVES,
+    UNKNOWN_AUTHOR,
     Acquisition,
     BookAnalysis,
     BookProvenance,
@@ -97,6 +98,8 @@ def ingest_book(
     run_id: str,
     source_path: Path,
     acquisition: Acquisition | None,
+    title: str | None = None,
+    author: str | None = None,
 ) -> IngestResult:
     """Parse, record provenance, chunk and embed.
 
@@ -144,8 +147,8 @@ def ingest_book(
             )
 
         provenance = BookProvenance(
-            title=parsed.detected_title or source_path.stem,
-            author=parsed.detected_author or "Unknown",
+            title=title or parsed.detected_title or source_path.stem,
+            author=author or parsed.detected_author or UNKNOWN_AUTHOR,
             source=str(source_path),
             file_hash=digest,
             source_format=source_format,
@@ -215,7 +218,18 @@ def make_ingest_node(deps: NodeDependencies) -> Node:
             run_id=state.run_id,
             source_path=Path(state.source_path),
             acquisition=state.acquisition,
+            title=state.book_title,
+            author=state.book_author,
         )
+
+        if result.provenance.author == UNKNOWN_AUTHOR:
+            # Loud, and at the point where it can still be fixed cheaply. Left quiet, this
+            # surfaces nineteen Leaves later as prose attributing the book's claims to nobody.
+            log.warning(
+                "ingest.author_unknown",
+                title=result.provenance.title,
+                remedy="re-run with --author; the CMS write refuses this value",
+            )
 
         log.info(
             "ingest.complete",

@@ -40,6 +40,17 @@ class SourceFormat(StrEnum):
     PDF = "pdf"
 
 
+# What a book's author is called when the file did not say and nobody told us.
+#
+# **A sentinel, not a value.** It exists so the gap is visible and checkable; it must never
+# reach a Track. `LEGAL.md` names fabricated content attributed to a real author as the
+# highest-severity risk in the product, and a real book published under "Unknown" is the same
+# wound from the other side — it breaks the attribution the fair-use position rests on, and it
+# reaches the draft prompts, where the model is asked to write attributive framing about an
+# author whose name is the word Unknown.
+UNKNOWN_AUTHOR = "Unknown"
+
+
 class BookProvenance(BaseModel):
     """Where this book came from. Written once at ingest, never mutated."""
 

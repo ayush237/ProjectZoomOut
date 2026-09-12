@@ -57,6 +57,15 @@ class PipelineState(BaseModel):
     source_path: str
     acquisition: Acquisition
 
+    # What the operator said this book is, when the file does not say.
+    #
+    # A PDF frequently carries no usable title or author — Ikigai's carries neither — and the
+    # parser's fallback is the filename and the string "Unknown". Both reach the CMS *and* the
+    # draft prompts, so a book whose metadata is missing gets generated content that attributes
+    # its claims to nobody. Supplied at `run`, recorded in provenance, and never guessed.
+    book_title: str | None = None
+    book_author: str | None = None
+
     # --- ingest
     book_id: str | None = None
     provenance: BookProvenance | None = None
