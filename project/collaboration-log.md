@@ -23,6 +23,60 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-16 — WP33: regenerate Ikigai Leaf 4's bloom
+
+*Pipeline Manager. **Suggested model: Sonnet** — this is the rare pipeline package where the design is already written. WP31 built the guard, ruled the light rule, and did this exact operation twice on Leaves 3 and 7. There is no judgement left to buy; the guard makes the call.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Check your branch first — that checkout was parked on `wp32-paid-tier-check` on 2026-09-16, which predates WP32's own sign-off.** `git checkout main && git pull`, then branch from `origin/main`.
+> **Transport:** `acquisition` is `undocumented`, so `require_paid_tier` now routes this to Vertex and **refuses** the free tier. That is a check as of WP32, not discipline — but confirm the refusal path is live rather than assuming it, because three consecutive reports cited a comment that was never true.
+> **Read:** this handoff · **your own WP31 completion report** — the guard, the light-rule rewrite, and the two prompt defects it found · `apps/pipeline/src/zoomout_pipeline/assets/style_guard.py` · `prompts/asset_style.md`'s light rule · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP33 — the last image between Ikigai and a readable book
+
+**Suggested model:** Sonnet.
+
+**Context:** Ikigai's Leaf 4 carries a teal radial falloff at a soldering-iron tip — a bloom, and a breach of the light rule as WP31 rewrote it. **WP31 reported it rather than fixing it**, correctly: that package was scoped to Leaves 3 and 7 and its handoff called a flag on the other sixteen a finding, not a failure. It is now the only thing standing between Ikigai and publication, and **publication is the whole critical path to the in-person pilot.**
+
+**What makes this worth a package rather than a note:** WP30.1's human pass cleared this image, and **Architect cleared it again at sign-off, looking at the same contact sheet.** The guard caught it. That is the strongest evidence WP31 produced and it is evidence against reviewing style by eye.
+
+**Objective:** Leaf 4's scenario image is replaced with one that passes the style guard and still belongs to its scenario and to the set, attached as a draft.
+
+**Scope:** `apps/pipeline`, plus Ikigai's **draft** Leaf 4 record. **Verify the regeneration path yourself** — you ran it twice in WP31 and that report is the authority, not this line.
+
+**Requirements**
+- **Regenerate Leaf 4's scenario image until it passes the guard**, then **look at it yourself.** Both, in that order — the guard is the gate, your eye is the second check, and WP31 established the guard catches what the eye misses rather than the reverse.
+- **If it resists, stop and report rather than buying attempts.** Leaf 3 took four regenerations across two packages, and the cause was in the scenario prose rather than the image prompt. If Leaf 4 behaves the same way, **the finding is worth more than the image** — say what you found and stop.
+- **Leaf 4 stays a draft.** Do not publish it, and do not touch any Track-level field.
+- **Report the spend against the ceiling.**
+
+**Out of scope**
+- **Publishing Ikigai's Leaves.** That is the founder's action, immediately after this lands, and doing it early would freeze anything still wrong.
+- **The other seventeen images.** They were guarded at generation and Leaf 4 is the only one flagged. If you have reason to think that is wrong, say so — do not act on it.
+- **Track 42's published Leaf 1.** Still unfixable by this pipeline and still the guard's best fixture.
+- **A `check-style` command over existing images** — see the constraint below. It is logged as debt and it is not this package.
+- `apps/mobile`, `apps/backend`, `apps/admin`.
+
+**Constraints:** **Ceiling $0.50.** One image at $0.134 plus guard reads at $0.004 each leaves room for three or four attempts, which is more than WP31 needed per Leaf after the prompt fixes landed. **If you are approaching the ceiling, that is the signal to stop and report, not to ask for more.**
+
+**One correction to carry, because your own report will contradict it.** WP31's closing note says *"Do not publish the Leaves without running the guard over the set first — it is now one command and $0.073."* **That command does not exist.** Checked 2026-09-16: `check_style` is imported in exactly one place, `cli.py:397`, inside `generate-assets`, and fires only on a candidate as it is generated. Nothing reads attached images back. The 19-image sweep was your `live` suite. **Nothing was wrong with the work** — the sweep happened — but the note describes an affordance the CLI does not have, and the next person to trust it would skip a check believing they had run one. It is in the debt register; **do not build it here.**
+
+**Device gate — the artefact, not the app.** Ikigai's Leaves are still drafts and `contentVisibility.ts` makes a draft unservable in every environment, so there is nothing to see in the app yet. **What to observe: the new Leaf 4 beside the old one, and the eighteen as a set** — that the bloom is gone, that no glow, text or floating iconography replaced it, that the soldering iron still reads as a soldering iron, and that the set still looks like one library.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `ruff format --check`, `mypy --strict`, `pytest` clean; nothing outside `apps/pipeline` touched
+- [ ] **The guard goes red on the current Leaf 4** — show the verdict, in its own words. This is the criterion that proves the replacement was necessary rather than assumed
+- [ ] **The replacement passes the guard**, and you say which attempt it was and what the earlier ones came back as
+- [ ] **You looked at it**, beside the old one and against the set — reported as an observation, not a verdict
+- [ ] **Leaf 4 is still a draft**; no Track-level field touched; no Leaf published
+- [ ] **The transport is recorded and the run went through Vertex** — a row you can point at, not a sentence in this report
+- [ ] Spend reported against the $0.50 ceiling
+- [ ] **If anything about the other seventeen changed your mind, it is stated** — as a finding, with nothing acted on
+
+**Testing expectations:** no new test is expected — the guard's coverage landed in WP31 and this package exercises it rather than extending it. **If you find yourself wanting one, that is a finding about the guard and worth reporting.** Say which evidence is the guard, which is a test, and which is you looking; that split is why your last three reports were trustworthy.
+
+---
+
 ### Handoff: 2026-09-15 — WP32: make the paid-tier constraint a check
 
 *Pipeline Manager. **Suggested model: Opus** — small code, and the reasoning about what to key it off decides whether it holds. **This was ruled the next package on 2026-09-15 and then not handed off; that delay is Architect's, and it is why three consecutive completion reports have had to report the same gap.***

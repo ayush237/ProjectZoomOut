@@ -2,27 +2,72 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: the paid-tier check — ruled 2026-09-15, not yet handed off
+## Active: the in-person pilot — the only thing on the critical path, 2026-09-16
 
-**This jumped the queue and the reason is not code quality.** `config.py` states that `require_paid_tier` *"turns that from a memory into a check."* **That function does not exist anywhere in the repo** — confirmed by grep against `origin/main`; `paid_tier` is read by no code at all and survives only in two comments. Google's free tier trains on submitted content, so this is the control that keeps copyrighted books off it, and right now it is prose.
+**Three steps, in this order, and the order is load-bearing.**
 
-**Ikigai already ran.** It ran correctly — Pipeline Manager used Vertex with the API key unset and verified the transport before the first paid call — **but nothing in the repo records that**, so the claim cannot be checked after the fact and never will be. The next session will not know to do any of it.
+1. **WP33 — regenerate Ikigai Leaf 4's image** (~$0.14, Pipeline Manager, handed off 2026-09-16).
+2. **The founder publishes Ikigai's eighteen Leaves.**
+3. **A dev build on the founder's phone, shown to friends in person.**
 
-**Two design points for the package.** Key the check off the Track's `acquisition` status rather than a hand-set bool: `public-domain` may use the free tier, everything else must be Vertex. A flag someone has to remember to set is the failure this already is. And **the run must record its transport**, so provenance is a query rather than a memory — the same argument that produced the `acquisition` field.
+**Why step 1 comes first, and it is not fussiness.** The machine account cannot edit a published
+document — `access/publishing.ts`: *"an update to a live document is a live content change."*
+Publish the Leaves first and Leaf 4's bloom is frozen permanently, exactly as Track 42's published
+Leaf 1 is frozen today with "$10K" rendered on it. **Track 50 being published while its Leaves were
+still drafts is the only reason WP31 could run at all**; that accident does not repeat.
 
-**Interim, until it exists:** run nothing without `USE_VERTEX=true` and the Gemini API key unset from the process.
+**Leaf 4's bloom is the strongest evidence WP31 produced, and it is evidence against human review.**
+A teal radial falloff at a soldering-iron tip. WP30.1's human pass cleared it; **Architect cleared it
+again at sign-off, looking at the same contact sheet**; the guard caught it. A style check by eye
+fails on exactly the images that look fine.
 
-### Queued behind it, in order
+**Founder ruling 2026-09-15, still governing: stay on the free setup until real readers have seen it.**
+No paid billing, no Claude on Vertex, no deployment. Reviews come from friends, in person, on the
+founder's own phone over LAN. That is what deprioritises WP12, WP13 and the cross-family work — they
+are not blocked, they are deliberately behind the pilot.
 
-1. **The output-side image detector** — text, glow and floating iconography in generated images. It now owns three things: Ikigai Leaves 3 and 7, Track 42's published Leaf 1 (which renders "$10K" and "$2K" legibly *and* carries a glow, live), and the light-rule rewrite ruled below.
-2. **The grounding gate's false reject** — an em dash before a PDF line break makes an honest quote fail to match. Safe direction, but it thins the audit trail, and the audit trail is the legal artefact. **Before book #3.**
-3. **The gate-1 named-framework flag** — flag any planned Leaf whose `source_chapters` include a chapter that is itself a named framework.
+**One check worth doing before step 3.** Payload's publish gate requires only a `disclaimer` and one
+purchase link, but `trackSchema` in `packages/shared` requires five fields including `coverUrl` as
+`z.url()`. **A Track can be published and then silently dropped by the backend** — that is Track 42's
+bug and Ikigai is the same shape. One anonymous fetch of Track 50 after step 2 answers whether the
+book actually opens. Better found now than in front of a friend.
 
-### The light ruling, because it changes what "correct" means
+### Open alongside, none of it blocking the pilot
 
-`asset_style.md` forbids *"a shaft of light thrown across a surface"* while the whole library — and the committed anchors — draw cast light. **The line is falloff, not subject matter:** cast light may be a flat, hard-edged shape of a lighter surface value; no gradient, bloom, halo or emissive source. That matches the rule's own origin (added after an anchor came back as a luminous cone that "cannot be reproduced consistently"), keeps the library legal, and **leaves Leaf 3's phone glow a real breach** — a ruling that excused it would have been the wrong ruling.
+- **WP29** — the Leaf player's footer. Handed off 2026-09-11, **never started**; its handoff is
+  deliberately retained in the active log rather than pruned, because pruning a live handoff is how
+  WP28 lost time.
+- **WP26.1** — Track-scoped XP and first-try count. **Proposed 2026-09-10, still unanswered.**
+- **Four pipeline items**, all separately packaged and all behind the pilot:
+  1. **Track 42's live "$10K" image** — its published Leaf 1 renders "$10K" and "$2K" legibly *and*
+     carries a glow: two absolute prohibitions, live in front of any reader. **The pipeline cannot
+     fix it** — the machine account cannot edit published content — so it needs the founder to
+     unpublish first. **That is a founder decision, and it is the only one of the four that a
+     reader can currently see.**
+  2. **The Leaf publish gate** — nothing stops a Leaf being published before the guard has seen it,
+     and three completion reports have now asked people to remember instead. Track 50's Leaves
+     being drafts is the accident that saved WP31.
+  3. **The grounding gate's false reject** — `normalise_for_quote_match` folds an em dash to a
+     hyphen and then collapses whitespace, so a PDF line break after an em dash makes an honest
+     verbatim quote fail to match. Safe direction, but it thins the audit trail, and **the audit
+     trail is the legal artefact.** Before book #3.
+  4. **The gate-1 named-framework flag** — flag any planned Leaf whose `source_chapters` include a
+     chapter that is itself a named framework. Ikigai's Leaf 17 was that breach and it passed every
+     mechanical gate, because the 1:1 check measures chapter mapping and cannot see phrasing.
 
-**Still open alongside:** WP29 (Manager, the Leaf player's footer) · WP26.1 (proposed, unanswered) · WP27's PR #40, mergeable and CI-green, waiting on a click · **the in-app observation of draft content, now blocked twice.**
+### The light ruling still stands, because it changes what "correct" means
+
+`asset_style.md` forbade *"a shaft of light thrown across a surface"* while the whole library — and
+the committed anchors — draw cast light. **The line is falloff, not subject matter:** cast light may
+be a flat, hard-edged shape of a lighter surface value; no gradient, bloom, halo or emissive source.
+WP31 rewrote the rule on that line and **it does not launder the breach it was asked about** — Leaf
+8's auditorium is legal under it, Leaf 3's phone bloom is not, both verified against committed
+fixtures. **This is the rule WP33's Leaf 4 is judged against.**
+
+**A caution WP31 paid for twice:** the first rewrite explained hardness as *"an edge you could trace
+with one line"* — the word *line*, in a contract whose previous paragraph forbids line art — and both
+regenerated images came back as outlined drawings. A model-facing prompt that explains a prohibition
+reintroduces it; that is now three for three.
 
 ---
 
@@ -78,7 +123,7 @@ The design exploration is complete: all 14 app surfaces exist as clickable mocku
 | | WP26 — Track complete + share card | One new screen, one re-skin | Sonnet | 📤 **Handed off 2026-09-10**, blocked on PR #37 |
 | | **WP27 — Explore, Library, Journey, Profile** + the icon swap | The gap found 2026-09-09, the last redesign package | Sonnet | ✅ **Signed off 2026-09-10**, PR #40 |
 
-**⚠️ WP27 is signed off but PR #40 is still open as of 2026-09-11**, so the four tab screens on `main` are still the pre-redesign versions — see the roadmap's WP27 row.
+**✅ WP27's PR #40 is merged.** *This line said it was still open; corrected 2026-09-16 after checking — zero open PRs, and `Icon.tsx:91` reads `achievement: 'leaf'`. All fourteen surfaces are on `main`.*
 
 **🎨 The redesign is complete as of 2026-09-10** — all fourteen surfaces in the new visual language, seven packages plus four follow-ups. What remains open is listed below, and none of it is redesign work.
 
