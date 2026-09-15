@@ -370,3 +370,62 @@ def test_hands_are_fine_when_somebody_is_in_the_frame() -> None:
     )
 
     assert setting.figures == 1
+
+
+# --- the sibling of the two tests above, which did not exist until it had already shipped
+
+
+def test_a_focus_cannot_name_a_lighting_effect() -> None:
+    """**Also found by looking at the picture, and the pair above is why it should not have
+    had to be.**
+
+    WP30 established that a contradiction in the plan is cheap to catch in text and expensive
+    to catch in an image, then built the check for exactly one contradiction. This is the
+    other one: `asset_style.md` forbids glow, light cones, beams, bloom and volumetric light
+    absolutely, so a focus naming a beam asks for a picture the contract says cannot be drawn.
+
+    Ikigai's Leaf 8 asked for "an unlit wooden lectern standing under a spotlight beam" and
+    got two volumetric cones converging on a lectern. One of eighteen settings named a light
+    effect, and it produced the only prohibition breach in the set.
+    """
+    with pytest.raises(ValidationError, match="lighting effect"):
+        a_setting(
+            0,
+            "an empty theater auditorium facing a timber stage",
+            figures=0,
+            focus="an unlit wooden lectern standing under a spotlight beam",
+        )
+
+
+@pytest.mark.parametrize(
+    "focus",
+    [
+        "a paper lantern hanging over the doorway",
+        "a desk lamp switched off beside a closed notebook",
+        "a candle burnt down to a stub on a saucer",
+    ],
+)
+def test_a_lamp_is_a_thing_and_stays_allowed(focus: str) -> None:
+    """The rule is about the light a thing throws, never about the thing.
+
+    Getting this wrong in the other direction would forbid half the objects in an ordinary
+    room, and the style contract's own sentence is "a lamp is a shape, and the room around it
+    is a darker shape" — the lamp was never the problem.
+    """
+    setting = a_setting(0, "a tatami room opening onto a bamboo garden", figures=0, focus=focus)
+
+    assert setting.focus == focus
+
+
+def test_the_prompt_tells_the_model_both_rules_before_it_answers() -> None:
+    """A validator the prompt never mentions is a retry loop with extra steps.
+
+    Each rejected plan is a whole extra model call, and `derive_scene_plan` caps at three
+    before it kills the asset run. Both contradictions are cheap to state and expensive to
+    discover.
+    """
+    prompt = load_prompt("scene_setting")
+
+    assert "spotlight" in prompt and "beam" in prompt
+    assert "lighting effect" in prompt
+    assert "nobody's hands are in the picture" in prompt

@@ -392,9 +392,24 @@ def generate_assets(
         typer.echo(f"{len(keys)} Leaves, {settings.scenario_candidates} candidates each")
         typer.echo(f"anchors: {len(anchors)} | budget: {budget.max_images} images\n")
 
+        missing_images: list[str] = []
+
         for key in keys:
-            if key in assets:
-                typer.echo(f"  leaf {key}: already has assets, skipped")
+            # **Keyed on the image, not on "has assets".** Both of these checks used to ask
+            # whether the Leaf had a *diagram*, and a diagram is a four-tenths-of-a-cent text
+            # call while the image is the most expensive thing this pipeline buys. WP30.1's
+            # run lost Leaf 8's image to a read timeout; `generate_candidates` logged the
+            # refusal and carried on, `attach_assets` still wrote the diagram, and both skip
+            # checks then read that diagram and called the Leaf done. A re-run would have
+            # skipped straight past the one Leaf with no picture.
+            #
+            # Same failure WP20 hit at Leaf 11 of 18, in the sibling of the code that was
+            # fixed for it. Cost of getting this wrong in the other direction is one $0.004
+            # diagram regenerated; cost of getting it wrong this way is a Track shipped with
+            # a hole in it that nothing reports.
+            recorded = assets.get(key) or {}
+            if recorded.get("candidates") or recorded.get("recovered"):
+                typer.echo(f"  leaf {key}: already illustrated, skipped")
                 continue
 
             # Ask Payload, not just local bookkeeping — the same reasoning `find_leaf`
@@ -411,7 +426,8 @@ def generate_assets(
             # check is what recovers a run whose bookkeeping is *already* lost, which no
             # amount of future checkpointing can help with.
             existing = client.get_leaf(state.cms_leaf_ids[key], draft=True)
-            if ((existing.get("stickyNotes") or {}).get("diagram") or {}).get("url"):
+            chosen = ((existing.get("scenario") or {}).get("image") or {}).get("url")
+            if existing.get("imageCandidates") or chosen:
                 typer.echo(f"  leaf {key}: already illustrated in the CMS, skipped")
                 assets[key] = {"recovered": True}
                 graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
@@ -446,6 +462,8 @@ def generate_assets(
                 candidates=candidates,
                 order=record.order,
             )
+            if not candidates:
+                missing_images.append(key)
             typer.echo(
                 f"  leaf {key}: {len(candidates)} candidates"
                 f"{', diagram' if diagram else ', no diagram'}"
@@ -458,6 +476,17 @@ def generate_assets(
             graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
 
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
+    if missing_images:
+        # Named at the end rather than left in a warning thirty screens up. A Leaf whose
+        # image call failed is charged against the budget, logged once, and otherwise
+        # indistinguishable from a Leaf that worked — which is how this run finished green
+        # with seventeen pictures for eighteen Leaves.
+        typer.secho(
+            f"\n{len(missing_images)} Leaves have NO scenario image: "
+            f"{', '.join(missing_images)}. Re-run to generate them.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
 
 
 @app.command("review-track")
