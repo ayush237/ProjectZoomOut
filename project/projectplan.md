@@ -2,7 +2,31 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: WP30.1 — finish Ikigai's images inside the credit, and fix Leaf 17 — handed off 2026-09-15
+## Active: the paid-tier check — ruled 2026-09-15, not yet handed off
+
+**This jumped the queue and the reason is not code quality.** `config.py` states that `require_paid_tier` *"turns that from a memory into a check."* **That function does not exist anywhere in the repo** — confirmed by grep against `origin/main`; `paid_tier` is read by no code at all and survives only in two comments. Google's free tier trains on submitted content, so this is the control that keeps copyrighted books off it, and right now it is prose.
+
+**Ikigai already ran.** It ran correctly — Pipeline Manager used Vertex with the API key unset and verified the transport before the first paid call — **but nothing in the repo records that**, so the claim cannot be checked after the fact and never will be. The next session will not know to do any of it.
+
+**Two design points for the package.** Key the check off the Track's `acquisition` status rather than a hand-set bool: `public-domain` may use the free tier, everything else must be Vertex. A flag someone has to remember to set is the failure this already is. And **the run must record its transport**, so provenance is a query rather than a memory — the same argument that produced the `acquisition` field.
+
+**Interim, until it exists:** run nothing without `USE_VERTEX=true` and the Gemini API key unset from the process.
+
+### Queued behind it, in order
+
+1. **The output-side image detector** — text, glow and floating iconography in generated images. It now owns three things: Ikigai Leaves 3 and 7, Track 42's published Leaf 1 (which renders "$10K" and "$2K" legibly *and* carries a glow, live), and the light-rule rewrite ruled below.
+2. **The grounding gate's false reject** — an em dash before a PDF line break makes an honest quote fail to match. Safe direction, but it thins the audit trail, and the audit trail is the legal artefact. **Before book #3.**
+3. **The gate-1 named-framework flag** — flag any planned Leaf whose `source_chapters` include a chapter that is itself a named framework.
+
+### The light ruling, because it changes what "correct" means
+
+`asset_style.md` forbids *"a shaft of light thrown across a surface"* while the whole library — and the committed anchors — draw cast light. **The line is falloff, not subject matter:** cast light may be a flat, hard-edged shape of a lighter surface value; no gradient, bloom, halo or emissive source. That matches the rule's own origin (added after an anchor came back as a luminous cone that "cannot be reproduced consistently"), keeps the library legal, and **leaves Leaf 3's phone glow a real breach** — a ruling that excused it would have been the wrong ruling.
+
+**Still open alongside:** WP29 (Manager, the Leaf player's footer) · WP26.1 (proposed, unanswered) · WP27's PR #40, mergeable and CI-green, waiting on a click · **the in-app observation of draft content, now blocked twice.**
+
+---
+
+## Completed: WP30.1 — finish Ikigai's images inside the credit, and fix Leaf 17 — 2026-09-15
 
 **WP30 is signed off at 7 of 9.** The generator works and Ikigai's text exists — Track 50, 18 draft Leaves, nothing published, 134/134 source references with locators, and the shuffle confirmed working at 6/5/7 across A/B/C where Track 42 was position B on 15 of 18. **Both unmet criteria have a single cause: no Ikigai images were ever generated**, because spend hit $10.07 and stopped.
 
