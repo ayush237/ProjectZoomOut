@@ -21,9 +21,11 @@ from pathlib import Path
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from zoomout_pipeline.models import Acquisition, Transport, TransportRecord
+
 # Free tier only for public-domain books (proposal §4a): Google's free tier uses
 # submitted content to improve its products, so a copyrighted work must never go
-# through it. `require_paid_tier` below turns that from a memory into a check.
+# through it. `require_paid_tier` at the bottom of this file is that check.
 # Verified against a live key on 2026-08-26, and it contradicts the proposal's §4a.
 #
 # §4a says "Gemini's free tier includes Pro-tier models". It no longer does: every Pro model
@@ -155,10 +157,6 @@ class PipelineSettings(BaseSettings):
 
     anchors_dir: Path = Path("assets/anchors")
 
-    # Set true once a book that is not public domain goes through. §4a: paid tier only,
-    # because the free tier trains on submitted content.
-    paid_tier: bool = False
-
     runs_dir: Path = Path("runs")
 
     # --- Payload, the CMS. The REST API is the only door (never its tables).
@@ -209,3 +207,67 @@ class PipelineSettings(BaseSettings):
 def get_settings() -> PipelineSettings:
     """Process-wide settings. Cached so the environment is read once."""
     return PipelineSettings()  # type: ignore[call-arg]  # values come from env
+
+
+# --------------------------------------------------------------- the paid-tier constraint
+
+
+# The one acquisition status Google's free tier may see. Everything else is a work somebody
+# else owns, and the free tier uses submitted content to improve Google's products.
+#
+# Deliberately a set of what is *allowed* rather than of what is forbidden. A fifth status
+# added to `Acquisition` later is refused by default and somebody has to think about it,
+# which is the safe direction for a list whose other members are all "in copyright".
+FREE_TIER_ACQUISITIONS = frozenset({Acquisition.PUBLIC_DOMAIN})
+
+
+class FreeTierForbiddenError(RuntimeError):
+    """Refusing to send a book somebody else owns through a tier that trains on it.
+
+    **The sibling of `require_known_author` and of the never-publish guard**, and it exists
+    for the same reason they do: the promise is enforced where the decision is made rather
+    than remembered upstream, because upstream is where a default quietly wins.
+
+    Until WP32 this was prose. `config.py` said `require_paid_tier` "turns that from a memory
+    into a check" and no such function existed; `paid_tier` was a bool that no code read. A
+    copyrighted book went through this pipeline twice on one session's discipline, correctly,
+    and nothing in the repository records that it did.
+    """
+
+
+def require_paid_tier(acquisition: Acquisition, settings: PipelineSettings) -> TransportRecord:
+    """The transport this run may use, or a refusal naming the fix.
+
+    **Keyed off the book's own `acquisition`, not off a flag somebody sets.** `paid_tier` was
+    exactly such a flag, defaulted to the unsafe value, and was never read — which is the
+    failure mode this replaces rather than repeats. `acquisition` is required at ingest, has
+    no default, and is already the field the written acquisition policy will be queried on.
+
+    **What this cannot see, stated plainly:** it checks the label, not the book. A work
+    ingested as `public-domain` that is not public domain passes this check and reaches the
+    free tier, and nothing downstream will notice. The label is a human's claim made at
+    ingest; this guard makes that claim load-bearing and visible, and it does not verify it.
+    It also says nothing about any transport this pipeline does not own — a model reached
+    through some other client, or a future provider, is outside it entirely.
+    """
+    if settings.use_vertex:
+        return TransportRecord(
+            transport=Transport.VERTEX,
+            project=settings.vertex_project,
+            acquisition=acquisition,
+        )
+
+    if acquisition in FREE_TIER_ACQUISITIONS:
+        return TransportRecord(transport=Transport.DEVELOPER_API, acquisition=acquisition)
+
+    raise FreeTierForbiddenError(
+        f"refusing to run a book recorded as {acquisition.value!r} through the AI Studio "
+        "Developer API. Google's free tier uses submitted content to improve its products, "
+        "and only 'public-domain' may go through it (proposal §4a).\n\n"
+        "Use Vertex AI, which does not train on submitted prompts:\n"
+        "  export ZOOMOUT_PIPELINE_USE_VERTEX=true\n"
+        "  export ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex\n\n"
+        "If this book really is public domain, re-ingest it with "
+        "`--acquisition public-domain`; provenance is written once and is not patched "
+        "after the fact."
+    )
