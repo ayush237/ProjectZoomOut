@@ -1186,6 +1186,125 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP32 — the paid-tier constraint stops being a comment — 2026-09-15
+
+**8 of 8 acceptance criteria met. $0.00 against the $1 ceiling — this package made no model
+calls at all.** `apps/pipeline` lint, `ruff format --check`, `mypy --strict` (80 files) and
+`pytest` (282 passed, 6 deselected — up from 267) are clean. Nothing outside `apps/pipeline`
+was touched, and no book, Track or Leaf was modified.
+
+| Demonstrated on the real database | |
+|---|---|
+| Ikigai (`undocumented`), free tier | **REFUSED**, exit 2, before any call |
+| Ikigai, Vertex | allowed → `vertex`, project `zoomout-vertex` |
+| Wattles (`public-domain`), free tier | allowed → `developer-api` |
+| Wattles, Vertex | allowed → `vertex` |
+| The refused run | **no checkpoint, no book row** — the database still holds the same two books it held this morning |
+
+---
+
+## What was actually wrong
+
+`config.py:26` said `require_paid_tier` *"turns that from a memory into a check."* **That
+function had never existed.** `paid_tier: bool = False` was read by no code, defaulted to the
+unsafe value, and the only other mention was a second comment in `client.py` pointing back at
+it. Three consecutive completion reports cited that comment as evidence the constraint was
+enforced, which is the specific damage a comment describing a non-existent guard does.
+
+Both comments are now true or gone, and the flag is deleted rather than left beside the check
+that replaces it.
+
+## The design decision that mattered
+
+**Keyed off the book's own `acquisition`, not off a flag.** A flag somebody has to remember to
+set is precisely the failure this entry already was, and repeating the shape while renaming it
+would have fixed nothing. `acquisition` is required at ingest, has no default, is the field
+the written acquisition policy will be queried on, and is already recorded on every run.
+
+`FREE_TIER_ACQUISITIONS` is written as a whitelist of one rather than a blacklist of three.
+**A fifth status added to `Acquisition` later is refused until somebody thinks about it**,
+which is the safe direction for an enum whose other members all mean "a work somebody else
+owns".
+
+**`undocumented` is on the closed side, and that is the case worth stating.** It is the honest
+answer for a file whose provenance nobody wrote down — not a claim that the work is free of
+copyright — and it is what Ikigai carries. A check written as "refuse the two obviously-owned
+statuses" would have let through the exact book this package was written for.
+
+## Where it fires, and why there
+
+**Before the client is built.** `run` resolves the transport before `run_context()`, because
+building the client is where the transport is chosen and the API key is read; a check after
+that would be describing a decision already made, and a check inside a node would fire after
+the book had gone. `test_the_check_runs_before_the_client_is_built` asserts the ordering in
+the source rather than trusting it.
+
+**One door for existing runs.** Seven commands open a checkpoint before calling a model, and
+this project's recurring defect is a guard carried to one place and not its twin. So there are
+exactly two helpers: `open_run_for_models`, which enforces and records, and `read_run_state`,
+which does neither and is used by `status`, `cost`, `write-drafts` and `purge-raw-text` —
+**none of which calls a model**, so refusing them would be a false refusal that made a
+misconfigured environment undiagnosable. `test_no_command_loads_a_checkpoint_outside_the_two_helpers`
+makes that structural rather than remembered.
+
+## What the check cannot see
+
+**It checks the label, not the book.** A work ingested as `public-domain` that is not public
+domain passes, reaches the free tier, and nothing downstream notices. The label is a human's
+claim made at ingest; this guard makes that claim load-bearing and visible and does not verify
+it. It also says nothing about any transport this pipeline does not own.
+
+Stated in the docstring, in the README, and here, because the last time this constraint was
+described without being checked it was believed for four packages.
+
+## Two defects found by running it
+
+**The checkpointer was silently refusing the new types.** `TransportRecord` round-trips anyway
+— the serializer falls back to a plain dict and Pydantic rebuilds it — so the values were
+correct, `status` printed them correctly, and the only symptom was two `Blocked deserialization`
+lines per checkpoint read. That is exactly the kind of thing that gets skimmed past for a year.
+They belonged in `models.py` beside every other checkpointed domain type, and in
+`_CHECKPOINTED_TYPES`.
+
+`test_every_type_the_state_carries_is_allowed_through_the_checkpointer` now walks
+`PipelineState`'s annotations and asserts every reachable model and enum is on the allowlist —
+**a list maintained by hand is the failure it is preventing.** Mutation-checked: removing the
+two entries turns it red.
+
+**A traceback is not a refusal an operator can act on.** The first version raised through
+Typer and rendered as a rich traceback with the message at the bottom. Now rendered plainly,
+exit code 2.
+
+## The evidence, and which kind each piece is
+
+**Tests:** both directions, all four acquisition statuses, the whitelist shape, the refusal
+message naming the fix, the source ordering, the two structural rules. Mutation-checked —
+disabling the guard turns five red, including the load-bearing one.
+
+**The load-bearing test is `test_no_call_is_made_when_the_transport_is_refused`**, and it uses
+a counting client whose count must be zero. Raising is not the requirement; not sending is. A
+run that raises after eight Leaves satisfies every other assertion in that file.
+
+**Observed:** a real `run` against `Ikigai.pdf` with the free tier configured. It refused,
+exited 2, printed the fix, and left nothing behind — no checkpoint for the run id, no new row
+in `books`, and the two books in the database are still Wattles (2026-08-26) and Ikigai
+(2026-09-12). Then a real `generate-assets` on the Ikigai run recorded
+`transport=vertex project=zoomout-vertex acquisition=undocumented`, and `status --run-id
+ikigai` reads it back. Zero model calls and zero images across the whole package.
+
+---
+
+## What the next package inherits
+
+**Ikigai and Track 42 were not re-run and their history is not reconstructible.** The
+transport record starts from now. Both went through Vertex — Ikigai twice, on discipline — and
+that is a claim from a completion report, not a row in a database. Nothing can change that
+retroactively, which is the argument for the record existing at all.
+
+**Still open, unchanged:** the grounding gate's false reject on line-wrapped quotes, the gate-1
+named-framework flag, the Leaf publish gate, and Leaf 4's bloom on Track 50. Track 42's
+published Leaf 1 still needs the founder to unpublish before anything can touch it.
+
 ### Completed: WP31 — the output-side image guard, and Ikigai's last two breaches — 2026-09-15
 
 **8 of 8 acceptance criteria met. $1.52 against the $4 ceiling.** `apps/pipeline` lint,
