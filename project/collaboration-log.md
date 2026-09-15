@@ -1086,6 +1086,280 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP30.1 — Ikigai's eighteen images, and the named-framework breach — 2026-09-15
+
+**8 of 8 acceptance criteria met, and two of them come with a caveat you should read rather than
+skim.** `apps/pipeline` lint, `ruff format --check`, `mypy --strict` (77 files) and `pytest`
+(257 passed, 2 deselected — up from 226) are clean. Nothing outside `apps/pipeline` was touched.
+Track 50 is still a draft; nothing was published.
+
+**Spend: $3.56 against the $5 ceiling.** Images $2.95, text $0.61. Breakdown and the one
+estimated figure are at the bottom.
+
+| | |
+|---|---|
+| Leaf 17 | Rewritten. **0 of 16 forbidden phrasings survive**, down from 14 instances |
+| Ikigai's variety | **PASS — median nearest-neighbour 0.798, closest pair 0.745, zero near-duplicate pairs** |
+| Track 42's variety | **Still FAILS — median 0.502, closest pair 0.277, six near-duplicate pairs, exit 1** |
+| Images | 18/18 attached as drafts, every one with alt text, scenario prompt and options verified intact |
+| Retained | `apps/pipeline/runs/ikigai/images/` + `runs/ikigai/ikigai-contact-sheet.png` |
+
+**The caveat: two of the eighteen images still breach the style contract, and I stopped rather
+than keep buying.** Leaves 3 and 7 carry floating notification icons — `asset_style.md` forbids
+"floating icons or symbolic overlays" — and Leaf 3 also has a glow off a phone screen. Both were
+regenerated once. **Leaf 3 came back worse** (glow retained, two icons instead of none, and a
+laptop-at-a-desk composition that is the exact Track 42 register this work exists to escape).
+The handoff's own rule is to stop after one regeneration pass and report rather than buy toward a
+threshold, and that rule is right: the model reaches for notification iconography because both
+scenarios are *about* digital distraction. **This is the output-side detector the handoff put out
+of scope, and it is the correct next package.** The other sixteen are clean.
+
+---
+
+## Half A — Leaf 17
+
+### The breach was three times larger than WP30 reported, and measuring it was the first thing I did
+
+WP30 said "three of its five sticky notes". Measured against the live record with the phrase
+check this package added:
+
+```
+Leaf 17: 14 hits    Leaf 13: 1 hit    Leaf 12: 0    Leaf 0: 0
+```
+
+All **five** sticky notes were rules from the list. So was the Dinner Table fact. And **seven of
+the fourteen were in source-reference notes and quotes across four slides** — notes reading
+`"Rule 1 states to stay active and not retire"` and `"The ten rules include staying active
+without retiring, taking it slow, eating until 80% full…"`, which `cms/mapper.source_references`
+turns into `sourceReferences` rows the reader sees.
+
+**That is the half nobody had looked at, and it decided the design.** A rewrite that fixed the
+five slides and left the references would have moved the breach rather than removed it, and
+reported success. `revised_leaf_patch` deliberately carries `sourceReferences` forward — correct
+after an editorial revision, which preserves citations by construction — so a rewrite needed its
+own patch builder. Hence `rewritten_leaf_patch`, which rebuilds references from the claims the
+rewrite actually made and writes extras from the record instead of preserving them.
+
+Leaf 13's single hit is the control that makes the check trustworthy: its own concept **is** the
+80 percent rule, it cites it honestly, and it is not reproducing a list. The check is not a
+blanket word ban.
+
+### Why the rewrite clears it, in my own words
+
+The original Leaf was **a digest of a list**. Its unit of content was "here are the rules": five
+sticky notes, each an item from the book's named framework in the book's own imperative voice,
+with a summary that enumerated four more in prose. Reproducing a named framework means handing
+the reader the framework itself, as the thing being delivered. That is what it did.
+
+The rewrite's unit of content is **a single argument the book makes in a different chapter.** Its
+passage P2 — "And now, ikigai", chapter 19, not the rules chapter — says the experience is
+reachable *"without therapists or spiritual retreats"*, that once found *"it is only a matter of
+having the courage and making the effort to stay on the right path"*, and that the path runs
+through a world you have to accept as imperfect. The four sticky notes are propositions drawn
+from that argument in ZoomOut's words: finding your ikigai is the beginning rather than the
+finish; staying on the path is the actual work; the path runs through the ordinary imperfect life
+you already have; giving up what you do well costs you your sense of purpose.
+
+The test I applied is **could a reader reconstruct the ten rules from this Leaf** — and no. There
+is no enumeration, no set, and no imperative code. The one claim still sourced to the rules
+chapter cites a single explanatory sentence about losing purpose, not a rule heading; quoting one
+sentence from a chapter is what every Leaf in the library does.
+
+**What this is not: proof.** `surviving_phrases` checks that named strings are gone. A paraphrase
+of the same list would clear it. The module docstring, the CLI output and the README all say so
+in those words, because the temptation to read a green check as an answer here is exactly the
+failure mode.
+
+### Three defects the first real run found, two of them mine
+
+The first `rewrite-leaf` invocation was rejected by grounding and the original Leaf stood — the
+Tier A behaviour working. It also exposed:
+
+- **`revise_leaf` dropped the reason.** It returned `(leaf | None, spend)` and logged
+  `failures=2` — a count. There was no way to learn which claim broke without paying for the
+  call again, which is what it cost. It now returns the verdict, logs the failure text, and the
+  CLI prints each one. Five call sites updated.
+- **Extras were regenerated even when the rewrite was discarded.** Extras follow the takeaway; an
+  unchanged takeaway has nothing for them to follow. The run paid for that call and cleared a
+  grounded Dinner Table fact off a Leaf whose text it had just declined to touch — strictly worse
+  than doing nothing.
+- **A discarded rewrite's spend was never recorded.** The command exited before `update_state`,
+  so the money existed only in terminal scrollback. That is the one figure in this report I can
+  only estimate, and it is why.
+
+A bounded retry now quotes the grounding failures back, capped at 2 — the mechanism `draft_leaf`
+uses for the same gate and `derive_scene_plan` for a rejected plan. **It is not the loop
+`review_and_revise` declines to have**, which stops because retrying *blind* is a second roll of
+the same dice; this one changes the prompt. Nothing beneath it retries a grounding failure, so
+these do not stack into WP20's N×M. Attempt 2 succeeded.
+
+### A false rejection in the grounding gate — reproducible, reported, not fixed
+
+**Attempt 1 was rejected for a quote that was verbatim.** The model quoted
+`you have to accept that the world—like the people who live in it—is imperfect`. The passage
+contains exactly that. It failed because the PDF wraps mid-sentence:
+
+```
+raw        : 'the world—\nlike the people'
+normalised : 'the world- like the people'   (em dash → '-', newline → ' ')
+quote      : 'the world-like the people'
+```
+
+`normalise_for_quote_match` folds whitespace and folds em dashes to hyphens, but not whitespace
+*adjacent* to a folded dash — so a line break after an em dash makes an honest quote unmatchable.
+That is precisely the artefact the function's own docstring says it exists to fold.
+
+**I did not fix it**, and the reasoning is deliberate: it is the legal gate, the failure direction
+is safe (it rejects honest quotes and can never accept invented ones), and a change there needs
+its own package with fixtures across real books and an Architect ruling. It cost this package one
+Pro-model call and would have cost the whole rewrite without the retry. The fix shape is one line
+in `normalise_for_quote_match`; the test corpus is the harder half.
+
+### Leaf 17 now has no Dinner Table fact and no apply-in-life — deliberately, and reversible for a cent
+
+17/18 on both, down from 18/18. Both fields are `.optional()` in `content.ts`, so the Leaf is
+still publishable, and the takeaway source reference is present so a DTK could be added later.
+
+The extras call returned nothing for both, which the `extra_content` prompt explicitly sanctions
+and my brief explicitly invited. **I think it is the honest answer and I checked before accepting
+it.** This Leaf's two passages are a rules list and a chapter-transition page. The one genuinely
+surprising deep cut in them is Morita's three-day rule about anger — which belongs to Leaf 2's
+territory, not this Leaf's, and using it here would repeat the exact duplication WP30 flagged
+when Leaf 17's old DTK duplicated Leaf 13's. **Founder's call to overturn; it is one Flash call.**
+
+The editorial pass then ran at `editorial_attempts=1` for parity with the other seventeen: review,
+one accepted revision, review. One advisory finding remains open on the scenario (a fourth-wall
+break — "What approach aligns with the Okinawan principles"), which predates this package and was
+out of scope.
+
+---
+
+## Half B — the eighteen images
+
+### The scene plan is the fix working
+
+Eighteen distinct places, eight exteriors, five unpeopled, all three shot values, six different
+times of day. Against Track 42's eighteen seated figures at tables in dim interiors. One Flash
+call, $0.0163, derived before a single image was bought.
+
+I bought **one image first** and looked at it before committing the other $2.41. That is $0.134
+to de-risk seventeen, and it is the pattern I would repeat.
+
+### A focus may name a lamp. It may not name the beam coming out of it.
+
+**Leaf 8 came back as two volumetric cones converging on a lectern** — glow, light cones, bloom
+and volumetric light, four prohibitions in `asset_style.md` at once. The image model was not
+wrong. Its scene plan said the focus was **"an unlit wooden lectern standing under a spotlight
+beam"**, so it was handed a plan naming a beam and a contract forbidding beams, and satisfied the
+more specific instruction.
+
+**That is the same failure `_an_empty_frame_has_no_hands_in_it` already exists for.** WP30 wrote
+that validator, wrote in its docstring that a contradiction in the plan is cheap to catch in text
+and expensive to catch in an image, and did not carry the idea to the other contradiction of the
+same shape. `_LIGHT_EFFECTS` and `_a_light_effect_is_not_a_thing_in_the_room` are that missing
+twin. `scene_setting.md` now states both rules, so the validator is a backstop rather than a
+retry loop.
+
+Measured rather than asserted: **of eighteen derived settings exactly one named a light effect,
+and it produced the only plan-caused breach in the set.** Regenerated with the beam removed from
+the focus, Leaf 8 is clean — what remains is a flat lighter shape thrown from a doorway, which is
+the depth-from-lightness device the contract sanctions.
+
+**A tension worth an Architect ruling:** `asset_style.md` permits "a bright window is a lighter
+shape" and forbids "a shaft of light thrown across a surface" in the same paragraph. Leaf 8's
+replacement, Leaf 2's window wedge and Leaf 16's doorway all sit between those two sentences, as
+do the committed anchors. If the second sentence means what it says, much of the library breaches
+it.
+
+### Two defects in `generate-assets`, both the same shape as WP20's
+
+**Leaf 8's first image call timed out.** `generate_candidates` logged the refusal and carried on,
+`attach_assets` still wrote the diagram, the run exited 0, and the Leaf was silently imageless.
+
+Then the worse half: **both idempotency checks keyed off the diagram** — a $0.004 text call —
+while the image is the most expensive thing this pipeline buys. So both read that diagram and
+called the Leaf done. **A re-run would have skipped straight past the one Leaf with no picture.**
+That is the WP20 failure at Leaf 11 of 18, in the sibling of the code that was fixed for it.
+Now keyed on `imageCandidates` and `scenario.image`, and the command names every Leaf that ended
+with no scenario image, at the end, where it will be read.
+
+### Looked at, one by one
+
+**What the machine could answer:** the amber guardrail passed on all eighteen at exactly 0.00000,
+which settled Leaf 2's brass door and Leaf 7's lemons — warm neutrals, not reserved amber.
+
+**What only looking could answer:**
+
+| | |
+|---|---|
+| Text, letters, numerals | **None in any of the eighteen.** Leaf 1's mixing console was the real risk — knobs, faders and blank display panels, zoomed and checked, no labels |
+| Disembodied limbs | **None.** Leaf 13 is hands-and-cuffs at a table, which is the sanctioned `close` framing with `figures: 1`, not WP30's hand floating across a house |
+| Glow or bloom | **Leaf 8 rejected and replaced. Leaf 3 still breaches** — see the caveat at the top |
+| Floating icons (a fourth thing, found by looking) | **Leaves 3 and 7.** Both regenerated once; both still carry one |
+
+Rejected and regenerated: **Leaf 8** (spotlight cones — fixed), **Leaf 3** (glow — regenerated,
+came back worse), **Leaf 7** (chat-bubble overlay — regenerated, came back with a bell overlay).
+
+**Leaf 2 is the weakest image and is not a breach.** Its plan asked for a close shot of "a brass
+doorway latch", so it is a large olive-gold door with wide teal stripes — off-palette against a
+library whose identity is four dark surfaces and one small teal accent, and a weak illustration of
+"accepting unpleasant feelings while taking constructive action". Flagged rather than regenerated
+because it breaches nothing, and your eye should decide whether that is drift.
+
+---
+
+## Spend against the $5 ceiling
+
+| | |
+|---|---|
+| **Images** | **$2.948** — 22 charged at $0.134 |
+| Diagram specs (~22 Flash calls) | $0.122 |
+| Leaf 17 rewrite (accepted, 2 Pro attempts + extras) | $0.226 |
+| Leaf 17 editorial pass at `editorial_attempts=1` | $0.130 |
+| Scene plan | $0.016 |
+| Discarded first rewrite | **~$0.12 — estimated, not measured** |
+| Vertex connectivity probe | $0.001 |
+| **Total** | **≈ $3.56** |
+
+**22 images charged, 21 received, 18 kept.** One lost to the timeout, three rejected and
+replaced. The estimate is the discarded rewrite, whose spend the command failed to record — the
+bug is fixed, but that particular figure is gone.
+
+`editorial_attempts=1` is confirmed as the cost lever WP30 identified: one Leaf's full editorial
+pass cost $0.130 against WP30's ~$0.50/Leaf at the default of 2.
+
+**The run ledger reads $4.3432 and that is not this package's spend** — it is Track 50's lifetime
+cost including WP30's text generation. Worth knowing, because `review-track` and the image budget
+do not write into it at all; `cost --run-id` is an undercount by construction and should not be
+quoted as a Track total.
+
+---
+
+## What the next package inherits
+
+**An unresolved obstacle, restated because it has now blocked two packages.** Ikigai is a draft
+and must stay one, and `apps/backend/src/content/contentVisibility.ts` returns
+`content.status === 'published'` in every non-production environment. **No draft Track can reach
+the app without a backend change.** The in-app observation of these images is deferred to whenever
+Ikigai is published, and is debt, not a skipped gate.
+
+**`ZOOMOUT_PIPELINE_PAID_TIER` is recorded and enforced nowhere.** `config.py` says
+"`require_paid_tier` below turns that from a memory into a check" — there is no such function
+anywhere in the codebase. The founder's shell has `ZOOMOUT_PIPELINE_GEMINI_API_KEY` set and
+`USE_VERTEX` unset, so **any pipeline command run as the environment stands would send a
+copyrighted book through the free Developer API, which trains on submitted content.** I ran every
+command with `USE_VERTEX=true` and `env -u ZOOMOUT_PIPELINE_GEMINI_API_KEY` so the free path was
+unreachable, and verified the transport before the first paid call. The guard does not exist and
+the comment says it does.
+
+**The Vertex project id had never been written down.** WP30 exported it per-session; it was not in
+the environment, `gcloud config`, or the repo, and every command that costs money was blocked on a
+value nobody could reconstruct. It is now in the README's env table, along with the fact that
+`zoomout-free-test` is the free tier and no book in copyright may go through it.
+
+**Orphaned media.** The four rejected images are still in Payload's Media collection, unreferenced.
+I did not delete them — deleting media is destructive and was not asked for.
+
 ### Completed: WP30 — Ikigai end to end, and scenario images that match their scenarios — 2026-09-15
 
 **7 of 9 acceptance criteria met. Two are unmet because the founder capped spending mid-package,
