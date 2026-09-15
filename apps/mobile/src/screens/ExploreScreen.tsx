@@ -208,8 +208,28 @@ export function ExploreScreen(): React.JSX.Element {
            * At `accessibilityExtraExtraExtraLarge` a `display` heading wraps to two
            * lines and takes half the viewport — pinned, it pushes the content the
            * reader came for off the bottom of every screen.
+           *
+           * **The count beside it is the pagination affordance screen-04 asks for**
+           * ("the real screen currently stops at twenty with no sign more exists"):
+           * `totalTracks` is the server's own count, so a reader sees up front how much
+           * of the catalogue twenty is a part of, rather than discovering the edge by
+           * scrolling into it.
            */
-          ListHeaderComponent={<Text variant="display">Explore</Text>}
+          ListHeaderComponent={
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between',
+                gap: theme.spacing.md,
+              }}
+            >
+              <Text variant="display">Explore</Text>
+              <Text variant="caption" tone="textMuted" testID="explore-count">
+                {list.length} of {tracks.data?.totalTracks ?? list.length}
+              </Text>
+            </View>
+          }
           ListHeaderComponentStyle={{ paddingBottom: theme.spacing.sm }}
           data={list}
           keyExtractor={(track) => track.id}
@@ -259,7 +279,14 @@ export function ExploreScreen(): React.JSX.Element {
                   }}
                 />
               }
-            />
+            >
+              {/* screen-04: "cover, title, author, a one-line description and an add
+                  action" — `TrackCard` carries the first three and the action; this is
+                  the one piece Explore adds to the shared card via its `children` slot. */}
+              <Text variant="small" tone="textMuted" numberOfLines={2}>
+                {item.description}
+              </Text>
+            </TrackCard>
           )}
         />
       </View>

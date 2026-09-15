@@ -1,24 +1,28 @@
 import { useCallback } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { TrackProgressSummary } from '@zoomout/shared';
 
-import type { LibraryEntry } from '../api/client';
+import type { LeafSummary, LibraryEntry } from '../api/client';
 import { useApi } from '../auth/AuthProvider';
 import type { AppStackParamList } from '../navigation/types';
 import {
   Button,
   EmptyState,
   ErrorState,
-  ProgressBar,
   Screen,
   StatusMessage,
   Text,
   TrackCard,
 } from '../components';
-import { useTheme } from '../design';
+import { type Theme, useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
+import { buildProgressStrip, STRIP_WINDOW_HEIGHT } from './journeyProgressStrip';
+import { curvePath } from './track/roadmapGeometry';
+import { buildRoadmapModel, type LeafNodeState } from './track/roadmapModel';
 
 /**
  * Journey — what the reader is in the middle of, and the way back into it.
@@ -159,10 +163,10 @@ export function JourneyScreen(): React.JSX.Element {
                 />
               }
             >
-              <ProgressBar
+              <TrackProgressStrip
                 testID={`journey-progress-${item.track.id}`}
-                completed={item.progress.completedLeaves}
-                total={item.progress.totalLeaves}
+                trackId={item.track.id}
+                progress={item.progress}
               />
             </TrackCard>
           )}
@@ -192,4 +196,128 @@ function resumeAt(navigation: AppNavigation, entry: LibraryEntry): void {
     trackId: entry.track.id,
     trackTitle: entry.track.bookTitle,
   });
+}
+
+/**
+ * A compressed strip of the Track's graph, in place of a plain bar (screen-04, WP27).
+ *
+ * **Fetches this Track's Leaves itself**, which is the one per-row request `LibraryScreen`
+ * warns against for exactly this reason — but that warning is about the whole shelf,
+ * which can run to dozens of books, and Journey's list is already filtered to Tracks
+ * with somewhere to resume. In practice that is a handful of requests, not the request
+ * explosion `TrackProgressSummary` exists to prevent for the full library.
+ *
+ * **Degrades to the count alone.** The count comes straight from the rollup already on
+ * `entry` and renders immediately; the graphic is additional and only appears once the
+ * Leaf list arrives. A slow or failed fetch leaves the row with exactly what `ProgressBar`
+ * showed before this package — never a blocked row, never a crash.
+ */
+function TrackProgressStrip({
+  testID,
+  trackId,
+  progress,
+}: {
+  readonly testID?: string;
+  readonly trackId: string;
+  readonly progress: TrackProgressSummary;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const api = useApi();
+
+  const loadLeaves = useCallback(
+    async (): Promise<readonly LeafSummary[]> => api.listLeaves(trackId),
+    [api, trackId],
+  );
+  const leaves = useAsyncResource<readonly LeafSummary[]>(loadLeaves);
+
+  const label =
+    progress.totalLeaves === 0
+      ? 'No Leaves yet'
+      : `${String(progress.completedLeaves)} of ${String(progress.totalLeaves)} complete`;
+
+  const states =
+    leaves.status === 'ready' && leaves.data !== null
+      ? buildRoadmapModel(leaves.data, progress).nodes.map((node) => node.state)
+      : null;
+
+  const strip = states === null ? null : buildProgressStrip(trackId, states);
+
+  return (
+    <View testID={testID} style={{ gap: theme.spacing.sm }}>
+      {strip === null ? null : (
+        <View
+          // Decorative: `label` below is the accessible statement of progress, in the
+          // same words `ProgressBar` used — the graph is a picture of that fact, not a
+          // second copy of it a screen reader would have to reconcile.
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ height: STRIP_WINDOW_HEIGHT, overflow: 'hidden' }}
+        >
+          <Svg
+            width="100%"
+            height={STRIP_WINDOW_HEIGHT}
+            viewBox={`0 ${String(strip.windowY)} ${String(strip.geometry.width)} ${String(STRIP_WINDOW_HEIGHT)}`}
+          >
+            {strip.geometry.spine.map((curve, index) => (
+              <Path
+                // `spine` is one static curve per gap for this render; nothing reorders
+                // it, so the index is stable.
+                key={index}
+                d={curvePath(curve)}
+                stroke={theme.palette.border}
+                strokeWidth={curve.strokeWidth}
+                opacity={curve.opacity}
+                fill="none"
+              />
+            ))}
+            {strip.geometry.nodes.map((node) => {
+              const paint = paintFor(node.state, theme);
+
+              return (
+                <Circle
+                  key={node.index}
+                  cx={node.centre.x}
+                  cy={node.centre.y}
+                  r={paint.radius}
+                  fill={paint.fill}
+                  {...(paint.stroke === undefined
+                    ? {}
+                    : { stroke: paint.stroke, strokeWidth: 1.5 })}
+                />
+              );
+            })}
+          </Svg>
+        </View>
+      )}
+
+      <Text variant="caption" tone="textMuted" testID={`${testID ?? 'journey-progress'}-label`}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * Dot styling per state. `revisit` paints identically to `locked` — `buildRoadmapModel`
+ * never emits it (see that module's docstring), but the union still has to be handled.
+ */
+function paintFor(
+  state: LeafNodeState,
+  theme: Theme,
+): { readonly fill: string; readonly stroke?: string; readonly radius: number } {
+  switch (state) {
+    case 'done':
+      return { fill: theme.palette.reward, radius: 3 };
+    case 'next':
+      return { fill: theme.palette.primary, radius: 5 };
+    case 'revisit':
+    case 'locked':
+      return { fill: theme.surfaceFor('pressed'), stroke: theme.palette.border, radius: 2.5 };
+    default:
+      return unreachable(state);
+  }
+}
+
+function unreachable(value: never): never {
+  throw new Error(`Unhandled Leaf node state: ${String(value)}`);
 }

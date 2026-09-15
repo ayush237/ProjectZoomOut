@@ -98,7 +98,21 @@ export function LibraryScreen(): React.JSX.Element {
            * lines and takes half the viewport — pinned, it pushes the content the
            * reader came for off the bottom of every screen.
            */
-          ListHeaderComponent={<Text variant="display">Library</Text>}
+          ListHeaderComponent={
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between',
+                gap: theme.spacing.md,
+              }}
+            >
+              <Text variant="display">Library</Text>
+              <Text variant="caption" tone="textMuted">
+                {entries.length} {entries.length === 1 ? 'track' : 'tracks'}
+              </Text>
+            </View>
+          }
           ListHeaderComponentStyle={{ paddingBottom: theme.spacing.sm }}
           data={entries}
           keyExtractor={(entry) => entry.track.id}

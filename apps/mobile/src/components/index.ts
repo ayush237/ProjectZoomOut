@@ -8,6 +8,7 @@
  */
 
 export { AchievementUnlock } from './AchievementUnlock';
+export { badgeBlobPath } from './achievementBadge';
 export { Button, type ButtonProps, type ButtonVariant } from './Button';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { ErrorState, type ErrorStateProps } from './ErrorState';

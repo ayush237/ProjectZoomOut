@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import type { AchievementStatus } from '@zoomout/shared';
 
 import type { DayStatus } from '../api/client';
 import { useApi, useAuth } from '../auth/AuthProvider';
-import { Button, Icon, Screen, StatusMessage, Text } from '../components';
+import { badgeBlobPath, Button, Icon, Screen, StatusMessage, Text } from '../components';
 import { useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
@@ -292,17 +293,59 @@ function AchievementTile({
         opacity: unlocked ? 1 : 0.6,
       }}
     >
-      <Icon
-        name={unlocked ? 'achievement' : 'locked'}
-        size={20}
-        color={unlocked ? theme.palette.reward : theme.palette.textMuted}
-      />
+      <AchievementGlyph unlocked={unlocked} />
       <Text variant="caption" tone={unlocked ? 'textPrimary' : 'textMuted'}>
         {achievement.name}
       </Text>
       <Text variant="small" tone="textMuted">
         {achievement.description}
       </Text>
+    </View>
+  );
+}
+
+/** The tile's footprint for the badge — smaller than `AchievementUnlock`'s 44pt. */
+const TILE_BADGE_SIZE = 32;
+
+/**
+ * The organic blob-and-mark, at grid scale (WP27).
+ *
+ * **The same mark `AchievementUnlock` gives a freshly-earned badge**, reused here rather
+ * than a bare `Icon` so the grid does not read as a second, plainer achievement system —
+ * `badgeBlobPath`'s own reasoning applies just as much to a tile as to the celebration:
+ * a blob reads as an object, and the trophy icon it replaces did not. Locked tiles stay
+ * a bare `Icon`, deliberately: a blob is what a reader is told they *have*, and giving an
+ * unearned tile the same object would blur the one distinction §3 requires — locked and
+ * unlocked already differ by icon shape, border colour and opacity, and that is enough.
+ */
+function AchievementGlyph({ unlocked }: { readonly unlocked: boolean }): React.JSX.Element {
+  const theme = useTheme();
+
+  if (!unlocked) {
+    return <Icon name="locked" size={20} color={theme.palette.textMuted} />;
+  }
+
+  const centre = TILE_BADGE_SIZE / 2;
+  const path = badgeBlobPath(centre, centre, centre * 0.82);
+
+  return (
+    <View style={{ width: TILE_BADGE_SIZE, height: TILE_BADGE_SIZE }}>
+      <Svg
+        width={TILE_BADGE_SIZE}
+        height={TILE_BADGE_SIZE}
+        viewBox={`0 0 ${String(TILE_BADGE_SIZE)} ${String(TILE_BADGE_SIZE)}`}
+      >
+        <Path d={path} fill={theme.palette.reward} stroke={theme.palette.rewardSoft} strokeWidth={1.5} />
+      </Svg>
+      <View
+        style={StyleSheet.absoluteFill}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="achievement" size={TILE_BADGE_SIZE * 0.45} color={theme.palette.onReward} />
+        </View>
+      </View>
     </View>
   );
 }

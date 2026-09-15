@@ -480,6 +480,23 @@ describe('Library with progress', () => {
 });
 
 describe('Explore', () => {
+  it('shows how many of the catalogue are loaded, from the server’s own count', async () => {
+    // The pagination affordance screen-04 asks for: a reader sees the total up front,
+    // from `totalTracks`, rather than discovering the edge of page one by scrolling
+    // into it with nothing to indicate more exists.
+    const backend = new FakeBackend()
+      .on('/content/tracks', () =>
+        json({ tracks: [TRACK], page: 1, totalPages: 2, totalTracks: 28 }),
+      )
+      .on('/library', () => json({ entries: [] }));
+
+    const view = await renderSignedIn(<ExploreScreen />, backend);
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-count')).toHaveTextContent('1 of 28');
+    });
+  });
+
   it('adds a Track to the library and reflects it on the button', async () => {
     const added: string[] = [];
     const backend = new FakeBackend()
@@ -552,6 +569,45 @@ describe('Explore', () => {
     });
     // Still offering the action, because it did not happen.
     expect(view.getByText('Add to library')).toBeOnTheScreen();
+  });
+});
+
+describe('Profile achievements', () => {
+  it('renders the earned count and both locked and unlocked tiles', async () => {
+    // The smoke test above renders Profile against an empty backend, so the grid never
+    // mounts with real data — this is the one happy path for WP27's badge restyle: real
+    // achievements reach the screen, and locked/unlocked both render without crashing.
+    const backend = new FakeBackend().on('/achievements', () =>
+      json({
+        achievements: [
+          {
+            id: 'first-leaf',
+            name: 'First Leaf',
+            description: 'Finish your first Leaf.',
+            tier: 'common',
+            unlockedAt: '2026-08-20T09:00:00.000Z',
+          },
+          {
+            id: 'month-of-mornings',
+            name: 'Month of Mornings',
+            description: 'Thirty days in a row.',
+            tier: 'milestone',
+            unlockedAt: null,
+          },
+        ],
+      }),
+    );
+
+    const view = await renderSignedIn(<ProfileScreen />, backend);
+
+    await waitFor(() => {
+      expect(view.getByTestId('profile-achievement-count')).toHaveTextContent('1 of 2');
+    });
+
+    expect(view.getByTestId('achievement-tile-first-leaf')).toBeOnTheScreen();
+    expect(view.getByTestId('achievement-tile-month-of-mornings')).toBeOnTheScreen();
+    expect(view.getByText('First Leaf')).toBeOnTheScreen();
+    expect(view.getByText('Month of Mornings')).toBeOnTheScreen();
   });
 });
 
