@@ -23,6 +23,7 @@ from zoomout_pipeline.llm.ratelimit import (
     retry_delay_seconds,
 )
 from zoomout_pipeline.logging import get_logger
+from zoomout_pipeline.prompts import load_prompt
 
 _log = get_logger(__name__)
 
@@ -100,22 +101,33 @@ class GeneratedImage:
 
 @dataclass
 class AnchorSet:
-    """The committed reference images that define the house style.
+    """The committed reference images that define the house style, and what they mean.
 
     Loaded from disk rather than regenerated, so the look is stable across runs and reviewable
     in a diff. Swappable by design: `design-direction.md` §9 reserves a mascot slot, and if one
     ever lands, re-anchoring is a re-render rather than a redesign.
+
+    **The instruction travels with the images because it is about these images.** It used to be
+    a string literal inside `generate`, which made it the one prompt in this service that could
+    not be diffed — and it was also wrong in a way that mattered: it said "do not reproduce
+    their subjects" while five of the six anchors are a person seated at a table, and Track 42
+    came back as eighteen more of them. What the anchors teach and what they must not teach are
+    a property of the anchor set, so they are stored with it.
     """
 
     images: list[bytes] = field(default_factory=list)
     mime_type: str = "image/png"
+    instruction: str = ""
 
     @classmethod
     def load(cls, directory: Path) -> AnchorSet:
         if not directory.exists():
             return cls()
         paths = sorted(p for p in directory.glob("*.png"))
-        return cls(images=[p.read_bytes() for p in paths])
+        return cls(
+            images=[p.read_bytes() for p in paths],
+            instruction=load_prompt("anchor_instruction"),
+        )
 
     def __len__(self) -> int:
         return len(self.images)
@@ -185,15 +197,7 @@ class ImageClient:
                 types.Part(inline_data=types.Blob(data=image, mime_type=anchors.mime_type))
                 for image in anchors.images
             )
-            parts.append(
-                types.Part(
-                    text=(
-                        "The images above define the house style. Match their medium, palette, "
-                        "line weight, level of detail and treatment of figures exactly. They "
-                        "are style references only — do not reproduce their subjects."
-                    )
-                )
-            )
+            parts.append(types.Part(text=anchors.instruction or load_prompt("anchor_instruction")))
         parts.append(types.Part(text=prompt))
 
         config = types.GenerateContentConfig(

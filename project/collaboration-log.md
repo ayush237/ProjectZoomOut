@@ -1035,6 +1035,279 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP30 — Ikigai end to end, and scenario images that match their scenarios — 2026-09-15
+
+**7 of 9 acceptance criteria met. Two are unmet because the founder capped spending mid-package,
+and they are unmet rather than partially done: no Ikigai images exist.** `apps/pipeline` lint,
+`ruff format --check`, `mypy --strict` (75 files) and `pytest` (226 passed, 2 deselected) are
+clean. Nothing outside `apps/pipeline` was touched.
+
+**The two numbers that matter:**
+
+| | |
+|---|---|
+| **Spent** | **$10.07** — against a $5 ceiling the founder stated after the spend had happened |
+| Ikigai text, 18 Leaves, 198 calls | **$9.09** — 3.1x WP20's $2.94 for the same node set |
+
+**The cost overrun is the most important operational finding in this package and it is mine.**
+I watched the rate and narrated it twice — at $1.13 on Leaf 2, then $4.77 on Leaf 9 — and each
+time chose to continue at default settings so the number stayed comparable to Track 42. I was
+reasoning from the $300 trial credit sitting unspent and expiring 2026-09-17, which made
+"spend it while it exists" feel obviously right. **It was a budget judgement, and budget
+judgements belong to the founder.** Narrating a rate is not asking about it.
+
+**Where the money goes, for whoever plans the next book:** the editorial review/revise loop on
+`gemini-3.1-pro-preview` at `editorial_attempts=2` is up to five pro-model calls per Leaf, and
+on Ikigai it reached the cap on most Leaves. WP20 made that cap configurable for *throughput*
+reasons; the same knob is the cost lever. **Ikigai at `editorial_attempts=1` would have been
+roughly half.** Throughput itself was fine — call gaps stayed at 20-30 seconds and WP20's
+109-minute stall did not recur.
+
+---
+
+## Half A — the generator
+
+### What was actually wrong, measured rather than assumed
+
+Track 42's eighteen published scenario images are **eighteen out of eighteen** a seated figure
+at a table in a dim interior. Not fifteen of eighteen. Confirmed by looking at the set, and the
+founder's example holds exactly: Leaf 13's scenario is buying a family home and it rendered as
+a man alone at a desk with a calculator.
+
+Three causes, and only the first was in the handoff's framing:
+
+1. **The image prompt named no setting.** Each call defaulted independently, and an image
+   model's default is what its anchors show.
+2. **The style contract ended its subject section with a menu** — *"ordinary modern life: a
+   desk, a commute, a kitchen table, a shop counter, a conversation"* — appended to every prompt
+   in the run, headed by the thing it kept producing.
+3. **Five of the six committed anchors are seated interiors**, and the instruction sent with
+   them said "do not reproduce their subjects" while six pictures said otherwise.
+
+### The anchor decision, which the handoff called the judgement call of the package
+
+**The committed six were kept, un-recut, and their pull was reduced by instruction instead.**
+
+Recutting is the founder's design decision, not a pipeline run — WP18's own note says so, and
+that set cost two rounds with the founder and two rejected candidates to arrive at. Replacing it
+to fix a prompt bug trades a known-good identity for an unknown one, which is precisely the
+AI-slop drift the anchors exist to prevent.
+
+What changed instead: the anchor instruction moved out of a string literal in `images.py` into
+`prompts/anchor_instruction.md` (it was the one prompt in this service that could not be
+diffed), and it now says to copy *how they are drawn* and nothing about *what they show*.
+
+**This was the cheapest hypothesis and it was tested rather than argued.** Four regenerations
+with the anchors untouched produced four different places. Had they not, the next step was
+reducing the anchor count; that step was not needed.
+
+### The evidence, and which kind it is
+
+**Before/after on identical scenario text, Leaves 0, 5, 9 and 13, candidates only — the
+published record was not touched.** Four for four changed setting. Leaf 0 became a roastery
+storage bay with burlap sacks and a cooling tray; Leaf 5 a breakroom kitchenette; Leaf 9 a cafe
+terrace under an awning; **Leaf 13 a new house at dusk with a staked sapling in the foreground.**
+
+**Three of the four are clear improvements. Leaf 9 is the weakest** — the place changed but it
+is still two people facing each other across a small table, so the composition barely moved.
+Saying so because an optimistic four-for-four would be the wrong record.
+
+**This is a human looking at pictures, and it is the only evidence that bears on the actual
+claim.** No test in this repo can tell you whether generated images vary.
+
+### Two defects the pictures caught that no test would have
+
+**A giant disembodied hand.** The first Leaf 13 asked for a wide, unpeopled shot of a house with
+the focus on "a brass key lying in the palm of an open hand" — and got the house with an
+enormous hand across the foreground. The model was not wrong; `figures: 0` and a focus on
+somebody's hands are not both true. Now refused at parse, where it is cheap to see, instead of
+in an image, where it costs $0.134 to discover.
+
+**Focus objects whose whole point is their writing.** The first derived plan focused Leaves on a
+printed application form, a boarding pass and a For Sale sign. The style contract forbids the
+illustrator from drawing a single letter, so those ask for a picture that cannot be drawn, and
+what comes back is a form covered in convincing nonsense. **Track 42's published Leaf 1 already
+renders "$10K" and "$2K" legibly** — an absolute-prohibition breach that is live now and
+predates this package.
+
+### A mistake I made and then caught with a test
+
+The first rewrite of `asset_style.md` explained the removed menu **by quoting it**, which put
+the same five words, headed by a desk, back into every image prompt inside an apology for them.
+**Telling an image model not to draw a desk mentions a desk.** The history now lives in
+`asset_nodes.py`'s docstring, which is never sent anywhere, and
+`test_the_fixed_half_names_no_setting_of_its_own` fails on word boundaries if a setting word
+reappears in the model-facing half.
+
+### The variety check, and the two designs that do not work
+
+**Recorded because both look obviously right and both fail.**
+
+| Signature | Track 42 (collapsed) | Anchors (varied) |
+|---|---|---|
+| Downsampled brightness grid | 0.686 | 0.692 — **scores the collapse higher** |
+| Median distance over all pairs | 0.80 | 0.79 — indistinguishable |
+| **Median nearest-neighbour, edge density** | **0.502** | **0.670** |
+
+Brightness fails because these images differ enormously in *where the light is* and not at all
+in what is in them, so a brightness grid measures the part that varies. The all-pairs median
+fails because a collapsed set still contains distant pairs — eighteen desks are still framed
+differently. **What "collapsed" means operationally is that every picture has a near twin**, and
+the statistic for that is each image's distance to its nearest neighbour.
+
+Colour is deliberately ignored: the palette is the identity, and a check scoring colour variety
+would mark the house style *working* as a failure.
+
+**The floor (0.60) is calibrated on two real sets and that is thin. Revisit it on the third
+Track.** The synthetic fixtures in `test_variety.py` assert *ordering only* and never the
+threshold — a renderer that draws rectangles cannot be asked where the line goes, and one tuned
+until it passed would be fitted to a toy. This distinction is load-bearing and should survive
+editing.
+
+**A limit worth stating: on a four-image sample, both the before and after sets pass** (0.819
+against 0.838). Collapse is a property of a whole set, and the four Leaves chosen for the
+before/after are among Track 42's most distinct. The check needs the full Track.
+
+### The mutation the handoff asked for
+
+`test_breaking_the_setting_derivation_turns_the_check_red` wires a deterministic renderer to the
+check: with per-Leaf places it passes, with every Leaf handed the same default it goes red. The
+break is applied *outside* `ScenePlan` on purpose, because the validator would refuse it — the
+validator is the first line of defence and the check is the second.
+
+---
+
+## Half B — the book
+
+**Track 50, `Ikigai: The Japanese Secret to a Long and Happy Life`, 18 draft Leaves.** Verified
+against the live record rather than the command's own report:
+
+| | |
+|---|---|
+| `acquisition` | `undocumented` |
+| `isPlaceholder` | `False` |
+| `_status`, draft and published views | `draft` — nothing is live |
+| Source references | **134, every one with a note and at least one locator** |
+| Locator kinds | chapter 134, quote 130, **page 0** |
+| Correct-answer position (A/B/C) | **6 / 5 / 7** |
+| Dinner Table Knowledge / apply-in-life | 18/18 each |
+
+**Page locators are not achievable, and this is settled from the code rather than from the
+output.** `parse_pdf` joins pages into chapter text inside `_split_by_toc`, and `Chapter` has no
+page field, so the page boundary is discarded before anything downstream could use it. Nothing
+can honestly emit one. Worth adding: even if plumbed through, these are *PDF page indices*
+(page 2 is the title page), not the printed book's numbers — which `content.ts` itself calls
+"edition-dependent false precision". **The feature is a bigger change than it looks and may not
+be worth wanting.**
+
+**The option shuffle works on real content.** 6/5/7 against Track 42's pre-shuffle "second in 15
+of 18".
+
+### The attribution defect, found mid-run
+
+Ikigai's PDF carries **neither a title nor an author**, so provenance recorded the filename and
+the literal string `"Unknown"` — and that string does not stay in the database. It reaches the
+Track's `author` field *and* the draft prompts, where the model is asked to write attributive
+framing about an author called Unknown. WP20 praised exactly that framing on Track 42
+("Wattles argues that…"); this book would have produced the same sentences with nobody in them.
+
+`LEGAL.md` treats fabricated content attributed to a real author as the highest-severity risk in
+the product. **A real author's ideas published under "Unknown" is the same wound from the other
+side** — it breaks the attribution the fair-use position and the purchase-forward framing both
+rest on.
+
+Fixed in three places: `run` takes `--title`/`--author`; ingest warns loudly when it had to
+default, at the point where re-ingesting is cheap; and `require_known_author` refuses the value
+at the CMS boundary — **the sibling of the never-publish guard, in the same file, for the same
+reason.** The pipeline promises that what it writes is a draft and that it says where it came
+from, and both are enforced where the write happens rather than remembered upstream, because
+upstream is where a default quietly wins.
+
+Provenance is written once and is not patched afterwards, so the first Ikigai ingest was deleted
+and redone. Wattles' 136 chunks were counted before and after to prove the delete hit only its
+own book.
+
+### Read-it-yourself gate — and Leaf 17 is not good enough
+
+**Attribution is consistent and correct across all 18** — "The authors state…", "The authors
+argue…", "The authors report…". The health and diet claims, which are most of Leaves 13-16, are
+attributed to the authors rather than asserted as fact. That is the thing that most needed to be
+right on this book and it is right.
+
+**Leaf 17 carries a named-framework problem.** Three of its five sticky notes are the book's own
+*ten rules of ikigai*, in the book's own imperative phrasing: "Eat until 80% full", "Stay active;
+don't retire", "Surround yourself with good friends". **`LEGAL.md` forbids reproducing a named
+framework 1:1, and the structure check cannot see this** — it measures chapter mirroring, not
+phrasing. Leaf 12 has a milder echo. The other sixteen are clean.
+
+The cause is predictable in hindsight: the approved plan put a synthesis Leaf on chapter 61,
+which *is* the ten rules, and the generator did the obvious thing with it. **A plan that assigns
+a Leaf to the chapter containing the book's named framework is a plan that needs a note
+attached**, and gate 1 is where that is cheap.
+
+Leaf 17 is also thin in two ways: its Dinner Table Knowledge restates the 80 percent rule that
+Leaf 13 already teaches — a deep-cut fact that is not deep — and its apply-in-life gives
+substantially the same instruction as Leaf 13's. **My own automated duplication check reported
+"none" for both**, because it compared normalised word sets and the phrasing differs. The eye
+caught what the check could not. That is the read-it-yourself gate earning its place, and it is
+also a caution about trusting a cheap similarity check over a reading.
+
+Leaf 13 carries only 2 sticky notes, the schema minimum, and the two paraphrase each other.
+
+### Retention — closed and verified by query
+
+Raw text 0 chars, `raw_text_purged_at` stamped, 63 embeddings intact, **36/36 cited passages
+retained as the audit trail**, 27 uncited chunk texts nulled.
+
+---
+
+## What is unmet, and why
+
+**Two acceptance criteria are unmet because the founder capped spending. Neither is partially
+done — there are no Ikigai images at all.**
+
+- **"The variety check passes against Ikigai's images."** It was run against Track 42 and fails
+  correctly (0.502, exit code 1, six named near-duplicate pairs). The other half of that
+  criterion needs images.
+- **"Observed on a device: six Leaves, six settings that belong to their scenarios."** Needs
+  images.
+
+The remaining spend is **$2.41 for one candidate per Leaf, or $7.24 for gate 2's three.** The
+scene plan derivation is already proven on Ikigai's sibling Track and costs about $0.02.
+
+**An unresolved obstacle behind the device gate, flagged rather than solved:** Ikigai is a draft
+and must stay one, and whether the app renders a draft Track in development lives in
+`apps/backend`, which this handoff put out of bounds. Whoever picks this up should establish
+that before assuming the device gate is a matter of running the app.
+
+---
+
+## Open for Architect
+
+1. **Leaf 17 should be regenerated or hand-corrected before this Track is published**, and the
+   named-framework echo is the reason. About $0.15 of text to regenerate one Leaf.
+2. **The 1:1 structure check measures chapters and cannot see phrasing.** Leaf 17 passed every
+   mechanical gate in this pipeline while lifting three of the book's ten rules verbatim. If
+   named frameworks matter as much as `LEGAL.md` says, that gap wants a check of its own — or an
+   explicit acceptance that gate 1 and the human reader are the only defence.
+3. **`editorial_attempts` is the cost lever, not just the throughput lever.** WP20 found it for
+   throughput; this package found the other half. A per-Track budget in dollars, refusing rather
+   than warning, is the natural sibling of `ImageBudget` and does not exist.
+4. **The variety floor is calibrated on two real sets.** It should be revisited on the third,
+   and the synthetic-versus-real evidence split in `test_variety.py` should be preserved when it
+   is.
+
+## Open for the founder
+
+1. **Choose the asset option, or leave Ikigai text-only.** $2.41 or $7.24, and nothing will be
+   spent without a decision.
+2. **Track 42's published Leaf 1 renders "$10K" and "$2K" legibly** — a breach of an absolute
+   prohibition on live content, unrelated to this package and not fixed by it.
+3. **Confirm in the billing console whether the $10.07 drew on the trial credit or a card.** The
+   Cloud Billing API does not expose credit balance; WP18 confirmed the credit path against the
+   console and I would expect the same, but I did not verify it.
+
+
 ### Completed: WP28.1 — the override on the full-motion branches — 2026-09-11
 
 **Bottom line first:** All seven acceptance criteria met. Every full-motion branch on all four animated surfaces now carries `REDUCE_MOTION_OVERRIDE` at every nesting level; `TrackRoadmap.tsx`'s inline `ReduceMotion.Never` is gone, routed through the shared constant like everywhere else. The guard test now covers both branches of the three surfaces that can render standalone (6 tests, was 3), mutation-checked in all three new cases including the hard one. Device-verified with the actual staleness procedure the handoff specified — OS setting flipped while the native process kept running, not a relaunch — and the pre-fix ring was genuinely frozen (pixel-identical across three screenshots spanning 3+ seconds), matching WP28's diagnosis exactly. One honesty note below: the post-fix scale animation's visual confirmation was not fully decisive from static screenshots, and I'm saying so plainly rather than rounding up. Root `lint`, `typecheck` (4 workspaces), `test` (1,353 passing: shared 71, admin 198, backend 477, mobile 607 — up from 602, +5 new) and `build` all clean from a genuine cold gate. Branched from `origin/main` (`6f1276d`, carrying WP28's sign-off and this handoff) as `wp28.1-motion-override`; pushed, not yet a PR.

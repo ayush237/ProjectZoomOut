@@ -208,3 +208,25 @@ def test_patching_a_leaf_cannot_smuggle_a_publish(status: str) -> None:
     # It failed at the transport (closed port), not at the guard — because the forced draft
     # status made it a legal write. The point is that it can never become a publish.
     assert not isinstance(error.value, PayloadPublishAttemptError)
+
+
+# ------------------------------------------------------------------ WP30: attribution
+
+
+def test_a_track_cannot_be_created_with_an_author_nobody_recorded() -> None:
+    """**The sibling of the never-publish guard**, and it exists for the same reason.
+
+    The pipeline promises two things about what it writes: that it is a draft, and that it
+    says where it came from. `parse_book` falls back to the literal string "Unknown" when a
+    PDF carries no metadata, which is most PDFs — Ikigai's carries neither a title nor an
+    author. Left alone that string reaches the Track's `author` field and the draft prompts,
+    and a real book published under "Unknown" breaks the attribution the whole fair-use
+    position rests on.
+    """
+    from zoomout_pipeline.cms.mapper import UnknownAuthorError, require_known_author
+
+    for missing in ("Unknown", "unknown", "  UNKNOWN  ", "   "):
+        with pytest.raises(UnknownAuthorError, match=r"attributed to nobody|refusing"):
+            require_known_author(missing)
+
+    assert require_known_author("Héctor García") == "Héctor García"

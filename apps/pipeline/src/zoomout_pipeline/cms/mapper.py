@@ -16,6 +16,7 @@ from typing import Any
 
 from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.models import (
+    UNKNOWN_AUTHOR,
     Acquisition,
     BookProvenance,
     EditorialFinding,
@@ -26,6 +27,33 @@ from zoomout_pipeline.models import (
 # Payload's own draft marker. Written explicitly on every create rather than relying on a
 # `?draft=true` query parameter, so a caller that forgets the parameter still cannot publish.
 DRAFT_STATUS = "draft"
+
+
+class UnknownAuthorError(RuntimeError):
+    """Refusing to create a Track whose author nobody recorded.
+
+    **The sibling of the never-publish guard, and it sits here for the same reason.** The
+    pipeline promises two things about what it writes: that it is a draft, and that it says
+    where it came from. Both are enforced at the boundary rather than remembered upstream,
+    because upstream is where a default quietly wins.
+
+    "Unknown" is what `parse_book` falls back to when a PDF carries no metadata, which is most
+    PDFs. Publishing a real author's ideas under that name breaks the attribution the fair-use
+    position depends on, and `LEGAL.md` treats attribution as the highest-severity axis in the
+    product. Re-ingest with `--author`; provenance is written once and is not patched after the
+    fact.
+    """
+
+
+def require_known_author(author: str) -> str:
+    """The author, or a refusal naming the fix."""
+    if author.strip().casefold() == UNKNOWN_AUTHOR.casefold() or not author.strip():
+        raise UnknownAuthorError(
+            f"refusing to create a Track with author {author!r}. The source file carried no "
+            "author and none was supplied, so every claim on this Track would be attributed "
+            'to nobody. Re-ingest with `zoomout-pipeline run --author "..."`.'
+        )
+    return author
 
 
 def track_payload(
@@ -50,7 +78,7 @@ def track_payload(
     """
     return {
         "bookTitle": provenance.title,
-        "author": provenance.author,
+        "author": require_known_author(provenance.author),
         "description": description,
         "acquisition": acquisition.value,
         "leafCount": leaf_count,

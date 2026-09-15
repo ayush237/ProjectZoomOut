@@ -40,6 +40,22 @@ class LLMError(RuntimeError):
     """A model call failed, or returned something that is not the requested shape."""
 
 
+class LLMSchemaError(LLMError):
+    """The model answered, and the answer is not the shape that was asked for.
+
+    Its own type because **only this kind of failure is worth telling the model about.** A
+    node that retries with the reason quoted back is teaching the model something when the
+    reason is "you repeated a place"; when the reason is a 403 it is repeating a request that
+    cannot succeed, burning its attempt budget and then reporting a model-quality problem for
+    what is a credentials problem.
+
+    WP30 built a retry loop that caught `LLMError` broadly and spent all three attempts on a
+    permission error before announcing that no usable scene plan could be produced. The
+    distinction already existed one class down — see `LLMTransportError` — and the new node
+    did not carry it.
+    """
+
+
 class LLMTransportError(LLMError):
     """The call never produced an answer — rate limit, timeout, network.
 
@@ -242,7 +258,7 @@ class GeminiClient:
         try:
             return GenerationResult(value=schema.model_validate_json(text), spend=spend)
         except ValidationError as error:
-            raise LLMError(
+            raise LLMSchemaError(
                 f"{node}: {model} returned JSON that is not a valid {schema.__name__}: {error}"
             ) from error
 

@@ -29,6 +29,7 @@ from zoomout_pipeline.models import (
     GeneratedLeaf,
     GeneratedLeafRecord,
     LeafPlan,
+    ScenePlan,
 )
 
 # Initial attempt plus four revisions.
@@ -55,6 +56,15 @@ class PipelineState(BaseModel):
     run_id: str
     source_path: str
     acquisition: Acquisition
+
+    # What the operator said this book is, when the file does not say.
+    #
+    # A PDF frequently carries no usable title or author — Ikigai's carries neither — and the
+    # parser's fallback is the filename and the string "Unknown". Both reach the CMS *and* the
+    # draft prompts, so a book whose metadata is missing gets generated content that attributes
+    # its claims to nobody. Supplied at `run`, recorded in provenance, and never guessed.
+    book_title: str | None = None
+    book_author: str | None = None
 
     # --- ingest
     book_id: str | None = None
@@ -137,6 +147,17 @@ class PipelineState(BaseModel):
     # What WP18 attached, keyed like `generated`. Holds media ids and urls — never image
     # bytes, which belong in Payload rather than in a checkpoint.
     cms_assets: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    # WP30. Where each Leaf's illustration happens, decided once for the whole Track before
+    # any image is bought.
+    #
+    # **Checkpointed because it is expensive to re-derive and must not drift.** Re-deriving
+    # per resume would hand the second half of an interrupted asset run a different set of
+    # places than the first half was drawn from, which is a subtler version of the failure
+    # this field exists to fix. Held here rather than written to Payload because it is a
+    # generation artifact: a Leaf stores the picture, not the reasoning behind it, and
+    # `packages/shared/src/content.ts` stays frozen.
+    scene_plan: ScenePlan | None = None
 
     # What WP19's editorial pass produced, keyed like `generated`. Findings and whether a
     # revision was accepted — not the Leaf text itself, which lives in `generated[key].leaf`

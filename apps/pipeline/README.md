@@ -78,6 +78,7 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_IMAGE_MODEL` | no | Default `gemini-3-pro-image`. Matches the anchor set's family — conditioning is strongest within one. |
 | `ZOOMOUT_PIPELINE_DIAGRAM_MODEL` | no | Default `gemini-3.6-flash`. Only emits a JSON spec. |
 | `ZOOMOUT_PIPELINE_SCENARIO_CANDIDATES` | no | Default 3. How many illustrations the human chooses between at gate 2. |
+| `ZOOMOUT_PIPELINE_DRAFT_MODEL` | no | Also derives the scene plan — one text call per Track. |
 | `ZOOMOUT_PIPELINE_MAX_IMAGES_PER_TRACK` | no | Default 70. **Halts** a run rather than warning — see `assets/budget.py`. |
 
 ```bash
@@ -158,6 +159,52 @@ uv run zoomout-pipeline purge-raw-text --run-id <run-id>
 `purchased`, or `undocumented`. R6 calls provenance retroactively impossible to
 reconstruct, so it is recorded at ingest or not at all. `undocumented` is an honest answer;
 silence is not.
+
+## Scenario illustrations: one identity, many places
+
+Two files, and the split is the point.
+
+| | |
+|---|---|
+| `prompts/asset_style.md` | **What every image shares** — medium, the dark palette, the teal accent, how figures are drawn, and the absolute prohibitions. Appended to every image prompt. |
+| `prompts/scene_setting.md` | **What must differ** — the place, interior or exterior, time of day, camera distance, and how many people are in frame. Read by a text model that decides them per Leaf. |
+
+They were one file until WP30, and holding them together is what produced Track 42:
+**eighteen seated figures at a table in a dim interior, eighteen out of eighteen**, including
+a scenario about buying a family home. The style contract was holding the *environment*
+constant along with the palette, and its subject section ended with a menu of five places
+headed by a desk.
+
+**The plan is derived for the whole Track in one call, before any image is bought.** That is
+the mechanism rather than an optimisation: a model that cannot see the other seventeen
+scenarios has nothing to vary from, so "vary the setting" in a per-Leaf prompt is a wish. Shown
+all of them together and required to return distinct places, it cannot collapse them without
+failing to parse.
+
+`ScenePlan` refuses a bare generic (`an office`), a place used twice, and **any word appearing
+in more than half the places** — which is what stops eighteen unique strings that are all a
+desk. It also refuses a frame with `figures: 0` whose focus names somebody's hands, because a
+model given both draws a disembodied one. Derivation failing is **fatal to the asset run**:
+falling back to "no setting" reproduces Track 42 silently, after paying for it.
+
+The plan is checkpointed into the run, so a resumed or `--limit`ed asset run draws the rest of
+the Track from the same places rather than deriving a second, independent set.
+
+```bash
+uv run zoomout-pipeline check-variety --track-id 42     # measure a Track in the CMS
+uv run zoomout-pipeline check-variety --dir some/pngs   # or a folder, for a before/after
+```
+
+**It measures the pictures, not the labels** — a place label can say "construction site" over a
+rendering of a desk. Two obvious designs do not work and `assets/variety.py` records why: a
+brightness grid scores Track 42 *above* the anchor set, because these images differ in where
+the light is rather than in what is in them; and the median over all pairs cannot separate them
+either (0.80 against 0.79). What "collapsed" means is that every picture has a near twin, so
+the statistic is the **median nearest-neighbour distance** over an edge-density signature.
+Track 42 measures 0.50 on it and the anchor set 0.67.
+
+The floor is calibrated on real images only, and on few of them. **Revisit it on the third
+Track rather than trusting it.**
 
 ## Gate 1
 
