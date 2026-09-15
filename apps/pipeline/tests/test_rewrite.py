@@ -22,6 +22,7 @@ import pytest
 from zoomout_pipeline.cms.mapper import rewritten_leaf_patch
 from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.graph.rewrite import (
+    MAX_REWRITE_ATTEMPTS,
     RewriteBrief,
     RewriteBriefError,
     load_brief,
@@ -236,8 +237,10 @@ def test_a_brief_with_an_invalid_finding_is_refused(tmp_path: Path) -> None:
 
 
 def test_a_rewrite_that_fails_grounding_is_discarded_and_the_original_stands() -> None:
+    """Every attempt ungrounded, so the Leaf that was already safe is the Leaf that stays."""
     original = _record()
-    llm = ScriptedLLM([_leaf(claims=[UNGROUNDED_CLAIM, TAKEAWAY_CLAIM])])
+    ungrounded = _leaf(claims=[UNGROUNDED_CLAIM, TAKEAWAY_CLAIM])
+    llm = ScriptedLLM([ungrounded, ungrounded])
 
     outcome = rewrite_leaf(
         llm=llm,
@@ -252,6 +255,83 @@ def test_a_rewrite_that_fails_grounding_is_discarded_and_the_original_stands() -
 
     assert outcome.revised is False
     assert outcome.record.leaf is original.leaf
+    assert outcome.attempts == MAX_REWRITE_ATTEMPTS
+    assert any("invented" in failure for failure in outcome.grounding_failures)
+
+
+def test_the_second_attempt_is_told_what_the_first_one_broke() -> None:
+    """Retried with the failures quoted back, not with the same prompt again.
+
+    `review_and_revise` stops on a grounding failure precisely because retrying blind is a
+    second roll of the same dice. This is the other case: the prompt changes.
+    """
+    grounded = _leaf(sticky=["A grounded note", "And another"])
+    llm = ScriptedLLM([_leaf(claims=[UNGROUNDED_CLAIM, TAKEAWAY_CLAIM]), grounded])
+
+    outcome = rewrite_leaf(
+        llm=llm,
+        record=_record(),
+        passages=[PASSAGE],
+        brief=_brief(),
+        revise_model="m",
+        extras_model="m",
+        concept="a concept",
+        with_extras=False,
+    )
+
+    assert outcome.revised is True and outcome.attempts == 2
+    assert outcome.grounding_failures == ()
+    first, second = (call["prompt"] for call in llm.calls if call["node"] == "revise")
+    assert "rejected by the grounding check" not in first
+    assert "rejected by the grounding check" in second
+    assert "which was never retrieved" in second
+
+
+def test_the_retry_is_capped() -> None:
+    """R7: every cycle in this service is bounded, and this one sits in front of a Pro model."""
+    ungrounded = _leaf(claims=[UNGROUNDED_CLAIM, TAKEAWAY_CLAIM])
+    llm = ScriptedLLM([ungrounded] * 6)
+
+    rewrite_leaf(
+        llm=llm,
+        record=_record(),
+        passages=[PASSAGE],
+        brief=_brief(),
+        revise_model="m",
+        extras_model="m",
+        concept="a concept",
+        with_extras=False,
+    )
+
+    assert len([c for c in llm.calls if c["node"] == "revise"]) == MAX_REWRITE_ATTEMPTS
+
+
+def test_extras_are_not_regenerated_when_the_slides_were_not_rewritten() -> None:
+    """The bug this command shipped with, and what it cost.
+
+    Extras follow the takeaway. When the rewrite is discarded the takeaway is unchanged, so
+    regenerating them answers a question nobody asked — and the first real run of this
+    command did exactly that, clearing a grounded Dinner Table fact off a Leaf whose text it
+    had just declined to touch. Paid for, and strictly worse than doing nothing.
+    """
+    kept = GeneratedExtras(dinner_table_knowledge="A grounded fact.", claims=[TAKEAWAY_CLAIM])
+    ungrounded = _leaf(claims=[UNGROUNDED_CLAIM, TAKEAWAY_CLAIM])
+    llm = ScriptedLLM([ungrounded, ungrounded])
+
+    outcome = rewrite_leaf(
+        llm=llm,
+        record=_record(extras=kept),
+        passages=[PASSAGE],
+        brief=_brief(),
+        revise_model="m",
+        extras_model="m",
+        concept="a concept",
+    )
+
+    assert outcome.revised is False
+    assert outcome.extras_replaced is False
+    assert outcome.record.extras.dinner_table_knowledge == "A grounded fact."
+    assert [call["node"] for call in llm.calls] == ["revise", "revise"]
 
 
 def test_regenerated_extras_that_fail_grounding_leave_the_originals_in_place() -> None:
@@ -345,14 +425,10 @@ def test_the_extras_instruction_reaches_the_extras_call_and_not_the_prompt_file(
     ).read_text(encoding="utf-8")
 
 
-def test_a_rewrite_makes_exactly_two_model_calls() -> None:
-    """Bounded by construction — one revise, one extras, no loop.
-
-    Every cycle in this service has a cap (R7). This one has no cycle at all: the escalation
-    path for a rewrite that did not work is the human who wrote the brief, reading it.
-    """
+def test_a_rewrite_that_lands_first_time_makes_exactly_two_calls() -> None:
+    """No retry when there is nothing to retry — the cap is a ceiling, not a quota."""
     llm = ScriptedLLM([_leaf(), GeneratedExtras(claims=[])])
-    rewrite_leaf(
+    outcome = rewrite_leaf(
         llm=llm,
         record=_record(),
         passages=[PASSAGE],
@@ -362,6 +438,7 @@ def test_a_rewrite_makes_exactly_two_model_calls() -> None:
         concept="a concept",
     )
     assert [call["node"] for call in llm.calls] == ["revise", "extra_content"]
+    assert outcome.attempts == 1
 
 
 # ------------------------------------------------------------------------------ the patch

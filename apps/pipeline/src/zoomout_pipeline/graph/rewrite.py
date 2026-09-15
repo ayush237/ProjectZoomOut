@@ -58,6 +58,12 @@ from zoomout_pipeline.prompts import render_prompt
 
 _log = get_logger(__name__)
 
+# Bounded, like every other cycle in this service (R7). Two rather than three because each
+# attempt is a call to the revise model, which is a Pro tier model and the most expensive
+# text call the pipeline makes — and because the second attempt is the one that gets the
+# grounding failures quoted back, which is where nearly all of the gain is.
+MAX_REWRITE_ATTEMPTS = 2
+
 
 class RewriteBriefError(ValueError):
     """The brief could not be read. Fatal — a rewrite with no findings is a coin toss."""
@@ -240,6 +246,8 @@ class RewriteOutcome:
     extras_replaced: bool
     survivors: tuple[tuple[str, str], ...]
     spend: list[TokenSpend] = field(default_factory=list)
+    attempts: int = 1
+    grounding_failures: tuple[str, ...] = ()
 
     @property
     def cleared(self) -> bool:
@@ -269,31 +277,59 @@ def rewrite_leaf(
     extras_model: str,
     concept: str,
     with_extras: bool = True,
+    max_attempts: int = MAX_REWRITE_ATTEMPTS,
 ) -> RewriteOutcome:
     """One targeted rewrite of one Leaf, grounding-gated at every step.
 
-    Bounded by construction: exactly one revise call and at most one extras call. There is
-    no loop here on purpose — the escalation path for a rewrite that did not work is the
-    human who wrote the brief, reading the result.
+    Bounded: at most `max_attempts` revise calls and at most one extras call. When it runs
+    out, the escalation path is the human who wrote the brief, reading the grounding
+    failures the outcome carries back.
     """
     spends: list[TokenSpend] = []
-
-    candidate, revise_spend = revise_leaf(
-        llm=llm,
-        record=record,
-        review=brief.review,
-        passages=passages,
-        model=revise_model,
-    )
-    spends.append(revise_spend)
-
     current = record
-    revised = candidate is not None
-    if candidate is not None:
-        current = current.model_copy(update={"leaf": candidate, "attempts": current.attempts + 1})
+    revised = False
+    feedback = ""
+    failures: tuple[str, ...] = ()
+    attempt = 0
+
+    while attempt < max_attempts:
+        attempt += 1
+        candidate, revise_spend, verdict = revise_leaf(
+            llm=llm,
+            record=record,
+            review=brief.review,
+            passages=passages,
+            model=revise_model,
+            feedback=feedback,
+        )
+        spends.append(revise_spend)
+
+        if candidate is not None:
+            current = record.model_copy(update={"leaf": candidate, "attempts": record.attempts + 1})
+            revised = True
+            failures = ()
+            break
+
+        # Retried **with the failures quoted back**, which is the difference between this
+        # and the loop `review_and_revise` deliberately does not have. That one stops on a
+        # grounding failure because a second attempt at the same prompt is a second roll of
+        # the same dice; this one changes the prompt, the way `draft_leaf` answers the
+        # grounding gate and `derive_scene_plan` answers a rejected plan.
+        #
+        # Nothing beneath this retries a grounding failure — the SDK's own retrying is off
+        # (`attempts=1`) and `_call_with_retry` covers rate limits, not content — so these
+        # do not multiply into N x M calls the way WP20's did.
+        failures = tuple(str(failure) for failure in verdict.failures)
+        feedback = verdict.feedback
+        _log.warning("rewrite.retrying", leaf=record.order, attempt=attempt, failures=len(failures))
 
     extras_replaced = False
-    if with_extras:
+    # **Only when the slides actually changed.** Extras follow the takeaway, and a takeaway
+    # that was never rewritten has nothing for them to follow. The first run of this command
+    # regenerated them anyway and cleared a grounded Dinner Table fact off a Leaf it had
+    # just declined to rewrite — a call paid for to answer a question nobody asked, and an
+    # outcome whose extras had moved and whose Leaf had not.
+    if with_extras and revised:
         extras, extras_spend = regenerate_extras(
             llm=llm,
             record=current,
@@ -312,6 +348,7 @@ def rewrite_leaf(
         "rewrite.complete",
         leaf=record.order,
         revised=revised,
+        attempts=attempt,
         extras_replaced=extras_replaced,
         survivors=[f"{where}: {phrase}" for where, phrase in survivors],
     )
@@ -321,6 +358,8 @@ def rewrite_leaf(
         extras_replaced=extras_replaced,
         survivors=survivors,
         spend=spends,
+        attempts=attempt,
+        grounding_failures=failures,
     )
 
 
@@ -335,6 +374,7 @@ def brief_summary(brief: RewriteBrief) -> dict[str, Any]:
 
 
 __all__ = [
+    "MAX_REWRITE_ATTEMPTS",
     "RewriteBrief",
     "RewriteBriefError",
     "RewriteOutcome",

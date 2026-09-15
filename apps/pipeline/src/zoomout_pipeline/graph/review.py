@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from zoomout_pipeline.config import DEFAULT_EDITORIAL_ATTEMPTS
 from zoomout_pipeline.cost import RunCost, TokenSpend
 from zoomout_pipeline.db.retrieval import Passage, format_passages
-from zoomout_pipeline.graph.grounding import check_grounding
+from zoomout_pipeline.graph.grounding import GroundingVerdict, check_grounding
 from zoomout_pipeline.llm.client import StructuredClient
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import (
@@ -134,12 +134,24 @@ def revise_leaf(
     review: EditorialReviewResult,
     passages: list[Passage],
     model: str,
-) -> tuple[GeneratedLeaf | None, TokenSpend]:
+    feedback: str = "",
+) -> tuple[GeneratedLeaf | None, TokenSpend, GroundingVerdict]:
     """Attempt a targeted rewrite from editorial findings.
 
     Returns the revised Leaf **only if it still passes grounding** against the same
     passages the original cited. A revision that fails grounding is discarded — returns
     `None` — rather than replacing an already-safe Leaf with a risk.
+
+    **The verdict comes back with it, discarded or not.** It used to be dropped on the
+    floor, and the only trace a rejected revision left was a count: `failures=4`, with no
+    way to learn which claim broke without paying for the call again. That is what a
+    rejected rewrite cost WP30.1 the first time it ran one. A caller that wants to retry
+    needs the reasons, and a human reading the output needs them more.
+
+    `feedback` is prepended when a previous attempt was rejected — the same mechanism
+    `draft_leaf` uses for the grounding gate and `derive_scene_plan` uses for a bad plan.
+    It is deliberately not a loop here; who retries, and how many times, belongs to the
+    caller, because the two callers have different budgets and different reasons.
     """
     prompt = render_prompt(
         "revise",
@@ -154,6 +166,15 @@ def revise_leaf(
         existing_claims=_existing_claims_block(record.leaf),
         passages=format_passages(passages),
     )
+    if feedback:
+        prompt = (
+            "# Your previous rewrite was rejected by the grounding check\n\n"
+            "Every one of these has to be fixed. A claim you cannot support with the "
+            "passages below is a claim to delete, not to reword — and a quote you cannot "
+            "copy character for character is a quote to drop, keeping only the note.\n\n"
+            f"{feedback}\n\n---\n\n" + prompt
+        )
+
     result = llm.generate_structured(
         prompt=prompt, schema=GeneratedLeaf, model=model, node="revise"
     )
@@ -169,11 +190,12 @@ def revise_leaf(
             leaf=record.order,
             reason="revision failed grounding; keeping the original",
             failures=len(verdict.failures),
+            detail=[str(failure) for failure in verdict.failures][:8],
         )
-        return None, result.spend
+        return None, result.spend, verdict
 
     _log.info("revise.accepted", leaf=record.order, tokens=result.spend.total_tokens)
-    return result.value, result.spend
+    return result.value, result.spend, verdict
 
 
 def review_and_revise(
@@ -205,7 +227,7 @@ def review_and_revise(
     # below. Nothing inside the body re-derives or re-checks it — the cap that reaches gate
     # 2 is the cap this line enforces, and nothing else is in a position to disagree with it.
     while revise_attempts < max_attempts and review.findings:
-        candidate, revise_spend = revise_leaf(
+        candidate, revise_spend, _verdict = revise_leaf(
             llm=llm, record=current, review=review, passages=passages, model=revise_model
         )
         spends.append(revise_spend)

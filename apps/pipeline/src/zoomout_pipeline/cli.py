@@ -684,7 +684,21 @@ def rewrite_leaf_command(
                 fg=typer.colors.YELLOW,
             )
 
+        if outcome.grounding_failures:
+            typer.secho(
+                f"\ngrounding rejected {outcome.attempts} attempt(s):",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            for failure in outcome.grounding_failures:
+                typer.secho(f"  - {failure}", fg=typer.colors.RED)
+
         if not outcome.revised:
+            # The calls were still made and still cost money. Recording that before exiting
+            # is the difference between a run ledger and a guess: the first version of this
+            # command exited here without writing the spend, so the money it had just spent
+            # existed only in a terminal scrollback.
+            _record_rewrite_cost(graph, config, state, outcome)
             typer.secho(
                 "\nthe rewrite was discarded for failing grounding; the original Leaf "
                 "stands and nothing was written",
@@ -723,11 +737,11 @@ def rewrite_leaf_command(
         # been replaced. Dropping it says "not reviewed since" rather than leaving a stale
         # pass attached to prose no reviewer has read.
         reviews = {k: v for k, v in state.cms_reviews.items() if k != key}
-        cost = state.cost
         for spend in outcome.spend:
-            cost.record(spend)
+            state.cost.record(spend)
         graph.update_state(  # type: ignore[attr-defined]
-            config, {"generated": generated, "cms_reviews": reviews, "cost": cost}
+            config,
+            {"generated": generated, "cms_reviews": reviews, "cost": state.cost},
         )
 
     typer.secho(
@@ -736,6 +750,18 @@ def rewrite_leaf_command(
         fg=typer.colors.GREEN,
         bold=True,
     )
+
+
+def _record_rewrite_cost(graph: Any, config: Any, state: Any, outcome: Any) -> None:
+    """Write a rewrite's spend into the run ledger, whether or not it produced anything.
+
+    A rejected attempt is not a free attempt. Cost is recorded per node, per Leaf, per run
+    precisely so that the answer to "what did this Track cost" does not depend on which
+    invocations happened to succeed.
+    """
+    for spend in outcome.spend:
+        state.cost.record(spend)
+    graph.update_state(config, {"cost": state.cost})
 
 
 def _echo_leaf(record: Any) -> None:
