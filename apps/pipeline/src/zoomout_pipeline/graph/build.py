@@ -86,6 +86,11 @@ from zoomout_pipeline.models import (
     LeafPlan,
     PlannedLeaf,
     ScenarioOptionDraft,
+    SceneLight,
+    ScenePlan,
+    SceneSetting,
+    SceneShot,
+    SceneVantage,
     SlideKey,
     SourceFormat,
 )
@@ -123,6 +128,13 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     EditorialReviewResult,
     EditorialFinding,
     EditorialFindingCategory,
+    # WP30 — the scene plan is decided once per Track and has to survive a resume, or the
+    # second half of an interrupted asset run is drawn from different places than the first.
+    ScenePlan,
+    SceneSetting,
+    SceneVantage,
+    SceneLight,
+    SceneShot,
 )
 
 

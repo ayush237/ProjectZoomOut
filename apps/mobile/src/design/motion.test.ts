@@ -1,6 +1,13 @@
 import { ReduceMotion } from 'react-native-reanimated';
 
-import { duration, motionPlan, motionTimingConfig, REDUCE_MOTION_OVERRIDE, spring } from './motion';
+import {
+  duration,
+  motionPlan,
+  motionSpringConfig,
+  motionTimingConfig,
+  REDUCE_MOTION_OVERRIDE,
+  spring,
+} from './motion';
 
 /**
  * The motion primitives.
@@ -58,6 +65,20 @@ describe('motionTimingConfig', () => {
     expect(motionTimingConfig(motionPlan(false, duration.celebration)).duration).toBe(
       duration.celebration,
     );
+  });
+});
+
+describe('motionSpringConfig', () => {
+  it('carries the override on a spring preset the same way motionTimingConfig does on a timing one', () => {
+    // WP28.1: the full-motion branches reach for `spring.*` directly, with no
+    // `MotionPlan` in between — this is what gives that path the same one-place
+    // guarantee, since there is no `motionPlan`/`motionTimingConfig` call for it to
+    // ride along with.
+    expect(motionSpringConfig(spring.reward).reduceMotion).toBe(ReduceMotion.Never);
+  });
+
+  it('preserves every field of the preset', () => {
+    expect(motionSpringConfig(spring.snappy)).toMatchObject(spring.snappy);
   });
 });
 

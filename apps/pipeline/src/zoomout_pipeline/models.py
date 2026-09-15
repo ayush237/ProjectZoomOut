@@ -7,10 +7,11 @@ testable on its contract instead of its prose.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # PRODUCT.md: a Track has 15–30 Leaves.
 MIN_LEAVES = 15
@@ -37,6 +38,17 @@ class Acquisition(StrEnum):
 class SourceFormat(StrEnum):
     EPUB = "epub"
     PDF = "pdf"
+
+
+# What a book's author is called when the file did not say and nobody told us.
+#
+# **A sentinel, not a value.** It exists so the gap is visible and checkable; it must never
+# reach a Track. `LEGAL.md` names fabricated content attributed to a real author as the
+# highest-severity risk in the product, and a real book published under "Unknown" is the same
+# wound from the other side — it breaks the attribution the fair-use position rests on, and it
+# reaches the draft prompts, where the model is asked to write attributive framing about an
+# author whose name is the word Unknown.
+UNKNOWN_AUTHOR = "Unknown"
 
 
 class BookProvenance(BaseModel):
@@ -308,3 +320,274 @@ class EditorialReviewResult(BaseModel):
     overall_note: str = Field(
         min_length=1, description="One or two sentences: does this Leaf read well overall?"
     )
+
+
+# ---------------------------------------------------------------------------- WP30
+# Where a scenario illustration takes place.
+#
+# **This is a generation artifact, not part of the content model.** Nothing here reaches
+# `packages/shared/src/content.ts` or a Payload collection: a Leaf stores the picture, not
+# the reasoning that produced it. It is checkpointed into the run and logged at the node
+# boundary so the decision is inspectable afterwards, and that is the whole of its life.
+#
+# It exists because Track 42 came back as eighteen variations of one picture — a seated
+# figure at a table in a dim interior, eighteen times out of eighteen, including a scenario
+# about buying a family home. The house style was holding the *environment* constant along
+# with the palette, which is not what it was for. Leaving the setting unstated left the model
+# to default, and its default is whatever the anchors show.
+
+
+class SceneVantage(StrEnum):
+    """Inside or outside. The single cheapest axis of variety, and Track 42 used one value."""
+
+    INTERIOR = "interior"
+    EXTERIOR = "exterior"
+
+
+class SceneLight(StrEnum):
+    """Time of day, as light rather than as a clock.
+
+    Named for what the illustrator draws. The palette stays dark at every value — these
+    change where the light comes from and how much of it there is, never the surfaces.
+    """
+
+    DAWN = "dawn"
+    MORNING = "morning"
+    MIDDAY = "midday"
+    AFTERNOON = "afternoon"
+    EVENING = "evening"
+    NIGHT = "night"
+
+
+class SceneShot(StrEnum):
+    """Camera distance. Track 42 is eighteen medium shots."""
+
+    CLOSE = "close"
+    MEDIUM = "medium"
+    WIDE = "wide"
+
+
+# Bare nouns that name no particular place. A `place` that normalises to one of these is the
+# default this whole mechanism exists to refuse, so it is rejected at parse rather than
+# flagged later — by then three images have been bought.
+GENERIC_PLACES = frozenset(
+    {
+        "desk",
+        "office",
+        "home office",
+        "workspace",
+        "workplace",
+        "room",
+        "interior",
+        "indoors",
+        "outdoors",
+        "home",
+        "house",
+        "table",
+        "work",
+        "somewhere",
+    }
+)
+
+_ARTICLES = frozenset({"a", "an", "the", "at", "in", "on", "of", "his", "her", "their", "its"})
+
+# Words too common to distinguish one place from another. Two places that differ only in
+# these are the same place with a coat of paint.
+_PLACE_STOPWORDS = _ARTICLES | frozenset({"small", "large", "old", "new", "quiet", "busy"})
+
+
+def normalise_place(value: str) -> str:
+    """A place reduced to its content words, for comparison.
+
+    Lowercased, stripped of punctuation and of the articles and filler adjectives that let a
+    model return the same place eighteen times and call it variety.
+    """
+    words = re.findall(r"[a-z]+", value.lower())
+    kept = [word for word in words if word not in _PLACE_STOPWORDS]
+    return " ".join(kept or words)
+
+
+def place_words(value: str) -> set[str]:
+    """The content words of a place, as a set."""
+    return set(normalise_place(value).split())
+
+
+# Body parts are people. A frame with "the palm of an open hand" in it has a person in it,
+# whatever the figure count says, and a model handed both resolves the contradiction by
+# drawing a disembodied one — which it did, filling the lower third of an otherwise good
+# picture of a house with a giant floating hand.
+_BODY_PARTS = frozenset(
+    {
+        "hand",
+        "hands",
+        "palm",
+        "palms",
+        "finger",
+        "fingers",
+        "fist",
+        "arm",
+        "arms",
+        "elbow",
+        "shoulder",
+        "shoulders",
+        "face",
+        "faces",
+        "eye",
+        "eyes",
+        "foot",
+        "feet",
+        "leg",
+        "legs",
+        "knee",
+        "knees",
+        "lap",
+        "wrist",
+        "thumb",
+    }
+)
+
+
+class SceneSetting(BaseModel):
+    """Where one Leaf's illustration happens, decided before the image model is asked.
+
+    Every field is an axis the house style must *not* hold constant. The style contract owns
+    medium, palette and figure treatment; this owns everything else about the frame.
+    """
+
+    order: int = Field(ge=0)
+
+    place: str = Field(
+        min_length=1,
+        description="A specific, concrete location — 'the roasting room behind a small "
+        "coffee shop', not 'an office'. Name what is physically there.",
+    )
+    vantage: SceneVantage
+    light: SceneLight
+    shot: SceneShot
+    figures: int = Field(
+        ge=0,
+        le=3,
+        description="How many people are in frame. 0 is allowed and is sometimes the "
+        "strongest choice — an empty place carries a situation too.",
+    )
+    focus: str = Field(
+        min_length=1,
+        description="The one object or action the eye lands on. Not a person's face.",
+    )
+
+    @model_validator(mode="after")
+    def _an_empty_frame_has_no_hands_in_it(self) -> SceneSetting:
+        """`figures: 0` and a focus on somebody's hands are not both true.
+
+        Found by looking at the picture. Leaf 13 of the WP30 before/after asked for a wide,
+        unpeopled shot of a house and a focus on "a brass key lying in the palm of an open
+        hand"; what came back was the house with an enormous disembodied hand across the
+        foreground. The model was not wrong — it was given two incompatible instructions and
+        satisfied both.
+
+        Caught here rather than left to the image model, because this is a contradiction in
+        the *plan* and it is cheap to see in text and expensive to see in an image.
+        """
+        if self.figures > 0:
+            return self
+        found = sorted(_BODY_PARTS & place_words(self.focus))
+        if found:
+            raise ValueError(
+                f"focus names {found} but `figures` is 0. A hand in the frame is a person in "
+                "the frame — either raise `figures`, or choose a focus with nobody attached "
+                "to it (keys on a doorstep rather than keys in a palm)."
+            )
+        return self
+
+    @field_validator("place")
+    @classmethod
+    def _must_name_somewhere_in_particular(cls, value: str) -> str:
+        """Reject the default rather than detect it afterwards.
+
+        A bare 'a desk' is the answer the model gives when it has not thought about the
+        scenario, and it is the answer that produced eighteen identical pictures.
+        """
+        normalised = normalise_place(value)
+        if normalised in GENERIC_PLACES:
+            raise ValueError(
+                f"{value!r} names no particular place. Say what is physically there — "
+                "'the loading bay behind a print shop', not 'an office'."
+            )
+        if len(normalised.split()) < 2:
+            raise ValueError(
+                f"{value!r} is one word. A place needs enough detail to be drawn: "
+                "what kind of place, and what is in it."
+            )
+        return value.strip()
+
+
+# A Track this size or larger is expected to move the camera and the clock. Below it, a
+# handful of Leaves may legitimately share a register, and a rule would be noise.
+MIN_LEAVES_FOR_AXIS_VARIETY = 8
+
+# No single content word may appear in more than this share of a Track's places. Without it
+# "a cluttered desk", "a tidy desk" and "a standing desk" are three distinct strings and one
+# room — which is exactly the shape Track 42's cosmetic variety took.
+MAX_SHARED_WORD_FRACTION = 0.5
+
+
+class ScenePlan(BaseModel):
+    """One setting per Leaf, for a whole Track, decided in a single pass.
+
+    **Derived for the Track at once rather than per Leaf, and that is the mechanism.** Track
+    42's images were generated one Leaf at a time from a prompt that never mentioned setting,
+    so every call defaulted independently to the same place; a prompt asking each call to
+    "vary the setting" would have done no better, because no call could see the others. A
+    model shown all eighteen scenarios together and required to return eighteen distinct
+    places cannot collapse them without failing to parse.
+    """
+
+    settings: list[SceneSetting]
+
+    @field_validator("settings")
+    @classmethod
+    def _places_must_differ(cls, value: list[SceneSetting]) -> list[SceneSetting]:
+        if not value:
+            raise ValueError("A scene plan needs at least one setting.")
+
+        orders = [setting.order for setting in value]
+        if len(set(orders)) != len(orders):
+            raise ValueError(f"Two settings claim the same Leaf: {sorted(orders)}")
+
+        normalised = [normalise_place(setting.place) for setting in value]
+        duplicates = {place for place in normalised if normalised.count(place) > 1}
+        if duplicates:
+            raise ValueError(
+                f"These places are used more than once: {sorted(duplicates)}. Every Leaf "
+                "needs its own place."
+            )
+
+        # Cosmetic variety is the failure mode a distinctness rule alone invites: eighteen
+        # unique strings that are all a desk. Counted over content words, that shows up.
+        counts: dict[str, int] = {}
+        for setting in value:
+            for word in place_words(setting.place):
+                counts[word] = counts.get(word, 0) + 1
+        ceiling = max(1, int(len(value) * MAX_SHARED_WORD_FRACTION))
+        overused = sorted(word for word, count in counts.items() if count > ceiling)
+        if overused:
+            raise ValueError(
+                f"{overused} appear in more than half the places. Distinct strings that "
+                "are all the same room are not variety — change the places, not the adjectives."
+            )
+
+        if len(value) >= MIN_LEAVES_FOR_AXIS_VARIETY:
+            if len({setting.shot for setting in value}) < 2:
+                raise ValueError(
+                    "Every Leaf uses the same camera distance. Vary `shot` — a close view "
+                    "of hands and a wide view of a room are different pictures."
+                )
+            if len({setting.light for setting in value}) < 3:
+                raise ValueError(
+                    "A Track this long should not happen entirely at one time of day. Vary `light`."
+                )
+
+        return sorted(value, key=lambda setting: setting.order)
+
+    def by_order(self) -> dict[int, SceneSetting]:
+        return {setting.order: setting for setting in self.settings}

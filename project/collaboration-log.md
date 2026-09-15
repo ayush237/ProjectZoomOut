@@ -20,6 +20,250 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-11 — WP30: Ikigai end to end, with scenario images that match their scenarios
+
+*Pipeline Manager. **Suggested model: Opus** — the finding is the deliverable on the first half. "The images vary now" is exactly the claim that can be asserted green while being false; it took the founder's eye to catch the current state.*
+
+> **Read:** this handoff · `apps/pipeline/src/zoomout_pipeline/graph/asset_nodes.py` (`scenario_image_prompt`) · `apps/pipeline/src/zoomout_pipeline/prompts/asset_style.md` · `apps/pipeline/src/zoomout_pipeline/assets/images.py` · `apps/pipeline/assets/anchors/` · `project/proposals/design-direction.md` · your own WP18 and WP20 completion reports in this log · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP30 — Ikigai end to end, with scenario images that match their scenarios
+
+**Suggested model:** Opus.
+
+**Context:** Track 42's eighteen scenario images are all a seated figure at a table in a dim interior. **Verified on the published record, not reported** — Architect pulled Leaves 0, 5, 9 and 13 from the live CMS and looked at them. Leaf 13's scenario is *"you want to buy a new house for your family"* and the image is a man alone at a desk at night with a calculator. The house style is working — the library does look like one product — but it is holding the **environment** constant along with the palette, and that is not what it was for. Book #2 is Ikigai, and generating it before this is fixed means paying for eighteen images twice.
+
+**Four causes were identified, and none is the scenario text:**
+1. **The prompt never names a place.** `scenario_image_prompt()` is scenario prose + "illustrate as a single quiet moment" + the style contract. The prose describes a situation and a feeling; it contains no location, so the model invents one and defaults to the safest interior.
+2. **The style contract's subject list is table-first.** *"Ordinary modern life: a desk, a commute, a kitchen table, a shop counter, a conversation"* — four of five are people at tables, phrased as a menu of examples rather than an instruction to vary.
+3. **Five of the six committed anchors are seated interiors.** A reference image carries environment and composition, not only palette and technique, so the anchors are teaching "seated person, table, dim room" as if it were style.
+4. **Nothing sees the set.** Each Leaf generates independently, so "they are all the same" is structurally undetectable.
+
+*Secondary, already forbidden by the contract: Leaf 13's papers carry arrow and line glyphs that read as writing.*
+
+**Objective:** Two things, in this order. **(A)** Scenario images keep one visual identity — medium, palette, figure treatment — while their *setting* is driven by the scenario, proven by a before/after on identical scenario text. **(B)** Ikigai is onboarded end to end with the fixed generator and lands in the CMS as a reviewed draft.
+
+**Scope:** `apps/pipeline` only — `graph/asset_nodes.py`, `prompts/asset_style.md`, `assets/` and the anchor set, plus tests.
+
+**Requirements — Half A, the generator**
+- **Derive a concrete setting per Leaf from the scenario, and name it in the image prompt.** The scenario implies a place even when it does not state one; the generator should decide it explicitly rather than leave the model to default.
+- **This must not require a schema change.** The setting is a generation artifact — recorded in the run, visible in logs — not a new field on the Leaf. Anything touching `packages/shared` or the Payload collections is out of scope and belongs to Manager.
+- **Split `asset_style.md` into what is fixed and what must vary.** Fixed: medium, palette, the teal-accent rule, the amber prohibition, depth-from-lightness, non-identifiable figures, every content guardrail. Varying: setting, interior/exterior, time of day, camera distance, number of figures, whether a figure appears at all.
+- **Re-examine the anchor set.** Decide whether to recut anchors spanning environments or to reduce their pull on composition — **this is the judgement call of the package**, because the anchors are what make the library cohere and a careless change trades one problem for the AI-slop drift the founder ruled against. Say what you chose and why.
+- **A Track-level variety check.** Something that looks at the whole set and fails when it has collapsed. Design it yourself; a setting-label distribution is a supporting signal, not the check, because a label can read "construction site" over a picture of a desk.
+
+**Requirements — Half B, the book**
+- **Ingest `/Users/ayushgupta/Documents/ZoomOut/ZO-admin/booksSource/Ikigai.pdf`** and run through gate 1, generation, grounding, assets and gate 2.
+- **`acquisition` must be `undocumented`** — the honest value for a downloaded PDF. Not `purchased`, not `licensed`. The point of the field is that "which Tracks need regenerating" stays a query.
+- **Ikigai lands as a draft and is not published.** It is in copyright; building against it was ruled acceptable 2026-08-13, and what ships at launch is still open.
+- **15–30 Leaves**, and **no 1:1 reproduction of the book's chapter structure or its named framework** — a hard legal constraint, not editorial taste.
+- **Source references need a locator, not only a note.** Ikigai is a PDF and `ingest/pdf.py` reads page by page, so **page locators may be achievable for the first time** — every prior Track used chapter/quote because EPUBs have no pages. Report whether page locators actually survive into references; if they do not, say so plainly rather than inventing them.
+- **State the image budget before the run and make it halt, not warn.** WP18's reported $2.34/Track was computed at the wrong per-image rate; the real rate is `gemini-3-pro-image` at $0.134.
+
+**Out of scope**
+- **Track 42's existing published images.** Regenerating them is a separate founder decision, deliberately deferred until this package's before/after exists. Do not touch the published record.
+- `apps/mobile`, `apps/backend`, `apps/admin`, any Payload collection change, any shared-type change.
+- Publishing Ikigai live. Draft only.
+- The curation policy itself — a founder decision, still open.
+
+**Constraints:** Half A ships and is proven before Half B's run starts. The option shuffle (`shuffle_options`, WP17) must be exercised — Track 42 predates it and carries the correct answer in position B for 15 of 18 Leaves; Ikigai is the first chance to confirm the shuffle works on real content. Raw text is purged after the run, as a deliberate command.
+
+**Device gate:** open an Ikigai Leaf in the app on a device and look at the scenario illustrations across **at least six** Leaves. **What to observe: the settings differ from one another and each one plausibly belongs to its own scenario** — not that the images are pretty, and not that the run exited zero.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `typecheck`, `test` pass
+- [ ] **Before/after on identical scenario text:** Track 42's Leaves 0, 5, 9 and 13 regenerated as *candidates only* with the new generator, presented beside the current published images. **The four new settings are visibly distinct from each other, and Leaf 13 is no longer a person at a desk**
+- [ ] `asset_style.md` separates fixed identity from varying environment, and the fixed half still forbids amber, text/symbols, identifiable people, and book branding
+- [ ] The variety check **fails against Track 42's current eighteen images and passes against Ikigai's** — run it both ways and show both results
+- [ ] Ikigai is in the CMS as a **draft**, 15–30 Leaves, `acquisition: undocumented`, `isPlaceholder` off
+- [ ] Every Leaf's source references carry a note **plus at least one locator**; report whether page locators were achievable
+- [ ] Correct-answer positions across Ikigai's Leaves are not concentrated in one position
+- [ ] **Observed on a device: six Leaves, six settings that belong to their scenarios**
+- [ ] Raw text purged after publish-to-draft, and the run's total cost reported
+
+**Testing expectations:** unit coverage on the setting derivation and the variety check, including a mutation — break the setting derivation and confirm the variety check goes red. **Say plainly which evidence is a test and which is a human looking at pictures**; the variety claim is not fully testable and the before/after is the real proof.
+
+---
+
+### Handoff: 2026-09-11 — WP29: the Leaf player's footer hosts the live action
+
+*Manager. **Suggested model: Sonnet** — one flow change, ruled and scoped. You found this; this is the fix.*
+
+> **Read:** this handoff · your own WP28 completion report — **commit `02f8e31`**, cited by hash because a pruned pointer is what cost WP28 time · `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` · `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` · `apps/mobile/src/components/Button.tsx` · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `projectRoadmap.md`, `design/`, `apps/pipeline`, `apps/admin`, `apps/backend`.
+> **Inherited:** Reduce Motion changed mid-session leaves Reanimated stale — relaunch, don't reload, if you gate on motion. RN's jest preset reports `fontScale: 2`, so screen tests exercise the degraded path only.
+
+### Task: WP29 — the footer carries whatever is actionable
+
+**Suggested model:** Sonnet.
+
+**Context:** WP28 established that the Leaf player pins a **disabled** *Next* in the footer — the position a reader's eye goes to for the primary action — while the live control, *Check answer*, sits below the fold inside the ScrollView. **This cost four packages of engineering time** from people who could read the source; a reader cannot. **The founder ruled 2026-09-11 for the footer fix rather than restyling the disabled state**, because making a dead button look dead still leaves a dead button where the live one should be.
+
+**Objective:** On every slide, the pinned footer holds the action that is currently available. A reader never scrolls to find the primary control, and never sees a prominent control that does nothing.
+
+**Scope:** `LeafPlayerScreen.tsx` and the slides' relationship to the footer.
+
+**Requirements**
+- **The footer hosts the currently-live action.** On the scenario slide before an answer that is *Check answer*; once answered it becomes *Next*. Other slides keep whatever they have today if it is already the live action.
+- **Do not restyle `Button`'s disabled state.** It is a real finding — `opacity: 0.5` on a teal pill against near-black still reads as live — but it is a design-system change touching every consumer, it is logged separately, and this package must not wait on it.
+- **The payoff gate does not change.** The rule that the payoff stays locked until a correct answer is the product's central guarantee. This moves a control; it does not alter when the control becomes available.
+- **If a disabled control genuinely must appear in the footer** in some state you find, say so rather than forcing the pattern — and report which state.
+
+**Out of scope:** `Button` itself, the other four slides' content, the report sheet, every other screen.
+
+**Constraints:** tokens only. Do not run `git add -A`; stage by path.
+
+**Device gate:** **play a Leaf end to end.** On the scenario slide, *before answering*, **the footer's control is the one that works** — press it and something happens. Answer wrongly, answer correctly, and confirm the footer follows the state. **Both themes, and at accessibility-max**, where the ScrollView is most likely to push content around.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] **On the scenario slide, the footer's control is live at every point** — never a disabled primary
+- [ ] The payoff still unlocks only after a correct answer — verified by exercising it
+- [ ] **Observed on a device: no scrolling is required to reach the primary action on any slide**
+- [ ] Both themes at accessibility-max
+- [ ] `Button.tsx` is unchanged in the diff
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier B, plus **Tier A on the footer-action selector** — "which action is live for this slide and state" is a pure function of slide index and answer state, and belongs in a tested module like `roadmapLabels` and `stickyNotesLayout` before it. Mutation-check it.
+
+---
+
+### Handoff: 2026-09-11 — WP28.1: the override on the full-motion branches
+
+*Manager. **Suggested model: Sonnet** — four one-line additions and one substitution. You diagnosed it, sized it, and declined to ship it inside a diagnosis package; that was right, and this is the package it belongs in.*
+
+> **Read:** this handoff · your own WP28 completion report — **at the top of the Completions section in `project/collaboration-log.md`, commit `02f8e31`** (cited by commit, not by position, because a pruned pointer is exactly what cost WP28 time) · `apps/mobile/src/design/motion.ts` · `apps/mobile/src/screens/track/TrackRoadmap.tsx` · the three `motionTimingConfig` call sites · `apps/mobile/src/design/reduceMotionCallSites.test.tsx` — **your own guard; extend it** · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `projectRoadmap.md`, `design/`, `apps/pipeline`, `apps/admin`, `apps/backend`.
+
+### Task: WP28.1 — close the staleness window
+
+**Suggested model:** Sonnet.
+
+**Context:** WP28 established that Reanimated freezes the OS reduce-motion value at native init while RN stays live, so the two disagree only when the setting changes mid-session. **Every reduced-motion branch is correctly flagged and accessibility is safe today. The full-motion branches are not flagged** — so inside that window the full-motion animation is suppressed while the fade branch was never taken, and nothing runs. **On `TrackRoadmap` that silences `NextNodeRing`, the only marker for which node to tap next on a long scrolling graph.**
+
+**Objective:** No branch of any animated surface can be silently suppressed, and the override lives in one place.
+
+**Scope:** the four animated surfaces and `motion.ts`.
+
+**Requirements**
+- **Add the override to the full-motion branch of all four surfaces.** You sized this at four one-line additions and judged it safe in all three states; that assessment stands.
+- **Route `TrackRoadmap.tsx` through `REDUCE_MOTION_OVERRIDE` instead of writing `ReduceMotion.Never` inline.** WP22.1's guarantee was that the flag lives in exactly one place, and an inline copy is that guarantee quietly not holding — **which is why it took a diagnosis package to notice.**
+- **Extend `reduceMotionCallSites.test.tsx` to cover the full-motion branches.** The guard currently proves the reduced branches are flagged; it should fail if a full-motion branch loses its override too.
+
+**Out of scope:** `NextNodeRing`'s own coverage — it needs a full graph fixture and is logged for WP14. Any redesign. Any other screen.
+
+**Device gate — and the procedure matters more than usual here.** The bug only exists inside the staleness window, and **WP28 established exactly how to create it: change the OS reduce-motion setting *while the app is running*, and do not relaunch.** A `simctl terminate` + launch clears the state and would show you a passing app that proves nothing. **A Metro or JS reload does not clear it, so that is your tool.**
+- **In the disagreeing state, on the roadmap: `NextNodeRing` still animates.** That is the criterion.
+- Then relaunch and confirm both ordinary states — reduce-motion genuinely on, genuinely off — still behave.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] All four full-motion branches carry the override
+- [ ] `TrackRoadmap` uses `REDUCE_MOTION_OVERRIDE`; no inline `ReduceMotion.Never` remains
+- [ ] The guard covers full-motion branches and **fails when one loses its flag** — mutation-checked
+- [ ] **Observed in the disagreeing state: `NextNodeRing` animates**
+- [ ] Observed after relaunch: both ordinary states unchanged
+- [ ] No production behaviour changes outside motion flags
+
+**Testing expectations:** extend the existing guard. **Say plainly which evidence is the test and which is the device observation** — the staleness window is not reproducible in Jest, so the device pass is the only proof of the case this package exists for.
+
+---
+
+### Handoff: 2026-09-10 — WP28: diagnose the tap failure and Reanimated's reduce-motion disagreement
+
+*Manager. **Suggested model: Opus** — **the finding is the deliverable.** There is no design here and no feature; the output is an explanation, and a wrong one costs a fifth package.*
+
+> **Read:** this handoff · `apps/mobile/src/design/motion.ts` · the three call sites using `motionTimingConfig` (`PayoffSlide`, `ScenarioSlide`, `AchievementUnlock`) · `apps/mobile/src/screens/track/TrackRoadmap.tsx` · your own WP25, WP26 and WP27 completion reports in this log — **the three tap reports are the evidence base and you wrote all of them** · `agents/manager.md`.
+> **Do not read:** `PRODUCT.md`, `LEGAL.md`, `projectRoadmap.md`, `apps/pipeline`, `apps/admin`, `apps/backend`, `design/`.
+
+### Task: WP28 — diagnose, do not work around
+
+**Suggested model:** Opus.
+
+**Context:** The Leaf-player tap failure has **three independent reports across three packages**, and each was met with a different workaround. **A fourth workaround costs more than an explanation.** While eliminating the Reduce Motion banner as the cause, WP27 found something else: **Reanimated reports reduce-motion as ON while the OS reports OFF.**
+
+**Objective:** An explanation, with evidence. A fix if the explanation yields one cheaply — but **an accurate "here is what it is and here is what it costs to fix" is a complete result**, and a plausible-sounding guess is a failure.
+
+**Scope:** diagnosis. Any fix must be justified by the diagnosis, not by making a symptom stop.
+
+**The three questions, in this order**
+
+1. **Is Reanimated's reduce-motion reading actually wrong?** Verify independently of WP27's observation. Is it permanent, or does it depend on app state, a stale listener, or the simulator? **`useReducedMotion` in `motion.ts` reads the OS via `AccessibilityInfo` — Reanimated maintains its own separate notion.** If those genuinely disagree, establish which is right and why.
+2. **If it is wrong, what is the blast radius?** `REDUCE_MOTION_OVERRIDE` exists precisely so our swap survives Reanimated's suppression. **Only three surfaces route through `motionTimingConfig` today** — `PayoffSlide`, `ScenarioSlide`, `AchievementUnlock` — while every animated surface added since WP22.1 (the roadmap, the slides, Track complete, the tabs) either sets the flag inline or does not carry it. **`TrackRoadmap.tsx` sets `ReduceMotion.Never` inline rather than through the helper**, which means WP22.1's "the flag lives in one place" guarantee is not actually holding. **Enumerate every animated surface and state, for each, whether it carries the flag by any route.** If Reanimated is permanently suppressing, anything without it has been running degraded and nobody knows.
+3. **Is any of that connected to the tap failure?** It is a lead, not an assumption. **Say so if it is unrelated** — eliminating it is a real result.
+
+**Reproduce before theorising.** Three reports, three packages, intermittent each time. **A deterministic reproduction is worth more than a hypothesis**, and if you cannot get one, that is itself the finding: report what correlates with it and what does not.
+
+**A fourth report arrived after this handoff was written, and it changes the shape of the question.** WP22.3 could not open Track 42 because **its card on the Library screen did not respond to tap.** Every previous report was the Leaf player — the Next button, the pill CTAs. **This one is a different screen and a different control type**, so "something about the Leaf player" is no longer a safe framing. **Treat the surface commonality as unproven** and let the reproduction tell you the boundary.
+
+**Two causes are already known and must be excluded first, so you are not rediscovering them:**
+- **Coordinate space** — screenshot pixels are not the tool's tap-point space (WP24).
+- **The Reduce Motion banner** — with that setting on, an invisible debugger banner swallows touches in the bottom ~15% (WP26). WP27 already eliminated it as *this* bug's cause; confirm that independently rather than inheriting it.
+
+**Out of scope**
+- **A fourth workaround.** If you find yourself adding a coordinate nudge or a retry, stop and report instead.
+- **Changing app code to suit the automation.** Standing rule, ruled 2026-09-08. If the defect is in the tooling, the finding is that the defect is in the tooling.
+- Any redesign work. The redesign is complete.
+
+**Time-box it and say so.** Diagnosis rat-holes. **If the root cause is not found within a reasonable effort, report what was eliminated, what was observed, and what you would try next.** That is a genuinely useful package and a far better outcome than a confident wrong answer — this project has recorded five stale claims that were confident when written.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass (or are untouched, if the package ships no code)
+- [ ] **Question 1 answered with evidence** — does Reanimated disagree with the OS, and is it permanent
+- [ ] **Question 2 answered as an enumeration** — every animated surface, and whether it carries the override by any route
+- [ ] **Question 3 answered either way** — connected, or explicitly eliminated
+- [ ] Either a deterministic reproduction, **or** a written account of what correlates and what does not
+- [ ] The two known causes are independently excluded
+- [ ] **No workaround added**
+- [ ] If a fix ships, it is justified by the diagnosis and its scope is stated
+
+**Testing expectations:** whatever the diagnosis supports. **If the answer is "Reanimated's reading is wrong and the flag is load-bearing everywhere", the valuable artefact is a test that fails when the override is removed from a surface that needs it** — the guard WP22.1 asked for and could not write. Say plainly which evidence is measurement and which is inference.
+
+---
+
+### Handoff: 2026-09-10 — WP22.3: give the roadmap room to breathe
+
+*Manager. **Suggested model: Sonnet** — one constant family, a clear target, and the failing condition is named.*
+
+> **Read:** this handoff · `apps/mobile/src/screens/track/roadmapGeometry.ts` (`GRAPH`, `spineBand`, the vertical rhythm) · `apps/mobile/src/screens/track/roadmapLabels.ts` · `agents/manager.md`.
+> **Inherited:** Reduce Motion ON makes the simulator swallow touches in the bottom ~15% — turn it off with `xcrun simctl spawn <udid> defaults write com.apple.Accessibility ReduceMotionEnabled -bool NO`. RN's jest preset reports `fontScale: 2`, so screen tests exercise the degraded path only.
+
+### Task: WP22.3 — vertical rhythm derived from label height
+
+**Suggested model:** Sonnet.
+
+**Context:** The founder finds the roadmap congested. **This is not a porting error — WP22.2 matched the source exactly**: `graph.jsx`'s fixture spaces nodes 24–32pt apart and WP22.2 set 24–40pt. **It reads congested for us because our labels are taller.** The mockup's are two or three words on one line; ours are real Leaf titles, wrapped to two lines by `roadmapLabels.ts`. **Two-line labels at 24–32pt gaps crowd where single-line labels do not** — the same short-label assumption that caused the original drift, showing up in the vertical dimension after WP22.2 fixed the horizontal one.
+
+**Objective:** The roadmap is comfortable to read at every Leaf count and text size, and a longer scroll is an acceptable price.
+
+**Scope:** `roadmapGeometry.ts`'s vertical rhythm.
+
+**Requirements**
+
+- **Derive vertical spacing from the actual label box height** rather than a fixed range — the same move `roadmapLabels.ts` already makes for the horizontal budget. A node whose label wraps to two lines needs more room beneath it than one that does not, and **that varies with the OS text scale.**
+- **Do not touch `spineBand` (0.25).** That constant is what gives labels their ~125pt gutter, and widening it is what caused the original stub-label problem. **This package changes the vertical dimension only.**
+- **Scroll length is explicitly not a target.** WP22.2 treated collapsing a ~2000pt scroll into one screen as a win. **The founder has ruled otherwise: vertical scrolling to explore the roadmap is fine; unreadable density is not.**
+- **This is a deliberate departure from the source, and the first one the redesign has made on purpose.** `graph.jsx` is compact because its content is short. Record it in the file so nobody later "corrects" it back toward the mockup.
+
+**Out of scope:** the label treatment itself, node glyphs, dendrites, `spineBand`, and every other screen.
+
+**Constraints:** `roadmapGeometry.ts` stays pure and seeded; its 15–30 tests must still pass. Tokens only.
+
+**Device gate:** **Track 42 (18 Leaves) and the 20-Leaf placeholder**, both themes, at **default and accessibility-max**. At accessibility-max labels wrap more, so that is the case most likely to crowd. **Then look at it and say whether it reads comfortably** — the founder's judgement is final, but yours is the first pass.
+
+**Acceptance criteria**
+- [ ] Root `lint`, `typecheck`, `test`, `build` pass
+- [ ] Vertical spacing responds to label height and text scale — **asserted by a test, since the function is pure**
+- [ ] `spineBand` is unchanged
+- [ ] `roadmapGeometry`'s existing 15–30 range tests still pass
+- [ ] **Observed at 18 and 20 Leaves, both themes, default and accessibility-max: no label collides with a node or another label**
+- [ ] The deliberate departure from the source is recorded in the file
+- [ ] No new colour, spacing, radius or duration values
+
+**Testing expectations:** Tier A on the rhythm function — it is pure, so "does spacing grow when the label wraps" is directly assertable. **Mutation-check it.**
+
+---
+
 ### Handoff: 2026-09-10 — WP27: the four tab screens, and the icon swap two packages deferred
 
 *Manager. **Suggested model: Sonnet** — four screens that all exist, one source file, an established method. **The last package of the redesign.***
@@ -790,6 +1034,495 @@ WITH ABSOLUTE URLS            : OK
 ---
 
 ## Completions (Manager → Architect)
+
+### Completed: WP30 — Ikigai end to end, and scenario images that match their scenarios — 2026-09-15
+
+**7 of 9 acceptance criteria met. Two are unmet because the founder capped spending mid-package,
+and they are unmet rather than partially done: no Ikigai images exist.** `apps/pipeline` lint,
+`ruff format --check`, `mypy --strict` (75 files) and `pytest` (226 passed, 2 deselected) are
+clean. Nothing outside `apps/pipeline` was touched.
+
+**The two numbers that matter:**
+
+| | |
+|---|---|
+| **Spent** | **$10.07** — against a $5 ceiling the founder stated after the spend had happened |
+| Ikigai text, 18 Leaves, 198 calls | **$9.09** — 3.1x WP20's $2.94 for the same node set |
+
+**The cost overrun is the most important operational finding in this package and it is mine.**
+I watched the rate and narrated it twice — at $1.13 on Leaf 2, then $4.77 on Leaf 9 — and each
+time chose to continue at default settings so the number stayed comparable to Track 42. I was
+reasoning from the $300 trial credit sitting unspent and expiring 2026-09-17, which made
+"spend it while it exists" feel obviously right. **It was a budget judgement, and budget
+judgements belong to the founder.** Narrating a rate is not asking about it.
+
+**Where the money goes, for whoever plans the next book:** the editorial review/revise loop on
+`gemini-3.1-pro-preview` at `editorial_attempts=2` is up to five pro-model calls per Leaf, and
+on Ikigai it reached the cap on most Leaves. WP20 made that cap configurable for *throughput*
+reasons; the same knob is the cost lever. **Ikigai at `editorial_attempts=1` would have been
+roughly half.** Throughput itself was fine — call gaps stayed at 20-30 seconds and WP20's
+109-minute stall did not recur.
+
+---
+
+## Half A — the generator
+
+### What was actually wrong, measured rather than assumed
+
+Track 42's eighteen published scenario images are **eighteen out of eighteen** a seated figure
+at a table in a dim interior. Not fifteen of eighteen. Confirmed by looking at the set, and the
+founder's example holds exactly: Leaf 13's scenario is buying a family home and it rendered as
+a man alone at a desk with a calculator.
+
+Three causes, and only the first was in the handoff's framing:
+
+1. **The image prompt named no setting.** Each call defaulted independently, and an image
+   model's default is what its anchors show.
+2. **The style contract ended its subject section with a menu** — *"ordinary modern life: a
+   desk, a commute, a kitchen table, a shop counter, a conversation"* — appended to every prompt
+   in the run, headed by the thing it kept producing.
+3. **Five of the six committed anchors are seated interiors**, and the instruction sent with
+   them said "do not reproduce their subjects" while six pictures said otherwise.
+
+### The anchor decision, which the handoff called the judgement call of the package
+
+**The committed six were kept, un-recut, and their pull was reduced by instruction instead.**
+
+Recutting is the founder's design decision, not a pipeline run — WP18's own note says so, and
+that set cost two rounds with the founder and two rejected candidates to arrive at. Replacing it
+to fix a prompt bug trades a known-good identity for an unknown one, which is precisely the
+AI-slop drift the anchors exist to prevent.
+
+What changed instead: the anchor instruction moved out of a string literal in `images.py` into
+`prompts/anchor_instruction.md` (it was the one prompt in this service that could not be
+diffed), and it now says to copy *how they are drawn* and nothing about *what they show*.
+
+**This was the cheapest hypothesis and it was tested rather than argued.** Four regenerations
+with the anchors untouched produced four different places. Had they not, the next step was
+reducing the anchor count; that step was not needed.
+
+### The evidence, and which kind it is
+
+**Before/after on identical scenario text, Leaves 0, 5, 9 and 13, candidates only — the
+published record was not touched.** Four for four changed setting. Leaf 0 became a roastery
+storage bay with burlap sacks and a cooling tray; Leaf 5 a breakroom kitchenette; Leaf 9 a cafe
+terrace under an awning; **Leaf 13 a new house at dusk with a staked sapling in the foreground.**
+
+**Three of the four are clear improvements. Leaf 9 is the weakest** — the place changed but it
+is still two people facing each other across a small table, so the composition barely moved.
+Saying so because an optimistic four-for-four would be the wrong record.
+
+**This is a human looking at pictures, and it is the only evidence that bears on the actual
+claim.** No test in this repo can tell you whether generated images vary.
+
+### Two defects the pictures caught that no test would have
+
+**A giant disembodied hand.** The first Leaf 13 asked for a wide, unpeopled shot of a house with
+the focus on "a brass key lying in the palm of an open hand" — and got the house with an
+enormous hand across the foreground. The model was not wrong; `figures: 0` and a focus on
+somebody's hands are not both true. Now refused at parse, where it is cheap to see, instead of
+in an image, where it costs $0.134 to discover.
+
+**Focus objects whose whole point is their writing.** The first derived plan focused Leaves on a
+printed application form, a boarding pass and a For Sale sign. The style contract forbids the
+illustrator from drawing a single letter, so those ask for a picture that cannot be drawn, and
+what comes back is a form covered in convincing nonsense. **Track 42's published Leaf 1 already
+renders "$10K" and "$2K" legibly** — an absolute-prohibition breach that is live now and
+predates this package.
+
+### A mistake I made and then caught with a test
+
+The first rewrite of `asset_style.md` explained the removed menu **by quoting it**, which put
+the same five words, headed by a desk, back into every image prompt inside an apology for them.
+**Telling an image model not to draw a desk mentions a desk.** The history now lives in
+`asset_nodes.py`'s docstring, which is never sent anywhere, and
+`test_the_fixed_half_names_no_setting_of_its_own` fails on word boundaries if a setting word
+reappears in the model-facing half.
+
+### The variety check, and the two designs that do not work
+
+**Recorded because both look obviously right and both fail.**
+
+| Signature | Track 42 (collapsed) | Anchors (varied) |
+|---|---|---|
+| Downsampled brightness grid | 0.686 | 0.692 — **scores the collapse higher** |
+| Median distance over all pairs | 0.80 | 0.79 — indistinguishable |
+| **Median nearest-neighbour, edge density** | **0.502** | **0.670** |
+
+Brightness fails because these images differ enormously in *where the light is* and not at all
+in what is in them, so a brightness grid measures the part that varies. The all-pairs median
+fails because a collapsed set still contains distant pairs — eighteen desks are still framed
+differently. **What "collapsed" means operationally is that every picture has a near twin**, and
+the statistic for that is each image's distance to its nearest neighbour.
+
+Colour is deliberately ignored: the palette is the identity, and a check scoring colour variety
+would mark the house style *working* as a failure.
+
+**The floor (0.60) is calibrated on two real sets and that is thin. Revisit it on the third
+Track.** The synthetic fixtures in `test_variety.py` assert *ordering only* and never the
+threshold — a renderer that draws rectangles cannot be asked where the line goes, and one tuned
+until it passed would be fitted to a toy. This distinction is load-bearing and should survive
+editing.
+
+**A limit worth stating: on a four-image sample, both the before and after sets pass** (0.819
+against 0.838). Collapse is a property of a whole set, and the four Leaves chosen for the
+before/after are among Track 42's most distinct. The check needs the full Track.
+
+### The mutation the handoff asked for
+
+`test_breaking_the_setting_derivation_turns_the_check_red` wires a deterministic renderer to the
+check: with per-Leaf places it passes, with every Leaf handed the same default it goes red. The
+break is applied *outside* `ScenePlan` on purpose, because the validator would refuse it — the
+validator is the first line of defence and the check is the second.
+
+---
+
+## Half B — the book
+
+**Track 50, `Ikigai: The Japanese Secret to a Long and Happy Life`, 18 draft Leaves.** Verified
+against the live record rather than the command's own report:
+
+| | |
+|---|---|
+| `acquisition` | `undocumented` |
+| `isPlaceholder` | `False` |
+| `_status`, draft and published views | `draft` — nothing is live |
+| Source references | **134, every one with a note and at least one locator** |
+| Locator kinds | chapter 134, quote 130, **page 0** |
+| Correct-answer position (A/B/C) | **6 / 5 / 7** |
+| Dinner Table Knowledge / apply-in-life | 18/18 each |
+
+**Page locators are not achievable, and this is settled from the code rather than from the
+output.** `parse_pdf` joins pages into chapter text inside `_split_by_toc`, and `Chapter` has no
+page field, so the page boundary is discarded before anything downstream could use it. Nothing
+can honestly emit one. Worth adding: even if plumbed through, these are *PDF page indices*
+(page 2 is the title page), not the printed book's numbers — which `content.ts` itself calls
+"edition-dependent false precision". **The feature is a bigger change than it looks and may not
+be worth wanting.**
+
+**The option shuffle works on real content.** 6/5/7 against Track 42's pre-shuffle "second in 15
+of 18".
+
+### The attribution defect, found mid-run
+
+Ikigai's PDF carries **neither a title nor an author**, so provenance recorded the filename and
+the literal string `"Unknown"` — and that string does not stay in the database. It reaches the
+Track's `author` field *and* the draft prompts, where the model is asked to write attributive
+framing about an author called Unknown. WP20 praised exactly that framing on Track 42
+("Wattles argues that…"); this book would have produced the same sentences with nobody in them.
+
+`LEGAL.md` treats fabricated content attributed to a real author as the highest-severity risk in
+the product. **A real author's ideas published under "Unknown" is the same wound from the other
+side** — it breaks the attribution the fair-use position and the purchase-forward framing both
+rest on.
+
+Fixed in three places: `run` takes `--title`/`--author`; ingest warns loudly when it had to
+default, at the point where re-ingesting is cheap; and `require_known_author` refuses the value
+at the CMS boundary — **the sibling of the never-publish guard, in the same file, for the same
+reason.** The pipeline promises that what it writes is a draft and that it says where it came
+from, and both are enforced where the write happens rather than remembered upstream, because
+upstream is where a default quietly wins.
+
+Provenance is written once and is not patched afterwards, so the first Ikigai ingest was deleted
+and redone. Wattles' 136 chunks were counted before and after to prove the delete hit only its
+own book.
+
+### Read-it-yourself gate — and Leaf 17 is not good enough
+
+**Attribution is consistent and correct across all 18** — "The authors state…", "The authors
+argue…", "The authors report…". The health and diet claims, which are most of Leaves 13-16, are
+attributed to the authors rather than asserted as fact. That is the thing that most needed to be
+right on this book and it is right.
+
+**Leaf 17 carries a named-framework problem.** Three of its five sticky notes are the book's own
+*ten rules of ikigai*, in the book's own imperative phrasing: "Eat until 80% full", "Stay active;
+don't retire", "Surround yourself with good friends". **`LEGAL.md` forbids reproducing a named
+framework 1:1, and the structure check cannot see this** — it measures chapter mirroring, not
+phrasing. Leaf 12 has a milder echo. The other sixteen are clean.
+
+The cause is predictable in hindsight: the approved plan put a synthesis Leaf on chapter 61,
+which *is* the ten rules, and the generator did the obvious thing with it. **A plan that assigns
+a Leaf to the chapter containing the book's named framework is a plan that needs a note
+attached**, and gate 1 is where that is cheap.
+
+Leaf 17 is also thin in two ways: its Dinner Table Knowledge restates the 80 percent rule that
+Leaf 13 already teaches — a deep-cut fact that is not deep — and its apply-in-life gives
+substantially the same instruction as Leaf 13's. **My own automated duplication check reported
+"none" for both**, because it compared normalised word sets and the phrasing differs. The eye
+caught what the check could not. That is the read-it-yourself gate earning its place, and it is
+also a caution about trusting a cheap similarity check over a reading.
+
+Leaf 13 carries only 2 sticky notes, the schema minimum, and the two paraphrase each other.
+
+### Retention — closed and verified by query
+
+Raw text 0 chars, `raw_text_purged_at` stamped, 63 embeddings intact, **36/36 cited passages
+retained as the audit trail**, 27 uncited chunk texts nulled.
+
+---
+
+## What is unmet, and why
+
+**Two acceptance criteria are unmet because the founder capped spending. Neither is partially
+done — there are no Ikigai images at all.**
+
+- **"The variety check passes against Ikigai's images."** It was run against Track 42 and fails
+  correctly (0.502, exit code 1, six named near-duplicate pairs). The other half of that
+  criterion needs images.
+- **"Observed on a device: six Leaves, six settings that belong to their scenarios."** Needs
+  images.
+
+The remaining spend is **$2.41 for one candidate per Leaf, or $7.24 for gate 2's three.** The
+scene plan derivation is already proven on Ikigai's sibling Track and costs about $0.02.
+
+**An unresolved obstacle behind the device gate, flagged rather than solved:** Ikigai is a draft
+and must stay one, and whether the app renders a draft Track in development lives in
+`apps/backend`, which this handoff put out of bounds. Whoever picks this up should establish
+that before assuming the device gate is a matter of running the app.
+
+---
+
+## Open for Architect
+
+1. **Leaf 17 should be regenerated or hand-corrected before this Track is published**, and the
+   named-framework echo is the reason. About $0.15 of text to regenerate one Leaf.
+2. **The 1:1 structure check measures chapters and cannot see phrasing.** Leaf 17 passed every
+   mechanical gate in this pipeline while lifting three of the book's ten rules verbatim. If
+   named frameworks matter as much as `LEGAL.md` says, that gap wants a check of its own — or an
+   explicit acceptance that gate 1 and the human reader are the only defence.
+3. **`editorial_attempts` is the cost lever, not just the throughput lever.** WP20 found it for
+   throughput; this package found the other half. A per-Track budget in dollars, refusing rather
+   than warning, is the natural sibling of `ImageBudget` and does not exist.
+4. **The variety floor is calibrated on two real sets.** It should be revisited on the third,
+   and the synthetic-versus-real evidence split in `test_variety.py` should be preserved when it
+   is.
+
+## Open for the founder
+
+1. **Choose the asset option, or leave Ikigai text-only.** $2.41 or $7.24, and nothing will be
+   spent without a decision.
+2. **Track 42's published Leaf 1 renders "$10K" and "$2K" legibly** — a breach of an absolute
+   prohibition on live content, unrelated to this package and not fixed by it.
+3. **Confirm in the billing console whether the $10.07 drew on the trial credit or a card.** The
+   Cloud Billing API does not expose credit balance; WP18 confirmed the credit path against the
+   console and I would expect the same, but I did not verify it.
+
+
+### Completed: WP28.1 — the override on the full-motion branches — 2026-09-11
+
+**Bottom line first:** All seven acceptance criteria met. Every full-motion branch on all four animated surfaces now carries `REDUCE_MOTION_OVERRIDE` at every nesting level; `TrackRoadmap.tsx`'s inline `ReduceMotion.Never` is gone, routed through the shared constant like everywhere else. The guard test now covers both branches of the three surfaces that can render standalone (6 tests, was 3), mutation-checked in all three new cases including the hard one. Device-verified with the actual staleness procedure the handoff specified — OS setting flipped while the native process kept running, not a relaunch — and the pre-fix ring was genuinely frozen (pixel-identical across three screenshots spanning 3+ seconds), matching WP28's diagnosis exactly. One honesty note below: the post-fix scale animation's visual confirmation was not fully decisive from static screenshots, and I'm saying so plainly rather than rounding up. Root `lint`, `typecheck` (4 workspaces), `test` (1,353 passing: shared 71, admin 198, backend 477, mobile 607 — up from 602, +5 new) and `build` all clean from a genuine cold gate. Branched from `origin/main` (`6f1276d`, carrying WP28's sign-off and this handoff) as `wp28.1-motion-override`; pushed, not yet a PR.
+
+---
+
+#### What changed, and why each piece is shaped the way it is
+
+**`motion.ts` gains `motionSpringConfig`, the `withSpring` counterpart to the existing `motionTimingConfig`.** The objective's own wording is "the override lives in one place," and before this package that was only true for `withTiming` configs. Every full-motion branch reaches for a named `spring` preset (`spring.reward`, `spring.snappy`) directly — there is no `MotionPlan` to build from, since committing to a spring at all already means the fade/spring choice is made — so the helper only needs to splice the flag in: `{ ...preset, reduceMotion: REDUCE_MOTION_OVERRIDE }`. Used at every `withSpring` call site touched by this package (4 of them). Not scope creep: `motion.ts` is explicitly in the handoff's scope, and a spring-config call site retyping `reduceMotion: REDUCE_MOTION_OVERRIDE` by hand is exactly the kind of place WP28 found the flag missing in the first place.
+
+**The four surfaces, in the same shape each time.** `withSequence`, `withDelay` and `withRepeat` each resolve reduce-motion independently of the animation they wrap (confirmed by reading Reanimated's own source — `getReduceMotionForAnimation`/`getReduceMotionFromConfig` in `animation/util.ts`, and the signatures of each factory: `withDelay(ms, anim, reduceMotion?)` and `withRepeat(anim, reps?, reverse?, cb?, reduceMotion?)` take it as a trailing positional argument; `withSequence(reduceMotion?, ...anims)` as a leading one; `withTiming`/`withSpring` take it inside their config object). Every nesting level in every full-motion branch now carries it:
+
+- **`PayoffSlide.tsx`** — the lock's squash-and-release (`withSequence` + 2 inner animations) and the panel's two staggered `withDelay`/inner pairs. 7 override sites.
+- **`ScenarioSlide.tsx`** — the wrong-answer nudge's `withSequence` + 3 inner animations. 4 new sites (the always-runs `feedbackOpacity` call was already correctly flagged via `motionTimingConfig`, unconditional on branch).
+- **`AchievementUnlock.tsx`** — two `withDelay` calls (opacity, translateY), each with one inner animation. 4 override sites.
+- **`TrackRoadmap.tsx`**'s `NextNodeRing` — the `scale` branch's `withRepeat` + inner `withTiming`. 2 override sites, plus the fade branch's existing 2 sites converted from inline `ReduceMotion.Never` to the shared constant.
+
+**`TrackRoadmap.tsx`'s inline `ReduceMotion.Never` is closed, both directions.** The handoff was explicit this was a second copy of the same decision, and explicit about why it mattered: it is *how* WP22.1's "the flag lives in one place" guarantee stopped holding without anyone noticing — a diagnosis package had to find it by reading the file, not by a test failing. `ReduceMotion` is no longer imported from `react-native-reanimated` in this file at all; `REDUCE_MOTION_OVERRIDE` comes from `../../design` like every other consumer. The docstring above `NextNodeRing` is rewritten to explain both the original fade-branch reasoning and why the full-motion branch needed the same treatment — future readers get the "why," not just the diff.
+
+#### The guard, extended and mutation-checked
+
+`reduceMotionCallSites.test.tsx` gains a parallel `describe('the full-motion branch', ...)` block alongside the existing (renamed, unchanged in substance) `describe('the reduced-motion branch', ...)`. Each test renders the same component as its reduced-motion counterpart, but with `AccessibilityInfo.isReduceMotionEnabled` mocked `false` instead of `true`, then asserts the exact count of overrides recorded by the spy — not a threshold. **Counts are exact by design, not by oversight:** with this many nesting levels per surface (up to 7), a loose `greaterThan(0)` would not notice one of them losing its flag, which is precisely the failure mode WP22.1's original bug was and this guard exists to catch.
+
+**Mutation-checked in all three new tests**, each time confirming only the matching test went red:
+1. Dropped `PayoffSlide`'s outer `withSequence` positional override, kept both inner configs correct → only the PayoffSlide full-motion test failed.
+2. Dropped `ScenarioSlide`'s outer `withSequence` positional override on the nudge → only the ScenarioSlide full-motion test failed.
+3. **The hard case:** dropped only `AchievementUnlock`'s *second* `withDelay`'s outer positional override (`translateY`), left the first (`opacity`) and both inner configs correct → only the AchievementUnlock full-motion test failed. This is the shape of WP22.1's actual original bug — an outer wrapper silently cancelling a correctly-configured inner animation — now reproduced and caught on the branch that previously had no coverage at all.
+
+All restored and reverified green (`git status` clean, no stray diffs) before committing.
+
+`motion.test.ts` gets a small direct unit-test pair for `motionSpringConfig` itself, mirroring `motionTimingConfig`'s existing tests: carries the override, preserves every field of the preset.
+
+#### Device gate — the procedure, and what it did and didn't prove decisively
+
+**Setup:** iPhone 16 Pro simulator, `com.zoomout.app` dev build, a seeded account with the 20-Leaf placeholder Track added (0/20 complete, so Leaf 1 is the `next` node and `NextNodeRing` renders on `TrackDetailScreen`'s roadmap).
+
+**The staleness window, built exactly as the handoff specified — the critical part.** Set OS reduce motion ON, cold-launched (`simctl terminate` + `launch`) so Reanimated's snapshot froze ON. Then, **without relaunching**, flipped the OS setting to OFF (`defaults write ... NO`) and confirmed via a throwaway native probe (`UIAccessibilityIsReduceMotionEnabled()`, `_AXSReduceMotionEnabled()`, and the raw plist, all three agreeing) that the OS genuinely reports OFF while the **same native PID** (confirmed via `launchctl list` before and after, unchanged throughout) kept running. A plain `defaults write` alone did not appear to reach the app's live `AccessibilityInfo` listener — no visible change after several seconds — so, per the handoff's own instruction, I used a Metro JS-only `reload` broadcast (over the `/message` WebSocket) to force `useReducedMotion`'s effect to re-mount and re-query the now-live value. Confirmed this was JS-only, not a native restart, by checking the PID again immediately after — unchanged both times I used it.
+
+**The negative proof is decisive.** With the pre-fix code restored (a plain file swap back to the `origin/main` version, then a JS reload to load it into the same stale-ON native process) and the app in the disagreeing state, I captured three screenshots of the ring spanning t=0, t=1s, t=3s. **All three are pixel-identical.** The ring's outer contour does not move at all across a window more than 3× the animation's own one-way duration (`duration.celebration` = 900ms). This is the bug, reproduced deterministically, in the exact state the handoff diagnosed it in.
+
+**The positive proof is code-level decisive, but not visually decisive, and I want to be precise about the difference.** With the fix restored and the identical staleness window rebuilt, the same three-screenshot comparison showed the ring's contour appearing to shift subtly between frames — consistent with the scale animation running, but not something I can assert as *proven* from a static image the way the frozen case can be *disproven*. This tool has no zoom, no frame-buffer access, and no way to sample raw pixel values for the native simulator (unlike the Browser pane's tools) — the same limitation WP22.1's own report already named ("caught by measuring pixels across six frames, not by looking"), and I don't have that instrument here. What I have instead, and what I'm resting the claim on: **the override is the identical mechanism, in the identical config shape, that WP28's own device pass already independently verified defeats Reanimated's suppression on the fade branch** — Reanimated's suppression logic (traced directly in its source) does not distinguish between animation kinds, only whether `reduceMotion` is set on that specific call. The JS guard mutation-checks that the override is structurally present at every nesting level. Both ordinary states (genuinely on, genuinely off, both freshly cold-launched with no staleness) were also re-confirmed working with no crash, no warning, and no regression from this diff.
+
+**Say plainly which is which:** the *frozen-ring* observation is a device measurement. The *scale-animation-now-works* claim rests on code-level mutation-checked proof plus an inconclusive-but-consistent visual observation, not a decisive device measurement. I did not round the second one up to match the first.
+
+**WP26's LogBox banner, encountered again, behaved exactly as documented.** With Reduce Motion ON at cold launch, the first tap in the bottom strip (tab bar) was swallowed by the banner; the second, identical tap worked. Not a regression, not new — just confirming the standing note still holds.
+
+#### Follow-ups / tech debt for Architect
+
+1. **`NextNodeRing` stays outside the JS guard's automated coverage.** It's a private component inside `TrackRoadmap.tsx` that needs a full graph fixture to render in isolation — WP28 named this boundary, and I'm not closing it here since the handoff scoped the guard extension to "the full-motion branches" of what the guard already covered, not to adding new fixture infrastructure. Logged for WP14, same as WP28 left it.
+2. **A pixel-level device-measurement tool for the iOS Simulator would have made this package's proof airtight rather than mostly-airtight.** The negative case (frozen ring) is unambiguous from screenshots; the positive case (ring now animating) is not, for the reason explained above. If a future package needs to prove a subtle animation is running rather than merely not-crashing, this is worth having — a raw `simctl io screenshot` piped through a pixel-diff script would likely suffice and wasn't worth building for this one package.
+3. **Nothing else.** No production behaviour changed outside motion flags; no new colour, spacing, radius, or duration values; the reduced-motion branches are provably byte-identical in behaviour (the only change to `TrackRoadmap`'s fade branch was swapping an inline literal for the identically-valued shared constant).
+
+**Time:** reading Reanimated's own source to confirm the exact resolution mechanism (`getReduceMotionForAnimation`, each factory's signature) before touching any code — worth it, since it's what let me write the override at precisely the right nesting levels on the first pass rather than discovering gaps later: a meaningful share. Implementation across the four surfaces plus `motion.ts`: quick once the mechanism was confirmed. The guard extension and its three mutation checks: a solid share, mostly the ESLint round-trip fixing my own new file's lint errors and getting the exact-count assertions right. Device gate: the largest single share, nearly all of it the staleness-window procedure itself — confirming the JS-reload mechanism, the tap-coordinate rediscovery on `TrackDetailScreen`'s title row (same intermittent behaviour WP28 already logged, not new), and the three-screenshot comparison sequences done twice (before/after) plus both ordinary-state relaunches. Write-up: modest.
+
+### Completed: WP28 — diagnose the tap failure and Reanimated's reduce-motion disagreement — 2026-09-10
+
+**Bottom line first:** All eight acceptance criteria met. **The tap failure is not a bug, and it is not one cause — it is two, both in the app's own correct behaviour, and both reproduced deterministically with same-coordinate controls.** **Reanimated's reduce-motion reading is not wrong**; it is a launch-time snapshot, and the disagreement WP27 saw is what staleness looks like. The two known causes are independently excluded and characterised. No workaround added. Ships one test (the guard WP22.1 asked for), mutation-checked three ways. Root `lint`, `typecheck` (4 workspaces), `test` (1,348 passing: shared 71, admin 198, backend 477, mobile 602 — 599 existing + 3 new) and `build` all clean from a genuine cold gate — `dist`/`.next` deleted across all four workspaces, `npm install`, then all four commands, with build outputs confirmed present on disk afterwards rather than inferred from an exit code. Branched from `origin/main` (`bbd5410`, which carries this handoff and the fourth data point) as `wp28-tap-diagnosis`; pushed, not yet a PR.
+
+---
+
+#### Question 3 first, because it is the one that cost four packages
+
+**The Leaf player's "Next" button was disabled, not unresponsive.** On the scenario slide, `Next` is `disabled` until the scenario is answered. `Button` renders a disabled control at `opacity: 0.5` — on a teal pill against a near-black page, that still reads as a teal pill. The real action, `Check answer`, lives **inside the `ScrollView`, below the fold**, while `Next` sits in the pinned footer where a primary CTA always sits. A session that does not scroll sees only the footer, taps the obvious continue affordance, and gets nothing — forever, at any coordinate, however precisely aimed.
+
+That is WP25's report almost word for word: *"would not register a tap after roughly fifteen attempts … while other buttons on the very same screens worked normally."* The other buttons worked because they were not disabled.
+
+**Proven, not inferred.** Three taps at (252, 815) on the unanswered scenario: nothing, four times over including varied offsets. Selected an option, scrolled, tapped `Check answer`, payoff unlocked. Then **one tap at the identical (252, 815)**: advanced to slide 4. Same control, same coordinates, same session, same build — dead when `disabled`, alive when not. The variable is the prop, and coordinates are eliminated by construction.
+
+**The Library card is a second, unrelated cause — the fourth data point.** `TrackCard`'s `Pressable` wraps **only the cover + title row**. `children` (the progress bar, the "Finished" marker) and `action` are rendered as siblings *outside* it. Everything below the title row is a dead zone. On a **finished** Track there is no `action` button at all — `LibraryScreen` omits it deliberately when `nextLeafId === null` — so the card is mostly dead zone with no button to aim at, which is exactly the state WP22.3 hit on Track 42.
+
+Verified on device on the Library card: tap at y=355 (inside the card, below the title row) — nothing. Tap at y=269 (the title row) — navigates to TrackDetail. 86pt apart, same card.
+
+**So "something about the Leaf player" was never the right framing**, and the handoff was right to say so. Two independent causes that both present as "this control ignores taps."
+
+**What I could not reproduce: WP27's header close button.** I tapped it once, at (28, 97), and it closed the Leaf immediately. I have no explanation for WP27's report of it being unresponsive and I am not going to invent one. Two possibilities I can neither confirm nor rule out: the `ReportErrorSheet` scrim was open (WP25 rebuilt that sheet with a full-screen scrim, and WP27 reports the report-link tap working immediately in the same session — an open sheet would swallow header and footer taps alike while the mid-screen link that opened it had already been hit), or it was the LogBox banner below plus coordinate estimation at the top edge. **Named as unexplained rather than folded into the tidy answer.**
+
+**Tap tally for this session: 20 taps, 20 first-attempt hits**, excluding the four deliberate negative-control taps on the disabled `Next` and the one on the card dead zone. That includes every pill CTA the earlier reports named — Sign in, Try again, Add to library, Start reading, Check answer, Next, Back — plus tab-bar items, text fields, the header ×, and a Track card. **There is no general tap-precision problem in this app or this tool.** WP15.8's and WP21's "many attempts across a wide, reasonable-looking coordinate range" almost certainly has the same explanation: `Continue`/`Next`/`Check answer` are all controls that are disabled until their precondition is met.
+
+---
+
+#### Question 1 — is Reanimated's reduce-motion reading wrong?
+
+**No. It is correct at every launch, and it is a snapshot rather than a subscription.** Measured four times, both directions.
+
+Both libraries call the **identical** API, `UIAccessibilityIsReduceMotionEnabled()`:
+- Reanimated — `apple/reanimated/apple/REAReducedMotion.h`, called once from `NativeProxy.mm` at proxy construction, stored as the `const` member `isReducedMotion_`, published to JS as `global._REANIMATED_IS_REDUCED_MOTION` by `RNRuntimeDecorator.cpp`, then frozen again on the JS side in a module-level `const` in `src/ReducedMotion.ts`. Reanimated's own `useReducedMotion()` returns that constant and its docstring says so outright: *"whether the reduced motion setting was enabled when the app started."*
+- React Native — `RCTAccessibilityManager.mm` reads the same function, **and subscribes to `UIAccessibilityReduceMotionStatusDidChangeNotification`**, updating on every change. `motion.ts`'s `useReducedMotion` sits on top of that via `AccessibilityInfo`, and is live.
+
+**So the two can disagree in exactly one window: after the setting changes while the app is running.** RN updates; Reanimated cannot, until the native process is cold-started. Nothing is broken — they answer different questions, and only one of them is documented as doing so.
+
+**Measurements (all on iPhone 16 Pro, `com.zoomout.app`, dev build):**
+
+| # | OS setting at launch | Cold launch? | Reanimated warning | Meaning |
+|---|---|---|---|---|
+| 1 | OFF | yes | absent | tracks OFF correctly |
+| 2 | ON | yes | present | tracks ON correctly |
+| 3 | OFF (turned off while PID 62299 ran) | no — same process | n/a | snapshot cannot change |
+| 4 | OFF | yes (new PID 62782) | absent | a real cold start clears it |
+| 5 | ON | yes (new PID 64284) | present | reproducible |
+
+I also wrote a throwaway Objective-C probe (`axprobe`, scratchpad only, never in the repo) run via `simctl spawn`, reporting `UIAccessibilityIsReduceMotionEnabled()`, libAccessibility's `_AXSReduceMotionEnabled()`, and the raw plist **side by side**. All three agreed at every point. **`xcrun simctl spawn … defaults write com.apple.Accessibility ReduceMotionEnabled` does move the real UIKit API** for any freshly launched process — so WP27's method of *reading* the state was sound; what it could not see is that the running process had already sampled it.
+
+**Why WP27 saw the disagreement, most likely:** the setting was turned ON deliberately during WP26 to verify motion, and WP27's `defaults write … NO` plus "a full app relaunch" did not actually cold-start the native process — a Metro/JS reload does not re-run native init. **`xcrun simctl terminate <udid> com.zoomout.app` then `launch` is the reliable clear**, measured above. I could not demonstrate the stale case live: Metro's `reload` broadcast turned out to do an HMR-style update that re-evaluates only changed modules, so Reanimated's module never re-initialised, and macOS blocked `osascript` from sending Cmd+R. **That specific step is inference from source, not measurement, and I am labelling it as such** — everything in the table above is measurement.
+
+---
+
+#### Question 2 — the blast radius, as an enumeration
+
+**The app has exactly four animated surfaces.** Definitive sweep for `react-native-reanimated`, `LayoutAnimation` and `Animated.` across `apps/mobile/src`:
+
+| Surface | Reduced-motion branch | Full-motion branch |
+|---|---|---|
+| `PayoffSlide` | `motionTimingConfig` → **override ✓** | `withSequence`/`withDelay`/`withTiming`/`withSpring` — **no override** |
+| `ScenarioSlide` | `motionTimingConfig` on `feedbackOpacity` → **override ✓** | `withSequence` + 2×`withTiming` + `withSpring` — **no override** |
+| `AchievementUnlock` | `motionTimingConfig` **and** explicit `REDUCE_MOTION_OVERRIDE` on the wrapping `withDelay` → **override ✓ at both levels** | `withDelay` + `withTiming`/`withSpring` — **no override** |
+| `TrackRoadmap` → `NextNodeRing` | `ReduceMotion.Never` **written inline**, on both the `withTiming` and the `withRepeat` → **override ✓** | `withRepeat(withTiming(…))` — **no override** |
+
+**Every reduced-motion branch is correctly flagged.** The accommodation is safe today, on all four.
+
+**The handoff's specific suspicion is confirmed:** `TrackRoadmap.tsx` imports `ReduceMotion` from `react-native-reanimated` directly and writes `ReduceMotion.Never` inline twice, bypassing `REDUCE_MOTION_OVERRIDE`/`motionTimingConfig`. It is *correct*, but it is a second copy of the decision, so WP22.1's "the flag lives in one place" guarantee is not holding.
+
+**Its other worry dissolves:** "the roadmap, the slides, Track complete, the tabs." **Track complete, the share card, and all four tab screens contain no animation whatsoever** — zero Reanimated, zero `Animated.`, zero `LayoutAnimation`. There is nothing there to run degraded. Only the roadmap and the two slides are real. (`AuthStack` calls `useReducedMotion` to pick React Navigation's own `animation` option — not Reanimated, no override applicable.)
+
+**The one genuine latent defect, and it is not the reduced-motion branch.** Every **full-motion** branch is unflagged, which is normally right — that branch only runs when the OS says motion is fine, and Reanimated agrees because it read the same value. **But in the staleness window it does not agree**, and then the full-motion branch is suppressed while the fade branch was never taken. Reanimated's suppression jumps an animation to its final value, so on three of the four surfaces this costs only the motion. On `TrackRoadmap` it costs more: `NextNodeRing`'s pulse is the only thing marking **which node to tap next on a long scrolling graph**, and the file's own docstring says a still ring is *"indistinguishable from a ring that was never meant to move."* **Latent, not observed** — it needs the setting toggled mid-session — but it is real and it is the most consequential item here.
+
+---
+
+#### The two known causes, independently excluded
+
+**Coordinate space (WP24) — excluded, by construction rather than by care.** Same-coordinate pairs settle it twice over: (252, 815) missed while `disabled` and hit while enabled; (150, 832) was swallowed while the LogBox banner was up and switched tabs once it was gone. Coordinates held constant; only app state changed. Twenty first-attempt hits across the full screen height (y=97 to y=832) confirm the mapping is sound. Converting screenshot pixels to the tool's 402×874 point space proportionally works reliably.
+
+**The Reduce Motion banner (WP26) — confirmed, reproduced, and corrected in one detail.** With reduce motion ON at launch, Reanimated emits its dev warning, RN's LogBox raises a notification, and it sits directly over the tab bar. **It is not invisible** — it reads "Open debugger to view warnings." with the tab labels showing beneath it. And it does not silently absorb taps indefinitely: **the first tap dismisses the banner instead of reaching the app, and the next tap works.** Screenshotted and verified both halves.
+
+The chain is worth stating once, since it links two of this package's threads: *reduce motion ON at native launch → Reanimated dev warning → LogBox banner → the next tap in the bottom strip goes to the banner.* It is a **dev-build-only** artefact, and it has nothing to do with the disabled-button cause.
+
+---
+
+#### What shipped
+
+**One file: `apps/mobile/src/design/reduceMotionCallSites.test.tsx`** (3 tests). The guard WP22.1 asked for and could not write: `motion.test.ts` pins the helper, and nothing could fail when a *caller* dropped the flag.
+
+It spies on Reanimated's animation factories rather than asserting on the rendered tree, and the reason is the whole difficulty: **suppression makes an animation jump to its final value, which is exactly where a correctly-animated element ends up** — the rendered output is identical either way, which is why WP22.1 had to measure pixels across six frames. The flag is only observable at the moment it is passed.
+
+**Mutation-checked in all three directions**, each time confirming that only the matching test went red: drop `PayoffSlide`'s override; drop `ScenarioSlide`'s; and the hard one — drop **only the outer `withDelay` flag** on `AchievementUnlock` while leaving the inner `withTiming` correct. That last is the case the count assertion (`>= 2`) exists for, and it is the precise shape of WP22.1's original bug. Assertions use exact sets, not `arrayContaining`, so a stray `ReduceMotion.System` fails rather than hiding.
+
+**No production code changed.** `git status` clean apart from this file.
+
+---
+
+#### Follow-ups / tech debt for Architect
+
+1. **The full-motion branches carry no override — a real latent defect, and I did not fix it.** The fix is four one-line additions and is safe in all three states (OS off: no change; stale disagreement: correct behaviour restored; OS on: branch not taken). **I left it for your ruling because the handoff scoped this package to diagnosis** and because changing motion on four surfaces without a device pass in the disagreeing state is the kind of unverified change this project has been bitten by. Cheap, but it is a behaviour change and yours to call.
+2. **`TrackRoadmap.tsx` should route through `REDUCE_MOTION_OVERRIDE`** instead of its inline `ReduceMotion.Never`, restoring WP22.1's single-source guarantee. Doing that would also make it renderable-in-isolation enough to close the test gap below.
+3. **Test gap, named: `NextNodeRing` is not covered by the new guard** — it is private and rendering the roadmap needs a full graph fixture. It is also the surface with the most to lose. Worth WP14.
+4. **`Button`'s disabled state is a UX finding, not a bug, and it cost four packages of engineering time.** `opacity: 0.5` on a saturated teal pill against a near-black page is a weak signal, and the disabled control sits in the footer position that reads as "the way forward" while the live control (`Check answer`) is below the fold. Real readers will hit this. Not mine to redesign, but it is the actual product consequence of this package.
+5. **The simulator's text injection drops characters.** Typing `wp28-…@example.com` in one call produced `wp28-…`; a second call for `@example.com` produced `@example`. Needed three calls to enter one email. Inconsistent across runs, so it looks like a race between injection and the controlled `TextInput`'s state. **Type into fields in short chunks and screenshot to confirm.**
+6. **The Payload CMS on :3001 is required for any device pass that touches content** — the backend returns 503 `CONTENT_UNAVAILABLE` without it and the app shows "That did not load." Not obvious from the mobile side; cost a few minutes.
+
+**Time:** reading the handoff, the four prior reports (one of which had to be recovered from git — see below) and the Reanimated/RN native sources: roughly a third, and it is where the answer to Question 1 actually came from. Device reproduction: another third, most of it the environment (backend, Payload, seeding an account, the `@`-dropping text injection) rather than the diagnosis itself, which was quick once the app was reachable. The guard test plus its three mutation checks and two lint rounds: about a fifth. Cold gate and this write-up: the rest.
+
+**One process note.** **WP27's completion report was not in `collaboration-log.md`** — the four-most-recent pruning at sign-off had dropped it, and the handoff names it as required reading and as a third of the evidence base. I recovered it with `git log -S` (commit `a7cea6b`) and read it there. **The pruning rule and the practice of citing prior reports as evidence are in conflict**; a handoff that points at a report should probably check it is still in the file, or cite the commit.
+
+### Completed: WP22.3 — give the roadmap room to breathe — 2026-09-10
+
+**Bottom line first:** All acceptance criteria met, device-verified in both themes at default and accessibility-max text size on the 20-Leaf placeholder — comfortable at every combination, no label colliding with a node or another label. **One gap named rather than hidden:** I did not get an on-device look at Track 42 specifically (below). Root `lint`, `typecheck` (4 workspaces), `test` (1,345 passing: shared 71, admin 198, backend 477, mobile 599 — 578 existing + 21 new) and `build` (backend/mobile/admin all produced real output) are clean from a genuine cold gate — `dist`/`.next` deleted across all four workspaces, `npm install`, then all four commands fresh. Branched from `origin/main` (`787a168`, which carries both this handoff and WP28's) as `wp22.3-roadmap-vertical-rhythm`; pushed, not yet a PR.
+
+**Time:** roughly 20% reading (the handoff, `roadmapGeometry.ts` and `roadmapLabels.ts` in full, `TrackRoadmap.tsx`'s call site), 35% working out the actual fix — the arithmetic on why `maxStep` never bound, the circular-import constraint, deciding worst-case-uniform over per-node-adaptive — 20% implementation, 15% mutation-checking and fixing the one knock-on test failure, 10% device verification.
+
+---
+
+**What changed.** `roadmapGeometry.ts` gains one new exported pure function, `minStepForLabels(fontScale)`, and `layoutRoadmap`'s `step` computation becomes `Math.max(the existing viewport-derived clamp, minStepForLabels(viewport.fontScale ?? 1))` — additive, not a replacement of the old formula. `RoadmapViewport` gains one optional field, `fontScale?: number`, defaulted to 1 so every existing caller (`constellationFragment.ts`, `TrackCompleteScreen.tsx`, both from WP26) keeps its exact prior numeric output untouched. `TrackRoadmap.tsx` — not in the handoff's Read list, touched anyway, for the reason below — gains one line: the `fontScale` it already reads via `useWindowDimensions()` (for the labels call, which already had it) now also reaches `layoutRoadmap`, and the geometry `useMemo`'s dependency array gains `fontScale`, which it was missing even for the *labels* recompute path before this package — a small pre-existing staleness bug, fixed as a side effect of touching the line next to it, not a separate agenda.
+
+**Why `TrackRoadmap.tsx`, when the handoff's scope was one file.** The acceptance criteria are explicit that the fix must be device-observed responding to real text scale ("Observed at 18 and 20 Leaves, both themes, default and accessibility-max: no label collides"). `layoutRoadmap`'s new `fontScale` parameter is inert unless something passes the reader's real value in — without this one line, the whole package would typecheck, unit-test green, and change nothing on an actual screen, because the default (`1`) would always apply regardless of the OS setting. Kept to the smallest possible change: one field added to an object literal already being constructed, one dependency added to an array already being written. `constellationFragment.ts` and `TrackCompleteScreen.tsx` were not touched — a finished Track's constellation renders every node as `'done'`, which needs no labels at all, so `fontScale` genuinely does not apply there.
+
+**The arithmetic behind "`GRAPH.maxStep` is unchanged but dominated in every realistic case," promised in the code comment.** `viewportDerivedIdeal(count) = (874 × 0.52) / (count − 1)` exceeds `maxStep` (40) only when `count ≤ 12` — at 13 it is already 37.9. `PRODUCT.md` floors a Track at 15 Leaves. So `maxStep` has not been reachable by any real Track since before this package, and `minStepForLabels(1)` (≈39, see below) already exceeds every value `maxStep` could have clamped down to in that range regardless. Nothing was removed, because `GRAPH.minStep`'s own stated purpose — "below this the cell bodies themselves start to touch" — is a real, different, still-valid constraint that simply no longer drives the outcome.
+
+**The floor's actual shape.** `minStepForLabels(fontScale) = max(lineHeight, fontSize × fontScale × 1.2) × 2 + 7` — two lines of the real `caption` token (imported from `design/`, not redefined, same precedent as the file's existing `MIN_TOUCH_TARGET` import) plus a 7pt breathing gap mirroring `roadmapLabels.ts`'s own `STACK_GAP`. At `fontScale = 1`: `max(16, 14.4) × 2 + 7 = 39`. **Assumes the worst case — every label at two lines — uniformly across the whole graph, not per node.** A true per-node figure (shorter gaps where a title is short enough to sit on one line) was the first design I considered and rejected: it would need each node's actual horizontal gutter and title to know whether that specific label wraps to one line or two, and by the time node positions (which the vertical step decides) exist, the step that produced them has already been spent — the same chicken-and-egg problem `layoutRoadmap`'s own docstring's "geometry has no business knowing a Leaf's title" rule exists to avoid entirely. Some real gaps are more generous than they strictly need to be under this; none are tighter than a two-line label needs, which is the direction "no label collides" cares about.
+
+**`LABEL_LINES_ASSUMED` (2) and a `STACK_GAP`-equivalent (7) are duplicated from `roadmapLabels.ts`, not imported.** `roadmapLabels.ts` already imports from `roadmapGeometry.ts` (`HALO_RADIUS`, `LABEL_GAP`, `RoadmapNodeGeometry`); importing the reverse direction would make the two files a cycle. Recorded in both places — if `MAX_LABEL_LINES` or `STACK_GAP` change there, this needs the matching update, and nothing enforces that automatically.
+
+---
+
+**Mutation-checking, actually performed rather than asserted.** Two real mutations, applied to the working tree and run against the full suite, not reasoned about in the abstract:
+1. `Math.max` → `Math.min` at the `step` wiring site (the line that actually applies the floor to real output). Caught by 18 tests: all 16 per-count instances of the new "never spaces two Leaves closer than a worst-case label needs" assertion, plus both dedicated end-to-end tests in the new "vertical rhythm responds to text scale" block.
+2. `LABEL_LINES_ASSUMED`: `2` → `1`. Caught by 2 of the 4 `minStepForLabels` unit tests (the exact-value match and the "comfortably larger than 24" check) — the other two (monotonic growth with scale, and the scaled-vs-unscaled-lineHeight check) correctly did *not* fire, since neither depends on the assumed line count.
+Both reverted after confirming; the working tree the commit reflects has never contained either mutation.
+
+**One existing test's premise was overturned on purpose, and is recorded as such rather than silently adjusted.** `roadmapGeometry.test.ts` had "fits the whole book in about one screen rather than a long scroll," asserting `geometry.height < VIEWPORT.height × 1.2`. This is WP22.2's composition goal, which this handoff explicitly reverses ("the founder has ruled otherwise: vertical scrolling to explore the roadmap is fine; unreadable density is not") — and it failed immediately, at 5 of the 16 tested counts, confirming the reversal is real and not merely theoretical. Replaced with an assertion on the actual requirement instead of a ceiling: every consecutive gap is at least `minStepForLabels`'s floor. The old test's comment and intent are preserved in the new one's, so the history of *why* the ceiling existed and *why* it was removed both survive in the file.
+
+**One further knock-on, in a different file, fixed without touching the module it tests.** `roadmapLabels.test.ts`'s "draws a leader only for the labels that had to move" built its node fixture via a real `layoutRoadmap(states, VIEWPORT, seed)` call (implicitly `fontScale` 1) at 18 Leaves, where every label was the same real 65-character title. Before this package, 18-Leaf node spacing (≈26.7pt) was already tighter than a two-line label (≈32pt) even at the *default* text size — so the fixture got leader-drawing "for free," as an accident of the crowding this package exists to remove. Closing exactly that gap means the accident no longer happens: at `fontScale` 1, the fixture's labels now fit without being pushed, and `withLeaders.length` came back 0. This is not a regression in leader-drawing — `layoutRoadmapLabels` is untouched, out of the handoff's scope, and every *other* assertion in that file (including "never lets two labels in the same gutter overlap," which would catch a real break) still passes. It is the test's fixture no longer producing the specific scenario it was written to exercise. Fixed by asking for labels at `fontScale: 1.5` while the fixture geometry stays built at 1 — the same "geometry and label-layout take independent inputs" property the module's own "degrading under the OS text size" tests already rely on, now doing double duty to reconstruct genuine stacking. 1.5 is comfortably past the ≈1.36 needed to force a two-line label taller than the fixture's own (scale-1) node spacing, and comfortably short of where `MIN_LABEL_CHARS` would start dropping labels instead of merely stacking them — a different, already-tested degradation that a larger scale would have triggered instead. Commented in place with the arithmetic, so it reads as a deliberate choice rather than an arbitrary number.
+
+---
+
+**Device verification.** iPhone 16 Pro simulator, both themes, default and accessibility-max text size (`simctl ui`, live-reactive — no relaunch needed for text size; the app *was* force-relaunched once at the start, per the standing Metro note, to pick up this branch's bundle after switching from `wp27-tab-screens-icon-swap`). All four combinations run against **the 20-Leaf placeholder Track**, reached via Explore → Track Detail: every node cleanly separated at default size with real (if short, synthetic) titles up to two lines wrapping without collision; at accessibility-max, nodes space out substantially further and the overwhelming majority of labels correctly vanish under `roadmapLabels.ts`'s own pre-existing "drop rather than render a stub" rule — exactly the intended interaction between the two mechanisms, and nothing here needed to change for it to work. Screenshots taken at each combination; scrolled the full length of the graph in the default-dark case to confirm no collision anywhere in the 20 nodes, not just the visible fold.
+
+**Track 42 was not reached, and I am saying so rather than reporting on the placeholder alone as if it were both.** "The Science of Getting Rich" (18 real Leaves, finished, real varied-length titles from a real book) sits in this account's Library with no action button — a finished Track's card has to be tapped directly, and repeated attempts at the coordinates its title/cover should occupy did not navigate. I did not chase this further: it did not reproduce on any *other* screen this session (Explore's cards, the placeholder's own card, every tab-bar target all responded normally), and open-ended tap-coordinate debugging in this simulator is explicitly WP28's job, not mine to freelance into. What I can say: the fix is provably title-content-agnostic — `minStepForLabels` never reads a title, only `fontScale`, so there is no code path by which Track 42's *specific* titles could behave differently from the placeholder's under this change. What I cannot say from direct observation: whether Track 42's real prose (up to 65 characters, per `roadmapLabels.test.ts`'s own fixture) reads comfortably at the two-line wraps it will actually produce, as opposed to the placeholder's mostly-short synthetic titles. Worth a follow-up look, not a blocking gap.
+
+**Possibly relevant to WP28, not investigated further here:** the Track 42 tap failure above has surface similarity to the three-package tap-resistance pattern WP28 is diagnosing, but I want to be precise about how *little* this adds: WP28's pattern is a footer-positioned primary CTA; this was a whole-card tap with no button at all, on a screen WP28's Read list does not include (`LibraryScreen.tsx`). Might be the same root cause, might be coordinate estimation on my part, might be a third thing. Flagging the data point, not the diagnosis.
+
+---
+
+**Files touched:** `apps/mobile/src/screens/track/roadmapGeometry.ts`, `roadmapGeometry.test.ts`, `roadmapLabels.test.ts`, `TrackRoadmap.tsx`.
+
+**Tests added/updated:** `minStepForLabels` — 4 new Tier A tests (exact value at default scale pinned to the real design token, monotonic growth with scale, exceeds the old flat-24 floor, scales `lineHeight` rather than trusting the unscaled token). A new "vertical rhythm responds to text scale end to end" block — 3 tests (height grows with scale; no gap anywhere undercuts the floor, checked at both scales; `spineBand`/the horizontal band is provably untouched by `fontScale`, exact equality not tolerance). The "fits in about one screen" test replaced as described above (16 instances, one per count). `roadmapLabels.test.ts`'s one affected test fixed in place, comment included.
+
+**Assumptions made:** the worst-case-uniform floor over per-node-adaptive spacing, and touching `TrackRoadmap.tsx` despite it being outside the named scope — both argued above, both because the alternative would have failed the acceptance criteria outright rather than merely being a stylistic difference.
+
+**Follow-ups / tech debt for Architect:**
+1. **Track 42 device check** — above. Low-risk given the fix's title-agnosticism, but not directly observed.
+2. **The Track 42 tap failure** — a possible fourth data point for WP28, not diagnosed.
+3. Nothing else. `spineBand`, the label treatment, node glyphs and dendrites are all untouched, as scoped.
+
+**On "no new colour, spacing, radius or duration values":** `LABEL_LINES_ASSUMED` and the 7pt gap are algorithm parameters for this file's existing "not a design token" category (see the file's own docstring, and `GRAPH`'s existing precedent of un-tokenised numbers like `haloRadius`) — not new design-system values. Nothing in `src/design/` changed; `minStepForLabels` only *reads* the existing `caption` token, the same way `TrackRoadmap.tsx` already did for the labels call.
+
+---
 
 ### Completed: WP27 — the four tab screens, and the icon swap — 2026-09-10
 

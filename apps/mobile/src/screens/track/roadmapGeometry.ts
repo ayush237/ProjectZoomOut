@@ -41,7 +41,7 @@
  * file and does not belong in a design system.
  */
 
-import { MIN_TOUCH_TARGET } from '../../design';
+import { MIN_TOUCH_TARGET, typography } from '../../design';
 import type { LeafNodeState } from './roadmapModel';
 
 export interface Point {
@@ -127,6 +127,12 @@ export interface RoadmapViewport {
   readonly width: number;
   /** The *visible* height, which sets the vertical rhythm. The graph itself is taller. */
   readonly height: number;
+  /**
+   * The OS text-size multiplier (WP22.3) — `useWindowDimensions().fontScale`, 1 at the
+   * default setting. Optional and defaulted to 1 so every caller that predates this
+   * field keeps its exact prior numeric output without being touched.
+   */
+  readonly fontScale?: number;
 }
 
 /**
@@ -756,6 +762,50 @@ function axonFor(
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Mirrors `roadmapLabels.ts`'s own `MAX_LABEL_LINES` and `STACK_GAP` — duplicated rather
+ * than imported, because that module already imports from this one (`HALO_RADIUS`,
+ * `LABEL_GAP`, `RoadmapNodeGeometry`); importing back would make the two files a cycle.
+ * If either value there changes, this one needs the matching update.
+ */
+const LABEL_LINES_ASSUMED = 2;
+const LABEL_STACK_GAP_ASSUMED = 7;
+
+/**
+ * The shortest two Leaves may sit apart before a worst-case label collides with its
+ * neighbour's (WP22.3).
+ *
+ * **What WP22.3 fixes.** The previous floor was `GRAPH.minStep`, a flat 24 transcribed
+ * from `graph.jsx`'s fixture — whose labels are one or two short words on a single line.
+ * Ours wrap real Leaf titles to up to two lines (`roadmapLabels.ts`), and `Text.tsx` never
+ * disables font scaling, so the true floor depends on the caption token's real, scaled
+ * height, not a constant borrowed from a mockup with shorter content.
+ *
+ * **A worst case, not a measurement of any specific label.** Geometry has no business
+ * knowing a Leaf's title (see `layoutRoadmap`'s own docstring), so this assumes the
+ * tallest label the layout could ever produce — the full two lines, stacked against an
+ * identical neighbour — rather than what a specific title actually wraps to. Some real
+ * gaps will have shorter labels than this accounts for; none will have taller ones, which
+ * is the direction that matters for "no label collides with a node or another label."
+ *
+ * Applied uniformly across the whole graph rather than per node, for the same reason: a
+ * per-node figure would need each node's actual horizontal gutter and title to know
+ * whether *that* label wraps to one line or two, and by the time node positions and
+ * per-node gutters exist, the vertical spacing that produced them has already been spent.
+ */
+export function minStepForLabels(fontScale: number): number {
+  const fontSize = typography.caption.fontSize ?? 12;
+  const lineHeight = typography.caption.lineHeight ?? 16;
+
+  // Same rule `roadmapLabels.ts` uses: React Native scales `fontSize` and leaves an
+  // absolute `lineHeight` alone, so the real stacking height of one line has to come from
+  // whichever is larger once scaled — otherwise a reader who sizes text up gets a floor
+  // computed from a number that no longer describes what is on screen.
+  const scaledLine = Math.max(lineHeight, fontSize * fontScale * 1.2);
+
+  return scaledLine * LABEL_LINES_ASSUMED + LABEL_STACK_GAP_ASSUMED;
+}
+
+/**
  * The whole graph, from the Leaves' states, a viewport and a seed. Nothing else.
  *
  * Takes the *states* rather than the Leaves themselves: geometry has no business knowing
@@ -773,10 +823,28 @@ export function layoutRoadmap(
   const width = Math.max(viewport.width, 1);
   const count = states.length;
 
-  const step = clamp(
-    (viewport.height * GRAPH.spanFraction) / Math.max(count - 1, 1),
-    GRAPH.minStep,
-    GRAPH.maxStep,
+  /**
+   * **A deliberate departure from `graph.jsx`, and the first the redesign has made on
+   * purpose (WP22.3) — do not "correct" this back toward the mockup.** The source is
+   * compact because its fixture labels are short; ours are real titles that wrap to two
+   * lines, and `minStepForLabels` is the floor that keeps those from colliding. The
+   * founder has ruled that a longer scroll is an acceptable price for that: WP22.2's
+   * `spanFraction`-derived ideal below is still tried first — a short book still gets to
+   * use the screen space it has — but nothing about it is allowed to shrink spacing below
+   * what legibility requires, and no upper clamp claws it back down afterwards the way
+   * `GRAPH.maxStep` used to. `GRAPH.minStep`/`maxStep` are unchanged and still describe a
+   * real constraint (`minStep`'s own comment: "below this the cell bodies themselves
+   * start to touch") — they are simply dominated by the label floor in every realistic
+   * case now, since `PRODUCT.md`'s 15–30 Leaf range never needed `maxStep` in the first
+   * place (see the WP22.3 completion report for the arithmetic).
+   */
+  const step = Math.max(
+    clamp(
+      (viewport.height * GRAPH.spanFraction) / Math.max(count - 1, 1),
+      GRAPH.minStep,
+      GRAPH.maxStep,
+    ),
+    minStepForLabels(viewport.fontScale ?? 1),
   );
 
   // Enough room above and below for a cell's dendritic field, so the first and last

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
-import { ReduceMotion, type WithTimingConfig } from 'react-native-reanimated';
+import { ReduceMotion, type WithSpringConfig, type WithTimingConfig } from 'react-native-reanimated';
 
 /**
  * Motion, from `design-direction.md` §6.
@@ -107,6 +107,18 @@ export function motionPlan(
  * independently and can suppress a correctly-configured child. Pass this to each of
  * their `reduceMotion` parameters, the same way `motionTimingConfig` below carries it
  * into `withTiming`'s.
+ *
+ * **WP28.1: required on the full-motion branch too, not only the fade.** WP28 found
+ * that Reanimated's own reduce-motion reading is a **snapshot taken once at native
+ * init**, while the OS setting the app itself sees (via `AccessibilityInfo`, through
+ * `useReducedMotion` above) stays live for the life of the process. The two can
+ * disagree for as long as the app keeps running, in either direction, whenever the
+ * reader changes the setting without a full restart. `motionPlan`'s branch choice is
+ * always correct — it reads the live value — but Reanimated's *separate* suppression
+ * check is not, and it applies to whichever branch actually runs. When Reanimated's
+ * stale snapshot still says reduce motion is on, an **unflagged full-motion**
+ * animation is silenced exactly as an unflagged fade would be. There is no branch
+ * this constant is safe to omit from.
  */
 export const REDUCE_MOTION_OVERRIDE = ReduceMotion.Never;
 
@@ -121,4 +133,20 @@ export const REDUCE_MOTION_OVERRIDE = ReduceMotion.Never;
  */
 export function motionTimingConfig(plan: MotionPlan): WithTimingConfig {
   return { duration: plan.durationMs, reduceMotion: REDUCE_MOTION_OVERRIDE };
+}
+
+/**
+ * The Reanimated `withSpring` config for one of the `spring` presets above, always
+ * carrying the override.
+ *
+ * `motionTimingConfig`'s counterpart for springs (WP28.1). A spring preset has no
+ * `MotionPlan` to build from — reaching for `spring.reward` or `spring.snappy` at all
+ * already means a caller has committed to the full-motion branch, so there is no
+ * fade/spring choice left for this to make; it only needs to splice the override in.
+ * Exists for the reason `motionTimingConfig` does: the flag belongs in one importable
+ * place, not retyped at every call site — and every full-motion call site is exactly
+ * where WP28 found it missing.
+ */
+export function motionSpringConfig(preset: (typeof spring)[keyof typeof spring]): WithSpringConfig {
+  return { ...preset, reduceMotion: REDUCE_MOTION_OVERRIDE };
 }

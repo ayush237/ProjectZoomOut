@@ -13,6 +13,7 @@ import type { UnlockedAchievement } from '@zoomout/shared';
 import {
   duration,
   motionPlan,
+  motionSpringConfig,
   motionTimingConfig,
   REDUCE_MOTION_OVERRIDE,
   spring,
@@ -105,8 +106,17 @@ function UnlockCard({
       return;
     }
 
-    opacity.value = withDelay(stagger, withTiming(1, { duration: duration.micro }));
-    translateY.value = withDelay(stagger, withSpring(0, spring.reward));
+    // Every nesting level carries the override here too (WP28.1) — the same
+    // reasoning as the reduced-motion branch above, now applied to the branch that
+    // runs when Reanimated and the OS agree that motion is fine. A stale
+    // disagreement between the two (see `motion.ts`) would otherwise silence this
+    // branch exactly as it would the fade one.
+    opacity.value = withDelay(
+      stagger,
+      withTiming(1, { duration: duration.micro, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+      REDUCE_MOTION_OVERRIDE,
+    );
+    translateY.value = withDelay(stagger, withSpring(0, motionSpringConfig(spring.reward)), REDUCE_MOTION_OVERRIDE);
   }, [index, reducedMotion, opacity, translateY]);
 
   const style = useAnimatedStyle(() => ({

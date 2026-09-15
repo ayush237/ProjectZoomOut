@@ -14,7 +14,9 @@ import { Icon, Text } from '../../components';
 import {
   duration,
   motionPlan,
+  motionSpringConfig,
   motionTimingConfig,
+  REDUCE_MOTION_OVERRIDE,
   spring,
   useReducedMotion,
   useTheme,
@@ -97,15 +99,24 @@ export function PayoffSlide({ data, justUnlocked }: PayoffSlideProps): React.JSX
     }
 
     // The lock reacts first — a quick squash and release, so the icon reads as having
-    // been sprung rather than swapped.
+    // been sprung rather than swapped. Every nesting level carries the override
+    // (WP28.1) — `withSequence` and `withDelay` below each resolve reduce-motion
+    // independently of the animation they wrap, the same reasoning as the reduced
+    // branch above, now applied to the branch that runs when Reanimated and the OS
+    // agree motion is fine. See `REDUCE_MOTION_OVERRIDE` in `design/motion.ts`.
     lockScale.value = withSequence(
-      withTiming(0.82, { duration: 90 }),
-      withSpring(1, spring.reward),
+      REDUCE_MOTION_OVERRIDE,
+      withTiming(0.82, { duration: 90, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+      withSpring(1, motionSpringConfig(spring.reward)),
     );
 
     // Then the panel, one beat behind.
-    opacity.value = withDelay(120, withTiming(1, { duration: duration.micro }));
-    scale.value = withDelay(120, withSpring(1, spring.reward));
+    opacity.value = withDelay(
+      120,
+      withTiming(1, { duration: duration.micro, reduceMotion: REDUCE_MOTION_OVERRIDE }),
+      REDUCE_MOTION_OVERRIDE,
+    );
+    scale.value = withDelay(120, withSpring(1, motionSpringConfig(spring.reward)), REDUCE_MOTION_OVERRIDE);
   }, [justUnlocked, reducedMotion, opacity, scale, lockScale]);
 
   const panelStyle = useAnimatedStyle(() => ({

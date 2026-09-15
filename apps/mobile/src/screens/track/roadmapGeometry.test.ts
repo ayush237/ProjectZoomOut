@@ -3,11 +3,13 @@ import {
   curvePath,
   dendriteBudgetPerNode,
   layoutRoadmap,
+  minStepForLabels,
   seedFromTrackId,
   type Curve,
   type Point,
   type RoadmapGeometry,
 } from './roadmapGeometry';
+import { typography } from '../../design';
 import type { LeafNodeState } from './roadmapModel';
 
 /**
@@ -162,12 +164,21 @@ describe.each(COUNTS)('at %i Leaves', (count) => {
     expect(spread).toBeGreaterThan((geometry.width * 0.25) / 2);
   });
 
-  it('fits the whole book in about one screen rather than a long scroll', () => {
-    // WP22.2's other composition change. `graph.jsx` puts all 18 Leaves inside one
-    // 844-tall screen; ours ran 104–152pt per Leaf and produced a graph two thousand
-    // points tall, which is both a different screen from the mockup and far too sparse
-    // for neighbouring dendritic fields to touch.
-    expect(geometry.height).toBeLessThan(VIEWPORT.height * 1.2);
+  it('never spaces two Leaves closer than a worst-case label needs (WP22.3)', () => {
+    // **Supersedes the old "fits in about one screen" assertion.** WP22.2 treated a
+    // ~2000pt scroll collapsing into one screen as a win; the founder has since ruled the
+    // opposite — a longer scroll is an acceptable price, unreadable density is not. A
+    // ceiling on `geometry.height` is exactly the thing that would reintroduce the
+    // congestion this package exists to remove, so there is deliberately no ceiling here
+    // any more. What is asserted instead is the actual requirement: every gap between
+    // consecutive centres is at least as tall as a two-line label at this fontScale needs.
+    const floor = minStepForLabels(1);
+
+    for (let index = 0; index + 1 < geometry.nodes.length; index += 1) {
+      const gap = (geometry.nodes[index + 1]?.centre.y ?? 0) - (geometry.nodes[index]?.centre.y ?? 0);
+
+      expect(gap).toBeGreaterThanOrEqual(floor - 0.01);
+    }
   });
 
   it('has one spine curve per gap between Leaves', () => {
@@ -419,6 +430,99 @@ describe('density budget', () => {
     const largest = Math.max(...densities);
 
     expect(largest / smallest).toBeLessThan(1.25);
+  });
+});
+
+/**
+ * WP22.3, Tier A: "does spacing grow when the label wraps" as a direct assertion on the
+ * pure function, per the acceptance criteria and the founder's density complaint.
+ */
+describe('minStepForLabels', () => {
+  const captionFontSize = typography.caption.fontSize ?? 12;
+  const captionLineHeight = typography.caption.lineHeight ?? 16;
+
+  it('matches two lines of the real caption token plus the stacking gap, at the default text size', () => {
+    // Pinned to the actual design token rather than a hardcoded number: this is the
+    // assertion a mutation on `LABEL_LINES_ASSUMED` (2 → 1) or `LABEL_STACK_GAP_ASSUMED`
+    // (7 → 0) is caught by — either mutation changes this exact value.
+    const scaledLine = Math.max(captionLineHeight, captionFontSize * 1 * 1.2);
+
+    expect(minStepForLabels(1)).toBeCloseTo(scaledLine * 2 + 7, 5);
+  });
+
+  it('grows as the OS text size grows', () => {
+    // The acceptance criterion's own wording: "responds to label height and text scale."
+    const atDefaultScale = minStepForLabels(1);
+    const larger = minStepForLabels(2);
+    const accessibilityMax = minStepForLabels(3.5);
+
+    expect(larger).toBeGreaterThan(atDefaultScale);
+    expect(accessibilityMax).toBeGreaterThan(larger);
+  });
+
+  it('is comfortably larger than the old flat 24pt floor even at the default text size', () => {
+    // The founder's complaint was visible at *default* text, not only at accessibility
+    // sizes — WP22.2's fixed 24–40 range never responded to real label content at any
+    // scale. This is the number that proves the floor actually moved.
+    expect(minStepForLabels(1)).toBeGreaterThan(24);
+  });
+
+  it('scales the line height rather than trusting the unscaled design-token constant', () => {
+    // `design/typography.ts` fixes `lineHeight` absolutely — React Native scales
+    // `fontSize` only — so a naive `lineHeight * 2 + gap` would silently stop growing
+    // once `fontSize * fontScale` overtakes the unscaled `lineHeight`. This mutation
+    // (deleting the `Math.max` and using `lineHeight` alone) is exactly what this test
+    // is there to kill.
+    const hugeScale = 10;
+    const naiveFloor = captionLineHeight * 2 + 7;
+
+    expect(minStepForLabels(hugeScale)).toBeGreaterThan(naiveFloor);
+  });
+});
+
+describe('the vertical rhythm responds to text scale end to end (WP22.3)', () => {
+  it('lays a Track out taller at accessibility-max than at the default text size', () => {
+    const states = statesFor(22);
+    const seed = seedFromTrackId('rhythm-check');
+
+    const atDefault = layoutRoadmap(states, VIEWPORT, seed);
+    const atAccessibilityMax = layoutRoadmap(states, { ...VIEWPORT, fontScale: 3.5 }, seed);
+
+    expect(atAccessibilityMax.height).toBeGreaterThan(atDefault.height);
+  });
+
+  it('never lets an accessibility-scale label floor collide, at either text size', () => {
+    for (const fontScale of [1, 3.5]) {
+      const geometry = layoutRoadmap(statesFor(20), { ...VIEWPORT, fontScale }, seedFromTrackId('42'));
+      const floor = minStepForLabels(fontScale);
+
+      for (let index = 0; index + 1 < geometry.nodes.length; index += 1) {
+        const gap =
+          (geometry.nodes[index + 1]?.centre.y ?? 0) - (geometry.nodes[index]?.centre.y ?? 0);
+
+        expect(gap).toBeGreaterThanOrEqual(floor - 0.01);
+      }
+    }
+  });
+
+  it('leaves spineBand untouched — this package is the vertical dimension only', () => {
+    // A direct assertion on the acceptance criterion, not just an absence of a diff:
+    // the horizontal band this geometry keeps its meander inside is unchanged.
+    const withoutFontScale = layoutRoadmap(statesFor(18), VIEWPORT, seedFromTrackId('42'));
+    const withFontScale = layoutRoadmap(
+      statesFor(18),
+      { ...VIEWPORT, fontScale: 3.5 },
+      seedFromTrackId('42'),
+    );
+
+    const bandOf = (geometry: RoadmapGeometry): number => {
+      const xs = geometry.nodes.map((node) => node.centre.x);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+
+    // Same seed, same horizontal wave — `fontScale` must not perturb it. An exact
+    // comparison, not a tolerance: nothing about the *x* dimension should move at all.
+    expect(bandOf(withFontScale)).toBe(bandOf(withoutFontScale));
   });
 });
 
