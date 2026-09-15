@@ -17,7 +17,11 @@ from uuid import UUID
 import typer
 from langgraph.types import Command
 
-from zoomout_pipeline.config import get_settings
+from zoomout_pipeline.config import (
+    FreeTierForbiddenError,
+    get_settings,
+    require_paid_tier,
+)
 from zoomout_pipeline.db.engine import ForeignDatabaseError, connect, describe_database
 from zoomout_pipeline.db.repository import BookRepository
 from zoomout_pipeline.db.schema import apply_schema
@@ -38,6 +42,65 @@ _log = get_logger(__name__)
 @app.callback()
 def _configure(json_logs: bool = typer.Option(False, "--json-logs")) -> None:
     configure_logging(json_output=json_logs)
+
+
+def read_run_state(graph: Any, run_id: str) -> PipelineState:
+    """A run's checkpoint, for a command that will not call a model.
+
+    **Deliberately does not enforce the paid-tier constraint**, so `status` and `cost` stay
+    usable for diagnosing a run whose environment is currently misconfigured. Nothing here
+    reaches a model, so there is nothing to refuse.
+    """
+    snapshot = graph.get_state({"configurable": {"thread_id": run_id}})
+    if not snapshot.values:
+        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    return PipelineState.model_validate(snapshot.values)
+
+
+def open_run_for_models(graph: Any, run_id: str) -> PipelineState:
+    """A run's checkpoint, for a command that *will* call a model.
+
+    **The one place the paid-tier constraint is enforced on an existing run**, and the reason
+    it is a named helper rather than four lines copied into each command: this project's
+    recurring defect is a guard that exists in one place and was never carried to its twin,
+    and seven commands load a checkpoint before calling a model. A test asserts that no
+    command validates a checkpoint outside these two helpers.
+
+    The refusal happens here — before the first node runs, before the first image is bought —
+    because a run that dies at Leaf 9 with a quota error has already sent eight Leaves' worth
+    of somebody else's book somewhere it must not go.
+
+    The decision is written back onto the run, so "which tier did this book go through" is a
+    query rather than a memory.
+    """
+    state = read_run_state(graph, run_id)
+    try:
+        record = require_paid_tier(state.acquisition, get_settings())
+    except FreeTierForbiddenError as refusal:
+        typer.secho(f"\n{refusal}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(2) from None
+
+    if state.transport is not None and state.transport.transport != record.transport:
+        # Not an error: a run legitimately moves between tiers if its book is public domain.
+        # It is worth saying out loud, because a run whose transport changed halfway is a run
+        # whose single recorded value no longer describes all of it.
+        typer.secho(
+            f"note: this run previously used {state.transport.transport.value}, now "
+            f"{record.transport.value}",
+            fg=typer.colors.YELLOW,
+        )
+
+    graph.update_state({"configurable": {"thread_id": run_id}}, {"transport": record})
+    state.transport = record
+    _log.info(
+        "run.transport",
+        run_id=run_id,
+        transport=record.transport.value,
+        project=record.project or None,
+        acquisition=record.acquisition.value,
+    )
+    return state
 
 
 @app.command()
@@ -116,6 +179,24 @@ def run(
     the old Leaves first, deliberately, with a credential that is allowed to.
     """
     resolved_run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
+
+    # **Before anything is built, let alone called.** `run` ingests, embeds and analyses, so
+    # the first model call is minutes away and the first *chunk of the book* leaves this
+    # machine inside it. A check that fired after `run_context()` would already have chosen
+    # the client; one that fired inside a node would already have sent the book.
+    try:
+        transport = require_paid_tier(acquisition, get_settings())
+    except FreeTierForbiddenError as refusal:
+        # Rendered rather than raised, so the operator reads the fix instead of a traceback.
+        # The exit code is what a script or a CI step will actually look at.
+        typer.secho(f"\n{refusal}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(2) from None
+    typer.echo(
+        f"transport  : {transport.transport.value}"
+        + (f" ({transport.project})" if transport.project else "")
+        + f" — acquisition {acquisition.value}"
+    )
+
     state = PipelineState(
         run_id=resolved_run_id,
         source_path=str(source),
@@ -123,6 +204,7 @@ def run(
         book_title=title,
         book_author=author,
         cms_track_id=cms_track_id,
+        transport=transport,
     )
 
     with run_context() as (graph, _deps):
@@ -145,11 +227,8 @@ def resume(
     """
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": run_id}}
+        open_run_for_models(graph, run_id)
         snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
 
         waiting = any(getattr(task, "interrupts", None) for task in snapshot.tasks)
         if waiting:
@@ -167,15 +246,20 @@ def status(run_id: Annotated[str, typer.Option()]) -> None:
     """Where a run is, read from the checkpoint rather than from memory."""
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": run_id}}
+        state = read_run_state(graph, run_id)
         snapshot = graph.get_state(config)  # type: ignore[attr-defined]
 
-    if not snapshot.values:
-        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-    state = PipelineState.model_validate(snapshot.values)
     typer.echo(f"run        : {state.run_id}")
     typer.echo(f"next       : {snapshot.next or '(complete)'}")
+    if state.transport is not None:
+        where = state.transport.transport.value
+        typer.echo(
+            f"transport  : {where}"
+            + (f" ({state.transport.project})" if state.transport.project else "")
+        )
+    else:
+        typer.echo("transport  : (not recorded — run predates WP32)")
+    typer.echo(f"acquisition: {state.acquisition.value}")
     typer.echo(f"book       : {state.provenance.title if state.provenance else '(not ingested)'}")
     typer.echo(f"chapters   : {state.chapter_count}")
     typer.echo(f"chunks     : {state.chunk_count}")
@@ -200,11 +284,8 @@ def status(run_id: Annotated[str, typer.Option()]) -> None:
 def cost(run_id: Annotated[str, typer.Option()]) -> None:
     """Token spend for a run, per node."""
     with run_context() as (graph, _deps):
-        snapshot = graph.get_state({"configurable": {"thread_id": run_id}})  # type: ignore[attr-defined]
-    if not snapshot.values:
-        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    _echo_cost(PipelineState.model_validate(snapshot.values), verbose=True)
+        state = read_run_state(graph, run_id)
+    _echo_cost(state, verbose=True)
 
 
 @app.command("measure-breakdown")
@@ -219,13 +300,8 @@ def measure_breakdown(
     every sample so `analyze` cannot confound the comparison.
     """
     with run_context() as (graph, deps):
-        snapshot = graph.get_state({"configurable": {"thread_id": run_id}})  # type: ignore[attr-defined]
+        state = open_run_for_models(graph, run_id)
 
-    if not snapshot.values:
-        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-    state = PipelineState.model_validate(snapshot.values)
     if state.analysis is None or state.provenance is None:
         typer.secho(f"run {run_id} has no analysis to reuse", fg=typer.colors.RED)
         raise typer.Exit(1)
@@ -283,13 +359,10 @@ def write_drafts(
 
     with run_context() as (graph, deps):
         config = {"configurable": {"thread_id": run_id}}
-        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        state = PipelineState.model_validate(snapshot.values)
+        # `read_run_state`, not `open_run_for_models`: this maps already-generated Leaves into
+        # Payload and calls no model, so there is no transport to refuse. Writing drafts for a
+        # copyrighted book must not require Vertex to be configured.
+        state = read_run_state(graph, run_id)
         if not state.generated:
             typer.secho(f"run {run_id} has no generated Leaves to write", fg=typer.colors.RED)
             raise typer.Exit(1)
@@ -342,12 +415,7 @@ def generate_assets(
 
     with run_context() as (graph, deps):
         config = {"configurable": {"thread_id": run_id}}
-        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        state = PipelineState.model_validate(snapshot.values)
+        state = open_run_for_models(graph, run_id)
         if not state.cms_leaf_ids:
             typer.secho(
                 f"run {run_id} has no Leaves in Payload — run write-drafts first",
@@ -561,12 +629,7 @@ def review_track(
 
     with run_context() as (graph, deps):
         config = {"configurable": {"thread_id": run_id}}
-        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        state = PipelineState.model_validate(snapshot.values)
+        state = open_run_for_models(graph, run_id)
         if not state.generated:
             typer.secho(f"run {run_id} has no generated Leaves to review", fg=typer.colors.RED)
             raise typer.Exit(1)
@@ -690,12 +753,7 @@ def rewrite_leaf_command(
 
     with run_context() as (graph, deps):
         config = {"configurable": {"thread_id": run_id}}
-        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        state = PipelineState.model_validate(snapshot.values)
+        state = open_run_for_models(graph, run_id)
         key = str(order)
         record = state.generated.get(key)
         if record is None:
@@ -886,12 +944,7 @@ def balance_distractors(
 
     with run_context() as (graph, deps):
         config = {"configurable": {"thread_id": run_id}}
-        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
-        if not snapshot.values:
-            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        state = PipelineState.model_validate(snapshot.values)
+        state = open_run_for_models(graph, run_id)
         if not state.generated:
             typer.secho(f"run {run_id} has no generated Leaves", fg=typer.colors.RED)
             raise typer.Exit(1)
@@ -1232,13 +1285,8 @@ def purge_raw_text(
     mechanism until it does is how it never gets built.
     """
     with run_context() as (graph, _deps):
-        snapshot = graph.get_state({"configurable": {"thread_id": run_id}})  # type: ignore[attr-defined]
+        state = read_run_state(graph, run_id)
 
-    if not snapshot.values:
-        typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-
-    state = PipelineState.model_validate(snapshot.values)
     if state.book_id is None:
         typer.secho(f"run {run_id} never ingested a book", fg=typer.colors.RED)
         raise typer.Exit(1)

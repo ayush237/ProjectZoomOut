@@ -35,6 +35,32 @@ class Acquisition(StrEnum):
     UNDOCUMENTED = "undocumented"
 
 
+class Transport(StrEnum):
+    """Which door a run's model calls go through.
+
+    Recorded on the run rather than inferred later, for the reason `acquisition` itself
+    exists (R6): which books went through which door has to be a query, not somebody's
+    recollection of which environment variables were exported that afternoon.
+    """
+
+    VERTEX = "vertex"
+    DEVELOPER_API = "developer-api"
+
+
+class TransportRecord(BaseModel):
+    """What a run decided about its transport, and on what grounds.
+
+    Written into the run's own state so `status` can answer "which door did this book go
+    through" months later, when the shell that exported the variables is long gone.
+    """
+
+    transport: Transport
+    project: str | None = Field(
+        default=None, description="The GCP project billed, when the transport is Vertex."
+    )
+    acquisition: Acquisition
+
+
 class SourceFormat(StrEnum):
     EPUB = "epub"
     PDF = "pdf"

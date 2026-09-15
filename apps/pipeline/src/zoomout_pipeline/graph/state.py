@@ -30,6 +30,7 @@ from zoomout_pipeline.models import (
     GeneratedLeafRecord,
     LeafPlan,
     ScenePlan,
+    TransportRecord,
 )
 
 # Initial attempt plus four revisions.
@@ -56,6 +57,15 @@ class PipelineState(BaseModel):
     run_id: str
     source_path: str
     acquisition: Acquisition
+
+    # Which door this run's model calls went through, and on what grounds. Written by
+    # `require_paid_tier` every time a command that can call a model opens the run.
+    #
+    # **Recorded rather than inferred, for the same reason `acquisition` is.** Ikigai went
+    # through this pipeline twice, correctly, on one session's discipline — and nothing in
+    # the repository records that it did, so the claim cannot be checked afterwards and
+    # never will be. A run that cannot say which tier it used has not really said anything.
+    transport: TransportRecord | None = None
 
     # What the operator said this book is, when the file does not say.
     #

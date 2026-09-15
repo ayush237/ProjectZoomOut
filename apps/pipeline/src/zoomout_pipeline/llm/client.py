@@ -102,7 +102,9 @@ class GeminiClient:
 
     Free tier for public-domain books only (proposal §4a): Google's free tier uses
     submitted content to improve its products, so a copyrighted work must never go through
-    it. `config.paid_tier` records which side of that line a run is on.
+    it. **This client does not decide that** — it has no idea which book it is being used
+    for. `config.require_paid_tier` refuses the combination before a run reaches here, and
+    the decision it made is recorded on the run as a `TransportRecord`.
     """
 
     def __init__(

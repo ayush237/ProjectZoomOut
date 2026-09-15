@@ -71,7 +71,6 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_EMBEDDING_MODEL` | no | Default `gemini-embedding-001`, truncated to 768 dimensions. |
 | `ZOOMOUT_PIPELINE_DRAFT_MODEL` | no | Default `gemini-3.6-flash`. The five slides. |
 | `ZOOMOUT_PIPELINE_EXTRAS_MODEL` | no | Default `gemini-3.6-flash`. Dinner Table Knowledge and apply-in-life. |
-| `ZOOMOUT_PIPELINE_PAID_TIER` | no | Set `true` before any book that is not public domain. See below. |
 | `ZOOMOUT_PIPELINE_RUNS_DIR` | no | Where plan files are written. Default `runs/`. |
 | `ZOOMOUT_PIPELINE_PAYLOAD_URL` | no | Default `http://localhost:3001`. `localhost`, not `127.0.0.1` — see the note below. |
 | `ZOOMOUT_PIPELINE_PAYLOAD_API_KEY` | for CMS writes | The machine account's key (WP15.2). Provisioned by `npm run create-pipeline-key --workspace=apps/admin`, printed once, never in the repo. |
@@ -131,6 +130,24 @@ analysis pointed there. Two things have since changed that argument:
 Vertex authenticates with Application Default Credentials — `gcloud auth
 application-default login` — so there is no key file for this package to read or leak. Same
 SDK, same model names; only the transport and the billing change.
+
+### Free tier is for public-domain books only — and this is now a check
+
+**Keyed off the book's own `acquisition`, not off a flag.** `public-domain` may use the AI
+Studio Developer API; `licensed`, `purchased` and `undocumented` must use Vertex. A run that
+would send one of the latter through the free tier **refuses before the first call**, exits 2,
+and names the fix. See `require_paid_tier` in `config.py`.
+
+`ZOOMOUT_PIPELINE_PAID_TIER` is gone. It was a bool, defaulted to the unsafe value, and was
+read by no code for four packages while a comment claimed it was enforced.
+
+**What the check cannot see:** it checks the label, not the book. A work ingested as
+`public-domain` that is not public domain passes, and nothing downstream notices. The label is
+a human's claim made at ingest; this makes that claim load-bearing and visible, and does not
+verify it.
+
+Every run records which door it used — `zoomout-pipeline status --run-id <id>` prints the
+transport, the project when it is Vertex, and the resolved `acquisition`.
 
 ### Free tier is for public-domain books only
 

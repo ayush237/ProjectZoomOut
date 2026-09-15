@@ -93,6 +93,8 @@ from zoomout_pipeline.models import (
     SceneVantage,
     SlideKey,
     SourceFormat,
+    Transport,
+    TransportRecord,
 )
 
 _log = get_logger(__name__)
@@ -135,6 +137,11 @@ _CHECKPOINTED_TYPES: tuple[type, ...] = (
     SceneVantage,
     SceneLight,
     SceneShot,
+    # WP32 — the transport decision is recorded on the run, so it is checkpointed like
+    # everything else here. Left out of this tuple it still round-trips, via a dict
+    # fallback and two "Blocked deserialization" warnings on every read.
+    Transport,
+    TransportRecord,
 )
 
 
