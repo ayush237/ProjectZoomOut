@@ -20,6 +20,55 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-15 — WP31: the output-side image guard, and Ikigai's last two breaches
+
+*Pipeline Manager. **Suggested model: Opus** — the finding is the deliverable. A detector that reports clean on an image with "$10K" written across it is the exact failure this package exists to prevent, and it is the failure that reports green.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. Branch from `origin/main`.
+> **⚠️ Before any model call:** `export USE_VERTEX=true` and **unset the Gemini API key from the process.** `ZOOMOUT_PIPELINE_PAID_TIER` is enforced by nothing — `require_paid_tier` does not exist, `paid_tier` is read by no code — and Ikigai is a copyrighted book. The free Developer API trains on submitted content. This is discipline, not a check, until the paid-tier package lands.
+> **Read:** this handoff · **your WP30.1 completion report, commit `88a3e14`** · **WP30's, commit `a00527f`** · `apps/pipeline/src/zoomout_pipeline/assets/variety.py` — the precedent for image analysis in this service · `prompts/asset_style.md` · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP31 — catch in the output what the prompt cannot prevent
+
+**Suggested model:** Opus.
+
+**Context:** Three absolute prohibitions in the style contract are breached by images that passed every gate. **Ikigai Leaf 3** has a soft phone glow and two floating notification icons; **Leaf 7** has floating icons; **Track 42's published Leaf 1** renders "$10K" and "$2K" legibly *and* carries a glow. WP30 closed the input half — a focus object whose whole point is its writing is refused at parse — but a model asked for a laptop still writes "$10K" on it, and **nothing looks at the result.** Both Ikigai scenarios are about digital distraction, so this is a predictable failure of a whole scenario class, not bad luck.
+
+**Objective:** Generated images are checked for text, glow and floating iconography before they are attached, and Ikigai's Leaves 3 and 7 pass.
+
+**Scope:** `apps/pipeline` only, plus Ikigai's **draft** Leaf records.
+
+**Requirements**
+- **Build the output-side guard.** Design it yourself — `variety.py` is the precedent for image analysis here, and whether this is classical CV, a vision call, or both is your call. **Say what you chose and what it cannot catch**, because every one of these has a blind spot and an unstated blind spot is worse than a known one.
+- **It must fire on the known-bad fixtures.** Track 42's Leaf 1 (text + glow) and Ikigai's current Leaf 3 (glow + floating icons) are the corpus. **A guard that has never gone red against a real breach is not evidence.** Commit them as fixtures the way `collapsed-track` already is.
+- **Regenerate Ikigai Leaves 3 and 7 until they pass the guard**, then look at them yourself. Leaf 3 came back worse once already; if it resists, **say so and stop** rather than buying attempts.
+- **Rewrite `asset_style.md`'s light rule.** It currently forbids *"a shaft of light thrown across a surface"* while the whole library and the committed anchors draw cast light. **The ruling: the line is falloff, not subject matter — cast light may be a flat, hard-edged shape of a lighter surface value; no gradient, bloom, halo or emissive source.** Leaf 8's auditorium is a hard-edged polygon and stays legal; Leaf 3's phone is a soft bloom and does not. **The rewrite must not launder the breach it was asked about.**
+
+**Out of scope**
+- **Track 42's published Leaf 1 — read-only, as a fixture.** The machine account cannot edit published content (`access/publishing.ts`: *"an update to a live document is a live content change"*), so fixing it needs the founder to unpublish first. **That is a founder decision and not this package's.** Use the image; do not try to replace it.
+- Publishing Ikigai, or any Track-level field — the founder is filling those by hand.
+- The paid-tier check, the grounding false reject, the gate-1 named-framework flag — all separately packaged.
+- `apps/mobile`, `apps/backend`, `apps/admin`.
+
+**Constraints:** **Ceiling $4.** Two Leaves at one candidate each is well under; the rest is headroom for regeneration and for whatever the guard itself costs per image. **If the guard is expensive per image, say what it would cost across an 18-Leaf book before adopting it as a default** — a check nobody can afford to run is not a check.
+
+**Device gate — the artefacts, not the app.** Ikigai is still a draft and `contentVisibility.ts` makes drafts unservable in every environment. **What to observe: Leaves 3 and 7 side by side with their current versions, and the eighteen as a set** — that the two replacements carry no text, no glow and no floating iconography, and that they still belong to their scenarios and to the set's visual identity.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `ruff format --check`, `mypy --strict`, `pytest` clean
+- [ ] **The guard goes red on Track 42 Leaf 1 and on Ikigai's current Leaf 3** — show both results
+- [ ] The guard passes the other sixteen Ikigai images — **and if it flags any of them, that is a finding, not a failure; report it**
+- [ ] **Ikigai Leaves 3 and 7 replaced**, passing the guard, and **looked at**
+- [ ] `asset_style.md`'s light rule rewritten on the falloff line; **Leaf 8's cast light still legal, Leaf 3's glow still a breach**
+- [ ] Track 50 still a **draft**; no Track-level field touched
+- [ ] **What the guard cannot catch, stated plainly**
+- [ ] Spend reported against the $4 ceiling
+
+**Testing expectations:** unit coverage on the guard, with the known-bad fixtures as the load-bearing cases. Mutation-check it: disable the detector and confirm the fixture tests go red. **Say which evidence is a test, which is the guard, and which is you looking** — that split is why your last two reports were trustworthy.
+
+---
+
 ### Handoff: 2026-09-15 — WP30.1: finish Ikigai's images inside the credit, and fix Leaf 17
 
 *Pipeline Manager — **a fresh session, so this handoff assumes no memory of WP30.** **Suggested model: Opus.** Two judgement calls, both of the kind that report green while being wrong: whether a rewritten Leaf 17 still reproduces the book's named framework, and whether eighteen images actually vary. Neither is testable.*
