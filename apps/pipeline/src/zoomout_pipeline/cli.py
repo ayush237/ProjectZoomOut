@@ -1097,6 +1097,38 @@ def check_variety_command(
         raise typer.Exit(1)
 
 
+@app.command("contact-sheet")
+def contact_sheet_command(
+    directory: Annotated[str, typer.Option("--dir", help="A directory of PNGs, in Leaf order.")],
+    out: Annotated[str, typer.Option(help="Where to write the sheet.")] = "",
+    columns: Annotated[int, typer.Option(help="Images per row.")] = 3,
+) -> None:
+    """One image of a whole Track's illustrations, to look at.
+
+    The companion to `check-variety` and not a substitute for it: that measures whether every
+    picture has a near twin, this shows a person what the pictures actually are. Text in a
+    frame, a light bloom and a hand attached to nobody are all absolute prohibitions that no
+    mechanical gate in this service catches, and all three have shipped.
+    """
+    from zoomout_pipeline.assets.contact_sheet import write_contact_sheet
+
+    paths = sorted(Path(directory).glob("*.png"))
+    if not paths:
+        typer.secho(f"no PNGs in {directory}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    destination = Path(out) if out else Path(directory) / "contact-sheet.png"
+    # A sheet written into the directory it is built from would be picked up as an input the
+    # next time this runs, so a rebuild would tile the previous sheet into the new one.
+    paths = [path for path in paths if path.resolve() != destination.resolve()]
+    if not paths:
+        typer.secho(f"no PNGs in {directory} other than {destination.name}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    written = write_contact_sheet(paths, destination, columns=columns)
+    typer.secho(f"{len(paths)} images -> {written}", fg=typer.colors.GREEN, bold=True)
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
