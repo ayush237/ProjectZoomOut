@@ -37,7 +37,7 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 **Objective:** Generated images are checked for text, glow and floating iconography before they are attached, and Ikigai's Leaves 3 and 7 pass.
 
-**Scope:** `apps/pipeline` only, plus Ikigai's **draft** Leaf records.
+**Scope:** `apps/pipeline` only, plus Ikigai's **draft** Leaf records. **Track 50 itself is published as of 2026-09-15 and is therefore out of reach** — the machine account cannot edit published documents. Its eighteen Leaves are still drafts, which is what keeps this package runnable.
 
 **Requirements**
 - **Build the output-side guard.** Design it yourself — `variety.py` is the precedent for image analysis here, and whether this is classical CV, a vision call, or both is your call. **Say what you chose and what it cannot catch**, because every one of these has a blind spot and an unstated blind spot is worse than a known one.
@@ -61,7 +61,7 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 - [ ] The guard passes the other sixteen Ikigai images — **and if it flags any of them, that is a finding, not a failure; report it**
 - [ ] **Ikigai Leaves 3 and 7 replaced**, passing the guard, and **looked at**
 - [ ] `asset_style.md`'s light rule rewritten on the falloff line; **Leaf 8's cast light still legal, Leaf 3's glow still a breach**
-- [ ] Track 50 still a **draft**; no Track-level field touched
+- [ ] **Ikigai's eighteen Leaves are still drafts**, and no Track-level field is touched. **Track 50 itself was published by the founder on 2026-09-15, after this handoff was written** — the Leaves were not, which is the only reason this package can still run: the machine account cannot edit published documents, and a published Leaf would be frozen. **Do not publish the Leaves**; that is the founder's action once this package lands
 - [ ] **What the guard cannot catch, stated plainly**
 - [ ] Spend reported against the $4 ceiling
 
