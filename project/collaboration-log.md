@@ -20,6 +20,57 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-15 — WP32: make the paid-tier constraint a check
+
+*Pipeline Manager. **Suggested model: Opus** — small code, and the reasoning about what to key it off decides whether it holds. **This was ruled the next package on 2026-09-15 and then not handed off; that delay is Architect's, and it is why three consecutive completion reports have had to report the same gap.***
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. Branch from `origin/main`.
+> **⚠️ Until this package exists, the thing it builds does not:** `export USE_VERTEX=true` and unset the Gemini API key from the process before any model call.
+> **Read:** this handoff · `apps/pipeline/src/zoomout_pipeline/config.py` (the comment at line 26 and `paid_tier` at ~160) · `apps/pipeline/src/zoomout_pipeline/llm/client.py` (`GeminiClient.__init__`) · `apps/pipeline/src/zoomout_pipeline/cms/mapper.py` (`require_known_author` — **the shape to copy**) · `packages/shared/src/content.ts` `TRACK_ACQUISITION_STATUSES` · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP32 — the constraint that is currently a comment
+
+**Suggested model:** Opus.
+
+**Context:** `config.py:26` says `require_paid_tier` *"turns that from a memory into a check."* **That function has never existed.** `paid_tier: bool = False` is read by no code; the only other mention is a second comment in `client.py`. `GeminiClient` takes `use_vertex` and `api_key` independently and cross-checks neither against the book being processed.
+
+**Google's free tier trains on submitted content.** This is the control that keeps copyrighted works off it, and it is prose. **Ikigai — copyrighted — has already been through the pipeline twice.** It went through correctly, on one session's discipline, and **nothing in the repo records that it did**: the run log has no transport line, so the claim cannot be checked afterwards and never will be.
+
+**Objective:** A run that would send a non-public-domain book through the free tier fails before the first call, and every run records which transport it used.
+
+**Scope:** `apps/pipeline` only.
+
+**Requirements**
+- **Key the check off the book's `acquisition` status, not a hand-set bool.** `public-domain` may use the free Developer API; `purchased`, `licensed` and `undocumented` must use Vertex. **A flag someone has to remember to set is the failure this entry already is** — `paid_tier` exists today and is exactly that.
+- **Fail before the first paid call, not on it.** `require_known_author` in `cms/mapper.py` is the shape to copy: it refuses, and **the refusal names the fix**. A run that dies at Leaf 9 with a quota error has already sent eight Leaves' worth of a copyrighted book somewhere it must not go.
+- **Record the transport in the run.** Vertex or Developer API, the project id when Vertex, and the resolved `acquisition` — written where `status`/`cost` already look. **Provenance becomes a query rather than a memory**, which is the whole argument the `acquisition` field itself was built on.
+- **Say what the check cannot see.** If it keys off `acquisition`, then a book mislabelled `public-domain` passes — name that plainly rather than leaving it implied.
+
+**Out of scope**
+- The grounding gate's false reject, the gate-1 named-framework flag, the Leaf publish gate — separately packaged.
+- Any change to `apps/admin`'s collections or to `packages/shared`. If the check needs a value that does not exist in the pipeline's own state, **say so and stop** rather than reaching into another workspace.
+- Fixing Ikigai or Track 42.
+- **Chasing the Vertex quota for Claude** — that is a founder console action, tracked separately.
+
+**Constraints:** **Ceiling $1.** This should need almost no model calls; if it needs more than a smoke test, say why before spending.
+
+**Device gate — none, and that is deliberate.** Nothing here reaches a screen. **What to observe instead: the check refusing.** Point a run at a non-public-domain book with Vertex disabled and confirm it **stops before any call is made** — not that it warns, not that it fails partway.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `ruff format --check`, `mypy --strict`, `pytest` clean
+- [ ] **A non-public-domain book with the free tier configured refuses before the first model call** — demonstrate it, and show that zero calls were made
+- [ ] A public-domain book on the free tier still runs
+- [ ] Any book on Vertex runs
+- [ ] **The run records its transport, project id and resolved `acquisition`** — show the record from a real run
+- [ ] `config.py:26`'s comment is either true or gone — **no comment describing a function that does not exist**
+- [ ] **What the check cannot catch, stated plainly**
+- [ ] Spend reported against the $1 ceiling
+
+**Testing expectations:** unit coverage on the refusal, both directions, mutation-checked — remove the check and confirm the refusal test goes red. **The load-bearing test is the one proving no call was made**, not the one proving an exception was raised.
+
+---
+
 ### Handoff: 2026-09-15 — WP31: the output-side image guard, and Ikigai's last two breaches
 
 *Pipeline Manager. **Suggested model: Opus** — the finding is the deliverable. A detector that reports clean on an image with "$10K" written across it is the exact failure this package exists to prevent, and it is the failure that reports green.*
