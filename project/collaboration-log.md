@@ -1135,6 +1135,181 @@ WITH ABSOLUTE URLS            : OK
 
 ## Completions (Manager → Architect)
 
+### Completed: WP31 — the output-side image guard, and Ikigai's last two breaches — 2026-09-15
+
+**8 of 8 acceptance criteria met. $1.52 against the $4 ceiling.** `apps/pipeline` lint,
+`ruff format --check`, `mypy --strict` (79 files) and `pytest` (267 passed, 6 deselected — up
+from 257) are clean. Ikigai's eighteen Leaves are all still drafts; no Track-level field was
+touched.
+
+| | |
+|---|---|
+| Guard on Track 42 Leaf 1 | **RED** — reads `"$10K"`, plus the halo and the floating UI cards |
+| Guard on Ikigai Leaf 3 (before) | **RED** — floating chat bubbles, and a bloom with "smooth gradient falloff" |
+| Guard on Leaf 8 (hard-edged cast light) | **PASS** — the load-bearing negative |
+| Leaves 3 and 7 | Replaced, passing the guard, looked at, and they belong to the set |
+| Variety, unchanged by the swap | median 0.812, closest pair 0.745, zero near-duplicate pairs |
+| Guard cost | **$0.004 per image → $0.073 per 18-Leaf book** |
+
+**Two findings on the other sixteen, which the criterion asks for as findings rather than
+failures.** Leaf 4 has a real bloom at the soldering-iron tip — **WP30.1's human pass looked at
+that image and cleared it, and was wrong**; at 3x it has no traceable boundary. Leaf 11 is a
+**false positive**: what the guard called "a soft-edged beam fading smoothly" is flat pale
+ground with hard vector edges throughout. Leaf 4 is a genuine breach still live on the Track
+and is **not fixed** — the handoff scoped regeneration to Leaves 3 and 7 and named a flag on
+the sixteen as a finding, so it is reported. About $0.14 to fix on a word.
+
+---
+
+## The guard
+
+### What it is, and what was measured before it
+
+**A vision call, plus the existing mechanical amber check folded into the same verdict.** The
+classical route was tried first, because `variety.py` is the precedent for image analysis here
+and pure PIL is the house style. Two designs, both recorded in the module docstring:
+
+| Metric | Breaches | Clean |
+|---|---|---|
+| Ring level around the brightest 1.5% of pixels | 0.34-0.68 | 0.37-0.89 |
+| Local soft-ramp density, strongest tile | 0.72-0.81 | 0.70-0.83 |
+
+**Both score the breaches below several clean images.** The falloff idea is right — a bloom is
+a ramp and legal cast light is a step — but these illustrations are not the piecewise-constant
+art the measurement assumes. They carry pervasive soft shading by design, so smooth variation
+is not anomalous: mean ramp density sits at 0.42-0.57 across breaching and clean images alike.
+Worse for any threshold, **the two Tracks differ more from each other than breaches differ from
+clean images within a Track** — Track 42's flatter, smaller renders score 0.12 where Ikigai's
+score 0.45. A number calibrated on one book would be meaningless on the next.
+
+Text is the same story from the other side, and `guardrails.py` had already recorded the
+decision not to add OCR: flat vector art is full of small rectangles that are not text — a
+mixing console's faders, a circuit board's pads — and a detector tuned to find "$10K" among them
+finds all of them.
+
+### The evidence, and which kind each piece is
+
+**A test** (normal gate, scripted client): that an image is actually sent, that a finding fails
+the verdict, that the amber check is folded in, that the retry is bounded, and the mutation —
+with the guard switched off, nothing is rechecked and the refusal path cannot fire.
+
+**The guard's own evidence** (the `live` suite, excluded from the gate): 4/4 against committed
+fixtures of real breaches. It reads `"$10K"` character for character. It calls Leaf 3's phone a
+"soft cyan radial glow and light bloom… with smooth gradient falloff". **And it passes Leaf 8's
+auditorium**, which is a bright, obviously-lit stage whose light is a hard-edged polygon — the
+case that proves it learned *falloff* rather than *brightness*.
+
+**A person looking:** nineteen images, one by one. Four real breaches found, one of which I had
+personally cleared by eye in WP30.1. One false positive. That split is the guard's actual
+precision and no test in the repository states it.
+
+### What it cannot catch — stated because an unstated blind spot is worse
+
+- **It is not deterministic.** Same image, different runs, possibly different findings. That is
+  why the gate uses a scripted client and the real-model evidence is a `live` suite.
+- **It hallucinates**, as Leaf 11 shows — and a false positive costs a real $0.134 image to
+  regenerate. The prompt pushes back by naming an empty list as a common and correct answer,
+  which trades some recall for it.
+- **It is not independent of what generated the image.** R3 wants a different family grading the
+  work; this is Gemini reading Gemini. The Claude-on-Vertex quota that would fix that is still
+  the console action `config.py` has been waiting on since WP19.
+- **It says nothing about what actually decides a Track** — whether the place belongs to the
+  scenario, whether the set has collapsed, whether the Leaf is any good.
+
+### Cost, before adopting it as a default
+
+**$0.004 per image, $0.073 per eighteen-Leaf book**, at 2,444 input tokens and 280-1,570 output.
+Add the retries it causes: refusals ran about one in three on the two distraction-themed Leaves
+and near zero elsewhere, so budget roughly **$0.10-0.15 of reads and two or three extra images
+per book**. Against $2.41 of images per Track that is affordable, and it is the only thing
+standing between a bloom and a published Leaf nobody can edit.
+
+---
+
+## Ikigai's Leaves 3 and 7
+
+### Leaf 3 resisted four regenerations, and the cause was in the scenario text
+
+Twice in WP30.1, twice more here under the guard — always a glowing phone with notification
+badges. **Its scenario prose opens "Your smartphone is buzzing with group chat notifications",
+and `scenario_image_prompt` puts that text first in every image prompt.** The most specific
+instruction in the prompt was asking for exactly the thing the most general one forbids, and
+specific wins.
+
+This is Leaf 8's spotlight beam one layer up. WP30 stopped a *focus* naming something undrawable;
+WP30.1 stopped it naming a light effect; neither could see the scenario, which is written for a
+reader and names whatever the situation needs. `scenario_image_prompt` now says the scenario is
+what is happening rather than an inventory for the frame, and that anything in it the contract
+forbids is drawn plain and unlit or left out of shot.
+
+After that change both Leaves passed on the second sample, with the guard refusing the first —
+a badge on Leaf 3, a phone bloom on Leaf 7. **The gate worked exactly as designed: it caught
+both, and the redraw was clean.**
+
+### The light-rule rewrite caused a regression, and a test now guards it
+
+The ruling was to move the line to falloff, and the first rewrite did — by explaining hardness
+as *"a clean, hard edge you could trace with one line"*, and asking *"could the boundary be
+traced with one clean line?"*. **The word *line*, twice, in a contract whose previous paragraph
+forbids line art.** Both images regenerated under that wording came back as outlined drawings,
+which nothing else in the set is.
+
+Same lesson as WP30's removed subject menu: telling an image model not to draw a desk mentions a
+desk. Hardness is now "ends at a definite edge" and "where one flat value meets another", and
+`test_the_light_rule_does_not_ask_for_line_art` fails if `line`, `trace`, `stroke`, `outline` or
+`contour` reappears anywhere in that section. The prohibition itself keeps its own words.
+
+**The rewrite does not launder the breach it was asked about.** Leaf 8's auditorium is legal
+under it and the live guard passes it; Leaf 3's phone bloom is a breach under it and the live
+guard fails it. Both verified against the committed fixtures rather than asserted.
+
+### Looked at
+
+Both replacements carry no text, no glow and no floating iconography, and both belong to their
+scenarios — Leaf 3 an attic writing nook at night with the skylight as a hard-edged lighter
+polygon and the phone a flat unlit rectangle; Leaf 7 a garden pergola where **the light from the
+phone is drawn as a hard-edged triangle**, which is the ruling working rather than being evaded.
+The outlines are gone. Across the eighteen the set still reads as one library, and the variety
+measure is unmoved at 0.812.
+
+Before/after and the full sheet: `runs/ikigai/leaf-03-07-before-after.png` and
+`runs/ikigai/ikigai-contact-sheet.png`.
+
+---
+
+## Spend against the $4 ceiling
+
+| | |
+|---|---|
+| Images — 10 generated at $0.134 | $1.340 |
+| Style guard — 39 reads | $0.160 |
+| Diagram specs | $0.020 |
+| **Total** | **$1.520** |
+
+Ten images for two Leaves: three regeneration passes, two of which were spent discovering the
+two prompt defects above rather than on the images themselves.
+
+---
+
+## What the next package inherits
+
+**Leaf 4's bloom is real, live on Track 50, and not fixed.** Reported rather than regenerated
+because the handoff scoped this package to Leaves 3 and 7 and explicitly called a flag on the
+other sixteen a finding. One command, about $0.14.
+
+**Track 42's published Leaf 1 is unchanged and now a committed fixture.** It cannot be fixed by
+this pipeline — the machine account cannot edit published documents — so it needs the founder to
+unpublish first. It is the guard's best test case in the meantime.
+
+**Track 50 is published and its Leaves are not.** That is the only reason this package could run
+at all: a published Leaf would have frozen both breaches permanently. **Do not publish the
+Leaves without running the guard over the set first** — it is now one command and $0.073.
+
+**`ZOOMOUT_PIPELINE_PAID_TIER` is still enforced by nothing**, three packages after it was first
+reported. `require_paid_tier` does not exist and `paid_tier` is read by no code. Every command in
+this package ran with `USE_VERTEX=true` and the API key unset from the process. That is
+discipline, not a check, and discipline is what the next session will not know to apply.
+
 ### Completed: WP30.1 — Ikigai's eighteen images, and the named-framework breach — 2026-09-15
 
 **8 of 8 acceptance criteria met, and two of them come with a caveat you should read rather than
