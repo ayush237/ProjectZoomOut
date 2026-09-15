@@ -53,6 +53,13 @@ One entry per Leaf, each with:
   doorstep, a pair of tweezers over a clock movement, a folded coat, a scoop in a bin of beans.
   The same applies to the place: a shopfront is fine, a shopfront with its name on it is not.
 
+  **And never the light a thing throws, only the thing.** No spotlight, no beam, no shaft, no
+  glow, no halo, no bloom. The illustrator draws flat shapes and is forbidden every lighting
+  effect there is — a lamp is a shape and the room around it is a darker shape — so "a lectern
+  under a spotlight beam" asks for a picture that cannot be drawn, and what comes back is the
+  volumetric cone the contract spent a paragraph prohibiting. Name the lectern. `light`
+  already says what time of day it is, and that is the only place brightness belongs.
+
 ## The rules your answer is checked against
 
 These are mechanical. An answer breaking one is rejected and you are asked again, so it is
@@ -69,6 +76,10 @@ cheaper to satisfy them first time.
    values.
 6. **Nothing in the frame carries writing.** See `focus` above — this one is a content
    guardrail rather than a matter of variety, and it is the only rule here with legal weight.
+7. **No focus names a lighting effect.** A beam, a glow, a shaft or a spotlight is not an
+   object in the room; it is something the illustrator is forbidden to draw. See `focus`.
+8. **An empty frame has nobody's hands in it.** If `figures` is 0, the focus may not name a
+   hand, a palm, a lap or any other part of a person.
 
 ## How to choose a place
 

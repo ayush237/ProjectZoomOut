@@ -126,7 +126,7 @@ def test_a_revision_that_stays_grounded_is_accepted() -> None:
     )
     llm = ScriptedLLM([revised])
 
-    result, spend = revise_leaf(
+    result, spend, _verdict = revise_leaf(
         llm=llm, record=_record(), review=_review_with_findings(), passages=[PASSAGE], model="m"
     )
 
@@ -149,7 +149,7 @@ def test_a_revision_that_breaks_grounding_is_discarded() -> None:
     )
     llm = ScriptedLLM([broken])
 
-    result, _spend = revise_leaf(
+    result, _spend, _verdict = revise_leaf(
         llm=llm, record=_record(), review=_review_with_findings(), passages=[PASSAGE], model="m"
     )
 
@@ -173,7 +173,7 @@ def test_a_revision_may_not_change_the_correct_option() -> None:
     )
     llm = ScriptedLLM([same_answer])
 
-    result, _spend = revise_leaf(
+    result, _spend, _verdict = revise_leaf(
         llm=llm, record=_record(), review=_review_with_findings(), passages=[PASSAGE], model="m"
     )
 

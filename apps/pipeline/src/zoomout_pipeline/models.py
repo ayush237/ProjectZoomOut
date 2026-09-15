@@ -416,6 +416,49 @@ def place_words(value: str) -> set[str]:
 # whatever the figure count says, and a model handed both resolves the contradiction by
 # drawing a disembodied one — which it did, filling the lower third of an otherwise good
 # picture of a house with a giant floating hand.
+# Words that name a lighting *effect* rather than a thing in the room.
+#
+# **The sibling of `_BODY_PARTS`, and it was missing.** WP30 learned that a contradiction in
+# the plan is cheap to catch in text and expensive to catch in an image, and built the check
+# for exactly one contradiction: `figures: 0` with a focus on somebody's hands. This is the
+# other one. `asset_style.md` forbids glow, light cones, beams, bloom and volumetric light
+# absolutely — "a lamp is a shape, and the room around it is a darker shape" — so a focus
+# naming a beam asks the illustrator for a picture the contract says cannot be drawn.
+#
+# Measured, not assumed: of Ikigai's eighteen derived settings exactly one named a light
+# effect — Leaf 8's "an unlit wooden lectern standing under a spotlight beam" — and it
+# produced the only prohibition breach in the set, two volumetric cones converging on the
+# lectern. One for one.
+#
+# A lamp, a window or a candle as an *object* is fine and is not listed here; what is listed
+# is the light such a thing throws.
+_LIGHT_EFFECTS = frozenset(
+    {
+        "backlight",
+        "backlit",
+        "beam",
+        "beams",
+        "bloom",
+        "flare",
+        "glare",
+        "glow",
+        "glowing",
+        "halo",
+        "illuminated",
+        "lamplight",
+        "moonbeam",
+        "ray",
+        "rays",
+        "shaft",
+        "shafts",
+        "spotlight",
+        "spotlit",
+        "sunbeam",
+        "sunbeams",
+        "underlit",
+    }
+)
+
 _BODY_PARTS = frozenset(
     {
         "hand",
@@ -496,6 +539,36 @@ class SceneSetting(BaseModel):
                 f"focus names {found} but `figures` is 0. A hand in the frame is a person in "
                 "the frame — either raise `figures`, or choose a focus with nobody attached "
                 "to it (keys on a doorstep rather than keys in a palm)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _a_light_effect_is_not_a_thing_in_the_room(self) -> SceneSetting:
+        """A focus may name a lamp. It may not name the beam coming out of it.
+
+        The sibling of `_an_empty_frame_has_no_hands_in_it`, found the same way — by looking
+        at the picture. Leaf 8 of Ikigai asked for "an unlit wooden lectern standing under a
+        spotlight beam" and got two volumetric cones converging on a lectern, which is four
+        separate prohibitions in `asset_style.md` at once: no glow, no light cones or beams,
+        no bloom, no volumetric light.
+
+        **The model was not wrong.** It was handed a plan that named a beam and a contract
+        that forbids beams, and it satisfied the more specific instruction — exactly as the
+        `figures: 0` case did when it was given an empty frame and a focus on a hand.
+
+        Caught here because the plan is text, and text is where this costs nothing. In an
+        image it costs $0.134 and a human's eye to find, and the eye is the only thing that
+        was catching it.
+        """
+        found = sorted(_LIGHT_EFFECTS & place_words(self.focus))
+        if found:
+            raise ValueError(
+                f"focus names {found}, which is a lighting effect rather than something in "
+                "the room. The style contract forbids glow, beams, cones and bloom at every "
+                "time of day — a lamp is a shape and the room around it is a darker shape. "
+                "Choose a focus that is an object or an action ('an unlit lectern on the "
+                "bare stage', not 'a lectern under a spotlight beam'); `light` already says "
+                "what time of day it is."
             )
         return self
 
