@@ -20,6 +20,57 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-15 — WP30.1: finish Ikigai's images inside the credit, and fix Leaf 17
+
+*Pipeline Manager — **a fresh session, so this handoff assumes no memory of WP30.** **Suggested model: Opus.** Two judgement calls, both of the kind that report green while being wrong: whether a rewritten Leaf 17 still reproduces the book's named framework, and whether eighteen images actually vary. Neither is testable.*
+
+> **Where you work:** the pipeline checkout at `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Branch from `origin/main`** — WP30 merged as PR #44 and all of its code (`assets/variety.py`, `graph/scene_settings.py`, the rewritten `prompts/asset_style.md`, `prompts/anchor_instruction.md`) is already there. Do **not** continue on `wp30-scenario-settings`.
+> **Read:** this handoff · **WP30's completion report, commit `a00527f`** · **WP30's handoff, commit `da5bfb8`** — both cited by hash because the log prunes by position · `apps/pipeline/src/zoomout_pipeline/assets/variety.py` · `apps/pipeline/src/zoomout_pipeline/graph/scene_settings.py` · `apps/pipeline/src/zoomout_pipeline/prompts/asset_style.md` · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP30.1 — Ikigai's eighteen images, and the named-framework breach
+
+**Suggested model:** Opus.
+
+**Context:** WP30 built the scene-setting generator and produced Ikigai's text — Track 50, 18 draft Leaves, nothing published — then stopped before images when spend reached $10.07. **Two of its nine criteria are unmet for one reason: no Ikigai images exist.** Separately, WP30's own report found that **Ikigai's Leaf 17 lifts three of the book's "ten rules of ikigai" as sticky notes, in the book's own imperative phrasing.** `PRODUCT.md` forbids reproducing a named framework 1:1. It passed every mechanical gate, because the 1:1 check measures chapter mapping and cannot see phrasing.
+
+**Budget — the hard constraint of this package.** The founder has confirmed the existing Google Cloud credit covers this and wants Ikigai finished on it. **Ceiling: $5 total.** Eighteen images at one candidate each is $2.41; the Leaf 17 regeneration is the rest. **If the run would exceed $5, stop and report rather than continue** — WP30 overran a stated ceiling by 2x and its own report is clear that narrating a rate is not the same as asking.
+
+**Order matters and is not arbitrary.** Leaf 17 is rewritten **first**. Its rewrite changes its scenario, which changes its derived setting, which changes its image. Generate first and you buy that image twice.
+
+**Scope:** `apps/pipeline` only, plus the Ikigai draft records in the CMS that the pipeline already owns.
+
+**Requirements**
+- **Rewrite Leaf 17 so it does not reproduce the book's named framework.** Teach the same idea without lifting the list or its phrasing. Run it at `editorial_attempts=1` — WP20 made that cap configurable for throughput, and WP30 established it is also the cost lever.
+- **Re-derive the Track-level ScenePlan after the rewrite**, so Leaf 17's setting reflects the new scenario and the whole-Track variety constraint still holds across all eighteen.
+- **Generate eighteen scenario images, one candidate per Leaf.** One rather than gate 2's three is deliberate: the variety check now catches collapse mechanically, which is most of what a second and third candidate were for.
+- **The variety check gates the set before anything is attached.** Regenerate only the Leaves it flags, and only if the ceiling allows. If it still fails after one regeneration pass, **stop and report the score** — do not keep buying images toward a threshold.
+- **Look at all eighteen yourself before attaching them.** Specifically for: **any text, letters or numerals**; **any glow or light bloom**; and disembodied limbs. All three are absolute prohibitions in the style contract, and all three have shipped past the mechanical gates before — Track 42's published Leaf 1 renders "$10K" and "$2K" legibly *and* has a glow on the teal card, which is live right now on a published Track.
+- **Retain the images.** WP30's four-image before/after was its own most important evidence and no longer exists on disk — nothing from that comparison survives, so neither the founder nor Architect can see what was claimed. **Save the eighteen where they survive the session** and hand the founder a contact sheet.
+
+**Out of scope**
+- **An output-side text/glow detector.** Wanted, and a separate package — it must not put this credit-bound run at risk.
+- **A per-Track text budget that refuses.** Also wanted, also separate; `ImageBudget` already halts, which is what this package needs.
+- **Track 42's published images**, including the Leaf 1 breach. Logged separately.
+- **Publishing Ikigai.** Draft only, unchanged from WP30.
+- `apps/mobile`, `apps/backend`, `apps/admin`, any shared-type or Payload collection change.
+
+**Device gate — replaced, and here is why.** WP30's device gate asked for Ikigai Leaves observed in the app. **That was unmeetable and the fault was Architect's**: `apps/backend/src/content/contentVisibility.ts` returns `content.status === 'published'` in *every* non-production environment — *"a draft is never servable anywhere"*, deliberately — so no draft Track can reach the app without a backend change the same handoff put out of scope. **What to observe instead: the eighteen images as a set, side by side.** For each one, whether its place belongs to its scenario; across the set, whether the places differ. The in-app observation is deferred to whenever Ikigai is published and is recorded as debt, not dropped.
+
+**Acceptance criteria**
+- [ ] Pipeline `lint`, `ruff format --check`, `mypy --strict`, `pytest` all clean
+- [ ] **Leaf 17 no longer reproduces the ten rules** — neither the list nor its phrasing. Say in your own words why the rewrite clears it, rather than asserting that it does
+- [ ] All eighteen Ikigai Leaves carry a scenario image; Track 50 is still a **draft**, still `acquisition: undocumented`
+- [ ] **The variety check passes against Ikigai's eighteen** — report the median nearest-neighbour distance and the closest pair, not just the verdict
+- [ ] The same check still **fails against Track 42's set** — it is committed as `tests/fixtures/collapsed-track`, so run it both ways and show both numbers
+- [ ] **Observed: eighteen images looked at, no text, no glow, no disembodied limbs** — name anything you rejected and regenerated
+- [ ] **The eighteen images are retained and a contact sheet is handed over**
+- [ ] **Total spend reported against the $5 ceiling**, images and text separately
+
+**Testing expectations:** no new test can prove the variety claim, and do not write one that pretends to. Cover the Leaf 17 regeneration path and any change to scene derivation. **Say plainly which evidence is a test, which is the variety check, and which is you looking at pictures** — WP30 got this right and it is the reason its report was trustworthy.
+
+---
+
 ### Handoff: 2026-09-11 — WP30: Ikigai end to end, with scenario images that match their scenarios
 
 *Pipeline Manager. **Suggested model: Opus** — the finding is the deliverable on the first half. "The images vary now" is exactly the claim that can be asserted green while being false; it took the founder's eye to catch the current state.*

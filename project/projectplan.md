@@ -2,7 +2,23 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: WP30 — Ikigai end to end, and the scenario-image fix — handed off 2026-09-11
+## Active: WP30.1 — finish Ikigai's images inside the credit, and fix Leaf 17 — handed off 2026-09-15
+
+**WP30 is signed off at 7 of 9.** The generator works and Ikigai's text exists — Track 50, 18 draft Leaves, nothing published, 134/134 source references with locators, and the shuffle confirmed working at 6/5/7 across A/B/C where Track 42 was position B on 15 of 18. **Both unmet criteria have a single cause: no Ikigai images were ever generated**, because spend hit $10.07 and stopped.
+
+**WP30.1 finishes it on the existing Google Cloud credit**, which the founder has confirmed covers the remaining work. $5 ceiling. Eighteen images at one candidate each is $2.41; one candidate rather than gate 2's three is deliberate, because the new variety check catches collapse mechanically and that was most of what the extra candidates were for.
+
+**Leaf 17 is rewritten first, and the order is not arbitrary.** It lifts three of the book's *"ten rules of ikigai"* in the book's own imperative phrasing — a named-framework breach that passed every mechanical gate, because the 1:1 check measures chapter mapping and cannot see phrasing. Rewriting it changes its scenario, which changes its derived setting, which changes its image; generate first and that image is bought twice.
+
+**One criterion in WP30 was unmeetable as written, and that was mine.** The handoff required Ikigai to stay a draft *and* required an Ikigai Leaf observed in the app. `contentVisibility.ts` makes a draft unservable in **every** environment, deliberately — so closing that gap needs a backend change the same handoff excluded. WP30.1 replaces the device gate with an observation of the images themselves, and the in-app check is deferred to publication rather than dropped.
+
+**Three packages are queued behind this**, all deliberately kept out so they cannot put a credit-bound run at risk: an **output-side text and glow detector** (Track 42's published Leaf 1 renders "$10K" and "$2K" legibly *and* carries a glow — two absolute prohibitions, live); a **per-Track text budget that refuses** rather than warns; and a **gate-1 flag** for any plan that puts a Leaf on the chapter holding a named framework.
+
+**Still open alongside it:** WP29 (Manager, the Leaf player's footer) · WP26.1 (proposed, unanswered) · WP27's PR #40, now mergeable and waiting on a click.
+
+---
+
+## Completed: WP30 — Ikigai end to end, and the scenario-image fix — handed off 2026-09-11
 
 **Book #2 is the active feature.** *Ikigai* (`ZO-admin/booksSource/Ikigai.pdf`) goes through the existing pipeline, and it carries a defect fix the founder found by looking at the app: **Track 42's eighteen scenario images are all a seated figure at a table in a dim interior**, whatever the scenario.
 
