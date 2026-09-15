@@ -286,3 +286,41 @@ def gate2_review_patch(
         ]
 
     return patch
+
+
+def rewritten_leaf_patch(
+    *,
+    record: GeneratedLeafRecord,
+    existing: dict[str, Any],
+    passages: dict[int, Passage],
+) -> dict[str, Any]:
+    """A PATCH body for a Leaf that was rewritten, not merely revised.
+
+    **The difference from `revised_leaf_patch` is what it refuses to carry forward**, and it
+    is the whole reason this exists as a second function rather than a flag on the first.
+
+    `revised_leaf_patch` copies the existing Dinner Table fact, apply-in-life and
+    `sourceReferences` forward, because editorial revision provably cannot have invalidated
+    them: `revise` never touches extras, and it keeps a claim's original citation whenever
+    the wording is unchanged. Neither holds for a rewrite. Ikigai's Leaf 17 carried the
+    book's named framework in *three* places — the sticky notes, the Dinner Table fact, and
+    a reference note reading "The ten rules include staying active without retiring, taking
+    it slow, eating until 80% full…". Cleaning the slides and copying the other two forward
+    would have moved the defect rather than fixed it, and the Leaf would have reported
+    green.
+
+    So extras are written from the record rather than preserved — including as `None`, which
+    clears the field, because a rewrite that could not support a deep-cut fact must be able
+    to say so — and `sourceReferences` is rebuilt from the claims the rewrite actually made.
+
+    `passages` is keyed by chunk id, exactly as `leaf_payload` takes it.
+    """
+    patch = revised_leaf_patch(leaf=record.leaf, existing=existing)
+
+    takeaway = dict(patch["takeaway"])
+    takeaway["dinnerTableKnowledge"] = record.extras.dinner_table_knowledge
+    takeaway["applyInLife"] = record.extras.apply_in_life
+    patch["takeaway"] = takeaway
+
+    patch["sourceReferences"] = source_references(record, passages)
+    return patch

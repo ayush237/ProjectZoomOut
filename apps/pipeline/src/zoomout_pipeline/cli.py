@@ -307,6 +307,9 @@ def write_drafts(
 def generate_assets(
     run_id: Annotated[str, typer.Option(help="The run whose Leaves should be illustrated.")],
     limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
+    save_dir: Annotated[
+        str, typer.Option(help="Also write every candidate here, as it is generated.")
+    ] = "",
 ) -> None:
     """Generate and attach assets for a run whose Leaves are already in Payload.
 
@@ -317,7 +320,7 @@ def generate_assets(
     Re-running is safe: a Leaf that already carries a diagram is skipped.
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError, ImageBudget
-    from zoomout_pipeline.assets.images import AnchorSet, ImageClient
+    from zoomout_pipeline.assets.images import AnchorSet, ImageClient, save_candidates
     from zoomout_pipeline.cms.client import PayloadClient
     from zoomout_pipeline.graph.asset_nodes import (
         attach_assets,
@@ -428,6 +431,12 @@ def generate_assets(
             except BudgetExceededError as error:
                 typer.secho(f"\nHALTED: {error}", fg=typer.colors.RED, bold=True)
                 break
+
+            # On disk before Payload, and before the diagram call that could raise. An image
+            # that exists only inside a run that then fails is an image that was paid for
+            # and lost — which is what happened to WP30's before/after set.
+            if save_dir:
+                save_candidates(Path(save_dir), order=record.order, candidates=candidates)
 
             diagram = build_diagram(llm=deps.llm, record=record, model=settings.diagram_model)
             assets[key] = attach_assets(
@@ -576,6 +585,184 @@ def review_track(
     typer.secho(
         f"\n{len(reviews)} Leaves reviewed, ${total_usd:.4f}", fg=typer.colors.GREEN, bold=True
     )
+
+
+@app.command("rewrite-leaf")
+def rewrite_leaf_command(
+    run_id: Annotated[str, typer.Option(help="The run the Leaf belongs to.")],
+    order: Annotated[int, typer.Option(help="Which Leaf, by its order in the Track.")],
+    brief: Annotated[str, typer.Option(help="YAML brief: findings, forbidden phrases.")],
+    keep_extras: Annotated[
+        bool, typer.Option(help="Leave the Dinner Table fact and apply-in-life alone.")
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option(help="Rewrite and print, writing to neither the CMS nor the run.")
+    ] = False,
+) -> None:
+    """Rewrite one finished Leaf against findings a human wrote down.
+
+    For the defect no gate in this pipeline can see. Ikigai's Leaf 17 listed five of the
+    book's ten rules of ikigai in the book's own imperative phrasing, and passed the
+    structure check (which measures chapter mapping), grounding (every rule was cited) and
+    editorial review (whose four categories have no member for it). The findings therefore
+    come from a person; everything after that is the machinery `review.py` already has,
+    including discarding a rewrite that does not still pass grounding.
+
+    **Re-running is safe and costs money.** Unlike the other deliberate invocations there is
+    no skip-if-done check, because "already rewritten" is not a state this can read — the
+    brief is what decides whether the Leaf needs it. `--dry-run` spends the model calls and
+    writes nothing, which is the cheap way to look before committing.
+    """
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.cms.mapper import rewritten_leaf_patch
+    from zoomout_pipeline.graph.leaf_nodes import reload_passages
+    from zoomout_pipeline.graph.rewrite import brief_summary, load_brief, rewrite_leaf
+
+    brief_path = Path(brief)
+    loaded = load_brief(brief_path)
+    typer.echo(f"brief: {brief_path} — {json.dumps(brief_summary(loaded))}\n")
+
+    with run_context() as (graph, deps):
+        config = {"configurable": {"thread_id": run_id}}
+        snapshot = graph.get_state(config)  # type: ignore[attr-defined]
+        if not snapshot.values:
+            typer.secho(f"no checkpoint for run {run_id}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        state = PipelineState.model_validate(snapshot.values)
+        key = str(order)
+        record = state.generated.get(key)
+        if record is None:
+            typer.secho(f"run {run_id} has no generated Leaf {order}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # The concept from the approved plan, not from the Leaf's own prose. `extra_content`
+        # is told what the Leaf teaches, and after a rewrite the Leaf's text is the thing
+        # under repair — reading the concept back out of it would feed the defect forward.
+        planned = next(
+            (leaf for leaf in (state.plan.leaves if state.plan else []) if leaf.order == order),
+            None,
+        )
+        concept = planned.concept if planned is not None else record.title
+
+        passages = reload_passages(deps, record.passage_refs)
+        if not passages:
+            typer.secho(
+                f"Leaf {order} has no retrievable passages — its cited chunks may have been "
+                "purged. A rewrite cannot be grounded without them.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+        typer.echo(f"passages: {', '.join(p.ref + ' -> ' + str(p.chunk_id) for p in passages)}")
+
+        settings = deps.settings
+        outcome = rewrite_leaf(
+            llm=deps.llm,
+            record=record,
+            passages=passages,
+            brief=loaded,
+            revise_model=settings.revise_model,
+            extras_model=settings.extras_model,
+            concept=concept,
+            with_extras=not keep_extras,
+        )
+
+        typer.echo(
+            f"revised: {outcome.revised} | extras replaced: {outcome.extras_replaced} | "
+            f"${outcome.total_cost.total_usd:.4f}"
+        )
+        _echo_leaf(outcome.record)
+
+        if outcome.survivors:
+            typer.secho("\nFORBIDDEN PHRASING SURVIVED:", fg=typer.colors.RED, bold=True)
+            for where, phrase in outcome.survivors:
+                typer.secho(f"  {where}: {phrase!r}", fg=typer.colors.RED)
+        elif loaded.forbidden_phrases:
+            typer.secho(
+                f"\nnone of the {len(loaded.forbidden_phrases)} forbidden phrasings survive "
+                "— which is not the same as the rewrite being right. Read it.",
+                fg=typer.colors.YELLOW,
+            )
+
+        if not outcome.revised:
+            typer.secho(
+                "\nthe rewrite was discarded for failing grounding; the original Leaf "
+                "stands and nothing was written",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            raise typer.Exit(1)
+
+        if dry_run:
+            typer.secho(
+                "\ndry run — neither the CMS nor the run was written", fg=typer.colors.YELLOW
+            )
+            return
+
+        leaf_id = state.cms_leaf_ids.get(key)
+        if leaf_id is not None:
+            client = deps.payload_client or PayloadClient(
+                base_url=settings.payload_url, api_key=settings.payload_api_key
+            )
+            # Fetched immediately before the patch, never from memory: the patch carries
+            # each group whole, so what it carries forward has to be what Payload holds now.
+            existing = client.get_leaf(leaf_id, draft=True)
+            client.update_leaf_draft(
+                leaf_id=leaf_id,
+                patch=rewritten_leaf_patch(
+                    record=outcome.record,
+                    existing=existing,
+                    passages={p.chunk_id: p for p in passages},
+                ),
+            )
+            typer.echo(f"\nLeaf {order} (CMS id {leaf_id}) updated as a draft")
+
+        generated = dict(state.generated)
+        generated[key] = outcome.record
+        # The editorial verdict recorded against this Leaf described the text that has just
+        # been replaced. Dropping it says "not reviewed since" rather than leaving a stale
+        # pass attached to prose no reviewer has read.
+        reviews = {k: v for k, v in state.cms_reviews.items() if k != key}
+        cost = state.cost
+        for spend in outcome.spend:
+            cost.record(spend)
+        graph.update_state(  # type: ignore[attr-defined]
+            config, {"generated": generated, "cms_reviews": reviews, "cost": cost}
+        )
+
+    typer.secho(
+        f"\nLeaf {order} rewritten. Its editorial review was cleared — re-run review-track "
+        "to review the new text.",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+
+def _echo_leaf(record: Any) -> None:
+    """The rewritten Leaf, in full, because reading it is the actual gate."""
+    leaf = record.leaf
+    typer.echo("\n" + "=" * 78)
+    typer.echo(f"Leaf {record.order} — {record.title}\n")
+    typer.echo(f"SUMMARY\n  {leaf.summary_body}\n")
+    typer.echo(f"SCENARIO\n  {leaf.scenario_prompt}")
+    for option in leaf.scenario_options:
+        typer.echo(f"  [{'x' if option.is_correct else ' '}] {option.text}")
+    typer.echo(f"\nPAYOFF\n  {leaf.payoff_body}\n")
+    typer.echo("STICKY NOTES")
+    for note in leaf.sticky_notes:
+        typer.echo(f"  - {note}")
+    typer.echo(f"\nTAKEAWAY\n  {leaf.takeaway_body}")
+    typer.echo(f"\n  dinner table: {record.extras.dinner_table_knowledge or '(none)'}")
+    typer.echo(f"  apply in life: {record.extras.apply_in_life or '(none)'}")
+    typer.echo("\nCLAIMS")
+    for claim in [*leaf.claims, *record.extras.claims]:
+        for citation in claim.citations:
+            quote = f' | "{citation.quote[:60]}…"' if citation.quote else ""
+            typer.echo(
+                f"  [{claim.slide_key.value}] {claim.text[:70]}\n"
+                f"      {citation.passage_ref} — {citation.note[:80]}{quote}"
+            )
+    typer.echo("=" * 78)
 
 
 @app.command("balance-distractors")

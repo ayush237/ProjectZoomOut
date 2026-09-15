@@ -267,3 +267,28 @@ def _first_image(response: object) -> tuple[bytes | None, str]:
             if data:
                 return bytes(data), str(getattr(blob, "mime_type", "image/png"))
     return None, "image/png"
+
+
+def save_candidates(
+    directory: Path, *, order: int, candidates: list[tuple[bytes, str]]
+) -> list[Path]:
+    """Write one Leaf's candidates to disk beside their alt text, and return the paths.
+
+    **Retention is a property of the run, not of whoever was watching it.** WP30's
+    before/after comparison was that package's single most important piece of evidence and
+    it existed only in a temporary directory; nothing from it survives, so neither the
+    founder nor Architect can now see what was claimed about it. Images are also the most
+    expensive thing this pipeline buys, which makes losing them the most expensive way to
+    lose anything.
+
+    The alt text is written alongside deliberately: a PNG on disk with no record of what it
+    was asked to show cannot be checked against its own scenario later.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for index, (data, alt) in enumerate(candidates):
+        path = directory / f"leaf-{order:02d}-scenario-{index + 1}.png"
+        path.write_bytes(data)
+        path.with_suffix(".txt").write_text(alt, encoding="utf-8")
+        written.append(path)
+    return written
