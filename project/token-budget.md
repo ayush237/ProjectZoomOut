@@ -123,3 +123,25 @@ Steps 1 and 2 are the ones that matter. The rest is tidying.
 **The heavy build is nearly over.** WP20 is the last pipeline package; WP12, WP13 and WP14 remain on the app side. What follows is mostly content review — founder hours in a CMS, costing no tokens at all.
 
 The burn rate is about to fall on its own. These changes are worth making because they are cheap and permanent, not because the current rate continues indefinitely.
+
+---
+
+## Measured again — 2026-09-15
+
+**The rules in this file were not followed, and the file grew past the point the last rescue started from.**
+
+| | 2026-08-29 | 2026-09-15 before | 2026-09-15 after |
+|---|---|---|---|
+| `collaboration-log.md` | 190KB / 47k | **417KB / 106k** | **79KB / 20k** |
+| `projectRoadmap.md` | 130KB / 32k | 169KB / 43k | 153KB / 39k |
+| **Startup load** | ~104k | **~181k** | **~91k** |
+
+**What went wrong is exactly what Lever 2 predicted.** Archiving happened as a rescue, not as a habit: five packages were signed off between 2026-09-11 and 2026-09-15 and none of them archived anything, so the log more than doubled and ended up **larger than it was before the previous split**. Lever 1 was also not followed — one Architect session ran WP28.1 through WP32, six packages, without clearing.
+
+**Two things changed in the rules, both learned here.**
+
+**The log's "keep the four most recent" rule gains an exception: a handoff whose package is still open is never pruned.** WP29 was handed off 2026-09-11 and not started; under the plain rule it would have been archived out of the active file while still being the live instruction for an unstarted package. That is the pruned-pointer failure that already cost WP28 time, one step earlier.
+
+**Open debt is not archived, only resolved debt is.** The register is 140 open rows and 85KB — the largest remaining item, and the obvious next cut. It was deliberately left alone: **open debt that is not loaded is debt that gets forgotten**, and this project's own record says a defect is not recorded until it reaches a list someone reads. Shrinking it is a real decision about what to stop tracking, not a tidy-up, and it should be made deliberately rather than at the end of a session that is already over budget.
+
+**So the remaining gap to the 40k target is the debt register, and closing it needs a ruling rather than a script.**
