@@ -63,7 +63,7 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_DATABASE_URL` | yes | The pipeline's own Postgres. Refuses a URL ending in `/zoomout` or `/zoomout_cms`. |
 | `ZOOMOUT_PIPELINE_GEMINI_API_KEY` | one of the two | AI Studio Developer API key. Unused when `USE_VERTEX` is set. |
 | `ZOOMOUT_PIPELINE_USE_VERTEX` | one of the two | `true` to use Vertex AI with Application Default Credentials instead of an API key. |
-| `ZOOMOUT_PIPELINE_VERTEX_PROJECT` | with Vertex | GCP project id. Required when `USE_VERTEX` is set — it is what calls bill to. |
+| `ZOOMOUT_PIPELINE_VERTEX_PROJECT` | with Vertex | GCP project id. Required when `USE_VERTEX` is set — it is what calls bill to. **Use `zoomout-vertex`** — see below. |
 | `ZOOMOUT_PIPELINE_VERTEX_LOCATION` | no | Default `global`. Gemini 3.x is **only** served there — regional endpoints 404. |
 | `ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE` | no | Default 60, sized for the AI Studio free tier. Raise it on Vertex. |
 | `ZOOMOUT_PIPELINE_ANALYZE_MODEL` | no | Default `gemini-3.6-flash`. |
@@ -89,7 +89,7 @@ export ZOOMOUT_PIPELINE_GEMINI_API_KEY="..."
 
 # ...or Vertex AI, with no key on disk:
 export ZOOMOUT_PIPELINE_USE_VERTEX=true
-export ZOOMOUT_PIPELINE_VERTEX_PROJECT="your-project-id"
+export ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex
 export ZOOMOUT_PIPELINE_EMBED_REQUESTS_PER_MINUTE=600
 
 # For anything that writes to Payload:
@@ -101,6 +101,20 @@ server rejects `/_next/*` requests whose `Origin` it does not allowlist, which c
 `localhost` but not the IP form — the admin UI 403s its own JavaScript and renders blank with
 nothing on screen to explain why. `allowedDevOrigins` in `apps/admin/next.config.ts` (WP15.2)
 fixes the admin UI itself; the pipeline's default just avoids walking into the same trap.
+
+### Which project, and why this is written down
+
+**`zoomout-vertex`.** There are three ZoomOut projects on this account and the names do not
+tell you which is which: `zoomout-b1358`, `zoomout-free-test` and `zoomout-vertex`.
+**`zoomout-free-test` is the free tier and no book in copyright may go through it** — Google's
+free tier uses submitted content to improve its products, which is the whole reason
+development was confined to public-domain books.
+
+It is recorded here because it was not recorded anywhere. WP30 exported it per-session, and
+when a later session picked the work up it was not in the environment, not in `gcloud config`
+and not in the repo — every command was blocked on a value nobody could reconstruct. A
+project id is not a credential; it appears in the URL of every Vertex call. The credential is
+ADC, which stays on the machine.
 
 ### Vertex AI, and why it is the better target
 
@@ -194,6 +208,54 @@ the Track from the same places rather than deriving a second, independent set.
 uv run zoomout-pipeline check-variety --track-id 42     # measure a Track in the CMS
 uv run zoomout-pipeline check-variety --dir some/pngs   # or a folder, for a before/after
 ```
+
+**Keep the images.** `generate-assets --save-dir runs/<id>/images` writes every candidate to
+disk with its alt text as it is generated, before the upload and before the diagram call that
+could raise. WP30's before/after comparison was that package's most important evidence, lived
+in a temporary directory, and no longer exists.
+
+```bash
+uv run zoomout-pipeline generate-assets --run-id ikigai --save-dir runs/ikigai/images
+uv run zoomout-pipeline contact-sheet --dir runs/ikigai/images
+```
+
+`contact-sheet` is the companion to `check-variety` and not a substitute for it. That measures
+whether every picture has a near twin; this produces the thing a person looks at. **The checks
+that actually decide whether a Track ships cannot be measured** — does this place belong to
+this scenario, is there text in the frame, is there a light bloom, is there a hand attached to
+nobody. All of those are absolute prohibitions or hard requirements with no mechanical gate,
+and Track 42's published Leaf 1 breaches two of them right now.
+
+## Rewriting one Leaf: `rewrite-leaf`
+
+For the defect no gate here can produce. Ikigai's Leaf 17 listed five of the book's *ten rules
+of ikigai* in the book's own imperative phrasing, and restated them in the Dinner Table fact
+and in seven source-reference notes. It passed the structure check (which measures chapter
+mapping), passed grounding (every rule was cited), and passed editorial review, whose four
+categories — pedagogy, scenario plausibility, prose, attribution — have no member for it.
+
+So the findings come from a person, in a YAML brief, and everything downstream is the
+machinery `review.py` already has:
+
+```bash
+uv run zoomout-pipeline rewrite-leaf --run-id ikigai --order 17 \
+  --brief runs/ikigai/leaf-17-brief.yaml
+```
+
+| | |
+|---|---|
+| `findings` | Fed to `revise` as an `EditorialReviewResult`. Required — a rewrite with nothing named is a regeneration. |
+| `forbidden_phrases` | Checked mechanically afterwards against **everything a reader sees**, citation notes and quotes included. |
+| `extras_instruction` | Prepended to the `extra_content` prompt. Only reached when the slides were actually rewritten. |
+
+**A rewrite that fails grounding is discarded and the original stands.** A human deciding
+*what* is wrong does not also get to decide the fix may be ungrounded. Retried once with the
+grounding failures quoted back — the mechanism `draft_leaf` uses for the same gate — then it
+stops and hands the failures to the person who wrote the brief.
+
+**`forbidden_phrases` passing is not the Leaf being right.** A paraphrase of the same list
+clears it. Whether the idea was taught instead of the list reproduced is a reading, and the
+command says so in its own output.
 
 **It measures the pictures, not the labels** — a place label can say "construction site" over a
 rendering of a desk. Two obvious designs do not work and `assets/variety.py` records why: a
