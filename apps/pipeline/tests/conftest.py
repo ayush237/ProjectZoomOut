@@ -8,7 +8,7 @@ fake and the normal gate never touches the network.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -72,8 +72,19 @@ class ScriptedLLM:
         model: str,
         node: str,
         system_instruction: str | None = None,
+        images: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
-        self.calls.append({"node": node, "model": model, "prompt": prompt})
+        # `images` is recorded rather than ignored: WP31's style guard is a *reading* call
+        # whose whole job is to look at a picture, so "was an image actually sent" is a
+        # thing its tests need to assert and a silently-dropped argument would pass.
+        self.calls.append(
+            {
+                "node": node,
+                "model": model,
+                "prompt": prompt,
+                "images": list(images or []),
+            }
+        )
 
         # Serve the next scripted response only if it is the shape being asked for. A
         # resumed run replays nodes that already completed, so a positional script would
