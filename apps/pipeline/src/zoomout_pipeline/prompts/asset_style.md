@@ -16,10 +16,22 @@ painterly brushwork, no glossy highlights.
 **Solid filled shapes with no outlines.** Forms are defined by where one colour meets another,
 never by a drawn contour. No line art, no stroked edges, no sketch or ink treatment.
 
-**No lighting effects.** No glow, no light cones or beams, no lens flare, no bloom, no
-volumetric light. A lamp is a shape, and the room around it is a darker shape. This holds at
-every time of day: a bright window is a lighter shape, never a shaft of light thrown across a
-surface.
+**Light is drawn as a shape, like everything else here.** Where light falls, fill a flat area
+with a lighter surface value that ends at a definite edge — a window as a lighter rectangle, a
+doorway's spill as a lighter polygon on the floor, the lit part of a stage as a lighter
+quadrilateral. Its boundary is where one flat value meets another, exactly as every other form
+here is bounded. Use as many of these as the scene needs.
+**Where the lit area ends is what matters, not how bright it is and not what is casting it.**
+
+**Never draw falloff.** No bright core fading smoothly outward, no halo or bloom around a lamp,
+a screen, a candle or a fire, no soft radial wash on a wall or a face, no beam or light cone
+with soft sides, no lens flare, and nothing that appears to emit light into the air around it.
+A lamp is a shape, and the room around it is a darker shape. A phone screen is a small lighter
+rectangle, and the hand holding it is not lit by it.
+
+If you cannot decide, apply the same test the reviewer does: **does the lit area stop at a
+definite edge, or does it fade out?** If it stops, fill it. If it would dissolve gradually into
+the dark, the scene is drawn without it.
 
 Chosen for legibility at small sizes — these are seen on a phone, often at thumbnail scale.
 Flat shapes survive that; detail becomes mud.

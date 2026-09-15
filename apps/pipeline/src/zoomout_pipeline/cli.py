@@ -321,6 +321,7 @@ def generate_assets(
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError, ImageBudget
     from zoomout_pipeline.assets.images import AnchorSet, ImageClient, save_candidates
+    from zoomout_pipeline.assets.style_guard import GuardResult, check_style
     from zoomout_pipeline.cms.client import PayloadClient
     from zoomout_pipeline.graph.asset_nodes import (
         attach_assets,
@@ -361,6 +362,18 @@ def generate_assets(
         images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
         budget = ImageBudget(max_images=settings.max_images_per_track, model=settings.image_model)
         assets = dict(state.cms_assets)
+
+        # Every candidate is read before it is kept. Three prohibitions in the style contract
+        # are invisible to every other gate here, all three have shipped, and this is the
+        # cheapest place to see them — the image is paid for either way, but a refusal costs
+        # one regeneration instead of a published Leaf the machine account cannot edit.
+        guard_spend: list[float] = []
+        refused: dict[str, GuardResult] = {}
+
+        def guard(data: bytes) -> GuardResult:
+            verdict = check_style(llm=deps.llm, data=data, model=settings.analyze_model)
+            guard_spend.append(verdict.spend.usd)
+            return verdict
 
         keys = sorted(state.cms_leaf_ids, key=lambda k: int(k))
         if limit:
@@ -443,6 +456,7 @@ def generate_assets(
                     model=settings.image_model,
                     count=settings.scenario_candidates,
                     budget=budget,
+                    guard=guard,
                 )
             except BudgetExceededError as error:
                 typer.secho(f"\nHALTED: {error}", fg=typer.colors.RED, bold=True)
@@ -464,6 +478,14 @@ def generate_assets(
             )
             if not candidates:
                 missing_images.append(key)
+            else:
+                # Re-read the kept candidate rather than trusting the loop's bookkeeping:
+                # `generate_candidates` returns an image that never passed rather than
+                # leaving the Leaf blank, and which of those two happened is exactly what
+                # the person reading this output needs to know.
+                final = guard(candidates[0][0])
+                if not final.passed:
+                    refused[key] = final
             typer.echo(
                 f"  leaf {key}: {len(candidates)} candidates"
                 f"{', diagram' if diagram else ', no diagram'}"
@@ -476,6 +498,21 @@ def generate_assets(
             graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
 
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
+    if guard_spend:
+        typer.secho(
+            f"style guard: {len(guard_spend)} reads, ${sum(guard_spend):.4f}",
+            fg=typer.colors.GREEN,
+        )
+    if refused:
+        typer.secho(
+            f"\n{len(refused)} Leaves kept an image the style guard refused:",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        for key, verdict in sorted(refused.items(), key=lambda kv: int(kv[0])):
+            typer.secho(f"  leaf {key}:", fg=typer.colors.RED, bold=True)
+            for line in verdict.summary().splitlines()[1:]:
+                typer.secho(f"  {line}", fg=typer.colors.RED)
     if missing_images:
         # Named at the end rather than left in a warning thirty screens up. A Leaf whose
         # image call failed is charged against the budget, logged once, and otherwise

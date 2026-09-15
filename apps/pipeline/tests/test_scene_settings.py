@@ -10,6 +10,7 @@ is the state that produced Track 42 in the first place.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any, TypeVar
 
 import pytest
@@ -106,6 +107,7 @@ class FakeSceneLLM:
         model: str,
         node: str,
         system_instruction: str | None = None,
+        images: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
         self.prompts.append(prompt)
         if self.failures > 0:
@@ -262,6 +264,35 @@ def test_the_image_prompt_names_the_place_and_keeps_the_style_contract() -> None
     assert "No text, letters, numerals" in prompt
     assert "No identifiable person" in prompt
     assert "No book cover" in prompt
+
+
+def test_the_light_rule_does_not_ask_for_line_art() -> None:
+    """**The sibling of the test below, and it caught a bug that same test's lesson predicted.**
+
+    WP31 rewrote the light rule on the falloff line, and the first rewrite explained hardness
+    as "a clean, hard edge you could trace with one line" and asked "could the boundary be
+    traced with one clean line?" — the word *line*, twice, in a contract whose paragraph above
+    forbids line art. Both images regenerated under that wording came back as outlined
+    drawings, which nothing in the set had been.
+
+    Telling an image model not to draw a desk mentions a desk; telling it that a good edge is
+    one you could trace with a line mentions a line. Hardness is now described as a definite
+    edge where one flat value meets another, and `line` survives in this file only inside the
+    prohibition itself.
+    """
+    contract = load_prompt("asset_style")
+
+    # Sliced from *after* the prohibition paragraph. Including it would make the test fail on
+    # the prohibition's own words, which is the one place these terms belong.
+    _, _, after = contract.partition("no sketch or ink treatment.")
+    light = after.split("Chosen for legibility")[0]
+
+    for drawn in ("line", "lines", "trace", "traced", "stroke", "outline", "contour"):
+        assert not re.search(rf"\b{drawn}\b", light, re.IGNORECASE), (
+            f"the light rule says {drawn!r}, which is the drawing technique the paragraph "
+            "above it forbids"
+        )
+    assert "No line art" in contract, "the prohibition itself must still be there"
 
 
 def test_the_fixed_half_names_no_setting_of_its_own() -> None:

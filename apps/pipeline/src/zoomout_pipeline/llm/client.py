@@ -14,7 +14,7 @@ outside the gate.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar, cast
 
@@ -85,6 +85,7 @@ class StructuredClient(Protocol):
         model: str,
         node: str,
         system_instruction: str | None = None,
+        images: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]: ...
 
 
@@ -217,7 +218,19 @@ class GeminiClient:
         model: str,
         node: str,
         system_instruction: str | None = None,
+        images: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
+        """Text in, typed object out — and optionally images in alongside the text.
+
+        `images` exists for WP31's style guard, which has to look at a generated illustration
+        and answer whether it breaches the contract. It is a *reading* call, not a generating
+        one, which is why it belongs here beside the other structured calls rather than in
+        `assets/images.py` — that module makes pictures, this one makes typed answers.
+
+        Images go **before** the prompt. The instruction is what the model should be holding
+        in mind while it looks, and the same ordering is what `ImageClient.generate` uses for
+        its anchors.
+        """
         from google.genai import types
 
         config = types.GenerateContentConfig(
@@ -226,13 +239,22 @@ class GeminiClient:
             system_instruction=system_instruction,
         )
 
+        contents: Any = prompt
+        if images:
+            parts = [
+                types.Part(inline_data=types.Blob(data=image, mime_type="image/png"))
+                for image in images
+            ]
+            parts.append(types.Part(text=prompt))
+            contents = parts
+
         response = self._call_with_retry(
             node=node,
             model=model,
             units=1,
             what="model call",
             call=lambda: self._client.models.generate_content(
-                model=model, contents=prompt, config=config
+                model=model, contents=contents, config=config
             ),
         )
 

@@ -27,6 +27,19 @@ Two causes, both here:
    desk, a commute, a kitchen table, a shop counter, a conversation* — appended to every prompt
    in the run, headed by the thing it kept producing.
 
+## Why the prompt now says the scenario is not an inventory (WP31)
+
+Ikigai's Leaf 3 resisted four regenerations, two of them under the output-side style guard,
+always with the same breach: a phone screen glowing, with notification bubbles over it. The
+model was not ignoring the contract. **Its scenario prose opens "Your smartphone is buzzing
+with group chat notifications"**, and that prose is the first thing in every image prompt —
+so the most specific instruction in the prompt was asking for the exact thing the most
+general one forbids, and specific wins.
+
+This is the same defect as Leaf 8's spotlight beam one layer up. WP30 stopped a *focus* from
+naming something undrawable and WP30.1 stopped it naming a light effect; neither could see
+the scenario text, which is written for a reader and names whatever the situation needs.
+
 **That quotation is the last one in this package, and it lives in a docstring on purpose.** The
 first attempt at a fix explained the removal *inside the prompt file*, which put the same five
 words back into every image prompt wrapped in an apology for them. Telling an image model not
@@ -36,11 +49,13 @@ to draw a desk mentions a desk. The model-facing files now name no setting at al
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from zoomout_pipeline.assets.budget import ImageBudget
 from zoomout_pipeline.assets.diagrams import DiagramRenderError, DiagramSpec, render
 from zoomout_pipeline.assets.images import AnchorSet, ImageClient, ImageGenerationError
+from zoomout_pipeline.assets.style_guard import GuardResult
 from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.logging import get_logger
 from zoomout_pipeline.models import GeneratedLeafRecord, SceneSetting, SceneShot
@@ -102,6 +117,11 @@ def scenario_image_prompt(record: GeneratedLeafRecord, setting: SceneSetting) ->
         f"{record.leaf.scenario_prompt}\n\n"
         "Illustrate the situation described above as a single quiet moment. Do not depict "
         "the outcome or the answer — only the moment of the decision.\n\n"
+        "**The text above is what is happening, not an inventory for the frame.** It is a "
+        "question written for a reader, and it names things freely that these illustrations "
+        "may not show. Where it mentions something the rules below do not allow to be drawn, "
+        "draw the moment without it — the object plain, unlit and unmarked, or simply out of "
+        "shot. The situation decides what is going on; the rules below decide what appears.\n\n"
         f"{scene_block(setting)}\n"
         f"{load_prompt('asset_style')}"
     )
@@ -134,6 +154,16 @@ def scenario_alt_text(setting: SceneSetting) -> str:
     )
 
 
+# How many times one candidate slot may be redrawn because the style guard refused it.
+#
+# Bounded, like every cycle here (R7), and small because each attempt is a fresh $0.134
+# image. One retry is where the value is: the guard's own findings are not fed back — an
+# image model cannot act on "there is a bloom around the phone" the way a text model acts on
+# a grounding failure — so a second attempt is a fresh sample from the same distribution,
+# and a third is the same bet again at the same price.
+MAX_GUARD_ATTEMPTS = 2
+
+
 def generate_candidates(
     *,
     client: ImageClient,
@@ -143,31 +173,84 @@ def generate_candidates(
     model: str,
     count: int,
     budget: ImageBudget,
+    guard: Callable[[bytes], GuardResult] | None = None,
+    max_guard_attempts: int = MAX_GUARD_ATTEMPTS,
 ) -> list[tuple[bytes, str]]:
     """N candidate illustrations for one Leaf, as (png, alt) pairs.
 
     The budget is charged **before** each call. Charging afterwards would mean the run has
     already spent what it was not allowed to spend.
+
+    **`guard` is checked before a candidate is kept, not after it is attached.** Three
+    prohibitions in the style contract are invisible to every other gate in this service —
+    text, falloff light, floating iconography — and all three have shipped. Catching them
+    here is the cheapest place there is: the image has been paid for either way, but a
+    refusal costs one regeneration rather than a published Leaf nobody can edit.
+
+    **A candidate that never passes is still returned.** The alternative is a Leaf with no
+    picture at all, which is worse and which no downstream step can tell apart from a Leaf
+    nobody has illustrated yet. It is returned with the guard's findings logged loudly, and
+    the caller reports it — see `generate-assets`, which names every such Leaf at the end.
     """
     prompt = scenario_image_prompt(record, setting)
     alt = scenario_alt_text(setting)
 
     candidates: list[tuple[bytes, str]] = []
     for index in range(count):
-        budget.charge(leaf_order=record.order)
-        try:
-            image, _spend = client.generate(
-                prompt=prompt, model=model, node="assets", anchors=anchors
-            )
-        except ImageGenerationError as error:
-            # A refusal is informative — the guardrails forbid identifiable people, and a
-            # scenario naming one would be refused by the model as well as by us. Log and
-            # keep the candidates we have rather than losing the Leaf.
+        kept: bytes | None = None
+        refused: GuardResult | None = None
+
+        attempts = max_guard_attempts if guard is not None else 1
+        for attempt in range(1, attempts + 1):
+            budget.charge(leaf_order=record.order)
+            try:
+                image, _spend = client.generate(
+                    prompt=prompt, model=model, node="assets", anchors=anchors
+                )
+            except ImageGenerationError as error:
+                # A refusal is informative — the guardrails forbid identifiable people, and a
+                # scenario naming one would be refused by the model as well as by us. Log and
+                # keep the candidates we have rather than losing the Leaf.
+                _log.warning(
+                    "assets.candidate_failed",
+                    leaf=record.order,
+                    index=index,
+                    error=str(error)[:200],
+                )
+                break
+
+            if guard is None:
+                kept = image.data
+                break
+
+            verdict = guard(image.data)
+            if verdict.passed:
+                kept = image.data
+                refused = None
+                break
+
+            refused = verdict
+            kept = image.data
             _log.warning(
-                "assets.candidate_failed", leaf=record.order, index=index, error=str(error)[:200]
+                "assets.guard_refused",
+                leaf=record.order,
+                index=index,
+                attempt=attempt,
+                breaches=sorted({f.breach.value for f in verdict.findings}),
+                detail=[f.what[:120] for f in verdict.findings],
             )
+
+        if kept is None:
             continue
-        candidates.append((image.data, alt))
+        if refused is not None:
+            _log.error(
+                "assets.guard_exhausted",
+                leaf=record.order,
+                index=index,
+                attempts=max_guard_attempts,
+                breaches=sorted({f.breach.value for f in refused.findings}),
+            )
+        candidates.append((kept, alt))
 
     return candidates
 
