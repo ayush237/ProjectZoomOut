@@ -6,7 +6,7 @@ Owned by Architect. Represents the single feature currently being planned or imp
 
 **Three steps, in this order, and the order is load-bearing.**
 
-1. **WP33 — regenerate Ikigai Leaf 4's image** (~$0.14, Pipeline Manager, handed off 2026-09-16).
+1. ~~**WP33 — regenerate Ikigai Leaf 4's image**~~ ✅ **Done 2026-09-16, 8/8, $0.1455.** Passed on attempt 1 of 1. **One open question came back with it and it is the founder's:** see *Before step 2* below.
 2. **The founder publishes Ikigai's eighteen Leaves.**
 3. **A dev build on the founder's phone, shown to friends in person.**
 
@@ -20,6 +20,32 @@ still drafts is the only reason WP31 could run at all**; that accident does not 
 A teal radial falloff at a soldering-iron tip. WP30.1's human pass cleared it; **Architect cleared it
 again at sign-off, looking at the same contact sheet**; the guard caught it. A style check by eye
 fails on exactly the images that look fine.
+
+**Before step 2 — the one decision WP33 handed back.** "Ikigai has no known style breach" means
+*guarded at generation* for seventeen Leaves and *guarded as attached* for Leaf 4 only. Nothing in the
+CLI has ever read an attached image back from Payload, and Manager was careful to say that their own
+look at the other seventeen was a **contact sheet at ~240px**, not WP31's one-by-one pass at full size
+— *"the set coheres, and that is all my looking establishes this time."* **That caution is right and
+it is the same thumbnail-scale review that cleared Leaf 4 wrongly in WP30.1.**
+
+**Ruled: publish, with a free pre-flight that is neither of the two options offered.** Re-guarding the
+seventeen buys a *second non-deterministic sample* from the same instrument — the guard is a vision
+call, and WP31 measured its precision at four real breaches and one false positive across nineteen. It
+does not buy certainty, and it costs a package on the critical path. **The question actually worth
+answering is whether the bytes Payload serves are the bytes the guard already cleared** — and that is
+a sha256 comparison: free, deterministic, no model call. Every candidate is still on disk, each
+overwritten in place by its own regeneration, and **Manager already proved the method on Leaf 4**
+(byte-identical, `c2e0c8d6…`). It needs the machine key, so it is a two-minute Pipeline Manager task.
+
+**What the hash check closes and what it does not.** It closes transfer and wiring — that the cleared
+image is the served image, and that no candidate landed on the wrong Leaf, which is WP20's Leaf-11
+defect family. **It does not re-examine the images**; seventeen still rest on their generation-time
+verdict. That residual is accepted deliberately, because the pilot is friends in person on the
+founder's own phone, and unpublish-then-fix is available.
+
+**The honest counterweight, because it has a track record:** Track 42's published Leaf 1 has rendered
+"$10K" with a glow since 2026-08-29, and the reason it is still there is that unpublishing is a founder
+decision nobody has made. **"We can always take it down" is true and has not historically happened.**
 
 **Founder ruling 2026-09-15, still governing: stay on the free setup until real readers have seen it.**
 No paid billing, no Claude on Vertex, no deployment. Reviews come from friends, in person, on the
