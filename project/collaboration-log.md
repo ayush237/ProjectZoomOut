@@ -343,6 +343,211 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP33 — Ikigai Leaf 4's bloom, replaced on the first attempt — 2026-09-16
+
+**8 of 8 acceptance criteria met. $0.1455 against the $0.50 ceiling.** `apps/pipeline` ruff
+check, `ruff format --check` (95 files), `mypy --strict` (50 files) and `pytest` (282 passed,
+6 deselected) are clean. **No source file changed** — `git status` is empty, and this package
+is the CLI and the guard being used rather than altered. Ikigai's eighteen Leaves are all
+still drafts; Track 50's `updatedAt` is still `2026-09-15T14:23:17.600Z`, from before this
+session.
+
+| | |
+|---|---|
+| Guard on Leaf 4 **as attached** | **RED** — one `glow` finding, quoted below |
+| Replacement | **PASS on attempt 1 of 1.** No second image was bought |
+| Guard on the replacement **as Payload now serves it** | **PASS** — clean, and byte-identical to what was generated |
+| Leaf 266 after the write | `_status: draft`, prompt intact, 3 options intact, diagram untouched |
+| Transport | **Vertex `zoomout-vertex`**, recorded on the run |
+| Spend | **$0.1455** — one image $0.134, three guard reads $0.0115 |
+
+---
+
+## The verdict that proves the replacement was necessary
+
+The guard, on the image Payload was actually serving for Leaf 4 (`leaf-04-scenario-7.png`,
+media 155), in its own words:
+
+> `[glow] At the tip of the soldering iron in the center of the frame, there is a soft teal
+> radial glow fading into the dark background without a clean hard edge.`
+
+**That image was fetched from Payload, not read off disk**, and then checked against the
+local candidate — byte-identical, sha256 `c2e0c8d6…`. The thing WP31 flagged and the thing
+live on the Track were the same thing, which is worth one line of verification rather than an
+assumption.
+
+I looked at it at 3x before running the guard and reached the same conclusion independently:
+a bright core at the tip with no traceable boundary onto the board.
+
+## The cause was **not** Leaf 3's cause, and that is the finding worth keeping
+
+The handoff's stop condition was "if it resists like Leaf 3, the finding is worth more than
+the image." It did not resist, and the reason is visible in the prompt before a cent is spent.
+
+**Leaf 4's scenario prose names no light effect at all:**
+
+> "You are a software developer assigned to build a basic internal form for your team—a
+> routine task you could complete on autopilot. You feel unmotivated and disengaged before
+> you even start. How should you approach this task to achieve flow?"
+
+No phone, no buzzing, no glow, nothing the contract forbids. **Leaf 3's failure mode was a
+specific instruction beating a general one; Leaf 4's was neither.** The only light word
+anywhere ahead of the style contract is the scene block's own boilerplate, which already says
+the time of day "changes where the light falls and nothing about the palette."
+
+**What produced the bloom was the scene setting's focus — "a fine soldering iron tip joining
+wires on a contact board" — via the model's prior, not via an instruction.** A soldering iron
+tip is a hot glowing object in the training data. WP30's parse guard refuses a focus that
+*names* a light effect and this one does not name one, so the guard is not wrong here; the
+object simply carries the connotation.
+
+**The practical consequence: a fresh sample was enough.** That is exactly the case
+`MAX_GUARD_ATTEMPTS = 2` is sized for, and its comment already predicted it — "a second
+attempt is a fresh sample from the same distribution." Here the first sample was clean, so the
+retry never fired. No prompt change was needed and none was made.
+
+**This bounds the worry.** There is no systemic prose defect behind Leaf 4. If another Leaf
+blooms on an object with a hot/glowing prior — a stove, a candle, a forge — expect the same
+shape: cheap to fix by resampling, not worth a prompt change.
+
+## Looked at — reported as observation
+
+Beside the old one, at full size, and at 3x on the tip. **The bloom is gone and nothing
+replaced it**: no glow, no text, no floating iconography, no reserved amber. Every boundary in
+the frame is a value meeting a value. The cast light from the window is now drawn the way the
+rewritten rule asks — a hard-edged lighter polygon across the wall and the figure.
+
+**The soldering iron still reads as a soldering iron**: teal grip, metal shaft, fine tip
+touching a board with a pale flat curl of solder smoke. The place is still the hardware test
+bench it was given, with one non-identifiable figure, face cropped at the frame edge.
+
+**One thing my eye got wrong, which is on-theme for this package.** The replacement looked
+distinctly *lighter* to me than the old one, enough that I stopped and measured it instead of
+trusting the impression. Mean luminance of the eighteen as attached:
+
+- 17 others: **mean 0.276, sd 0.061**, range 0.180–0.398
+- Leaf 4 old: 0.265 · **Leaf 4 new: 0.301**
+
+That is +0.4 sd and **seventh-lightest of eighteen** — mid-pack, nowhere near Leaf 12 at
+0.398. The set still reads as one library on the contact sheet. **My eye was measuring the
+change from the old Leaf 4, not the position in the set**, which is the same error class as
+WP30.1 clearing this image by eye in the first place, pointing the other way.
+
+Artefacts (all under gitignored `runs/`, so not committed):
+`runs/ikigai/leaf-04-before-after.png`, `runs/ikigai/leaf-04-tip-detail.png`,
+`runs/ikigai/ikigai-contact-sheet-wp33.png`.
+
+## The transport, as a row rather than a sentence
+
+The refusal path was verified **by execution, and by accident in the most convincing possible
+state.** The shell this package started in had `ZOOMOUT_PIPELINE_GEMINI_API_KEY` set and
+`ZOOMOUT_PIPELINE_USE_VERTEX` **unset** — a free-tier key live, Vertex off, against a book
+recorded `undocumented`. That is precisely the configuration three previous reports were
+relying on discipline to avoid.
+
+```
+$ python -m zoomout_pipeline.cli generate-assets --run-id ikigai --limit 1
+refusing to run a book recorded as 'undocumented' through the AI Studio Developer API...
+EXIT CODE: 2
+```
+
+**WP32 works.** The run was then re-opened with `USE_VERTEX=true` and
+`VERTEX_PROJECT=zoomout-vertex`, and the recorded transport on the `ikigai` thread is
+`transport=VERTEX project='zoomout-vertex' acquisition=undocumented`.
+
+That test cost nothing and risked nothing: all eighteen Leaves were already illustrated and
+the scene plan was cached, so `generate-assets` would have skipped every Leaf and derived no
+plan even if the refusal had failed. Worth stating, because running the real command to test a
+refusal is only safe when you have checked what happens if it does not fire.
+
+## How Leaf 4 was actually regenerated, since the CLI has no path for it
+
+**`generate-assets` cannot do this, and that is by design.** It skips a Leaf twice — once on
+`cms_assets` bookkeeping, once on Payload's own `imageCandidates`/`scenario.image` — and both
+skips are load-bearing (they are WP20's Leaf-11 defect). Clearing them to force a redraw would
+have meant writing over bookkeeping to make a command do something it deliberately refuses.
+
+So the regeneration was a script over the real functions, in the real order:
+`generate_candidates(guard=…)` → look → `attach_assets(diagram=None)` → `scenario_patch` +
+`update_leaf_draft` → re-fetch → `verify_siblings`.
+
+Three deliberate choices in that:
+
+- **`diagram=None`.** `attach_assets` writes `stickyNotes` only when handed a diagram, so
+  passing `None` writes `imageCandidates` alone. Leaf 4's diagram is correct and was neither
+  regenerated nor overwritten — confirmed after the write:
+  `stickyNotes.diagram=/api/media/file/leaf-04-diagram-2.png`, unchanged.
+- **`scenario_patch`, never a partial group.** WP19 proved on this exact field that Payload
+  nulls what a PATCH omits. `verify_siblings` on the **re-fetched** document returned
+  `prompt_intact=True options_intact=True`.
+- **`attach-scenario-images` was not used**, though it is the command that normally sets
+  `scenario.image`. It operates on all eighteen Leaves, and the other seventeen are out of
+  scope. One Leaf's group was patched directly instead.
+
+Bookkeeping was then merged rather than replaced — `cms_assets['4']` keeps its existing
+`diagram` record alongside the new candidate — so a future `generate-assets` still sees Leaf 4
+as illustrated and skips it.
+
+New media 201, served at `/api/media/file/leaf-04-scenario-8.png`.
+
+## Two findings, nothing acted on
+
+**1. A settings validation failure prints part of the Gemini API key.** Running any command
+without `ZOOMOUT_PIPELINE_DATABASE_URL` raises a pydantic `ValidationError` whose message
+echoes the whole input dict, including `gemini_api_key`. I hit this by accident and a
+truncated key landed in my terminal. It would land in any log or CI output the same way.
+**`SecretStr` on `gemini_api_key` and `payload_api_key` fixes it**; pydantic then renders them
+as `**********`. Not done here — it is a one-line change in `config.py` with a test, and it is
+not this package.
+
+**2. The `check-style`-over-attached-images debt is real, and I can now say what shape it
+wants.** The handoff was right that the command does not exist and right not to build it here.
+For the record: what I needed was not a sweep but *one Leaf, as the CMS serves it* — fetch
+`scenario.image`, guard the bytes, print the verdict. That is the operation that proves a fix
+landed, and it is what the `live` suite cannot do because it reads committed fixtures rather
+than Payload.
+
+## The other seventeen — nothing changed my mind, and here is exactly what I looked at
+
+**No finding, and nothing acted on.** Leaf 11 remains the known false positive; the other
+sixteen were guarded at generation.
+
+**Being precise about the evidence, because it is weaker than WP31's:** I looked at the
+eighteen **as a contact sheet at roughly 240px wide**, checking that the set still coheres. I
+did **not** repeat WP31's one-by-one pass at full size. That pass is what found Leaf 4 in the
+first place, and a sheet at thumbnail scale would not have found it — WP30.1's human pass
+cleared Leaf 4 from a sheet exactly like this one.
+
+So: the set coheres, and that is all my looking establishes this time. If anyone wants renewed
+confidence in the other seventeen before publication, the thing that would give it is the
+guard over the attached images, not another person looking at a sheet.
+
+## Spend against the $0.50 ceiling
+
+| | |
+|---|---|
+| Guard on Leaf 4 as attached (the RED verdict) | $0.0050 |
+| Image — 1 generated at $0.134 | $0.1340 |
+| Guard during generation (attempt 1, passed) | $0.0029 |
+| Guard on the replacement as attached | $0.0036 |
+| **Total** | **$0.1455** |
+
+Under a third of the ceiling, because the image passed first time. The budget was additionally
+capped locally at 4 images for this package regardless of the ceiling.
+
+## What the next package inherits
+
+**Ikigai is ready to publish as far as the style guard can see.** Leaf 4 was the last known
+breach and it is replaced. Publishing is the founder's action and nothing here does it — the
+machine key cannot, and all eighteen Leaves are still drafts.
+
+**Caveat on that sentence, stated because it is the one that could mislead:** "as far as the
+guard can see" means *at generation time* for seventeen Leaves and *as attached* for Leaf 4
+only. Nothing in the CLI has read the other seventeen back from Payload. That gap is finding 2
+above and it is the debt item, not a defect in this work.
+
+---
+
 ### Completed: WP32 — the paid-tier constraint stops being a comment — 2026-09-15
 
 **8 of 8 acceptance criteria met. $0.00 against the $1 ceiling — this package made no model
