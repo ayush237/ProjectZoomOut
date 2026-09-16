@@ -120,7 +120,7 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
     status: mapStatus(document._status),
     isPlaceholder: document.isPlaceholder ?? true,
 
-    summary: mapBodySlide(document.summary),
+    summary: mapBodySlide(document.summary, baseUrl),
     scenario: {
       prompt: document.scenario?.prompt ?? undefined,
       options: (document.scenario?.options ?? []).map((option) => ({
@@ -129,14 +129,14 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
         isCorrect: option.isCorrect ?? false,
       })),
       ...optionalImage(document.scenario?.image, baseUrl),
-      ...optionalAudio(document.scenario?.audio),
+      ...optionalAudio(document.scenario?.audio, baseUrl),
     },
-    payoff: mapBodySlide(document.payoff),
+    payoff: mapBodySlide(document.payoff, baseUrl),
     stickyNotes: {
       // Payload array rows are objects; the domain model is a plain string list.
       notes: (document.stickyNotes?.notes ?? []).map((row) => row.note ?? ''),
       ...optionalDiagram(document.stickyNotes?.diagram, baseUrl),
-      ...optionalAudio(document.stickyNotes?.audio),
+      ...optionalAudio(document.stickyNotes?.audio, baseUrl),
     },
     takeaway: {
       body: document.takeaway?.body ?? undefined,
@@ -146,7 +146,7 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
       ...(isAbsent(document.takeaway?.applyInLife)
         ? {}
         : { applyInLife: document.takeaway.applyInLife }),
-      ...optionalAudio(document.takeaway?.audio),
+      ...optionalAudio(document.takeaway?.audio, baseUrl),
     },
 
     sourceReferences: (document.sourceReferences ?? []).map((reference) => ({
@@ -198,11 +198,14 @@ function mapStatus(status: 'draft' | 'published' | null | undefined): 'draft' | 
   return status === 'published' ? 'published' : 'draft';
 }
 
-function mapBodySlide(slide: { body?: string | null; audio?: CmsAudio } | undefined): {
+function mapBodySlide(
+  slide: { body?: string | null; audio?: CmsAudio } | undefined,
+  baseUrl: string,
+): {
   body: string | undefined;
   audio?: { url: string; durationSeconds?: number };
 } {
-  return { body: slide?.body ?? undefined, ...optionalAudio(slide?.audio) };
+  return { body: slide?.body ?? undefined, ...optionalAudio(slide?.audio, baseUrl) };
 }
 
 type CmsAudio = { url?: string | null; durationSeconds?: number | null } | undefined;
@@ -213,15 +216,23 @@ type CmsAudio = { url?: string | null; durationSeconds?: number | null } | undef
  * Payload writes an empty group rather than omitting it, and the domain model uses
  * `exactOptionalPropertyTypes` — so `{ audio: undefined }` and no `audio` key are
  * different things, and only the latter validates.
+ *
+ * **Routed through `resolveMediaUrl`, the same as images and `coverUrl` (WP15.8).**
+ * Payload serves uploaded media CMS-relative and `audioRefSchema` requires an absolute
+ * `z.url()`, so until this ran a relative audio URL didn't just fail to play — it
+ * failed validation and could take the whole Leaf down with it.
  */
-function optionalAudio(audio: CmsAudio): { audio?: { url: string; durationSeconds?: number } } {
+function optionalAudio(
+  audio: CmsAudio,
+  baseUrl: string,
+): { audio?: { url: string; durationSeconds?: number } } {
   if (isAbsent(audio?.url) || audio.url.length === 0) {
     return {};
   }
 
   return {
     audio: {
-      url: audio.url,
+      url: resolveMediaUrl(audio.url, baseUrl),
       ...(isAbsent(audio.durationSeconds) ? {} : { durationSeconds: audio.durationSeconds }),
     },
   };
