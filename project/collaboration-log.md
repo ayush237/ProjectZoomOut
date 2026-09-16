@@ -23,6 +23,76 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-17 — VO-2: Ikigai, read aloud
+
+*Pipeline Manager. **Suggested model: Opus** — the integration is small and the judgement is the whole package. **72 clips is more than anyone will listen to properly**, and that is exactly the pressure that let Leaf 4's bloom past two human passes, one of them Architect's at sign-off. "Does this sound like a person, or like a machine doing an impression of feeling" is the deliverable.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Check your branch — this checkout has been parked on a stale feature branch every time anyone looked.** `git checkout main && git pull`, then branch from `origin/main`. **VO-1 must be merged first** — without it `Media` rejects your uploads outright.
+> **Transport:** Google **Cloud TTS**, billed to the founder's existing GCP credit. **This is not the AI Studio tier `require_paid_tier` refuses** — Cloud TTS and Vertex are Customer Data under the GCP DPA's training restriction, and they are what the credit pays for. Confirm that is the path you are actually on rather than assuming it from the SDK you imported.
+> **Read:** this handoff · `project/projectplan.md`'s voiceover section, **including the legal boundary** · `project/LEGAL.md`'s narration section · `apps/pipeline/src/zoomout_pipeline/assets/` for the image pipeline's shape — upload, attach, draft-write — which is the precedent to follow · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: VO-2 — 72 clips that sound like someone who means it
+
+**Suggested model:** Opus.
+
+**Context:** Voiceover is approved — four slides per Leaf, one narrator, Ikigai only. The founder's requirement is explicit and it is not "audio exists": *"it should not read it directly like a robot, instead it should have emotions so that users can actually feel things."* **Gemini 2.5 Flash TTS supports natural-language style direction and inline tags** (`[curiosity]`, `[hope]`, `[short pause]`), which is the reason this vendor was chosen over three cheaper ones. **A technically correct, flat result is a failed package.**
+
+**Objective:** All 72 clips exist, attached to Ikigai's Leaves as pending draft versions, in one consistent voice that a person would describe as warm rather than synthetic — and a single review track that lets the founder hear the whole book without opening 72 files.
+
+**Scope:** `apps/pipeline`, plus Ikigai's Leaf records. **Verify the upload/attach path yourself against the image pipeline rather than trusting this list.**
+
+**The four narrated fields, and nothing else:**
+`summary.body` · `scenario.prompt` · `payoff.body` · `takeaway.body`
+
+> **⚠️ `sourceReferences[].quote` is never narrated, and this is a legal boundary rather than a scoping preference.** Those bodies are ZoomOut's own prose; the quotes are the book's verbatim words. **Reading the bodies aloud narrates our words; reading the quotes aloud would produce an audio reproduction of copyrighted text**, which our fair-use position does not reach. `takeaway.dinnerTableKnowledge` and `applyInLife` are also out — not for legal reasons, just not in scope. **If you find yourself writing "narrate the slide", stop and narrate the named field.**
+
+**Requirements**
+- **Choose the voice, and justify it.** 30 prebuilt voices. **One narrator for all 72.** Say what you picked, what you rejected, and what you were listening for — this is the single most consequential aesthetic decision in the package and it should not be the first voice in the list.
+- **Use the emotion steering rather than defaulting past it.** Work out what direction suits each slide *type* — a scenario is a situation being set, a payoff is an explanation landing, a takeaway is a closing thought. **Per-slide-type direction, not per-clip hand-tuning**, which would not survive a second book.
+- **Populate `durationSeconds`.** `audioRefSchema` makes it optional and the player will want it. Measure it from the file; do not estimate.
+- **`alt` is required on every Media upload and the founder has ruled it stays required.** Supply a real label — *"Narration of the Payoff slide, Leaf 4"* — not a placeholder. It is what makes 72 rows legible in the admin list.
+- **Ikigai's Leaves are published, so every write must be a draft write** (`?draft=true` — `machinesUpdateDraftsOnly` permits nothing else for a machine). Each lands as a pending draft version; **the live Leaf shows no audio until the founder publishes again.** That second publish is theirs and is not this package's.
+- **Produce one concatenated review track** — all 72 in reading order, ~23 minutes. See the risk below.
+- **Record the transport**, the way image generation now does. Cloud TTS is a **second egress path** for Leaf content and should not arrive unlisted.
+- **Report spend against the ceiling.**
+
+**The risk this package exists to manage**
+
+**Nothing will hear the 72 as a set unless you build the thing that does.** Each call is independent, so prosody and energy drift — clip 3 warm, clip 41 brisk, and no individual clip is wrong. **This is structurally identical to Track 42's eighteen identical scenario images:** *"nothing in the pipeline ever sees the whole set, so collapse is structurally undetectable."* The images got a contact sheet and a variety measure. **The review track is the audio equivalent and it is a requirement, not a nicety** — spot-checking eight clips is what clearing Leaf 4 by eye looked like.
+
+**Things worth listening for specifically**
+- **Em dashes and quotation marks.** The prose is full of them. An em dash should become a pause, not a word, and a quoted phrase should not shift register oddly. The grounding gate already had an em-dash defect; this is a different one at the same character.
+- **Names and Japanese terms.** *Ikigai*, *Okinawa*, *Héctor García*, *moai*. Get them wrong and the whole thing sounds careless.
+- **The end of a clip.** Trailing silence, a clipped final syllable, or an audible breath at the cut are what make a set feel cheap.
+
+**Out of scope**
+- **Publishing anything.** The founder publishes the Leaves a second time after this lands.
+- **Track 42.** Ruled: Ikigai only. The pilot decides whether voiceover earns a second book.
+- **`stickyNotes` audio.** The schema has the field; the product scope does not include it.
+- **Anything in the mobile app.** No player, no UI — VO-3 owns that.
+- **The backend contract-test gap** (register, 2026-09-17). Real, not yours, not now.
+- `apps/mobile`, `apps/backend`, `apps/admin`.
+
+**Constraints:** **Ceiling $3**, against ~$0.35 of expected cost. The headroom is for regenerating and for a voice comparison, **not for iterating toward a threshold.** **If you are approaching the ceiling, stop and report** — that is the signal, not a reason to ask for more. **If the emotion steering turns out not to work, that finding is worth more than 72 flat clips**: say so and stop rather than shipping audio that fails the requirement while meeting the criteria.
+
+**Device gate — the review track, not the app.** Ikigai's Leaves are published but the *audio* lands as unpublished drafts, so there is nothing to hear in the app yet. **What to observe: the full review track, start to finish, in one sitting** — that it is recognisably one narrator throughout, that the emotion reads as meant rather than performed, and that nothing in it would make a listener wince. **Say that you listened to all of it, or say which parts you sampled.** Both are acceptable; only the pretence is not.
+
+**Acceptance criteria**
+- [ ] `ruff check`, `ruff format --check`, `mypy --strict`, `pytest` clean; nothing outside `apps/pipeline` touched
+- [ ] **72 clips attached** — 18 Leaves × 4 slides — each with a URL, a measured `durationSeconds`, and a descriptive `alt`
+- [ ] **Every Leaf still reads `_status: published` with the audio sitting in a pending draft version** — verified by re-fetching, not inferred from the write succeeding
+- [ ] **No `sourceReferences[].quote` was sent to the TTS API.** Say how you ensured it — a code path that cannot reach those fields is better evidence than a promise
+- [ ] **The voice choice is stated with its reasoning**, and the per-slide-type direction is written down
+- [ ] **The review track exists and you listened to it**, reported as observation
+- [ ] **The transport is recorded as a queryable row**, and you confirmed the run went through Cloud TTS rather than the AI Studio endpoint
+- [ ] Spend reported against the $3 ceiling
+- [ ] **Anything you heard that you are not happy with is stated even if you shipped it** — a known flaw on a list beats a discovery on a reader's phone
+
+**Testing expectations:** unit coverage on the text selection (that only the four fields are reachable) and on the attach/draft-write path, mutation-checked. **The audio quality itself is not testable and should not be faked into one** — its evidence is the review track and you listening. As before: say which evidence is a test, which is the tooling, and which is you.
+
+---
+
 ### Handoff: 2026-09-17 — VO-1: make the audio path exist
 
 *Manager. **Suggested model: Sonnet** — two small fixes, both diagnosed, both with the correct implementation already identified in this handoff. **There is no judgement left to buy; the judgement was in finding them.***

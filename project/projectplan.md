@@ -102,6 +102,25 @@ quotes aloud would produce an audio reproduction of copyrighted text**, which is
 different posture. A future package asked to "narrate the slide" would cross this without
 noticing. Also in `LEGAL.md` as of this plan.
 
+### The `alt` ruling — VO-1's question, decided 2026-09-17
+
+**`Media.alt` stays required for everything, and VO-2 supplies a real descriptive label for each
+of the 72 clips.** Not a conditional requirement, and not a transcript field.
+
+**Audio needs no text alternative here, because it *is* the text alternative.** A transcript of
+a narrated slide is the slide's own body, which is already on screen and already the accessible
+form. Adding a transcript field would store a second copy of text the reader can already see.
+
+**Conditional-required was the tempting answer and it is the wrong trade.** `Media.ts` records
+why `alt` is enforced at three gates: *"a single shared predicate means one bug defeats every
+gate."* Making it conditional adds a branch to a gate that exists to catch an image with no alt
+text at upload time — and a bug in that branch makes `alt` optional for **images**, which is the
+case that actually matters. **The cost of leaving it required is 72 strings; the cost of getting
+the condition wrong is the gate.**
+
+So `alt` becomes a useful label rather than a nuisance: *"Narration of the Payoff slide, Leaf 4."*
+Payload's admin list shows it, which turns 72 rows of `leaf-04-payoff.mp3` into something legible.
+
 ### Open, carried rather than resolved
 
 - **WP32's check does not cover a TTS client.** It gates the Gemini Developer API transport;
