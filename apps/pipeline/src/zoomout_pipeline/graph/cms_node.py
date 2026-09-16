@@ -52,7 +52,7 @@ def make_write_drafts_node(deps: NodeDependencies, client: PayloadClient | None 
         if client is None:
             client = PayloadClient(
                 base_url=deps.settings.payload_url,
-                api_key=deps.settings.payload_api_key,
+                api_key=deps.settings.payload_api_key.get_secret_value(),
             )
 
         log = _log.bind(run_id=state.run_id, node="write_drafts_to_cms")

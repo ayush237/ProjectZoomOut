@@ -165,7 +165,7 @@ class GeminiClient:
     def from_settings(cls, settings: PipelineSettings) -> GeminiClient:
         """Build the client the configuration asks for — Vertex or the Developer API."""
         return cls(
-            settings.gemini_api_key,
+            settings.gemini_api_key.get_secret_value(),
             use_vertex=settings.use_vertex,
             project=settings.vertex_project,
             location=settings.vertex_location,

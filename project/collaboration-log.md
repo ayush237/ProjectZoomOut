@@ -420,6 +420,222 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
+### Completed: WP33.1 — the publish pre-flight, and the key stopped leaking — 2026-09-16
+
+**8 of 8 acceptance criteria met across both parts. $0.00 spend — no model was called.**
+`apps/pipeline` ruff check, `ruff format --check` (95 files), `mypy --strict` (50 files) and
+`pytest` (284 passed, up from 282 — 6 deselected) are clean. Nothing outside `apps/pipeline`
+touched.
+
+| | |
+|---|---|
+| Part A verdict | **18 of 18 match.** Every served scenario image is byte-identical to the candidate the guard cleared |
+| Leaf 4 control | Failed on the first run — **my own harness's fault, root-caused, not the data.** Passed after the fix |
+| Auth proof | `pipeline-bot@zoomout.local` on the correct scheme; `None` on the wrong one (control) |
+| All 18 `_status` | `draft`. Track 50 `updatedAt` unchanged at `2026-09-15T14:23:17.600Z` |
+| Part B | `SecretStr` on both keys, **plus `hide_input_in_errors`** — the handoff's named fix alone does not close the hole it names, verified before shipping either half alone |
+| Part B tests | Two, mutation-checked independently — reverting either mechanism turns exactly one red, never both, never neither |
+
+---
+
+## Part A: the table
+
+```
+  auth check [correct scheme        ] -> 'pipeline-bot@zoomout.local'
+  auth check [wrong scheme (control)] -> None
+
+Track 50: list_leaves returned 18 row(s).
+
+order  status   served filename               sha256[:16]       verdict
+------------------------------------------------------------------------------------------
+    0  draft    leaf-00-scenario-10.png       ab6e2e75651c565e  MATCH
+    1  draft    leaf-01-scenario-7.png        059e8882e52bb696  MATCH
+    2  draft    leaf-02-scenario-7.png        d4030bcb5d7b2714  MATCH
+    3  draft    leaf-03-scenario-11.png       b1562a4368011d72  MATCH
+    4  draft    leaf-04-scenario-8.png        4af91bb700526906  MATCH
+    5  draft    leaf-05-scenario-7.png        d24b1ed8c52c019a  MATCH
+    6  draft    leaf-06-scenario-7.png        758b1ae867cc13df  MATCH
+    7  draft    leaf-07-scenario-11.png       a4fe871be0627a6d  MATCH
+    8  draft    leaf-08-scenario-8.png        869218182144b7e6  MATCH
+    9  draft    leaf-09-scenario-5.png        fbeaff9424eee5cf  MATCH
+   10  draft    leaf-10-scenario-7.png        4c7ae83f989efd27  MATCH
+   11  draft    leaf-11-scenario-7.png        97cf64bec2fc1bdc  MATCH
+   12  draft    leaf-12-scenario-7.png        22199ea47631553e  MATCH
+   13  draft    leaf-13-scenario-7.png        da7ee35f8fc08289  MATCH
+   14  draft    leaf-14-scenario-7.png        f240ac44c6b31773  MATCH
+   15  draft    leaf-15-scenario-7.png        3b99fa9a34f83a38  MATCH
+   16  draft    leaf-16-scenario-7.png        70990322e234fe48  MATCH
+   17  draft    leaf-17-scenario-7.png        5edbb7df9688318c  MATCH
+
+Leaf 4 control: got '4af91bb700526906', expected '4af91bb700526906' -> OK, harness trusted
+all 18 Leaves _status == 'draft': True
+18 of 18 match. $0.00 spent — no model was called.
+```
+
+**This establishes transfer and wiring, not image quality**, exactly as scoped: it says the
+bytes Payload serves are the bytes the guard already cleared, on all eighteen. It says nothing
+new about whether any of the seventeen ungated-since-generation images is good, and nothing
+here re-examines them.
+
+## The Leaf 4 control caught a real bug — in my harness, not the pipeline
+
+First run:
+
+```
+Leaf 4 control: got '4af91bb700526906', expected prefix 'c2e0c8d634d1aa8c' -> MISMATCH
+```
+
+Per the handoff: *"if Leaf 4 does not match, the harness is wrong, not the data — fix the
+harness before reading anything else in the table."* I did not treat that as reassurance and
+move on; I root-caused it before trusting anything else the script printed.
+
+**The `c2e0c8d6…` I hardcoded as the "known-good anchor" was the hash of the *old, bloomed*
+Leaf 4 image** — the one WP33 replaced — copied from that report's own text without noticing
+which side of the replacement it described. WP33's actual replacement hash was never printed
+as a standalone value in that session's visible output (only a boolean "attached == generated
+bytes: True"), so I reached for the nearest-looking hash in the report and got the wrong one.
+
+Both temp files from that session were still on disk (`/tmp/_leaf4_attached.png`,
+`/tmp/_leaf4_new.png` — this machine, not this session; confirmed by mtime, `01:23`/`01:26` on
+09-16), which let me settle it directly instead of arguing from memory:
+
+```
+OLD (pre-WP33, bloomed)  : c2e0c8d634d1aa8c  <- what I'd hardcoded, wrongly
+NEW (WP33 replacement)   : 4af91bb700526906
+local file on disk NOW   : 4af91bb700526906
+local == NEW: True
+```
+
+Fixed the constant, re-ran, control passes. **The table above is post-fix.** Worth naming the
+type of error precisely: not a logic bug in the fetch-and-compare path, which was correct on
+the first run too — a wrong literal in a hardcoded expectation, of the exact kind the control
+exists to catch. It caught it.
+
+## Auth, checked the way the trap actually looks
+
+`list_leaves` returning exactly 18 is the count check the handoff asks for, but I added the
+sharper version from my own stored note on this: a wrong `Authorization` scheme returns `200`
+as anonymous, so "looks fine" can mean "not logged in," and a count can be right by
+coincidence in a way a named identity can't. Hitting `/api/admins/me` with the real scheme
+and, as a control, with `Bearer` instead of `admins API-Key`:
+
+```
+correct scheme        -> 'pipeline-bot@zoomout.local'
+wrong scheme (control) -> None
+```
+
+Real identity, not just a row count. Track 50's `updatedAt` re-checked after the run and
+still `2026-09-15T14:23:17.600Z` — unchanged, corroborating the "read-only" claim from outside
+the script rather than only from reading its own source.
+
+## Nothing was written, and here's how I know rather than assert
+
+Two independent checks, not one: `grep` over the script itself for anything write-shaped
+(`update_leaf_draft`, `upload_media`, `PATCH`, `POST`) found none — the only match was the
+print statement naming them as what *wasn't* called — and Track 50's `updatedAt` before and
+after this package are the same timestamp. The script was a scratchpad file, not committed;
+running it needed no `git` state at all, which is part of why re-running it costs nothing.
+
+## Part B: the handoff's fix, verified before being trusted
+
+**`SecretStr` on `gemini_api_key` and `payload_api_key` does not, by itself, close the hole
+WP33 named.** Checked this directly before writing either the code or the test, because the
+handoff's framing ("SecretStr… fixes it") is exactly the kind of claim this project's own
+standard says to verify rather than carry forward:
+
+```python
+class M(BaseModel):
+    required_field: str
+    secret: SecretStr = SecretStr('')
+
+M(secret='AQ.Ab8secretvalueXYZ123supersecret789')
+# -> "input_value={'secret': 'AQ.Ab8secretv...ueXYZ123supersecret789'}"
+```
+
+The field type change never runs: this error fires because `required_field` is *missing
+entirely*, and pydantic-core's "field required" error carries the raw pre-validation kwargs
+dict as `input_value` — built before any field, present or absent, is coerced to its declared
+type. **`SecretStr` protects a value once pydantic has it; this error fires on the way in,
+before that.** What actually closes it is `model_config = ConfigDict(hide_input_in_errors=True)`,
+confirmed by the same reproduction with that flag added and nothing else changed:
+
+```
+"1 validation error for M\nrequired_field\n  Field required [type=missing]\n..."
+```
+
+So the shipped fix is both, not the one named: `SecretStr` on the two fields (closes any path
+where a settings object or the field itself is `repr()`'d, `str()`'d, or logged — none exists
+in this codebase today, but the option costs nothing and the risk is exactly the kind that
+gets added later without anyone thinking about it) plus `hide_input_in_errors=True` on the
+model (closes the specific leak in the report, and any other pydantic validation error this
+settings class can raise). Also confirmed `hide_input_in_errors` alone does *not* suppress a
+custom `model_validator`'s own `ValueError` text — only the model-level `input_value` — so a
+validator that carelessly interpolated a secret into its own message would still leak; neither
+of this class's two custom validators does that, checked by reading them.
+
+`bool(SecretStr(...))` needed no change to `_require_vertex_project`'s
+`not self.gemini_api_key` check — confirmed empirically (`SecretStr("")` is falsy, a non-empty
+one is truthy) before assuming it, since a validator silently always-true or always-false is
+exactly the kind of thing that fails quietly.
+
+### The other seven call sites
+
+`gemini_api_key` had one production read (`GeminiClient.from_settings`); `payload_api_key` had
+seven (six in `cli.py`, one in `graph/cms_node.py`) — all `PayloadClient(...)` construction,
+none sharing a factory. Grepped for every occurrence repo-wide before touching any of them,
+both to catch all seven and to confirm no test reads `settings.payload_api_key` back as a
+plain string for comparison (none do — tests only ever pass it in as a constructor kwarg).
+Each site now unwraps with `.get_secret_value()` at the point it hands the value to something
+that needs a plain `str` — `GeminiClient.__init__` and `PayloadClient.__init__` both keep their
+own `api_key: str` signatures unchanged, so the secret type stops at the settings boundary and
+never leaks into either client's own surface.
+
+### The test, and the mutation matrix run against both fixes independently
+
+Two tests in `test_client_config.py`, because the two fixes protect two different things and a
+single test would only prove one of them:
+
+- **`test_a_validation_error_does_not_render_the_keys_it_was_given`** — the exact WP33
+  trigger (`database_url` omitted), asserting the real secrets and *fragments* of them (in
+  case a future truncation splits a value rather than omitting it, which is what the bug did
+  before this fix) are absent from `str(error.value)`, and that the message still names
+  `database_url` and "Field required" — useful, not just quiet.
+- **`test_the_credential_fields_do_not_repr_their_value`** — covers what the first test
+  structurally cannot: `repr()` of the fields and of the settings object itself, independent
+  of any validation error at all.
+
+Mutation-checked as three separate reversions, not one, because the two fixes are independent
+and a single revert-and-check could have missed that:
+
+| Reverted | Result |
+|---|---|
+| `hide_input_in_errors` only | `test_a_validation_error…` → **RED**. `test_the_credential_fields…` stayed green |
+| `gemini_api_key` to `str` only | `test_the_credential_fields…` → **RED** (the gemini assertion). Other test stayed green |
+| `payload_api_key` to `str` only | `test_the_credential_fields…` → **RED** (the payload assertion). Other test stayed green |
+
+Each mutation caught by exactly one test, never both, never neither. `config.py` diffed
+against a backup after every revert-and-restore cycle to confirm the file returned to its
+exact intended state before the next mutation and before the final commit.
+
+## What the next package inherits
+
+**The founder can publish on Part A's evidence**, per Architect's ruling: transfer and wiring
+are now checked, not assumed, for all eighteen Leaves, and the residual — the seventeen rest
+on their generation-time verdict only — is the same residual the ruling already accepted.
+
+**No systemic mismatch between WP30.1's batch path and WP33's script path** — the hypothesis
+the handoff flagged as worth holding did not materialize; all eighteen matched on the first
+correctly-anchored run, sixteen of them never touched by anything but the original WP30.1
+batch attach.
+
+**The pre-flight script was not committed**, per the handoff's own steer against building the
+general `check-style`-over-attached-images command in this package. It lived in scratch, ran
+once, and its output is the table above — reproducible in under a second at $0 if anyone wants
+to re-run it before the actual publish action, which I'd recommend doing right before, not
+relying on this table if any time passes.
+
+---
+
 ### Completed: WP33 — Ikigai Leaf 4's bloom, replaced on the first attempt — 2026-09-16
 
 **8 of 8 acceptance criteria met. $0.1455 against the $0.50 ceiling.** `apps/pipeline` ruff
