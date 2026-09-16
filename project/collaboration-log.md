@@ -558,6 +558,140 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
+### Completed: VO-1 — the two blockers in front of voiceover — 2026-09-17
+
+**7 of 7 acceptance criteria met.** Root `lint`, `typecheck` and `test` all clean —
+1,367 tests across the repo (shared 71, admin 198, backend 482, mobile 616), all
+green. No device gate was possible, exactly as the handoff pre-declared: no real audio
+file exists yet (VO-2) and nothing plays one (VO-3). Committed locally on branch
+`vo-1-audio-path`, off current `main`; **not pushed, no PR opened** — see "Needs a
+decision" below.
+
+| | |
+|---|---|
+| Part A | `Media` now accepts `audio/mpeg`. Everything else it does is already gated by mimetype inside Payload itself — verified by reading the actual upload pipeline, not assumed |
+| Part B | `optionalAudio` now routes through `resolveMediaUrl`, at all five call sites |
+| Load-bearing test | Relative→absolute on `summary.audio`, mutation-checked by hand: fix reverted → 5 new tests red, 49 pre-existing (incl. the absolute-URL one) stay green |
+| Maximal-fixture contract test | **Does not exist in `apps/backend`.** Closest match is `apps/pipeline/tests/test_cms_roundtrip.py` — out of scope per this handoff's own "do not read `apps/pipeline`", so left untouched. Flagged below |
+| `apps/mobile` | Untouched — `git diff --stat` confirms, and its 616 tests ran unmodified |
+
+---
+
+## Part A — `Media` accepts audio
+
+**Chose `audio/mpeg` only**, not `audio/mp4`/`wav`/`ogg`. The handoff named Google Cloud
+TTS as the pipeline's sole audio producer, which emits mp3, and asked for the narrower
+list as the safer default — so the list stays exact rather than speculative. Rejection
+of anything else needed no new code: `mimeTypes` already feeds Payload's own
+`mimeTypeValidator`, which is what actually enforces the list on upload; adding one
+entry was the whole change.
+
+**What else in `Media` assumes an image — checked against Payload 3.87.0's real upload
+source (`generateFileData.js`, `isImage.js`, `canResizeImage.js`, `getBaseFields.js`),
+not inferred:**
+- `Media.ts` itself sets no `imageSizes`, `resizeOptions` or `focalPoint` override —
+  there was nothing image-specific in *our* config to begin with.
+- Payload's upload pipeline gates every image operation by mimetype internally:
+  `sharp()` is only invoked when the file is an animated type (gif/webp/avif) or
+  `canResizeImage(mimetype)` is true; dimension probing (`getImageSize`) only runs when
+  `canResizeImage(mimetype) || isImage(mimetype)`. `audio/mpeg` matches neither, so none
+  of it runs — not a failure path, a skip.
+- Payload adds hidden `focalX`/`focalY` schema fields to *every* upload collection by
+  default (unconditional on mimetype, since `Media.ts` never sets `focalPoint: false`).
+  For audio these just stay `null` — the columns exist, nothing populates them, nothing
+  reads them. Inert, not broken.
+- **One real mismatch, flagged rather than fixed:** `alt` is required at the collection
+  level for every upload, audio included. But `audioRefSchema` (`packages/shared`) has
+  no `alt` field — nothing downstream ever reads it for audio. An admin uploading a
+  voiceover file will be forced to type accessibility text that no code path consumes.
+  This is a product/schema decision (does audio need its own field — a transcript? —
+  and should `alt` become conditionally required?), not mine to make. Left the field
+  as-is; documented the mismatch in `Media.ts`'s own comment so the next reader doesn't
+  have to rediscover it.
+- Field-level copy (`alt`'s and `credit`'s admin descriptions) still reads image-first
+  ("What the image shows", "generated illustrations") — cosmetic, not a defect, not
+  changed. The collection-level doc comment and the `mimeTypes` comment were updated to
+  describe both file types honestly, since those are the ones I was already editing.
+
+## Part B — the mapper, and the test that couldn't see it
+
+Routed `optionalAudio`'s return through `resolveMediaUrl(audio.url, baseUrl)`, the same
+function `mapImageParts` and `mapTrack`'s `coverUrl` already use (WP15.8). `optionalAudio`
+now takes `baseUrl` as a required parameter, so `mapBodySlide` and all three direct call
+sites (`scenario`, `stickyNotes`, `takeaway`) had to pass it through — a missed call site
+would not compile, which is stronger than a runtime guarantee for "all five are wired."
+
+**Added five tests**, not one, in a new `audio URL resolution (VO-1)` block: the
+load-bearing relative→absolute case on `summary.audio`, plus one each proving
+`scenario`, `payoff`, `stickyNotes` and `takeaway` independently resolve too — the
+handoff was explicit that a fix landed on the function but missed at one call site is
+exactly the defect this package exists to remove, so each is checked rather than
+trusted by inspection.
+
+**Mutation check, done by hand:** reverted `optionalAudio`'s `resolveMediaUrl(audio.url,
+baseUrl)` back to raw `audio.url`, ran the file's suite — all 5 new tests went red,
+all 49 pre-existing tests (including `:255`'s `maps audio through when a URL is present`,
+which uses an already-absolute URL) stayed green. Restored the fix, re-ran: 54/54 green.
+That contrast is the evidence the handoff asked for — it demonstrates the old test
+genuinely never covered this, not just that a new test happens to pass now.
+
+`stickyNotes`' audio is fixed and tested identically to the other four, per the
+handoff's instruction to fix it correctly even though it's outside the narration
+product scope.
+
+## The maximal-fixture contract test
+
+`agents/manager.md`'s testing bar describes "one test in `apps/backend`, run against
+real Payload rather than the stand-in... author a Leaf through Payload's REST API with
+every optional field populated, fetch it through the backend, assert every field
+survives." **I could not find this test anywhere in `apps/backend`** — every backend
+integration test (`content.integration.test.ts` and siblings) runs against
+`FakePayload`, not real Payload. The only file matching that description at all is
+`apps/pipeline/tests/test_cms_roundtrip.py`, and this handoff explicitly scopes out and
+says not to read `apps/pipeline`, so I left it alone rather than guessing at its
+contents or scope. I did not add audio coverage to it or to anything else, because I
+could not locate the test the handoff's testing-expectations line was asking me to
+extend. Surfacing this rather than silently skipping it, per that same line.
+
+## Needs a decision
+
+**Committed locally, not pushed, no PR opened.** `agents/manager.md` and
+`project/GETTING_STARTED.md` are explicit about branch discipline (never commit to
+`main`, stage specific paths) but neither says whether Manager pushes and opens the PR
+itself or hands that back. Pushing and opening a PR are visible outside this checkout,
+so I stopped short rather than assume — say the word and I'll push `vo-1-audio-path`
+and open it.
+
+**Files touched:** `apps/admin/src/collections/Media.ts`,
+`apps/backend/src/content/content.mapper.ts`,
+`apps/backend/src/content/content.mapper.test.ts`, this log entry.
+
+**Assumptions made:** `audio/mpeg`-only mimetype list (stated and reasoned above); the
+`alt`-for-audio mismatch is a finding, not something to fix in this package; no push/PR
+without asking first.
+
+**Follow-ups / tech debt for Architect:**
+1. **Does an audio Media document need its own accessibility field (a transcript)?**
+   `alt` is currently required and unread for audio. Real decision, not mine.
+2. **Where does the maximal-fixture contract test actually live, or does it still need
+   building in `apps/backend`?** `apps/pipeline/tests/test_cms_roundtrip.py` may already
+   be it, wearing a name that doesn't match manager.md's description — or it may be a
+   separate thing manager.md is still owed. Either way, once audio is in play it should
+   cover an audio field, per the handoff's own ask, and that's blocked on knowing which
+   test that is.
+3. `audio/mpeg` is deliberately the only accepted audio type. If VO-2's real pipeline
+   output ever differs, `Media` will reject it loudly (correct, by design) but the list
+   will need widening.
+4. Push + PR for `vo-1-audio-path`, pending the go-ahead above.
+
+**Time:** roughly 20 min reading the handoff + existing code; 30 min reading Payload's
+own upload source to verify Part A's "what else assumes an image" rather than guess at
+it; 20 min implementing both parts; 15 min writing and mutation-checking the five new
+tests by hand; 10 min the full cold gate (lint + typecheck + test, all workspaces); 15
+min this report.
+
+---
+
 ### Completed: WP33.1 — the publish pre-flight, and the key stopped leaking — 2026-09-16
 
 **8 of 8 acceptance criteria met across both parts. $0.00 spend — no model was called.**

@@ -850,4 +850,86 @@ describe('media URL resolution', () => {
 
     expect(track.coverUrl).toBe('https://cdn.example.net/cover.png');
   });
+
+  /**
+   * VO-1. Audio was never populated before this package, so `resolveMediaUrl` was
+   * never wired to it — `optionalAudio` returned `audio.url` raw. A relative audio URL
+   * doesn't just fail to play: `audioRefSchema` requires `z.url()`, so it fails
+   * validation and can take the whole Leaf down with it.
+   *
+   * The pre-existing `mapLeaf` > `maps audio through when a URL is present` test
+   * (above, in this file) asserts against `https://cdn.test/a.mp3` — already absolute —
+   * so it passes identically with or without this resolution. **This is the case that
+   * test cannot see.** Mutation-checked by hand: reverting `optionalAudio`'s
+   * `resolveMediaUrl(audio.url, baseUrl)` back to raw `audio.url` turns the first test
+   * below red while every other test in this file, including the absolute-URL one,
+   * stays green — the contrast that proves the old coverage never reached this.
+   */
+  describe('audio URL resolution (VO-1)', () => {
+    it('resolves a relative audio URL to absolute, the same as images and covers', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({ summary: { body: 'x', audio: { url: '/api/media/file/summary.mp3' } } }),
+          BASE_URL,
+        ),
+      );
+
+      expect(leaf.summary.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/summary.mp3');
+    });
+
+    /**
+     * `optionalAudio` is called from five places — `mapBodySlide` (summary, payoff)
+     * and directly from scenario, stickyNotes and takeaway. A fix landed on the
+     * function but missed at one call site is exactly the defect this package exists
+     * to remove, so each of the other four is checked independently rather than
+     * trusted by inspection.
+     */
+    it('resolves scenario audio too', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({
+            scenario: { ...cmsLeaf().scenario, audio: { url: '/api/media/file/scenario.mp3' } },
+          }),
+          BASE_URL,
+        ),
+      );
+
+      expect(leaf.scenario.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/scenario.mp3');
+    });
+
+    it('resolves payoff audio too', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({ payoff: { body: 'x', audio: { url: '/api/media/file/payoff.mp3' } } }),
+          BASE_URL,
+        ),
+      );
+
+      expect(leaf.payoff.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/payoff.mp3');
+    });
+
+    it('resolves stickyNotes audio too, though it is outside the narration product scope', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({
+            stickyNotes: { ...cmsLeaf().stickyNotes, audio: { url: '/api/media/file/notes.mp3' } },
+          }),
+          BASE_URL,
+        ),
+      );
+
+      expect(leaf.stickyNotes.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/notes.mp3');
+    });
+
+    it('resolves takeaway audio too', () => {
+      const leaf = expectOk(
+        mapLeaf(
+          cmsLeaf({ takeaway: { body: 'x', audio: { url: '/api/media/file/takeaway.mp3' } } }),
+          BASE_URL,
+        ),
+      );
+
+      expect(leaf.takeaway.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/takeaway.mp3');
+    });
+  });
 });
