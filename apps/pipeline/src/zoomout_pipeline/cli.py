@@ -425,7 +425,7 @@ def generate_assets(
 
         client = deps.payload_client or PayloadClient(
             base_url=settings.payload_url,
-            api_key=settings.payload_api_key,
+            api_key=settings.payload_api_key.get_secret_value(),
         )
         images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
         budget = ImageBudget(max_images=settings.max_images_per_track, model=settings.image_model)
@@ -636,7 +636,7 @@ def review_track(
 
         settings = deps.settings
         client = deps.payload_client or PayloadClient(
-            base_url=settings.payload_url, api_key=settings.payload_api_key
+            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
         )
 
         length_result = check_answer_length(list(state.generated.values()))
@@ -840,7 +840,7 @@ def rewrite_leaf_command(
         leaf_id = state.cms_leaf_ids.get(key)
         if leaf_id is not None:
             client = deps.payload_client or PayloadClient(
-                base_url=settings.payload_url, api_key=settings.payload_api_key
+                base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
             )
             # Fetched immediately before the patch, never from memory: the patch carries
             # each group whole, so what it carries forward has to be what Payload holds now.
@@ -969,7 +969,7 @@ def balance_distractors(
 
         plan = {leaf.order: leaf.concept for leaf in state.plan.leaves} if state.plan else {}
         client = deps.payload_client or PayloadClient(
-            base_url=settings.payload_url, api_key=settings.payload_api_key
+            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
         )
 
         generated = dict(state.generated)
@@ -1073,7 +1073,9 @@ def attach_scenario_images(
     from zoomout_pipeline.cms.client import PayloadClient
 
     settings = get_settings()
-    client = PayloadClient(base_url=settings.payload_url, api_key=settings.payload_api_key)
+    client = PayloadClient(
+        base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+    )
 
     leaves = client.list_leaves(track_id=track_id)
     if not leaves:
@@ -1197,7 +1199,9 @@ def check_variety_command(
         from zoomout_pipeline.cms.client import PayloadClient
 
         settings = get_settings()
-        client = PayloadClient(base_url=settings.payload_url, api_key=settings.payload_api_key)
+        client = PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+        )
         leaves = client.list_leaves(track_id=track_id)
         images, labels = [], []
         for leaf in leaves:

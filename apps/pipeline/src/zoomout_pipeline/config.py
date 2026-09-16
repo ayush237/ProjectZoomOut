@@ -18,7 +18,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from zoomout_pipeline.models import Acquisition, Transport, TransportRecord
@@ -92,14 +92,21 @@ class PipelineSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="ZOOMOUT_PIPELINE_",
         extra="ignore",
+        # `SecretStr` on the two credential fields stops a *repr* or a log line printing
+        # one; it does not stop pydantic's own "field required" error, whose `input_value`
+        # is the raw pre-validation kwargs dict and is rendered before either field is ever
+        # coerced. WP33 hit exactly that: a truncated Gemini key in the terminal from a run
+        # missing only `DATABASE_URL`. This is the other half of the fix — verified against
+        # both error shapes before adopting it, not assumed from the option's name.
+        hide_input_in_errors=True,
     )
 
     database_url: str = Field(
         description="Postgres URL for the pipeline's OWN database. Not the backend's, "
         "not Payload's. Holds pgvector chunks, provenance and LangGraph checkpoints.",
     )
-    gemini_api_key: str = Field(
-        default="", description="AI Studio Developer API key. Unused when `use_vertex`."
+    gemini_api_key: SecretStr = Field(
+        default=SecretStr(""), description="AI Studio Developer API key. Unused when `use_vertex`."
     )
 
     # Vertex AI, which is what the proposal's §4 specified all along ("Gemini via Vertex
@@ -169,7 +176,7 @@ class PipelineSettings(BaseSettings):
     # WP15.2 provisioned a publish-incapable machine account (`pipeline-bot@zoomout.local`)
     # authenticated by a static API key rather than a login. The founder holds the key; it
     # is not in the repo.
-    payload_api_key: str = ""
+    payload_api_key: SecretStr = SecretStr("")
 
     @field_validator("database_url")
     @classmethod
