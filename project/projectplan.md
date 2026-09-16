@@ -2,7 +2,26 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
-## Active: the in-person pilot — the only thing on the critical path, 2026-09-16
+## Active: the in-person pilot — one step left, 2026-09-17
+
+**Step 1 (WP33, Leaf 4's bloom) and step 2 (publishing the eighteen Leaves) are both done.**
+Ikigai is live and the app serves it — 18/18 verified anonymously, media serving, backend
+answering. **What is left is a dev build on the founder's phone, shown to friends in person.**
+
+> **⚠️ Founder signalled on 2026-09-17 that a new feature should be deployed first.** That
+> **reverses the standing ruling of 2026-09-15** — *"stay on the free setup until Ikigai is
+> published and real readers have seen it; no paid billing, no Claude on Vertex, no
+> deployment."* The reversal may well be right, and it is the founder's to make; it is flagged
+> here because the ruling is recorded and three parked packages hang off it. **What "deployed"
+> costs is not small: WP12 needs a domain and the GCP account, and production media serving is
+> still undesigned — it remains the single thing between real content and a real phone.**
+> **Unresolved at the end of the 2026-09-17 session: whether "deploy first" means WP12, or a
+> new feature that happens to need deploying. The next Architect session should settle that
+> before planning anything.**
+
+### The original three steps, for the record
+
+### Superseded framing: the in-person pilot — the only thing on the critical path, 2026-09-16
 
 **Three steps, in this order, and the order is load-bearing.**
 
