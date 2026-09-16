@@ -39,6 +39,27 @@ Primary posture: fair use, positioned as a complement to the source book, not a 
 2. IP counsel review of the initial book list before launch.
 3. Recurring review as the library scales.
 
+## Narration — what may be read aloud (added 2026-09-17)
+
+**Voiceover narrates ZoomOut's own prose and nothing else.** The four narrated fields are
+`summary.body`, `scenario.prompt`, `payoff.body` and `takeaway.body`. Every one of them is
+written by ZoomOut to explain an idea; none reproduces the source text.
+
+**`sourceReferences[].quote` is never narrated.** That field holds the book's verbatim words,
+and it exists to make a claim auditable rather than to be performed. **Reading the bodies aloud
+narrates our words; reading the quotes aloud would produce an audio reproduction of copyrighted
+text** — a materially different act from quoting in support of commentary, and one our fair-use
+position does not reach.
+
+**This is written down because the failure mode is a reasonable instruction.** A future package
+told to "narrate the slide" would include the citations without anyone deciding to, and nothing
+mechanical would catch it. Any handoff that touches narration carries this boundary explicitly.
+
+**The generated audio itself is ours to use commercially.** Google asserts no ownership of Cloud
+TTS output and the Cloud Data Processing Addendum's training restriction applies. This is the
+reason the vendor is Google Cloud rather than a free tier elsewhere: every other expressive
+service forbids commercial use on the free plan.
+
 ## Content integrity safeguards
 The highest-severity risk is fabricated content attributed to a real author — a false-attribution risk distinct from, and more urgent than, the copyright question above (see Bookey, in the competitive landscape). Requirements:
 - Critic-in-the-Loop must verify facts against source material, not just tone, style, or IP-safety.

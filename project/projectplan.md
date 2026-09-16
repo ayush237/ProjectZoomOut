@@ -2,6 +2,118 @@
 
 Owned by Architect. Represents the single feature currently being planned or implemented. Overwrite this file's content each time a new feature starts — history lives in `projectRoadmap.md`, `collaboration-log.md`, and this file's git history.
 
+## Active: voiceover — approved 2026-09-17
+
+**The app reads the Leaf aloud in a human, emotionally expressive voice.** Four slides —
+Summary, Scenario, Payoff, Takeaway — one voice, Ikigai only. 72 clips, 20,792 characters,
+about 23 minutes of audio. **Ceiling $3 against the existing Google Cloud credit**; the
+realistic cost is ~$0.35.
+
+### The finding that shapes the decomposition
+
+**The TTS integration is not the first package, and it is not the risky one.** Two blockers sit
+in front of it and **both are outside Pipeline Manager's scope**, which is the WP4 lesson: a
+criterion that cannot be met inside the scope it was given forces a scope breach.
+
+1. **`Media` rejects audio.** `apps/admin/src/collections/Media.ts:45` is
+   `mimeTypes: ['image/png', 'image/jpeg', 'image/webp']`, and there is no audio collection.
+   **The pipeline cannot upload an mp3 today.**
+2. **The backend mapper passes audio URLs through raw.** `content.mapper.ts:224` is
+   `url: audio.url`, while images get `resolveMediaUrl(url, baseUrl)` at `:299`. **WP15.8's fix
+   was never applied to audio**, because audio was never populated. Payload serves
+   `/api/media/file/x.mp3`; `audioRefSchema` requires `z.url()`, so a relative URL does not
+   merely fail to play — **it fails validation and can drop the Leaf.** The mapper test at
+   `:259` uses an absolute URL, so **a green suite cannot see this.** Same shape as WP15's
+   dropped fields.
+
+**Both were found by reading the code rather than trusting the schema's readiness.** The schema
+*is* ready — `audioRefSchema` has sat on all five slides since Phase 1 with a comment saying
+enabling audio should be "a data migration rather than a reshaping of the Leaf." That was true
+about the shape and not about the path.
+
+### Packages
+
+| | Package | Owner | Model | Delivers |
+|---|---|---|---|---|
+| **VO-1** | Foundations | Manager | Sonnet | Audio mime types on `Media`; `resolveMediaUrl` applied to audio, with a **relative**-URL test |
+| **VO-2** | Generation | **Pipeline Manager** | **Opus** | Gemini 2.5 Flash TTS, voice selection, 72 clips, upload, draft writes, a concatenated review track |
+| **VO-3** | Playback | Manager | Sonnet | The player, the control, the audio session. **Absorbs WP29** |
+
+**Order: VO-1 → VO-2 → the founder publishes again → VO-3.** VO-3 needs real clips; a player
+with nothing to play cannot verify itself.
+
+**VO-3's handoff is deliberately not written yet.** Its spec depends on what VO-2 actually
+produces — duration metadata, file naming, how a clip behaves at the end. Writing it now would
+be writing criteria against a contract that does not exist, which this project has paid for
+three times.
+
+### Why Gemini TTS and not ElevenLabs, which PRODUCT.md named
+
+**The wall is free-tier commercial licensing, not cost.** ElevenLabs, Hume, Cartesia and Azure
+all forbid commercial use on their free tiers — ElevenLabs additionally requires "elevenlabs.io"
+in the title. **Expressive + free + commercially usable is offered by zero hosted vendors.**
+
+**Google Cloud TTS is the exception on all three**, and it is *not* the product WP32's check
+refuses. That check gates the Gemini Developer API (AI Studio), whose own pricing page states it
+trains on submitted content. **Cloud TTS and Vertex are Customer Data under the GCP DPA's
+training restriction, and they are what the credit pays for.** The legal answer and the cost
+answer agree, which is worth noticing because they usually do not.
+
+The true zero-cost fallback, if the credit is ever withdrawn, is **Chatterbox** — MIT licensed
+and the only permissively-licensed local model with a real emotion control. It costs Mac time
+and quality, and its Apple Silicon support is reportedly inconsistent.
+
+### Rulings — all four approved by the founder 2026-09-17
+
+**Ruling 1 — $3 ceiling.** The work is ~$0.35. Three dollars covers regeneration, a voice A/B
+and being wrong twice. **It is the stop signal, not a target.**
+
+**Ruling 2 — voiceover uses the iOS `playback` category, SFX keeps `ambient`.** Voiceover plays
+even with the hardware silent switch on; SFX stays muted by it. **A reader who taps "read this
+to me" has asked for sound, and being silently ignored reads as broken.** The consequence is
+that the app switches category by use, and VO-3 owns that. `SoundProvider.tsx` already records
+the `ambient` half of this contract on `SoundPlayer`.
+
+**Ruling 3 — WP29 is absorbed into VO-3.** WP29 restructures the Leaf player's footer so it
+holds the currently-live action; a voiceover control is a persistent *secondary* control in the
+same space. Designing them separately means restructuring that footer twice, with the second
+pass invalidating the first — WP22.2's shape. **WP29 was handed off 2026-09-11 and never
+started, so this costs nothing today.** Its handoff is superseded, not dropped.
+
+**Ruling 4 — Ikigai only.** Track 42 would double it to ~$0.70, which is still nothing — but it
+is 72 more clips to listen to, and Track 42's images are an unresolved problem already. **The
+pilot decides whether voiceover earns a second book.**
+
+### The risk worth naming loudest
+
+**Nothing in the pipeline will hear all 72 clips as a set.** Each call is independent, so
+prosody and energy can drift — clip 3 warm, clip 41 brisk. **This is structurally the same
+defect as Track 42's eighteen identical scenario images:** *"nothing in the pipeline ever sees
+the whole set, so collapse is structurally undetectable."* The images got a contact sheet and a
+variety measure; **audio gets a single concatenated review track**, so the book can be heard end
+to end in 23 minutes rather than approved 72 files at a time.
+
+### The legal boundary, recorded before anyone can cross it
+
+**Narration covers the body fields only — `summary.body`, `scenario.prompt`, `payoff.body`,
+`takeaway.body`. Never `sourceReferences[].quote`.** Those bodies are ZoomOut's own prose; the
+quotes are the book's verbatim text. **Reading the bodies aloud narrates our words; reading the
+quotes aloud would produce an audio reproduction of copyrighted text**, which is a materially
+different posture. A future package asked to "narrate the slide" would cross this without
+noticing. Also in `LEGAL.md` as of this plan.
+
+### Open, carried rather than resolved
+
+- **WP32's check does not cover a TTS client.** It gates the Gemini Developer API transport;
+  Cloud TTS is a second egress path for Leaf content. The content is our own prose, so the
+  hazard is lower — but this project records egress paths, and **VO-2 records its transport the
+  way image generation now does.**
+- **A second publish pass is required.** Ikigai's Leaves are published, so VO-2's writes land as
+  pending draft versions (`machinesUpdateDraftsOnly` permits a machine write only with
+  `?draft=true`) and **the live Leaf shows no audio until the founder publishes again.**
+
+---
+
 ## Active: the in-person pilot — one step left, 2026-09-17
 
 **Step 1 (WP33, Leaf 4's bloom) and step 2 (publishing the eighteen Leaves) are both done.**

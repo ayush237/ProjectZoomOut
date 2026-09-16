@@ -21,9 +21,13 @@ ZoomOut converts non-fiction books into short, gamified, interactive lessons —
 4. **Sticky notes** — key points recap, styled as sticky notes on a board. **2–6 notes** (ruled at the schema-freeze gate, 2026-08-08); revisit when the visual design direction lands
 5. **Takeaway** — key takeaway plus an optional Dinner Table Knowledge fact
 
-Slides 2 and 3 include a voiceover button. **Confirmed 2026-08-06:** "human voice over" in the original brief means AI-generated audio in a natural human-sounding voice (ElevenLabs), not literally human-recorded narration.
+**Slides 1, 2, 3 and 5 include a voiceover button** — Summary, Scenario, Payoff, Takeaway. **Confirmed 2026-08-06:** "human voice over" in the original brief means AI-generated audio in a natural human-sounding voice, not literally human-recorded narration. **Scope widened from slides 2–3 to four slides, and set to a single narrator voice, by the founder on 2026-09-17.** Sticky Notes is excluded: it is a recap of short fragments, not prose.
 
-**Voiceover is deferred to Phase 2** (decided 2026-08-06). Phase 1 ships without audio; the Leaf schema still reserves a per-slide audio reference so enabling it later is a data migration, not a redesign.
+**The vendor is Gemini 2.5 Flash TTS on Google Cloud, not ElevenLabs** (changed 2026-09-17). ElevenLabs forbids commercial use on its free tier and requires attribution; so do Hume, Cartesia and Azure. **Expressive, free and commercially usable is offered by no hosted vendor** — Google Cloud is the one place those three reconcile, and it is not the AI Studio tier that trains on submitted content. See `projectplan.md`.
+
+**Narration reads ZoomOut's prose only — never `sourceReferences[].quote`.** See `LEGAL.md`.
+
+~~**Voiceover is deferred to Phase 2**~~ — **approved and in build as of 2026-09-17.** The reservation worked: `audioRefSchema` has sat on all five slides since Phase 1 and needs no schema change. **What it did not cover was the path** — `Media` rejects audio mime types and the backend mapper never applied WP15.8's URL resolution to audio. Both are VO-1.
 
 ## Session mechanics
 - Completing a Leaf advances the user along the Track.
