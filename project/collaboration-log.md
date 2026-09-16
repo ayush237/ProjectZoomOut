@@ -23,6 +23,83 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-16 — WP33.1: prove the transfer, then stop the key leaking
+
+*Pipeline Manager. **Suggested model: Sonnet** — Part A is a script over functions you have already run once, and Part B is one line in each of two places plus a test. **The judgement in Part A was spent choosing sha256 over re-guarding; what is left is reading a table.***
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Check your branch — that checkout was on `wp32-paid-tier-check` this morning.** `git checkout main && git pull`, then branch from `origin/main`.
+> **Read:** this handoff · **your own WP33 completion report**, where you did Part A once for Leaf 4 · `apps/pipeline/src/zoomout_pipeline/config.py` · `agents/pipeline-manager.md`.
+> **Do not read:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: WP33.1 — the publish pre-flight, and the credential in the log
+
+**Suggested model:** Sonnet.
+
+**Context:** You ended WP33 by naming exactly the right caveat: *"Ikigai has no known style breach"* means **at generation time** for seventeen Leaves and **as attached** for Leaf 4 only. You offered two options — publish on generation-time evidence, or spend a package on the read-back command. **Ruled: neither.** Re-guarding seventeen images buys a *second non-deterministic sample* from an instrument measured at four real breaches and one false positive across nineteen; it does not buy certainty, and it costs a package on the critical path to the pilot.
+
+**The question worth answering is whether the bytes Payload serves are the bytes the guard already cleared.** That is sha256 — free, deterministic, no model call — and **you already proved the method on Leaf 4** (byte-identical, `c2e0c8d6…`). Every candidate is still on disk and each was overwritten in place by its own regeneration, so the local file for every Leaf is its final cleared version. Verified by mtime 2026-09-16: Leaves 3 and 7 at 20:27/20:29 on 09-15, Leaf 4 at 10:53 on 09-16, the rest from the WP30.1 run.
+
+**Objective:** A table of eighteen rows saying, for each Ikigai Leaf, whether what Payload serves is byte-identical to the candidate the guard cleared — and the Gemini and Payload keys no longer printable by a validation error.
+
+---
+
+## Part A — the pre-flight. **Report this the moment it is done; the founder publishes on it.**
+
+**Scope:** a script. **Read-only against Payload — this part writes nothing, to any collection, ever.** Whether it lands as a committed command or a throwaway is your call; if committing it is more than a few minutes, run it and paste the table.
+
+**Requirements**
+- For each of Track 50's eighteen Leaves: fetch `scenario.image`, fetch the media bytes **from Payload**, sha256 them, and compare against `runs/ikigai/images/leaf-NN-scenario-1.png`.
+- **Report all eighteen rows** — order index, `_status`, served filename, short hash, verdict. Not just the failures.
+- **On any mismatch: stop and report. Do not fix, regenerate, or re-attach anything.** A mismatch means either the wrong candidate is attached or the bytes were transformed, and both change the founder's publish decision. Say which you think it is and what would settle it.
+
+**Three traps, all of which cost me time this morning:**
+- **A 200 with zero rows is what "not authenticated" looks like.** Drafts are invisible anonymously, and my first query returned `200` and an empty list, which reads exactly like "nothing there". **Assert the count is 18 before trusting a single verdict**, and say what the count was. *"18 of 18 match"* against an empty set is the failure mode this bullet exists to prevent.
+- **The field is `trackId`, not `track`.** `where[track][equals]=50` returns HTTP 400.
+- **The orderIndex→filename mapping is an assumption until Leaf 4 proves it.** Leaf 4 is your known-good anchor: you have its hash. **If Leaf 4 does not match, the harness is wrong, not the data** — fix the harness before reading anything else in the table.
+
+**One hypothesis worth holding, so a bad result is read correctly.** If the seventeen mismatch *systematically* while Leaf 4 matches, the likely cause is not corruption — it is that WP30.1's batch path and WP33's script path differ in how they store bytes. **That is a finding about the pipeline, not a reason to regenerate seventeen images.** Say so rather than reaching for the generator.
+
+**What this does not close, and should be said in your report so nobody over-reads it:** it establishes *transfer and wiring* — that the cleared image is the served image, and that no candidate landed on the wrong Leaf, which is WP20's Leaf-11 defect family. **It does not re-examine the images.** Seventeen still rest on their generation-time verdict, and that residual is accepted deliberately.
+
+**Acceptance criteria — Part A**
+- [ ] **Eighteen rows reported**, with the fetched-leaf count stated explicitly and asserted to be 18
+- [ ] **Leaf 4 matches** its known hash `c2e0c8d6…` — the control that proves the mapping
+- [ ] Every Leaf's `_status` is `draft`, and **nothing was written to Payload** — say how you know
+- [ ] Any mismatch is reported and **not acted on**, with your read of the cause
+- [ ] $0.00 spend — **if this part costs money, something is wrong; stop**
+
+---
+
+## Part B — `SecretStr`. Does not gate publishing.
+
+**Context:** you hit this by accident in WP33 — a pydantic `ValidationError` on settings echoes the whole input dict, and a truncated Gemini key landed in your terminal. It would land in CI output the same way. **Verified in the code 2026-09-16: `config.py:101` declares `gemini_api_key: str`, `:172` `payload_api_key: str`, and `SecretStr` is not imported.**
+
+It is being folded in here rather than waiting for a convenient package because it is a credential in a log, and "the next pipeline package" has historically meant three packages.
+
+**Requirements**
+- `SecretStr` on `gemini_api_key` and `payload_api_key`; update the call sites that read them.
+- **A test that asserts a validation error does not contain the key material** — trigger the real failure (unset `ZOOMOUT_PIPELINE_DATABASE_URL`) and assert the rendered message. **A test that only asserts the field's type would pass against a future field that leaks.**
+- **Mutation-check it:** revert the `SecretStr` on one field and confirm that test alone goes red.
+
+**Out of scope (both parts)**
+- **Publishing anything.** The founder publishes the eighteen Leaves; nothing here does it.
+- **Regenerating any image**, including on a mismatch.
+- Building the general `check-style` command — still debt, still after the pilot.
+- `apps/mobile`, `apps/backend`, `apps/admin`.
+
+**Constraints:** **Part A must cost $0.00** — no model calls. Part B is code only. If you find yourself about to call a model in either part, stop and say why.
+
+**Device gate — the table, not the app.** Ikigai's Leaves are drafts and `contentVisibility.ts` makes a draft unservable everywhere, so there is nothing to see in the app. **What to observe: the eighteen rows, with the count asserted** — that every served image is the image the guard cleared, and that Leaf 4's row is the one you can check against a hash you already had.
+
+**Acceptance criteria — Part B**
+- [ ] `ruff check`, `ruff format --check`, `mypy --strict`, `pytest` clean; nothing outside `apps/pipeline` touched
+- [ ] Both keys are `SecretStr`; the real validation failure renders them masked
+- [ ] The test asserts **the absence of key material in the message**, not the field's type — and the mutation goes red
+
+**Testing expectations:** Part A needs no test — it is a measurement, and its evidence is the table plus the Leaf 4 control. Part B needs the one test above. **Say which evidence is a test, which is the script, and which is you looking**; that split is why your last four reports were trustworthy.
+
+---
+
 ### Handoff: 2026-09-16 — WP33: regenerate Ikigai Leaf 4's bloom
 
 *Pipeline Manager. **Suggested model: Sonnet** — this is the rare pipeline package where the design is already written. WP31 built the guard, ruled the light rule, and did this exact operation twice on Leaves 3 and 7. There is no judgement left to buy; the guard makes the call.*
