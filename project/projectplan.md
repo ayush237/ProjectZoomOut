@@ -21,6 +21,8 @@ A teal radial falloff at a soldering-iron tip. WP30.1's human pass cleared it; *
 again at sign-off, looking at the same contact sheet**; the guard caught it. A style check by eye
 fails on exactly the images that look fine.
 
+**✅ Step 1 is complete and the pre-flight passed — 18 of 18, $0.00 (WP33.1, PR #49). Publish when you are ready.** The caveat below is kept because it is the part that stays true after publishing.
+
 **Before step 2 — the one decision WP33 handed back.** "Ikigai has no known style breach" means
 *guarded at generation* for seventeen Leaves and *guarded as attached* for Leaf 4 only. Nothing in the
 CLI has ever read an attached image back from Payload, and Manager was careful to say that their own
