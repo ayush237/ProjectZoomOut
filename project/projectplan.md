@@ -197,6 +197,91 @@ rather than adding a second way to set the same thing. So **VO-3's design is unc
 the default value is still open** — a question for the founder's ear, best answered while
 listening to the two review tracks.
 
+### VO-2.1 signed off — 9 of 9, 2026-09-18
+
+**144 entries attached across 18 Leaves × 4 slides × 2 narrators, all drafts, nothing published.**
+Re-rendered exactly 4 (Leaf 5 summary, Leaf 9 payoff, both voices) for **$0.0346**. Ledger
+**$1.8230 of the $3.00 ceiling.** Ran on Sonnet, as suggested.
+
+**Gate counts traced rather than accepted** — the rule exists because WP33's silently narrowed.
+`mypy` configured target **97 files**, `pytest` **438 passed**, against VO-2's **97** and **422**.
+**No drop; +16 tests, all additions.** One label correction: the report compares to "VO-1.1", which
+was the TypeScript package (1,391 JS tests, no Python gate). **The right baseline is VO-2, and
+against VO-2 the numbers are correct.**
+
+**What I verified, and what I did not.** Counts, criteria and the report's internal consistency:
+verified. **The 144 live entries: not independently re-checked — Payload was not running when this
+was signed off** (nothing on 3001). The report's own evidence is strong — a script outside the
+pipeline and outside the test suite, re-fetching all 18 Leaves and recomputing every digest from the
+JSON Payload returned — but it is the package's evidence, not a second opinion. Stated rather than
+blurred.
+
+### The finding that outranks both of VO-2.1's questions
+
+**No gate in this pipeline can catch a typo, and Leaf 9 is the live case.**
+
+`textDigest` proves the clip matches the stored text. **It says nothing about whether the stored
+text is right.** A misspelling is therefore invisible to every check the pipeline runs: the guard
+passes, the digest matches, verification is clean, and the narrator reads the error aloud in a
+perfectly consistent way.
+
+**Leaf 9 (271) was recorded on 2026-09-18 as published reading `investments exposeyou to`** — a
+space lost when the founder retyped a hand-edit. **VO-2.1 then re-rendered Leaf 9's payoff in both
+voices.** Whether it rendered the corrected text or the broken text depends on when the fix landed,
+and **it cannot be determined from the report, because no gate looks at spelling.**
+
+**Check before the 59-minute listen, not after.** If the field still reads `exposeyou`, the fix is
+to correct and publish the text, then re-render that one slide in both voices — two clips, roughly
+$0.017.
+
+**The general rule this produces:** a pipeline gate that proves *consistency* must never be reported
+as proving *correctness*. The two read identically in a green report.
+
+### Ruling — `narrate --max-attempts` defaults to 3
+
+**Raise it, and move `MAX_NARRATION_ATTEMPTS` with it** so the library default and the CLI default
+cannot diverge. Verified in code 2026-09-18: `cli.py` defaults to **2** with `min=1, max=3`;
+`narration_nodes.py` holds `MAX_NARRATION_ATTEMPTS = 2`; the README's documented recipe at line 274
+already passes **3**. **A CLI whose default contradicts its own documented recipe is a trap**, and
+Ikigai is the proof — it was rediscovered exactly the way a trap gets rediscovered, by a held Leaf
+mid-run.
+
+**The cost argument is settled by the option's own help text:** *"Attempts already on disk are
+reused, so raising this re-buys only clips that still fail."* So the default does not multiply
+across the corpus — it applies only to the clips that failed twice, which is precisely the set worth
+retrying. At VO-2.1's measured **$0.0087 per clip**, five difficult lines in a new book cost about
+**four cents.**
+
+**The asymmetry decides it.** Too few attempts costs a held Leaf discovered mid-run, founder
+attention, and a re-run. Too many costs pennies on the few clips that earn them.
+
+**Accepted consequence:** the default then equals the maximum, so the flag's role flips from "raise
+this when you have trouble" to "lower this to economise." **That is the better shape** — the safe
+value is what you get by default, and thrift is the deliberate choice.
+
+**Not a package.** Two constants, a README line and a test. **It rides the next pipeline handoff**
+and is in the debt register — recorded in both places deliberately, because register entries have
+gone stale in this project five times across four packages, and a handoff is what actually gets read.
+
+### Payload's real array shape — recorded here so VO-3 cites the plan, not another worktree's report
+
+Reported by VO-2.1 from the live server rather than assumed. Each row:
+
+```
+{ id, narrator, url, durationSeconds, textDigest }
+```
+
+**The two details that would actually bite VO-3:**
+
+- **`id` is Payload's own bookkeeping** — a 24-character hex string, **absent before the first write
+  and stable across re-fetches after.** Never compare rows on it; VO-2.1's own idempotency check had
+  to be rewritten narrator-keyed for exactly this reason.
+- **An untouched slide reads back `[]` — never `null`, never omitted.** So absence and emptiness are
+  the same state, and a mapper that distinguishes them is inventing a case the server never sends.
+
+Order is whatever the writer sent (VO-2.1 always writes female-then-male). **`content.ts` is explicit
+that nothing may rely on it**, and VO-2.1's verification sorts before comparing.
+
 ### Package order, revised
 
 | | | Owner | Model |
