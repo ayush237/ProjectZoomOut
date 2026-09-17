@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from zoomout_pipeline.llm.client import GeminiClient, LLMError, LLMTransportError
 from zoomout_pipeline.llm.ratelimit import MAX_RETRIES, RateLimiter
@@ -161,7 +161,7 @@ def test_a_request_timeout_is_configured_on_the_client() -> None:
 
     settings = PipelineSettings(
         database_url="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline",
-        gemini_api_key="k",
+        gemini_api_key=SecretStr("k"),
         request_timeout_seconds=12.0,
     )
     client = _Client.from_settings(settings)

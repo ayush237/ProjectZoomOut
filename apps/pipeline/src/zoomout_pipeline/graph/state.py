@@ -184,6 +184,18 @@ class PipelineState(BaseModel):
     # Payload's `editorialFindings`. A count cannot be written to a field a human reads.
     leaf_reviews: dict[str, EditorialReviewResult] = Field(default_factory=dict)
 
+    # --- VO-2: voiceover
+    #
+    # The second egress path, recorded beside the first rather than overwriting it: a run
+    # whose text went through Vertex and whose narration went through Cloud TTS has two
+    # answers to "which door", and one field can only hold one of them.
+    narration_transport: TransportRecord | None = None
+
+    # What `narrate` attached, keyed like `generated`: media ids, urls, measured durations and
+    # the hash of the bytes uploaded — never audio, which belongs in Payload and on disk under
+    # `runs/`. Checkpointed per Leaf, for the reason `cms_assets` is.
+    cms_narration: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
     # --- cost
     cost: RunCost = Field(default_factory=RunCost)
 

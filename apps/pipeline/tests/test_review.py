@@ -7,7 +7,7 @@ through, only the absence of one to prove doesn't exist.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
@@ -402,7 +402,7 @@ def test_the_cap_is_configurable_and_the_node_honours_the_setting() -> None:
     """
     settings = PipelineSettings(
         database_url="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline",
-        gemini_api_key="k",
+        gemini_api_key=SecretStr("k"),
         editorial_attempts=1,
     )
     assert settings.editorial_attempts == 1

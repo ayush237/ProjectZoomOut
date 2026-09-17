@@ -17,7 +17,7 @@ from typing import Any, TypeVar, cast
 import psycopg
 import pytest
 from psycopg.rows import dict_row
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.config import PipelineSettings
@@ -73,16 +73,19 @@ class ScriptedLLM:
         node: str,
         system_instruction: str | None = None,
         images: Sequence[bytes] | None = None,
+        audio: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
-        # `images` is recorded rather than ignored: WP31's style guard is a *reading* call
-        # whose whole job is to look at a picture, so "was an image actually sent" is a
-        # thing its tests need to assert and a silently-dropped argument would pass.
+        # `images` and `audio` are recorded rather than ignored: the style guard and the
+        # narration guard are *reading* calls whose whole job is to look or listen, so "was
+        # the media actually sent" is a thing their tests need to assert and a
+        # silently-dropped argument would pass.
         self.calls.append(
             {
                 "node": node,
                 "model": model,
                 "prompt": prompt,
                 "images": list(images or []),
+                "audio": list(audio or []),
             }
         )
 
@@ -191,7 +194,7 @@ def analysis() -> BookAnalysis:
 def settings(tmp_path: Path) -> PipelineSettings:
     return PipelineSettings(
         database_url=TEST_DATABASE_URL,
-        gemini_api_key="test-key-not-used",
+        gemini_api_key=SecretStr("test-key-not-used"),
         runs_dir=tmp_path / "runs",
     )
 

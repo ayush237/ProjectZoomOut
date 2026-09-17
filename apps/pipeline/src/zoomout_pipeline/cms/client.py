@@ -13,6 +13,7 @@ is the arrangement the whole content model rests on.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -25,6 +26,8 @@ from zoomout_pipeline.logging import get_logger
 _log = get_logger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS = 30
+
+_BREAKS = re.compile(r"[\r\n]")
 
 
 class PayloadError(RuntimeError):
@@ -154,12 +157,19 @@ class PayloadClient:
         except urllib.error.URLError as error:
             raise PayloadError(f"GET {url} could not reach Payload: {error.reason}") from error
 
-    def upload_media(self, *, data: bytes, filename: str, alt: str) -> dict[str, Any]:
-        """Upload one image to Payload's media collection.
+    def upload_media(
+        self, *, data: bytes, filename: str, alt: str, mime_type: str = "image/png"
+    ) -> dict[str, Any]:
+        """Upload one file to Payload's media collection.
 
         `alt` is required by the collection and by the shared schema, so it is a parameter
         rather than an option — WP15 made an asset without alt text unpublishable, which
-        means an image with no alt is not a degraded asset but a Leaf that cannot ship.
+        means an image with no alt is not a degraded asset but a Leaf that cannot ship. The
+        founder ruled it stays required for audio too (VO-1), where it is a label.
+
+        `mime_type` is the part's declared type, and `Media` checks it against its list:
+        `image/png` for every image this pipeline has made, `audio/mpeg` for narration (the
+        only audio type VO-1 admitted).
 
         Multipart is hand-rolled because this is the only multipart call in the package and
         a dependency for one request would be a poor trade.
@@ -168,6 +178,11 @@ class PayloadClient:
             raise PayloadError(
                 f"refusing to upload {filename} with empty alt text — an asset without alt "
                 "cannot be published, so uploading one just moves the failure later"
+            )
+        # Both go into a header line verbatim; a line break in either would forge a header.
+        if _BREAKS.search(filename) or _BREAKS.search(mime_type) or '"' in filename:
+            raise PayloadError(
+                f"refusing a filename or type that would break the form: {filename!r}"
             )
 
         boundary = f"----zoomout{uuid4().hex}"
@@ -183,7 +198,7 @@ class PayloadClient:
                 document.encode(),
                 f"\r\n--{boundary}\r\n".encode(),
                 f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
-                b"Content-Type: image/png\r\n\r\n",
+                f"Content-Type: {mime_type}\r\n\r\n".encode(),
                 data,
                 f"\r\n--{boundary}--\r\n".encode(),
             ]
@@ -204,6 +219,13 @@ class PayloadClient:
         except urllib.error.HTTPError as error:
             raise PayloadError(
                 f"uploading {filename} failed: {error.code} {error.read().decode()[:400]}"
+            ) from error
+        # The sibling of `_request`'s own handler, which this path never had: a refused
+        # connection surfaced here as a bare `URLError` rather than the typed error every
+        # caller catches.
+        except urllib.error.URLError as error:
+            raise PayloadError(
+                f"uploading {filename} could not reach Payload at {self._base}: {error.reason}"
             ) from error
 
         doc = result.get("doc", result)
@@ -272,6 +294,36 @@ class PayloadClient:
         if not isinstance(docs, list) or not docs:
             return None
         return int(docs[0]["id"])
+
+    def find_media(self, *, filename: str) -> dict[str, Any] | None:
+        """The media document stored under exactly this filename, if there is one.
+
+        **The asset path's find-then-skip**, which WP20 found missing at Leaf 11 of 18 when
+        the Leaf write already had it. Narration filenames carry the hash of their bytes, so
+        a hit here means the same file is already uploaded and a retry must not upload a
+        second copy of it.
+        """
+        query = urllib.parse.urlencode(
+            {"where[filename][equals]": filename, "depth": "0", "limit": "1"}
+        )
+        result = self._request("GET", f"/api/media?{query}")
+        docs = result.get("docs")
+        if not isinstance(docs, list) or not docs:
+            return None
+        return dict(docs[0])
+
+    def whoami(self) -> dict[str, Any]:
+        """Who this key is authenticated as — **an empty dict when Payload served the request
+        anonymously.**
+
+        A wrong `Authorization` scheme is not refused: Payload answers 200 as an anonymous
+        caller, drafts become invisible, and "nothing to do" reads exactly like "not logged
+        in" (2026-09-01, a delete loop that reported zero failures and deleted nothing). A
+        command about to write asks this first.
+        """
+        result = self._request("GET", "/api/admins/me")
+        user = result.get("user")
+        return dict(user) if isinstance(user, dict) else {}
 
     def find_track(self, *, file_hash_title: str) -> int | None:
         """An existing draft Track with this exact title, if there is one."""

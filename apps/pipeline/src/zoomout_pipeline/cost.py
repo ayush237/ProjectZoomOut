@@ -40,10 +40,21 @@ _RATES_PER_MTOK: dict[str, tuple[float, float]] = {
     # pipeline's own generation model unpriced — every text call in every run to date
     # reported $0.00. `unpriced_models` did name it, correctly; nobody had looked.
     "gemini-3.6-flash": (0.75, 3.75),
+    # VO-2. Verified against cloud.google.com/text-to-speech/pricing, 2026-09-17 — the Cloud
+    # TTS page, not the Developer API's, because that is the product voiceover calls. Output
+    # is **audio** tokens, 25 per second of audio, so a clip's cost is set by how long the
+    # model chose to speak. No free usage tier for either.
+    "gemini-2.5-flash-tts": (0.50, 10.00),
+    "gemini-2.5-pro-tts": (1.00, 20.00),
     # Any remaining 3.x model is deliberately absent. Their published rates were not
     # verified here, and `unpriced_models` naming a model is more useful than a confident
     # number that is wrong — a silent zero is indistinguishable from a free call.
 }
+
+
+def rates_for(model: str) -> tuple[float, float] | None:
+    """`(input, output)` USD per million tokens, or None when the model is unpriced."""
+    return _RATES_PER_MTOK.get(model)
 
 
 class TokenSpend(BaseModel):

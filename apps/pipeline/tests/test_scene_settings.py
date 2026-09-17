@@ -108,6 +108,7 @@ class FakeSceneLLM:
         node: str,
         system_instruction: str | None = None,
         images: Sequence[bytes] | None = None,
+        audio: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
         self.prompts.append(prompt)
         if self.failures > 0:

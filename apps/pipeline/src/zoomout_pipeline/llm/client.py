@@ -86,6 +86,7 @@ class StructuredClient(Protocol):
         node: str,
         system_instruction: str | None = None,
         images: Sequence[bytes] | None = None,
+        audio: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]: ...
 
 
@@ -221,17 +222,19 @@ class GeminiClient:
         node: str,
         system_instruction: str | None = None,
         images: Sequence[bytes] | None = None,
+        audio: Sequence[bytes] | None = None,
     ) -> GenerationResult[T]:
-        """Text in, typed object out — and optionally images in alongside the text.
+        """Text in, typed object out — and optionally images or audio in alongside the text.
 
         `images` exists for WP31's style guard, which has to look at a generated illustration
-        and answer whether it breaches the contract. It is a *reading* call, not a generating
-        one, which is why it belongs here beside the other structured calls rather than in
-        `assets/images.py` — that module makes pictures, this one makes typed answers.
+        and answer whether it breaches the contract. `audio` exists for VO-2's narration
+        guard, which has to hear a clip and write down what was said — mp3, the format the
+        clip is uploaded in, so what is checked is what ships. Both are *reading* calls, not
+        generating ones, which is why they belong here beside the other structured calls.
 
-        Images go **before** the prompt. The instruction is what the model should be holding
-        in mind while it looks, and the same ordering is what `ImageClient.generate` uses for
-        its anchors.
+        Media goes **before** the prompt. The instruction is what the model should be holding
+        in mind while it looks or listens, and the same ordering is what
+        `ImageClient.generate` uses for its anchors.
         """
         from google.genai import types
 
@@ -242,11 +245,15 @@ class GeminiClient:
         )
 
         contents: Any = prompt
-        if images:
+        if images or audio:
             parts = [
                 types.Part(inline_data=types.Blob(data=image, mime_type="image/png"))
-                for image in images
+                for image in images or []
             ]
+            parts.extend(
+                types.Part(inline_data=types.Blob(data=clip, mime_type="audio/mpeg"))
+                for clip in audio or []
+            )
             parts.append(types.Part(text=prompt))
             contents = parts
 

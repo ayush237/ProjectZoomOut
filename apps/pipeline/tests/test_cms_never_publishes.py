@@ -91,6 +91,12 @@ def test_the_client_has_no_way_to_publish() -> None:
         # the pipeline no longer holds in memory. Neither writes anything.
         "list_leaves",
         "fetch_media",
+        # VO-2 added two more reads. `find_media` is the asset path's find-then-skip — a clip
+        # already uploaded is found by its content-hashed filename rather than uploaded again;
+        # `whoami` is how a command learns it is authenticated before it writes, because a
+        # wrong scheme is served as anonymous with a 200. Neither writes anything.
+        "find_media",
+        "whoami",
     }, (
         "The surface is asserted exactly so that adding a method is a deliberate act. If "
         "this fails because you added one, check it cannot publish and then update the set."
