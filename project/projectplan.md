@@ -185,6 +185,18 @@ handed off.** Remaining ceiling: **$1.21 of $3.**
 
 **Leaf 5 (267) is correctly fixed** — "known as takumi", published.
 
+### The default narrator, and what comes after voiceover
+
+**The founder ruled 2026-09-18 that the reader's narrator is chosen in an onboarding flow** — a
+separate feature, picked up once voiceover ships.
+
+**It does not close VO-3's question.** VO-3 ships before onboarding exists, so it still needs a
+default for every reader who has not been onboarded. **What it settles is the mechanism:** the
+narrator is a stored preference with a default, and onboarding later *writes* that preference
+rather than adding a second way to set the same thing. So **VO-3's design is unchanged, and only
+the default value is still open** — a question for the founder's ear, best answered while
+listening to the two review tracks.
+
 ### Package order, revised
 
 | | | Owner | Model |
