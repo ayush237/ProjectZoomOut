@@ -226,6 +226,15 @@ empty arrays versus absent keys — and the fake inherits the blind spot.
 **VO-2.1 and VO-3 are not written yet**, for the usual reason: VO-2.1 depends on the array shape
 Payload actually produces, which VO-1.1 discovers.
 
+**VO-3 owns the narrator *mechanism*; onboarding owns the *choosing*. Pin this in VO-3's handoff.**
+Row 7 above reads *"player, narrator choice, audio session, the footer"* — written on 2026-09-17,
+**before** the founder ruled the next day that the narrator is chosen in onboarding. Handed off as
+written, that line has Manager build a chooser, and then the onboarding package builds a second one —
+**which is the exact outcome the 2026-09-18 ruling rejected** when it turned down VO-3 asking on first
+play. The split that honours it: **VO-3 builds the stored preference, its default, and a way to change
+it later; onboarding writes that same preference at first run.** Recorded here rather than left in a
+conversation, because this plan is what the handoff gets written from.
+
 ### Two Leaf texts, fixed by the founder before VO-2.1
 
 Pipeline Manager flagged both because the narrators read them differently from how they are
