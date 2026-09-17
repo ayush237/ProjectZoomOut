@@ -23,6 +23,73 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-18 — VO-2.1: attach both narrators
+
+*Pipeline Manager. **Suggested model: Sonnet** — you built this path already; it changes shape, not intent. The one thing that could have failed silently, whether Python and Node hash text identically, **has been verified rather than left to you** (9 of 9 vectors, below).*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. `git checkout main && git pull` — **VO-1.1 is merged and the array shape is live in the dev database.** Branch from `origin/main`.
+> **Commit, push and open the PR yourself when done** — added to `agents/pipeline-manager.md` on 2026-09-17; it never reached that file before, which is why VO-2 sat uncommitted.
+> **Read:** this handoff · **your own VO-2 report** · **VO-1.1's completion report** for the shape Payload actually returns · `packages/shared/src/content.ts` (`NARRATOR_IDS`, `audioRefSchema`) **as the source of truth to mirror, not a file to edit** · `agents/pipeline-manager.md`.
+> **Do not read or edit:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.
+
+### Task: VO-2.1 — the 144 clips reach the CMS
+
+**Suggested model:** Sonnet.
+
+**Context:** VO-2 rendered and checked 144 clips and stopped at the write, correctly — one voice per slide was all the schema could hold. **VO-1.1 replaced that with an array keyed by narrator, each entry carrying a digest of the text it was made from.** Everything is cached: 183 raw renders on disk, so this package buys almost nothing.
+
+**Objective:** All 18 Leaves carry both narrators on all four narrated slides, as pending draft versions, with digests the backend will accept. Nothing published.
+
+**Scope:** `apps/pipeline` — principally `narration_patch` and `verify_narration_write` — plus Ikigai's Leaf records. **Verify against VO-1.1's report rather than assuming the array shape.**
+
+**The entry shape** — one per narrator, per narrated slide:
+
+```
+{ narrator: 'female' | 'male', url, durationSeconds, textDigest }
+```
+
+- **`NARRATOR_IDS` in `packages/shared` is the source of truth.** Mirror the two values with a test asserting exactly `female` and `male`, and a comment naming where they come from. **Achernar → `female`, Sadaltager → `male`.**
+- **`textDigest` is `sha256` of the narrated field exactly as Payload returns it** — `summary.body`, `scenario.prompt`, `payoff.body`, `takeaway.body`. **No trim, no normalise, no case change.** The backend recomputes it and **silently drops any entry that does not match**, so a normalisation on your side alone makes every clip vanish after the founder publishes.
+
+  > **Already checked, so you do not have to:** `hashlib.sha256(t.encode('utf-8')).hexdigest()` and Node's `createHash('sha256').update(t,'utf8').digest('hex')` agree on all 9 test vectors — ASCII, em dashes, curly quotes, padded whitespace, three real Leaf bodies, **and both Unicode forms of "Héctor García", which correctly hash differently from each other.** Neither side normalises. **Add the vectors as a Python test anyway**, so a future change that introduces normalisation fails loudly here instead of silently in the app.
+
+- **`durationSeconds` is now required and must be positive.** You already measure it from the encoded bytes.
+- **Array order carries no meaning.** The reader's default narrator is an app setting, not position. Do not rely on order and do not sort to imply precedence.
+
+**Requirements**
+- **All narrators or none, per Leaf.** You already refuse a Leaf with one failing clip because *"three clips and a silent fourth reads as a broken player."* **The same across voices:** a reader who chose one narrator must never be handed the other mid-book. A Leaf attaches only when both narrators pass on all four slides.
+- **Re-render what changed.** The founder corrected two texts, so those clips must be re-made — your cache keys on the text, so this should happen by itself. **Say which clips were re-rendered and confirm it was only those.** They are Leaf 5's summary and Leaf 9's payoff, in both voices — **4 clips, about $0.05.**
+- **This is the first time the upload path touches the live CMS.** `Media` accepts `audio/mpeg` as of VO-1 and the admin server has since restarted. **If an upload is rejected, stop and report** — that is a finding about the running server, not something to work around.
+- **Draft writes only** (`?draft=true`). Re-fetch both versions and verify. **Refuse any Leaf carrying unpublished changes**, as you already do — and **say so loudly if one does**, because it means someone edited text after this handoff and its digest will be wrong.
+- **Report what Payload's array actually returns** — row ids, ordering, how an empty array comes back. **VO-3 will build against that**, and it is the shape a hand-written fixture gets wrong.
+- Record the transport, as VO-2 did. Report spend.
+
+**Out of scope**
+- **Publishing.** The founder publishes the Leaves a second time after this lands. **Nothing here publishes anything.**
+- **Track 42**, `stickyNotes` audio, re-recording anything the founder has not changed.
+- **The player, the narrator picker, the default narrator** — VO-3.
+- `apps/mobile`, `apps/backend`, `apps/admin`, and `packages/shared` — **read `NARRATOR_IDS`, do not edit it.**
+
+**Constraints:** **$1.21 remains of the $3 voiceover ceiling** — VO-2 spent $1.79. Expected spend here is about $0.05. **If you are approaching the ceiling, something is wrong; stop and report.** **`runs/` is gitignored and holds 228 MB of paid renders — do not clean it.**
+
+**Device gate — the CMS, not the app.** The audio lands as unpublished drafts, so there is nothing to hear yet, and **the backend cannot be reached at all right now** — port 3000 is held by an unrelated project and ZoomOut's backend is down (register, 2026-09-18). **What to observe: re-fetch all 18 Leaves and see, in the draft version, both narrators on all four narrated slides with a URL, a positive duration and a digest — and the published version still carrying no audio at all.** Say plainly that you could not observe anything in the app and why.
+
+**Acceptance criteria**
+- [ ] `ruff check`, `ruff format --check`, `mypy` **(the configured target — report the file and test counts, and explain any drop)**, `pytest` clean; nothing outside `apps/pipeline` touched
+- [ ] **18 Leaves × 4 slides × 2 narrators = 144 entries attached**, each with URL, positive `durationSeconds` and a 64-char lowercase digest
+- [ ] **Every digest recomputes correctly from the text Payload returns** — checked by re-reading the stored Leaf, not from what you sent
+- [ ] **The cross-language vectors are a Python test**, and it fails if normalisation is introduced
+- [ ] **Exactly 4 clips re-rendered** (Leaf 5 summary, Leaf 9 payoff, both voices) — named, with cost
+- [ ] **Every Leaf still `_status: published` with all audio confined to the pending draft** — verified by re-fetching both versions
+- [ ] **A Leaf missing either narrator on any slide is refused, not partially attached** — mutation-checked
+- [ ] **Payload's real array response shape is reported** for VO-3
+- [ ] Transport recorded; spend reported against the $1.21 remaining
+- [ ] **Anything you are not happy with is stated even though you shipped it**
+
+**Testing expectations:** unit coverage on the reshaped patch and verification, each mutation-checked as its own reversion. **The load-bearing new test is the digest vector set** — it is the only thing standing between a normalisation change and 144 clips silently disappearing from a reader's screen. Say which evidence is a test, which is tooling, and which is you.
+
+---
+
 ### Handoff: 2026-09-17 — VO-1.1: two narrators, a digest, and the contract test that was never there
 
 *Manager. **Suggested model: Opus** — unlike VO-1. The code is small and fully specified below. **The care is the package:** it pushes a schema change that **drops columns** on the database holding the only two real books, and its test creates and deletes content against real Payload. A careless run here costs Ikigai, not a test.*

@@ -168,6 +168,23 @@ it: nothing reads the field and nothing has been written to it.**
 `scenario.prompt` · `payoff.body` · `takeaway.body`. **`stickyNotes` has no narrated field, so any
 audio entry there cannot be verified and is omitted.** Fail-safe; nothing writes it.
 
+### Status 2026-09-18
+
+**VO-1.1 is merged (12/12).** The narrator-keyed array is live in the dev database, backed up and
+re-verified; the backend contract test `manager.md` had claimed for weeks now exists. **VO-2.1 is
+handed off.** Remaining ceiling: **$1.21 of $3.**
+
+**Two things the founder must do before VO-2.1 runs:**
+
+1. **Leaf 9 (271) lost a space in the hand edit — it now reads `investments exposeyou to`, published.**
+   Paste the whole sentence rather than retyping the fragment. **That is Architect's lesson, recorded
+   in `architect.md`:** the unit handed to the founder should be pasteable whole.
+2. **The backend is not running and cannot start on port 3000** — an unrelated Next.js project holds
+   it on both stacks. Stop that project and start the backend. **VO-3 moves ZoomOut off 3000
+   permanently**, because Next defaults there and this will otherwise recur.
+
+**Leaf 5 (267) is correctly fixed** — "known as takumi", published.
+
 ### Package order, revised
 
 | | | Owner | Model |

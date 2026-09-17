@@ -128,6 +128,8 @@ Anything that would let a reader obtain content they have not earned, keep conte
 
 This is the deliberate exception to WP3's ruling that integration tests use a Payload stand-in. The stand-in is right for behaviour we control; it is exactly wrong for a contract test whose purpose is detecting drift between two real systems, because the fake inherits the same blind spot as the code under test.
 
+**Say before you restart a shared dev server, not after.** VO-1.1 restarted the admin dev server to pick up a schema change and interrupted the founder mid-edit on the two Leaves that package had just asked them to fix. **The restart was necessary; the silence was not.** Payload admin, the backend and Metro are all things the founder may be using while you work — a one-line warning first costs nothing, and a lost edit costs a republish. **Manager raised this itself, which is why it is here.**
+
 **Push the branch and open the PR yourself when the package is done.** Ruled 2026-09-17 after VO-1 asked — nothing here said either way, and the project's own history is split: WP5b and WP20.1 both sat waiting on the founder to push, and WP27's PR #40 stayed open for days while the roadmap called it merged. **The founder still merges; that is the gate.** Opening the PR is what makes the work reviewable, and a package that is finished but invisible is a package nobody can act on. Put the completion report in the PR body or point at it in `collaboration-log.md`.
 
 **Two rules survive the change:**
