@@ -275,6 +275,110 @@ Payload's admin list shows it, which turns 72 rows of `leaf-04-payoff.mp3` into 
 
 ---
 
+## Approved, gated on VO-3: the onboarding flow — 2026-09-18
+
+**Approved by the founder 2026-09-18** — the shape below and all five recommendations. **Not handed
+off**, and the reason is a standing rule in `agents/architect.md`: beat 3 consumes an audio layer VO-3
+has not built, and writing acceptance criteria against a contract that does not exist is the mistake
+that has already caused three out-of-scope excursions. The handoff is written when VO-3's audio layer
+can be read.
+
+### What onboarding is for — the sentence that decides everything else
+
+**It is an activation flow, not a preference wizard.** ZoomOut's differentiator is the active-recall
+gate, and that is a feature bullet when explained and the product when experienced. A reader who
+finishes one Leaf understands ZoomOut; a reader who reads three explainer screens does not. **So the
+flow ends inside the Leaf player, not on Explore.**
+
+The risk this guards against is specific rather than general. The founder's 2026-09-18 ruling
+introduced onboarding as the place the narrator gets chosen — which is a *preference*. Design the
+whole flow around preferences and the result is a settings wizard readers skip.
+
+### The constraint that rules out the conventional design
+
+**The library is two real Tracks.** Explore serves 28, of which Track 42 and Track 50 are real content
+and the rest are placeholders. **Every conventional onboarding pattern is a lie at that size** —
+interest tags, topic selection, "personalising your feed." The answer cannot be honoured, and the
+hollowness lands on the very next screen.
+
+That is permission rather than limitation: show the real books and let the reader pick one.
+
+### The five beats
+
+| # | Beat | What it does |
+|---|---|---|
+| 1 | **The promise** | One screen, not a carousel. What this is and what it costs: 15 minutes, one book, you will have to think |
+| 2 | **Pick your first book** | The real Tracks as full-bleed cards, one line of promise each. Picking adds to Library through the existing mechanic |
+| 3 | **Choose your narrator** | Two cards, female and male, each with a play button and a real sample. **The ruled beat** |
+| 4 | **Into Leaf 1** | Lands in the player, not the catalogue |
+| 5 | **The gate teaches itself** | A coach-mark on the scenario slide rather than an explainer screen |
+
+**Beat 1 is where the session cap becomes an asset instead of a paywall.** The 15-minute / 500-XP cap
+is a deliberate and unusual product decision. A reader who meets it on day one with no prior framing
+reads it as a paywall; claimed up front it is the reason to trust the app. **This is the only place
+that framing can happen before the fact.**
+
+**Beat 2 precedes beat 3 deliberately, and there is a payoff in the order.** Book first lets the
+narrator sample read a line from the book just picked — the product demonstrating itself rather than a
+voice demo. **One caveat defers it:** VO-2 rendered audio for Ikigai only, so the flourish works for
+Track 50 and not Track 42. Sample generically until voiceover coverage grows, and revisit when it does.
+
+**Beat 5 is held loosest.** The unlock mechanic is self-evident the moment a reader meets it, and
+explainer screens are what readers tap through fastest. A design call rather than a technical one.
+
+### Deliberately excluded
+
+- **An interests or goals questionnaire** — nothing behind it at two Tracks.
+- **A "minutes per day" goal setter** — the cap is fixed and server-authoritative. Offering a choice
+  implies configurability that does not exist and **undercuts the positive-friction design**, whose
+  whole point is that the app decides rather than the reader.
+- **A second age gate** — an auth step, built and audited in WP24. Onboarding starts after it.
+- **A feature-tour carousel** — beat 4 does the job better.
+
+### The five rulings, approved 2026-09-18
+
+| Question | Ruling | Why |
+|---|---|---|
+| Before or after account creation? | **After** | `PRODUCT.md` rules out guest mode, so a pre-auth taste Leaf needs **client-side grading — a second implementation of the thing the product guarantees is server-decided.** A real architectural cost against a conversion hypothesis that cannot be tested yet |
+| Notifications permission in onboarding? | **No** | **iOS grants exactly one prompt, ever.** Push notifications are Stage 4 and do not exist. Asking before there is anything to send spends a one-shot asset for nothing, and a reader who declines is gone permanently. The moment is after the first streak day, when the value is concrete |
+| Skippable? | **Yes — but skip must land somewhere designed** | The narrator has a default, so nothing breaks. Skipping today drops the reader on **Explore with no first-run state**, which is the exact weak moment onboarding exists to fix. **So Explore's first-run treatment is in scope for the same package** |
+| Narrator preference — device or account? | **Device, matching VO-3** | Zero backend work, and it honours the ruling that onboarding *writes* the existing preference rather than adding a second mechanism. `userSchema` has no preferences field at all, so account storage means a schema change, a migration and an endpoint |
+| What do existing installs see? | **The narrator beat only** | Readers with an account and a non-empty library must not be sent through a first-book picker |
+
+**The device-storage ruling carries a consequence to accept rather than discover: a reinstall or a
+second device means the default narrator, and onboarding running again.** Correct for MVP, taken
+knowingly.
+
+### Two risks recorded now
+
+**Onboarding promotes the cover problem from cosmetic to blocking.** Founder item 1 in
+`launch-blockers.md` is that Track 42's cover hotlinks a retailer's CDN. Today that is a card in a
+list. **A first-book picker makes covers the entire visual of a screen** — two or three full-bleed
+cards and nothing else. The moment this flow is real, covers stop being polish.
+
+**The mascot slot.** `proposals/design-direction.md` reserves four moments for a future character and
+says to compose the layouts with that space accounted for. Onboarding is a natural fifth and probably
+the best showcase of the five. **Compose beats 1–3 with that space** so a mascot stays an asset swap
+rather than a redesign.
+
+### Open, and not owned by onboarding
+
+**Where terms-of-service and privacy acceptance land.** WP24's design prompt forbids the age gate's
+checkbox from implying consent to anything but age, and GDPR/CCPA is a pre-launch blocker.
+**Onboarding is the tempting place and the wrong one** — it belongs to Stage 5. Recorded so it does not
+drift in by default.
+
+### Why this is not handed off yet
+
+Beat 3 plays an audio sample, so it consumes VO-3's audio layer. Building that layer inside an
+onboarding package would invert the order and put foundational audio work in a package about first-run
+UX. **VO-3 first; onboarding consumes it.**
+
+The stronger reason is about the handoff itself. **Its acceptance criteria and device gate for beat 3
+depend on what VO-3 actually builds** — how a sample is played, how the narrator preference is read and
+written. `agents/architect.md` records three out-of-scope excursions caused by writing criteria against
+a documented *intent* rather than a live *contract*. Writing them now would be the fourth.
+
 ## Active: the in-person pilot — one step left, 2026-09-17
 
 **Step 1 (WP33, Leaf 4's bloom) and step 2 (publishing the eighteen Leaves) are both done.**
