@@ -23,6 +23,126 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-17 — VO-1.1: two narrators, a digest, and the contract test that was never there
+
+*Manager. **Suggested model: Opus** — unlike VO-1. The code is small and fully specified below. **The care is the package:** it pushes a schema change that **drops columns** on the database holding the only two real books, and its test creates and deletes content against real Payload. A careless run here costs Ikigai, not a test.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO`. `git checkout main && git pull`, then branch from `origin/main`. **Push the branch and open the PR yourself when done** — ruled 2026-09-17, now in `agents/manager.md`.
+> **Read:** this handoff · `project/projectplan.md`'s voiceover section, **especially "The schema ruling"** · `packages/shared/src/content.ts` (`audioRefSchema`) · `apps/admin/src/collections/Leaves.ts` (`audioField` ~line 99) · `apps/backend/src/content/content.mapper.ts` (`optionalAudio`, `mapBodySlide`, `resolveMediaUrl`) and its tests · `agents/manager.md`, **including the corrected maximal-fixture paragraph** · `apps/pipeline/tests/test_cms_roundtrip.py` **as a pattern to read, not a file to edit**.
+> **Do not read:** `design/`, `projectRoadmap.md`. **Do not edit** anything under `apps/pipeline`.
+
+### Task: VO-1.1 — slide audio carries a narrator and a digest
+
+**Suggested model:** Opus.
+
+**Context:** Voiceover was scoped to one voice; **the founder then chose two narrators — a female and a male voice — for readers to pick between.** Pipeline Manager has 144 clips rendered and checked, and stopped at the CMS write because `audioRefSchema` holds exactly one reference per slide. **Nothing reads slide audio yet and nothing has ever been written to it, so the shape can change now without migrating any data. It will never be cheaper.**
+
+Reading the pipeline's code also showed that **nothing about the source text ever reaches the CMS.** Audio is the first content in this model that is *derived* from other content, and right now a Leaf whose text is edited after its audio is attached would keep playing narration that no longer matches the screen — with nothing able to notice.
+
+**Objective:** Every narrated slide can carry one clip per narrator, each clip records a digest of the text it was made from, and the backend serves only clips whose digest still matches — proven end to end against real Payload and the real backend.
+
+**Scope:** `packages/shared/src/content.ts` (+ regenerated `cms-generated.ts`), `apps/admin/src/collections/Leaves.ts`, `apps/backend/src/content/content.mapper.ts`, their tests, and a new live contract test in `apps/backend`. **Plus the live dev database's schema.** Verify this list rather than trusting it.
+
+---
+
+## Part A — the shared schema
+
+```ts
+export const NARRATOR_IDS = ['female', 'male'] as const;   // the only list of narrators, anywhere
+
+audioRefSchema = z.object({
+  narrator:        z.enum(NARRATOR_IDS),
+  url:             z.url(),
+  durationSeconds: z.number().positive(),                 // required now — every clip is measured
+  textDigest:      z.string().regex(/^[0-9a-f]{64}$/),    // sha256, lowercase hex
+});
+// each slide that has audio today:  audio: z.array(audioRefSchema).optional()
+```
+
+- **At most one entry per narrator per slide** — enforce it in the schema, not only in Payload.
+- **The field is `narrator`, not `voice`.** "Voice" means Google's name (Achernar, Sadaltager) in the pipeline; keeping the two words apart is the point.
+- **Nothing about a *default* narrator goes here.** Which voice plays before a reader chooses is an app concern, owned by VO-3. **Array order carries no meaning** — see Part D.
+- Update the reservation comment on `audioRefSchema`: it is no longer reserved.
+
+## Part B — the Payload field
+
+`audioField` becomes a `type: 'array'` with `narrator` (select, from the same list — **one source for the narrator IDs; say how you wired it**), `url` (text), `durationSeconds` (number), `textDigest` (text).
+
+- **Validate one entry per narrator** on the array.
+- **Make it visible and read-only in the admin** instead of hidden — the founder will want to see what is attached, and **a hand-edited entry would carry a wrong digest**. `readOnly` affects the admin UI only; the pipeline writes through the API.
+- Regenerate `cms-generated.ts` and confirm it matches.
+
+## Part C — the live database. **This is the part that can hurt.**
+
+Payload runs in **dev push mode** — there is no migrations directory. Turning a `group` into an `array` means the push **drops the group's columns** (e.g. `summary_audio_url`) on **both** `leaves` **and its versions table**, and creates new array tables. **Drizzle prompts before dropping columns.**
+
+**Requirements, in order:**
+1. **Take a restorable backup of the Payload database before anything else.** Say where it is and how you would restore it.
+2. **Prove the columns being dropped are empty** — every audio column, on `leaves` and on the versions table, `NULL` in every row. **Show the queries and the counts.** Nothing has ever written audio, so they should be; *should* is not evidence.
+3. **Record the baseline:** row counts for Tracks, Leaves and Leaf versions; published counts; **Tracks 42 and 50 and their 36 Leaves, with `_status` and `updatedAt`.**
+4. Apply the push. **Do not run it in a way that auto-declines or hangs on the prompt** — a non-interactive shell is exactly where that happens. **If it cannot be applied cleanly, stop and report; do not improvise with raw DDL against this database.**
+5. **Repeat step 3 and compare.** And the check that matters most: **an anonymous fetch of Track 50's Leaves still returns 18, all published** — the same query the founder used on 2026-09-17.
+
+WP15.4 set the precedent: **verified against the live dev DB, not only a fresh container.**
+
+## Part D — the backend mapper
+
+- **Map the array to entries; drop Payload's row `id`.**
+- **Every entry's `url` goes through `resolveMediaUrl`.** VO-1 fixed this for the single object two packages ago; **a reshape that reintroduces raw URLs undoes VO-1**, and the test for it must now use a relative URL *inside an array entry*.
+- **The digest check.** For each entry, recompute `sha256` of the slide's narrated text and **omit the entry if it does not match**, with a **structured warning** (Leaf id, slide, narrator, digest prefixes). Find the mapper's existing mechanism for reporting problems rather than inventing one.
+
+  | Slide | Narrated field — both sides must hash exactly this |
+  |---|---|
+  | summary | `summary.body` |
+  | scenario | `scenario.prompt` |
+  | payoff | `payoff.body` |
+  | takeaway | `takeaway.body` |
+  | stickyNotes | **none — omit any entry, with a warning.** Nothing writes it; an unverifiable clip fails closed |
+
+  **Hash the value exactly as Payload returns it** — no trimming, no normalising. The pipeline will hash the value it reads back from Payload; any normalisation on one side only makes *every* clip look stale. That failure is at least loud — the audio disappears — but it is the one to test for.
+- **Fail closed, per entry, never per Leaf.** A stale entry, a missing `durationSeconds`, or **two entries for the same narrator** (keep neither — array order carries no meaning, so there is no "first") each drop that entry and warn. **The Leaf itself stays readable.**
+- **No entries left → no `audio` key at all** (`exactOptionalPropertyTypes`, as today).
+
+## Part E — the backend contract test that `manager.md` described and nobody built
+
+`manager.md` said for weeks that a maximal-fixture test in `apps/backend` fetched content through the backend. **It never existed** (corrected 2026-09-17). The pipeline's round-trip goes pipeline → Payload → pipeline and never calls the backend. **WP15's dropped fields and VO-1's raw audio URLs both lived on the seam no test covers — and this package changes that seam again**, from an object to an array, which is exactly where a fixture written from understanding diverges from what Payload really returns.
+
+**Build it:** author a Track and Leaf in **real Payload** with **every optional field populated** — including audio for **both narrators on all four narrated slides**, with **relative** URLs and correct digests, **plus one entry with a wrong digest and one on `stickyNotes`** — publish them, fetch through the **real backend** as an authenticated reader, and assert every field survives: relative URLs absolute, the stale and `stickyNotes` entries absent, row ids gone.
+
+**Constraints on the test, because of where it runs:**
+- **It must never create, modify or delete anything belonging to Tracks 42 or 50**, or any record it did not create. Whether it uses a dedicated fixture Track in the dev database or an isolated one is your call — **say which and why.**
+- **It cleans up even when it fails.** A failed run must not leave a fixture Track in the founder's Explore screen.
+- **The fixture Track must satisfy `trackSchema`'s requirements, not just Payload's publish gate** — Payload checks two fields, the backend requires seven, and a Track that fails the backend's check is dropped silently. **That will look like "Leaf not found," not like a validation error.**
+- **Live-marked and excluded from the default gate**, like the pipeline's; the run command documented.
+
+**Out of scope**
+- **Anything under `apps/pipeline`.** VO-2's held write path targets the old shape and **will not work against this one** — that is expected, and VO-2.1 reshapes it. **Nobody should run it in between.**
+- Playing audio, the narrator picker, the default narrator — VO-3.
+- `apps/mobile`. Writing any real audio to any real Leaf.
+- The contract test for every other collection — this is the Leaf maximal fixture, which is what `manager.md` names.
+
+**Constraints:** no new runtime dependency. `resolveMediaUrl` already exists. **Structured logging** on every suppressed entry — *nothing fails silently*. Only the pre-push backup and the baseline queries touch the database outside Payload.
+
+**Device gate — the live database and the contract test, not a screen.** Nothing plays audio yet, so there is nothing to see in the app. **What to observe: the before/after counts matching, Ikigai still returning 18 published Leaves anonymously, and the contract test going green against the real backend.** And one thing on a device if you can: **Ikigai still opens and reads normally** after the push. Say plainly which of these you observed.
+
+**Acceptance criteria**
+- [ ] Root `npm run lint`, `npm run typecheck`, `npm test` clean — **report the test and file counts**, and explain any drop from the last package's
+- [ ] A **restorable backup** existed before the push, and its location is stated
+- [ ] **Every dropped audio column proven `NULL`** on `leaves` **and** its versions table before the push — queries and counts shown
+- [ ] **Baseline and post-push counts match**; Tracks 42 and 50 and their 36 Leaves unchanged in `_status` and content
+- [ ] **Anonymous fetch of Track 50's Leaves returns 18 published** after the push
+- [ ] `audioRefSchema` is narrator-keyed with `textDigest`, one entry per narrator enforced, `durationSeconds` required
+- [ ] **A relative URL inside an array entry maps to absolute** — and the test **goes red** with `resolveMediaUrl` removed from the entry path
+- [ ] **A stale digest is dropped with a structured warning** — and the test **goes red** with the digest check removed
+- [ ] **Two entries for one narrator: neither survives** — tested
+- [ ] **The live contract test passes against real Payload and the real backend**, and **goes red** when the mapper maps only the first array entry
+- [ ] **The contract test touched nothing it did not create**, and cleaned up after a deliberately failed run — say how you checked
+- [ ] Nothing under `apps/pipeline` or `apps/mobile` changed
+
+**Testing expectations:** unit tests for every mapper rule above, each mutation-checked **as a separate reversion** — WP33.1 showed that one combined mutation cannot tell a fix from its bodyguard. The contract test is the load-bearing new artefact: **its value is that it contradicts our own understanding of Payload's response**, so if it passes first time with no surprises, look again at what it asserts. Say which evidence is a unit test, which is the live test, which is a database query, and which is you looking.
+
+---
+
 ### Handoff: 2026-09-17 — VO-2: Ikigai, read aloud
 
 *Pipeline Manager. **Suggested model: Opus** — the integration is small and the judgement is the whole package. **72 clips is more than anyone will listen to properly**, and that is exactly the pressure that let Leaf 4's bloom past two human passes, one of them Architect's at sign-off. "Does this sound like a person, or like a machine doing an impression of feeling" is the deliverable.*
