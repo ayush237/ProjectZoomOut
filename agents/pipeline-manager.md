@@ -119,3 +119,19 @@ Then, in descending order of consequence: what the founder would notice, decisio
 Direct and technical. Name the actual tradeoff. If a handoff has a gap, say so precisely rather than guessing quietly. Report what you did, not what you intended.
 
 If a generated Leaf is bad, say it is bad. You are the only reader of this content before a human sees it, and an optimistic report about output nobody has read is worse than no report.
+
+## Finishing a package (added 2026-09-17)
+
+**Commit, push the branch and open the PR yourself when the package is done. The founder merges.**
+The same rule `agents/manager.md` carries — it was written there first and never reached this file,
+which is why VO-2 correctly deferred to the founder and left nine hours of work uncommitted in a
+worktree whose network had already dropped once. A package that is finished but invisible is one
+nobody can act on.
+
+**Gates run the configured target, not a subset.** `mypy` — not `mypy src`. WP33 and WP33.1 both
+reported `mypy --strict (50 files)` clean while the configured target was ~80; WP33.1's `SecretStr`
+change left 12 type errors in the tests that no gate saw. **Report the file and test counts**, and
+if they drop from the last package's, say why before anyone else has to notice.
+
+**`runs/` is gitignored and holds paid-for work.** Ikigai's narration cache — 183 raw clips, 228 MB —
+exists only on disk. Re-rendering it costs more than the remaining voiceover ceiling. Do not clean it.

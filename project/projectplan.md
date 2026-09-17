@@ -102,6 +102,119 @@ quotes aloud would produce an audio reproduction of copyrighted text**, which is
 different posture. A future package asked to "narrate the slide" would cross this without
 noticing. Also in `LEGAL.md` as of this plan.
 
+### ⚠️ Scope changed mid-VO-2: two narrators, and the reader chooses — 2026-09-17
+
+**The founder auditioned six voices in the Pipeline Manager session and chose two** — Achernar
+(female) and Sadaltager (male) — for readers to pick between. **This replaces Ruling 4's sibling,
+"one voice is enough," made earlier the same day.** It is the founder's call and a good one to make
+by ear; it is recorded here because it turned a data-fill into a **content-model change**, and
+that changes the package order below.
+
+**VO-2 stopped at the CMS write, correctly.** `audioRefSchema` holds one reference per slide, so
+there was nowhere to put a second voice. 144 clips are rendered and checked (183 raw renders
+cached, 228 MB, gitignored — **do not clean `ZO-pipeline/apps/pipeline/runs/`**). $1.79 of the $3
+ceiling is spent; **$1.21 remains for everything that follows.**
+
+### The schema ruling — how a slide carries two voices
+
+**Slide audio becomes an array, keyed by narrator, and each entry carries a digest of the text it
+was generated from.** Pipeline Manager's option (a), with three additions.
+
+```ts
+// packages/shared — the only list of narrators anywhere
+export const NARRATOR_IDS = ['female', 'male'] as const;
+
+audioRefSchema = z.object({
+  narrator:        z.enum(NARRATOR_IDS),
+  url:             z.url(),
+  durationSeconds: z.number().positive(),        // now required — every clip is measured
+  textDigest:      z.string().regex(/^[0-9a-f]{64}$/),
+});
+// each slide: audio: z.array(audioRefSchema).optional()  — at most one entry per narrator
+```
+
+**Keys are ZoomOut's, not Google's**, as Pipeline Manager recommended: a narrator can be re-cast
+without breaking a reader's saved choice, and a reader who picked "female" on Ikigai gets the
+female narrator on a second book even if a different Google voice reads it. **`female`/`male` are
+accepted as named** because that is how the founder framed the choice. Adding a second narrator of
+the same gender later needs a new key; the closed enum makes that a deliberate change rather than a
+string someone typed. **The field is `narrator`, not `voice`** — "voice" already means Google's
+name in the pipeline, and the whole point is keeping the two apart.
+
+**Addition 1 — the default narrator lives in app config, never in array order.** Pipeline
+Manager's draft said the player "falls back to the first." **That quietly reintroduces option (b)'s
+flaw through ordering:** if regeneration writes Sadaltager first on one Leaf and Achernar first on
+the next, a reader with no preference hears the narrator change between Leaves. **Array order
+carries no meaning.** Which narrator plays before a reader chooses is a founder ruling, owned by
+VO-3.
+
+**Addition 2 — all narrators or none, per Leaf.** Pipeline Manager already refuses to attach a
+Leaf with one failing clip, because *"three clips and a silent fourth reads as a broken player."*
+**The same logic runs across narrators:** a reader who chose one voice must never be handed the
+other mid-book because the first failed. A Leaf is attached only when every narrator passes on
+every narrated slide.
+
+**Addition 3 — `textDigest`, and the backend drops stale audio.** Reading VO-2's code: the
+pipeline's clip cache correctly includes the text, but **nothing about the source text reaches the
+CMS.** So once audio is attached, **anyone who edits a Leaf's text leaves narration playing that no
+longer matches the screen — and nothing would notice.** Audio is *derived* from text, and this is
+the first derived content in the model. The digest is `sha256` of the narrated field **exactly as
+read back from Payload**, lowercase hex. The backend mapper recomputes it and **omits any entry
+that does not match, with a structured warning** — so a stale clip fails closed, as a missing
+button, rather than as words a reader cannot find on the page. **This is the cheapest moment to add
+it: nothing reads the field and nothing has been written to it.**
+
+**Narrated field per slide, which both sides must agree on exactly:** `summary.body` ·
+`scenario.prompt` · `payoff.body` · `takeaway.body`. **`stickyNotes` has no narrated field, so any
+audio entry there cannot be verified and is omitted.** Fail-safe; nothing writes it.
+
+### Package order, revised
+
+| | | Owner | Model |
+|---|---|---|---|
+| 1 | **Commit VO-2**, push, PR, merge | Pipeline Manager → founder | — |
+| 2 | **VO-1.1** — narrator-keyed audio + `textDigest`, the live DB push, **the backend contract test** | Manager | **Opus** |
+| 3 | **Fix two Leaf texts and publish them** — see below | founder | — |
+| 4 | **VO-2.1** — attach both narrators as drafts; first live run of the upload path | Pipeline Manager | Sonnet |
+| 5 | **Listen to both review tracks** (~59 min) | founder | — |
+| 6 | **Publish the 18 Leaves again** | founder | — |
+| 7 | **VO-3** — player, narrator choice, audio session, the footer | Manager | Sonnet |
+
+**VO-1.1 is Opus, unlike VO-1, because of what it touches.** It pushes a schema change that
+**drops columns** on the database holding your only real books — Payload is in dev push mode (no
+migrations directory), and turning a `group` into an `array` removes the group's columns on both
+`leaves` and its versions table, which makes Drizzle prompt before dropping anything. And its
+contract test creates and deletes content against real Payload. **The code is small; the care is
+the package.**
+
+**The backend contract test comes in now, reversing "not in front of voiceover" from earlier
+today — because the scope changed.** One voice was a data fill; two voices is a content-model
+change, which is precisely the trigger `manager.md` names, **on the exact seam that has now
+produced two silent bugs** (WP15's dropped fields, VO-1's raw audio URLs). A new array field is
+where a fixture written from understanding diverges from what Payload really returns — row `id`s,
+empty arrays versus absent keys — and the fake inherits the blind spot.
+
+**VO-2.1 and VO-3 are not written yet**, for the usual reason: VO-2.1 depends on the array shape
+Payload actually produces, which VO-1.1 discovers.
+
+### Two Leaf texts, fixed by the founder before VO-2.1
+
+Pipeline Manager flagged both because the narrators read them differently from how they are
+written. **Verified against the live CMS 2026-09-17.**
+
+| Leaf | Now | Suggested |
+|---|---|---|
+| **5** (id 267), summary | *"Japanese artisans, known as **takumis**, elevate…"* | *"…known as **takumi**, elevate…"* — Japanese has no plural inflection, and both narrators already say "takumi" |
+| **9** (id 271), payoff | *"…while **small investments and a secondary income stream expose** you to…"* | *"…while **a secondary income stream and small investments expose** you to…"* |
+
+**Leaf 9's sentence is grammatically correct** — the compound subject takes "expose." It reads as a
+slip because a singular noun sits right before a plural verb, and **both narrators said "exposes,"
+which is what a skimming reader will hear in their head too.** Swapping the order puts a plural noun
+against its verb.
+
+**Edit and *publish* — do not just save.** VO-2's attach path refuses a Leaf with unpublished
+changes, deliberately. The four affected clips are re-rendered in VO-2.1 for about $0.05.
+
 ### The `alt` ruling — VO-1's question, decided 2026-09-17
 
 **`Media.alt` stays required for everything, and VO-2 supplies a real descriptive label for each
