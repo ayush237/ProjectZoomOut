@@ -39,6 +39,12 @@ import type { PublishStatus } from './primitives.js';
  * an honest description of every one of them. The field is required in the sense that
  * every Track has one; it is not a gate. Nothing here was removed, narrowed or renamed.
  *
+ * **Thawed a third time for VO-1.1** — `audioRefSchema` goes from a single reserved,
+ * optional reference to a narrator-keyed array (roadmap, ruled 2026-09-17: "the schema
+ * ruling"). Safe precisely because nothing had ever written to it: VO-2 stopped at the
+ * CMS write when the founder chose two narrators, so this is the last moment the shape
+ * changes for free rather than as a migration against real data.
+ *
  * Downstream code may depend on these shapes. A further change requires an Architect
  * ruling and a migration plan for content that already exists, because the CMS
  * enforces the same constraints independently and the two must not drift apart.
@@ -56,16 +62,62 @@ export const SLIDE_KEYS = ['summary', 'scenario', 'payoff', 'stickyNotes', 'take
 export const slideKeySchema = z.enum(SLIDE_KEYS);
 
 /**
- * Reference to a generated audio track for one slide.
+ * The two narrators a reader can choose between (VO-1.1).
  *
- * RESERVED FOR PHASE 2 — voiceover is deferred (PRODUCT.md), and nothing in Phase 1
- * reads this. It exists so that enabling audio later is a data migration rather than
- * a reshaping of the Leaf.
+ * **Keys are ZoomOut's, not Google's.** The pipeline's TTS provider names voices
+ * (Achernar, Sadaltager); this is the identity a reader's saved choice is keyed on, so a
+ * narrator can be re-cast to a different provider voice without breaking that choice.
+ * The field that carries this is `narrator`, never `voice` — "voice" already means the
+ * provider's name in the pipeline, and keeping the two words apart is the point.
+ *
+ * A closed enum rather than a free string: adding a second narrator of the same gender
+ * later is a deliberate change to this list, not a string someone typed once.
+ */
+export const NARRATOR_IDS = ['female', 'male'] as const;
+
+export const narratorIdSchema = z.enum(NARRATOR_IDS);
+
+/**
+ * At most one audio entry per narrator in a slide's `audio` array.
+ *
+ * Enforced here as well as in the CMS (`Leaves.ts`) — the same two-independent-gates
+ * shape every other content invariant in this file uses. Order is not part of the
+ * check and carries no meaning elsewhere either: which narrator plays by default is an
+ * app-config decision (VO-3), never derived from array position.
+ */
+function hasUniqueNarrators(entries: readonly { narrator: string }[]): boolean {
+  return new Set(entries.map((entry) => entry.narrator)).size === entries.length;
+}
+
+/**
+ * Reference to one generated narration clip for one slide, for one narrator.
+ *
+ * Added in VO-1.1, replacing the single optional reference reserved since Phase 1 (see
+ * the frozen-content-model note above) — the founder chose two narrators mid-VO-2, which
+ * turned a data fill into a content-model change.
+ *
+ * `textDigest` is what makes audio safe to serve at all: it is the sole *derived*
+ * content in this model, generated from a slide's narrated text rather than authored
+ * directly, so nothing else here defends against the text being edited after the clip
+ * exists. `textDigest` is `sha256`, lowercase hex, of the narrated field **exactly as
+ * read back from Payload** — the backend mapper recomputes it on every serve and omits
+ * any entry that no longer matches, with a structured warning, rather than serving
+ * narration that no longer matches what is on screen.
  */
 export const audioRefSchema = z.object({
+  narrator: narratorIdSchema,
   url: z.url(),
-  durationSeconds: z.number().positive().optional(),
+  durationSeconds: z.number().positive(),
+  textDigest: z.string().regex(/^[0-9a-f]{64}$/u, 'Must be a lowercase sha256 hex digest'),
 });
+
+/** A slide's audio: zero or more clips, at most one per narrator. */
+const slideAudioSchema = z
+  .array(audioRefSchema)
+  .optional()
+  .refine((entries) => entries === undefined || hasUniqueNarrators(entries), {
+    message: 'At most one audio entry per narrator.',
+  });
 
 /**
  * An illustration attached to a slide. Added in WP15 (Leaf v2).
@@ -128,7 +180,7 @@ export const diagramAssetSchema = imageAssetSchema
 
 export const summarySlideSchema = z.object({
   body: z.string().min(1),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 /**
@@ -163,12 +215,12 @@ export const scenarioSlideSchema = z.object({
   options: scenarioOptionsSchema,
   /** WP15. Optional: every Leaf authored before Leaf v2 has none, and stays valid. */
   image: imageAssetSchema.optional(),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 export const payoffSlideSchema = z.object({
   body: z.string().min(1),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 export const stickyNotesSlideSchema = z.object({
@@ -189,7 +241,7 @@ export const stickyNotesSlideSchema = z.object({
    * says something.
    */
   diagram: diagramAssetSchema.optional(),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 export const takeawaySlideSchema = z.object({
@@ -208,7 +260,7 @@ export const takeawaySlideSchema = z.object({
    * is a migration.
    */
   applyInLife: z.string().min(1).optional(),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 /* -------------------------------------------------------------------------- */
@@ -435,7 +487,7 @@ export const publicScenarioSlideSchema = z.object({
    * everything that was added after it was written.
    */
   image: imageAssetSchema.optional(),
-  audio: audioRefSchema.optional(),
+  audio: slideAudioSchema,
 });
 
 export const publicLeafSchema = baseLeafSchema
@@ -493,6 +545,7 @@ export function isProductionPublishable(content: {
 /* -------------------------------------------------------------------------- */
 
 export type SlideKey = z.infer<typeof slideKeySchema>;
+export type NarratorId = z.infer<typeof narratorIdSchema>;
 export type AudioRef = z.infer<typeof audioRefSchema>;
 export type ImageAsset = z.infer<typeof imageAssetSchema>;
 export type DiagramAsset = z.infer<typeof diagramAssetSchema>;

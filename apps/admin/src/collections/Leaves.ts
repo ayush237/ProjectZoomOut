@@ -1,4 +1,4 @@
-import { DIAGRAM_SPEC_FORMATS, SLIDE_KEYS } from '@zoomout/shared';
+import { DIAGRAM_SPEC_FORMATS, NARRATOR_IDS, SLIDE_KEYS } from '@zoomout/shared';
 import type { CollectionConfig, Field } from 'payload';
 
 import { publishedOrAuthenticated } from '../access/published';
@@ -23,14 +23,6 @@ import type { LeafDocumentInput } from '../validation/types';
  * groups it is structural, in the database, the API and the generated types.
  */
 
-/**
- * Per-slide audio reference, reserved for Phase 2 voiceover.
- *
- * Hidden from the admin UI rather than omitted: the column and the API shape exist
- * from day one, so enabling audio later is a data migration rather than a schema
- * change across three workspaces — but the founder authoring content today is not
- * shown a field they must leave empty.
- */
 /**
  * An illustration on a slide (WP15).
  *
@@ -96,16 +88,74 @@ const diagramField: Field = {
   ],
 };
 
+/**
+ * At most one audio entry per narrator (VO-1.1) — the CMS half of the same rule
+ * `slideAudioSchema` enforces in `packages/shared`. Array order carries no meaning
+ * (the schema ruling), so a collision has no "first" to prefer; this refuses the save
+ * rather than silently keeping one.
+ */
+export function noDuplicateNarrators(value: unknown): true | string {
+  if (!Array.isArray(value)) {
+    return true;
+  }
+
+  const narrators = value
+    .map((row: unknown) => (row as { narrator?: unknown }).narrator)
+    .filter((narrator): narrator is string => typeof narrator === 'string');
+
+  return new Set(narrators).size === narrators.length
+    ? true
+    : 'At most one audio entry per narrator.';
+}
+
+/**
+ * Per-slide narration: one clip per narrator, keyed and digested (VO-1.1).
+ *
+ * An array rather than the single reserved group Phase 1 shipped — the founder chose
+ * two narrators mid-VO-2 (roadmap, "the schema ruling"), and nothing had ever been
+ * written here yet, so the shape could still change for free. `narrator` shares its
+ * option list with `packages/shared`'s `NARRATOR_IDS` — one source for both, so the
+ * CMS and the domain model cannot drift into offering different narrators.
+ *
+ * **Visible and read-only, not hidden.** The founder authors nothing here — the
+ * pipeline writes through the API — but a hand-edited entry would carry a
+ * `textDigest` that matches nothing, and hiding the field would mean the founder
+ * cannot see what audio a Leaf actually carries. `readOnly` is admin-UI only; the
+ * pipeline's machine key still writes through the API exactly as before.
+ */
 const audioField: Field = {
   name: 'audio',
-  type: 'group',
+  type: 'array',
   admin: {
-    hidden: true,
-    description: 'Reserved for Phase 2 voiceover. Unused in Phase 1.',
+    readOnly: true,
+    description:
+      'Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.',
   },
+  validate: noDuplicateNarrators,
   fields: [
-    { name: 'url', type: 'text' },
-    { name: 'durationSeconds', type: 'number', min: 0 },
+    {
+      name: 'narrator',
+      type: 'select',
+      required: true,
+      options: NARRATOR_IDS.map((id) => ({ label: id, value: id })),
+    },
+    { name: 'url', type: 'text', required: true },
+    {
+      name: 'durationSeconds',
+      type: 'number',
+      required: true,
+      min: 0,
+      admin: { description: 'Seconds. Every real clip is measured.' },
+    },
+    {
+      name: 'textDigest',
+      type: 'text',
+      required: true,
+      admin: {
+        description:
+          'sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.',
+      },
+    },
   ],
 };
 

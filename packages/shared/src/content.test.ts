@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
 import {
+  audioRefSchema,
   hasSourceLocator,
   isProductionPublishable,
   leafSchema,
@@ -529,5 +530,78 @@ describe('Leaf v2 assets', () => {
 
     expect(publicLeaf.scenario.image?.alt).toBe('An illustration');
     expect(JSON.stringify(publicLeaf)).not.toContain('isCorrect');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Slide audio — narrator-keyed, VO-1.1                                       */
+/* -------------------------------------------------------------------------- */
+
+describe('VO-1.1 audio', () => {
+  const DIGEST_A = 'a'.repeat(64);
+  const DIGEST_B = 'b'.repeat(64);
+
+  const clip = (narrator: 'female' | 'male', digest = DIGEST_A): z.input<typeof audioRefSchema> => ({
+    narrator,
+    url: 'https://cdn.test/clip.mp3',
+    durationSeconds: 12.5,
+    textDigest: digest,
+  });
+
+  it('accepts a Leaf with no audio on any slide', () => {
+    // The migration plan, restated as a test: nothing has ever written audio, so
+    // every existing fixture must stay valid untouched.
+    const parsed = leafSchema.parse(buildLeafInput());
+
+    expect(parsed.summary.audio).toBeUndefined();
+  });
+
+  it('accepts one clip per narrator on the same slide', () => {
+    const input = buildLeafInput();
+    const result = leafSchema.safeParse({
+      ...input,
+      summary: { ...input.summary, audio: [clip('female'), clip('male')] },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects two entries for the same narrator', () => {
+    // Array order carries no meaning (the schema ruling) — there is no "first" to
+    // prefer, so a collision is rejected rather than silently resolved.
+    const input = buildLeafInput();
+    const result = leafSchema.safeParse({
+      ...input,
+      summary: { ...input.summary, audio: [clip('female', DIGEST_A), clip('female', DIGEST_B)] },
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe('At most one audio entry per narrator.');
+    }
+  });
+
+  it('rejects a textDigest that is not a lowercase sha256 hex string', () => {
+    expect(
+      audioRefSchema.safeParse({ ...clip('female'), textDigest: 'not-a-digest' }).success,
+    ).toBe(false);
+    expect(
+      // Uppercase hex is rejected too — the contract is lowercase, so the mapper's
+      // own lowercase digest can be compared with a plain string equality.
+      audioRefSchema.safeParse({ ...clip('female'), textDigest: DIGEST_A.toUpperCase() }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a clip with no durationSeconds', () => {
+    // Required now, unlike the reserved Phase 1 shape — every real clip is measured.
+    const { durationSeconds: _durationSeconds, ...withoutDuration } = clip('female');
+
+    expect(audioRefSchema.safeParse(withoutDuration).success).toBe(false);
+  });
+
+  it('rejects a narrator outside the closed enum', () => {
+    expect(
+      audioRefSchema.safeParse({ ...clip('female'), narrator: 'robot' }).success,
+    ).toBe(false);
   });
 });

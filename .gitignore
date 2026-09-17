@@ -52,6 +52,10 @@ apps/pipeline/runs/
 # mirror a directory that is rebuilt from the CMS anyway.
 apps/admin/media/
 
+# Pre-migration database backups (VO-1.1 and any future schema push). These hold
+# real content and are large; they belong on disk, never in git history.
+apps/admin/backups/
+
 # Editors and OS
 .DS_Store
 .idea/

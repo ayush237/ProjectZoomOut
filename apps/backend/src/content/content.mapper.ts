@@ -1,12 +1,18 @@
+import { createHash } from 'node:crypto';
+
 import {
   hasSourceLocator,
   leafSchema,
+  NARRATOR_IDS,
   SOURCE_LOCATOR_REQUIRED_MESSAGE,
   trackSchema,
+  type AudioRef,
   type DiagramAsset,
   type DiagramSpecFormat,
   type ImageAsset,
   type Leaf,
+  type NarratorId,
+  type SlideKey,
   type Track,
 } from '@zoomout/shared';
 import type { Leaf as CmsLeaf, Track as CmsTrack } from '@zoomout/shared/cms';
@@ -32,13 +38,24 @@ import type { ZodError } from 'zod';
  *  - `stickyNotes.notes` is `{ note }[]` in Payload, `string[]` in the domain model
  *  - `scenario.options` is a plain array in Payload, a 3-tuple in the domain model
  *  - Payload adds `_status`, timestamps and row ids throughout
- *  - media URLs (`scenario.image.url`, `stickyNotes.diagram.url`, `Track.coverUrl`)
- *    are stored CMS-relative (`/api/media/file/...`); `imageAssetSchema` requires
- *    absolute (WP15.8)
+ *  - media URLs (`scenario.image.url`, `stickyNotes.diagram.url`, `Track.coverUrl`,
+ *    and every slide audio entry's `url`) are stored CMS-relative
+ *    (`/api/media/file/...`); the domain schema requires absolute (WP15.8, VO-1)
+ *  - slide audio (VO-1.1) is narrator-keyed and self-verifying: an entry whose
+ *    `textDigest` no longer matches its narrated field's current text is dropped
+ *    rather than served, because a Leaf's text can be edited after a clip is
+ *    generated and nothing else would notice
  */
 
+/**
+ * A successful mapping also carries non-fatal warnings — content that was withheld
+ * without failing the whole document, the same "degrade, don't blank" shape
+ * `content.repository.ts` already applies one level up for a wholly invalid document.
+ * Today the only source is a stale, invalid or colliding slide-audio entry (VO-1.1);
+ * `mapTrack` always returns an empty list.
+ */
 export type MappingResult<T> =
-  | { readonly ok: true; readonly value: T }
+  | { readonly ok: true; readonly value: T; readonly warnings: readonly string[] }
   | { readonly ok: false; readonly reasons: readonly string[] };
 
 /**
@@ -95,7 +112,7 @@ export function mapTrack(document: CmsTrack, baseUrl: string): MappingResult<Tra
   const parsed = trackSchema.safeParse(candidate);
 
   return parsed.success
-    ? { ok: true, value: parsed.data }
+    ? { ok: true, value: parsed.data, warnings: [] }
     : { ok: false, reasons: describe(parsed.error, `Track ${String(document.id)}`) };
 }
 
@@ -112,15 +129,64 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
     return { ok: false, reasons: [optionIdProblem] };
   }
 
+  const leafId = String(document.id);
+
+  // Each narrated slide is mapped once, up front, so its audio can be verified
+  // against exactly the text this document carries — see `mapAudioEntries`.
+  const { warnings: summaryWarnings, ...summary } = mapBodySlide(
+    document.summary,
+    baseUrl,
+    leafId,
+    'summary',
+  );
+  const { warnings: payoffWarnings, ...payoff } = mapBodySlide(
+    document.payoff,
+    baseUrl,
+    leafId,
+    'payoff',
+  );
+  const scenarioAudio = mapAudioEntries(
+    document.scenario?.audio,
+    document.scenario?.prompt ?? undefined,
+    leafId,
+    'scenario',
+    baseUrl,
+  );
+  // stickyNotes has no narrated field (the roadmap's schema ruling): any entry here
+  // is unverifiable by construction and always omitted.
+  const stickyNotesAudio = mapAudioEntries(
+    document.stickyNotes?.audio,
+    undefined,
+    leafId,
+    'stickyNotes',
+    baseUrl,
+  );
+  const takeawayBody = document.takeaway?.body ?? undefined;
+  const takeawayAudio = mapAudioEntries(
+    document.takeaway?.audio,
+    takeawayBody,
+    leafId,
+    'takeaway',
+    baseUrl,
+  );
+
+  const warnings = [
+    ...summaryWarnings,
+    ...payoffWarnings,
+    ...scenarioAudio.warnings,
+    ...stickyNotesAudio.warnings,
+    ...takeawayAudio.warnings,
+  ];
+
   const candidate = {
-    id: String(document.id),
+    id: leafId,
     trackId: resolveRelationshipId(document.trackId),
     orderIndex: document.orderIndex,
     title: document.title,
     status: mapStatus(document._status),
     isPlaceholder: document.isPlaceholder ?? true,
 
-    summary: mapBodySlide(document.summary, baseUrl),
+    summary,
     scenario: {
       prompt: document.scenario?.prompt ?? undefined,
       options: (document.scenario?.options ?? []).map((option) => ({
@@ -129,24 +195,24 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
         isCorrect: option.isCorrect ?? false,
       })),
       ...optionalImage(document.scenario?.image, baseUrl),
-      ...optionalAudio(document.scenario?.audio, baseUrl),
+      ...(scenarioAudio.audio === undefined ? {} : { audio: scenarioAudio.audio }),
     },
-    payoff: mapBodySlide(document.payoff, baseUrl),
+    payoff,
     stickyNotes: {
       // Payload array rows are objects; the domain model is a plain string list.
       notes: (document.stickyNotes?.notes ?? []).map((row) => row.note ?? ''),
       ...optionalDiagram(document.stickyNotes?.diagram, baseUrl),
-      ...optionalAudio(document.stickyNotes?.audio, baseUrl),
+      ...(stickyNotesAudio.audio === undefined ? {} : { audio: stickyNotesAudio.audio }),
     },
     takeaway: {
-      body: document.takeaway?.body ?? undefined,
+      body: takeawayBody,
       ...(isAbsent(document.takeaway?.dinnerTableKnowledge)
         ? {}
         : { dinnerTableKnowledge: document.takeaway.dinnerTableKnowledge }),
       ...(isAbsent(document.takeaway?.applyInLife)
         ? {}
         : { applyInLife: document.takeaway.applyInLife }),
-      ...optionalAudio(document.takeaway?.audio, baseUrl),
+      ...(takeawayAudio.audio === undefined ? {} : { audio: takeawayAudio.audio }),
     },
 
     sourceReferences: (document.sourceReferences ?? []).map((reference) => ({
@@ -164,13 +230,13 @@ export function mapLeaf(document: CmsLeaf, baseUrl: string): MappingResult<Leaf>
   const parsed = leafSchema.safeParse(candidate);
 
   if (parsed.success) {
-    return { ok: true, value: parsed.data };
+    return { ok: true, value: parsed.data, warnings };
   }
 
   return {
     ok: false,
     reasons: [
-      ...describe(parsed.error, `Leaf ${String(document.id)}`),
+      ...describe(parsed.error, `Leaf ${leafId}`),
       // Zod reports the locator failure as a generic refinement message on the array.
       // Naming the offending entries turns a log line into something actionable.
       ...describeMissingLocators(document),
@@ -199,43 +265,132 @@ function mapStatus(status: 'draft' | 'published' | null | undefined): 'draft' | 
 }
 
 function mapBodySlide(
-  slide: { body?: string | null; audio?: CmsAudio } | undefined,
+  slide: { body?: string | null; audio?: readonly CmsAudioEntry[] | null } | undefined,
   baseUrl: string,
+  leafId: string,
+  slideKey: SlideKey,
 ): {
   body: string | undefined;
-  audio?: { url: string; durationSeconds?: number };
+  audio?: readonly AudioRef[];
+  warnings: readonly string[];
 } {
-  return { body: slide?.body ?? undefined, ...optionalAudio(slide?.audio, baseUrl) };
-}
-
-type CmsAudio = { url?: string | null; durationSeconds?: number | null } | undefined;
-
-/**
- * Emits an `audio` key only when there is a usable URL.
- *
- * Payload writes an empty group rather than omitting it, and the domain model uses
- * `exactOptionalPropertyTypes` — so `{ audio: undefined }` and no `audio` key are
- * different things, and only the latter validates.
- *
- * **Routed through `resolveMediaUrl`, the same as images and `coverUrl` (WP15.8).**
- * Payload serves uploaded media CMS-relative and `audioRefSchema` requires an absolute
- * `z.url()`, so until this ran a relative audio URL didn't just fail to play — it
- * failed validation and could take the whole Leaf down with it.
- */
-function optionalAudio(
-  audio: CmsAudio,
-  baseUrl: string,
-): { audio?: { url: string; durationSeconds?: number } } {
-  if (isAbsent(audio?.url) || audio.url.length === 0) {
-    return {};
-  }
+  const body = slide?.body ?? undefined;
+  const mapped = mapAudioEntries(slide?.audio, body, leafId, slideKey, baseUrl);
 
   return {
-    audio: {
-      url: resolveMediaUrl(audio.url, baseUrl),
-      ...(isAbsent(audio.durationSeconds) ? {} : { durationSeconds: audio.durationSeconds }),
-    },
+    body,
+    ...(mapped.audio === undefined ? {} : { audio: mapped.audio }),
+    warnings: mapped.warnings,
   };
+}
+
+/** One row of a slide's `audio` array, as Payload returns it — nothing trusted yet. */
+interface CmsAudioEntry {
+  readonly narrator?: string | null;
+  readonly url?: string | null;
+  readonly durationSeconds?: number | null;
+  readonly textDigest?: string | null;
+}
+
+/** `sha256`, lowercase hex — the form `audioRefSchema.textDigest` requires. */
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function isNarratorId(value: string | null | undefined): value is NarratorId {
+  return value !== null && value !== undefined && (NARRATOR_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Verifies and resolves one slide's narration, entry by entry (VO-1.1).
+ *
+ * **Fails closed per entry, never per Leaf** — a stale, invalid or colliding clip is
+ * dropped with a warning, the same "degrade, don't blank" shape `optionalImage` and
+ * `optionalDiagram` already use for a missing alt text. The Leaf itself stays
+ * readable; only the narration disappears, the way a missing button would.
+ *
+ * `narratedText` is the exact value of the field this slide's clips are supposed to
+ * have been generated from — `undefined` for `stickyNotes`, which has none. Hashed
+ * exactly as Payload returned it: no trimming, no normalising. The pipeline hashes
+ * the same round-tripped value, so normalising on only one side would make every
+ * clip look stale rather than just the ones that actually are.
+ */
+function mapAudioEntries(
+  rawAudio: readonly CmsAudioEntry[] | null | undefined,
+  narratedText: string | undefined,
+  leafId: string,
+  slideKey: SlideKey,
+  baseUrl: string,
+): { audio?: readonly AudioRef[]; warnings: readonly string[] } {
+  const entries = rawAudio ?? [];
+  if (entries.length === 0) {
+    return { warnings: [] };
+  }
+
+  const warnings: string[] = [];
+  const survivors = new Map<NarratorId, AudioRef>();
+  const collided = new Set<NarratorId>();
+
+  for (const raw of entries) {
+    const label = `Leaf ${leafId}: ${slideKey} audio (narrator ${String(raw.narrator ?? '(none)')})`;
+
+    if (narratedText === undefined) {
+      warnings.push(`${label} — omitted: "${slideKey}" has no narrated field to verify against`);
+      continue;
+    }
+
+    if (!isNarratorId(raw.narrator)) {
+      warnings.push(`${label} — omitted: not a known narrator`);
+      continue;
+    }
+
+    const url = raw.url?.trim() ?? '';
+    if (url.length === 0) {
+      // Payload writes an empty-ish row rather than omitting it, the same as every
+      // other asset group here — no URL means no entry, not a defect worth logging.
+      continue;
+    }
+
+    if (isAbsent(raw.durationSeconds) || raw.durationSeconds <= 0) {
+      warnings.push(`${label} — omitted: no usable durationSeconds`);
+      continue;
+    }
+
+    const digest = raw.textDigest?.trim().toLowerCase() ?? '';
+    const expected = sha256Hex(narratedText);
+    if (digest !== expected) {
+      const got = digest.length > 0 ? `${digest.slice(0, 8)}…` : '(none)';
+      warnings.push(`${label} — omitted: stale textDigest (expected ${expected.slice(0, 8)}…, got ${got})`);
+      continue;
+    }
+
+    if (survivors.has(raw.narrator)) {
+      collided.add(raw.narrator);
+      continue;
+    }
+
+    survivors.set(raw.narrator, {
+      narrator: raw.narrator,
+      url: resolveMediaUrl(url, baseUrl),
+      durationSeconds: raw.durationSeconds,
+      textDigest: digest,
+    });
+  }
+
+  // Array order carries no meaning (the schema ruling), so a collision has no
+  // "first" to prefer — both drop, and the reader gets no narration from either
+  // rather than an arbitrary one.
+  // Array order carries no meaning (the schema ruling), so a collision has no
+  // "first" to prefer — both drop, and the reader gets no narration from either
+  // rather than an arbitrary one.
+  for (const narrator of collided) {
+    survivors.delete(narrator);
+    warnings.push(
+      `Leaf ${leafId}: ${slideKey} has two audio entries for narrator ${narrator} — neither is served`,
+    );
+  }
+
+  return survivors.size === 0 ? { warnings } : { audio: [...survivors.values()], warnings };
 }
 
 type CmsImage =
