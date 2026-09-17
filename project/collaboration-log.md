@@ -27,7 +27,7 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 
 *Pipeline Manager. **Suggested model: Sonnet** — you built this path already; it changes shape, not intent. The one thing that could have failed silently, whether Python and Node hash text identically, **has been verified rather than left to you** (9 of 9 vectors, below).*
 
-> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. `git checkout main && git pull` — **VO-1.1 is merged and the array shape is live in the dev database.** Branch from `origin/main`.
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **This is a linked git worktree, so `git checkout main` will fail** — `main` belongs to the primary checkout at `ZO`. Use **`git fetch origin && git switch -c vo-2.1-attach-narrators origin/main`** instead. (Corrected 2026-09-18: the original text said `git checkout main && git pull`, which is what left this worktree squatting on `main` and blocked the founder.) **VO-1.1 is merged and the array shape is live in the dev database.**
 > **Commit, push and open the PR yourself when done** — added to `agents/pipeline-manager.md` on 2026-09-17; it never reached that file before, which is why VO-2 sat uncommitted.
 > **Read:** this handoff · **your own VO-2 report** · **VO-1.1's completion report** for the shape Payload actually returns · `packages/shared/src/content.ts` (`NARRATOR_IDS`, `audioRefSchema`) **as the source of truth to mirror, not a file to edit** · `agents/pipeline-manager.md`.
 > **Do not read or edit:** `apps/mobile`, `apps/backend`, `apps/admin`, `design/`, `projectRoadmap.md`.

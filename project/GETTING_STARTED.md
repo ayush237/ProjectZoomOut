@@ -78,6 +78,22 @@ git worktree add ../ZO-admin    -b <manager-branch>  main
 git worktree add ../ZO-pipeline -b <pipeline-branch> main
 ```
 
+**⚠️ Never run `git checkout main` in `ZO-admin` or `ZO-pipeline`.** They are *linked* worktrees; `main` is
+checked out by the primary checkout at `ZO`, and git refuses to have one branch in two worktrees:
+`fatal: 'main' is already used by worktree at …`. Worse is the case that *succeeds* — if `ZO` is on a
+feature branch, a linked worktree happily takes `main` and then **`ZO` cannot get it back**, which is
+exactly what happened on 2026-09-18 and blocked the founder mid-handoff.
+
+**Always branch straight from the remote instead:**
+
+```bash
+git fetch origin && git switch -c <your-branch> origin/main
+```
+
+That gets the latest `main` without anyone owning the branch. **`main` lives in `ZO` and nowhere else.**
+Handoffs must say this rather than "checkout main" — two of them said the wrong thing before this note
+existed.
+
 Point Manager at `../ZO-admin` and Pipeline Manager at `../ZO-pipeline`. Same repository, same history, same remotes — separate HEADs, so neither can disturb the other. Architect keeps the original checkout for `project/` and `agents/`.
 
 **The cost, so it is not a surprise:** each worktree needs its own `npm install`, and the pipeline's needs its own `.venv`. Ten minutes, once.
