@@ -166,6 +166,7 @@ export class PayloadContentRepository implements ContentRepository {
 
     for (const result of results) {
       if (result.ok) {
+        this.logWarnings(result.warnings, kind);
         valid.push(result.value);
       } else {
         this.logger.error(
@@ -186,6 +187,7 @@ export class PayloadContentRepository implements ContentRepository {
    */
   private requireValid<T>(result: MappingResult<T>, kind: string): T {
     if (result.ok) {
+      this.logWarnings(result.warnings, kind);
       return result.value;
     }
 
@@ -195,5 +197,19 @@ export class PayloadContentRepository implements ContentRepository {
     );
 
     throw new ContentInvalidError(result.reasons);
+  }
+
+  /**
+   * The `warn` sibling of the `error` calls above — a document that mapped
+   * successfully but had to withhold part of itself. Today the only source is a
+   * stale, invalid or colliding slide-audio entry (VO-1.1): the Leaf is served, the
+   * narration is not, and this is the only record of why.
+   */
+  private logWarnings(warnings: readonly string[], kind: string): void {
+    if (warnings.length === 0) {
+      return;
+    }
+
+    this.logger.warn({ warnings, kind }, 'Content served with some entries withheld');
   }
 }

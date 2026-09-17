@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { TrackAcquisition } from '@zoomout/shared';
 import type { Leaf as CmsLeaf, Track as CmsTrack } from '@zoomout/shared/cms';
 import { describe, expect, it } from 'vitest';
@@ -93,6 +95,30 @@ const expectOk = <T>(result: { ok: boolean; value?: T; reasons?: readonly string
   );
   return result.value as T;
 };
+
+/**
+ * Like `expectOk`, but also surfaces `warnings` — the non-fatal, per-entry channel
+ * VO-1.1 added for dropped audio. Kept separate from `expectOk` rather than widening
+ * it: most existing tests in this file have no opinion on warnings, and asserting an
+ * empty array everywhere would be noise, not coverage.
+ */
+const expectMapped = <T>(
+  result:
+    | { ok: true; value: T; warnings: readonly string[] }
+    | { ok: false; reasons: readonly string[] },
+): { value: T; warnings: readonly string[] } => {
+  expect(
+    result.ok,
+    `expected mapping to succeed, got: ${result.ok ? '' : result.reasons.join(' | ')}`,
+  ).toBe(true);
+  if (!result.ok) {
+    throw new Error('unreachable — the assertion above already failed');
+  }
+  return result;
+};
+
+/** sha256, lowercase hex — computed the same way the mapper computes it, for building fixtures. */
+const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /* -------------------------------------------------------------------------- */
 /* Track                                                                       */
@@ -241,28 +267,6 @@ describe('mapLeaf', () => {
     const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
 
     expect(leaf.scenario.options[2].isCorrect).toBe(false);
-  });
-
-  it('omits audio entirely rather than emitting an empty group', () => {
-    // exactOptionalPropertyTypes makes `{ audio: undefined }` and no key different.
-    const leaf = expectOk(
-      mapLeaf(cmsLeaf({ summary: { body: 'x', audio: { url: null } } }), BASE_URL),
-    );
-
-    expect(leaf.summary).not.toHaveProperty('audio');
-  });
-
-  it('maps audio through when a URL is present', () => {
-    const leaf = expectOk(
-      mapLeaf(
-        cmsLeaf({
-          summary: { body: 'x', audio: { url: 'https://cdn.test/a.mp3', durationSeconds: 30 } },
-        }),
-        BASE_URL,
-      ),
-    );
-
-    expect(leaf.summary.audio).toEqual({ url: 'https://cdn.test/a.mp3', durationSeconds: 30 });
   });
 
   it('omits dinnerTableKnowledge when null rather than passing undefined through', () => {
@@ -571,6 +575,12 @@ describe('media URL resolution', () => {
    * this package exists to catch. `scenario.image.url` and `stickyNotes.diagram.url`
    * are both CMS-relative here — that is the defect; every other field just rides
    * along so the document is real rather than assembled to make the test pass.
+   *
+   * Every `audio` field updated from `{ url: null, durationSeconds: null }` to `[]`
+   * for VO-1.1's group-to-array push — confirmed against the same live Leaf 244
+   * post-push (an anonymous fetch of Track 50 that day showed `"audio":[]`, the same
+   * shape Payload now returns for any untouched Leaf). Nothing else in this fixture
+   * changed; audio was never populated on this Leaf either before or after.
    */
   const REAL_LEAF_244: CmsLeaf = {
     id: 244,
@@ -579,10 +589,7 @@ describe('media URL resolution', () => {
     title: 'Real wealth comes from creating value, not competing for it',
     summary: {
       body: "Wattles argues that true wealth comes from creating new value rather than competing over existing resources. Because he views nature's supply as inexhaustible, you never need to take anything away from others to succeed.",
-      audio: {
-        url: null,
-        durationSeconds: null,
-      },
+      audio: [],
     },
     scenario: {
       prompt:
@@ -610,17 +617,11 @@ describe('media URL resolution', () => {
         width: null,
         height: null,
       },
-      audio: {
-        url: null,
-        durationSeconds: null,
-      },
+      audio: [],
     },
     payoff: {
       body: "By introducing an offering that teaches customers new skills, you create fresh value rather than fighting over the existing pool. Wattles believes true riches are formed on this 'creative plane'\u2014giving more in use value than you take in cash\u2014making them far more permanent than wealth won through competition.",
-      audio: {
-        url: null,
-        durationSeconds: null,
-      },
+      audio: [],
     },
     stickyNotes: {
       notes: [
@@ -645,10 +646,7 @@ describe('media URL resolution', () => {
         spec: '{\n  "kind": "contrast",\n  "nodes": [\n    {\n      "label": "Create new value"\n    },\n    {\n      "label": "Compete for existing resources"\n    },\n    {\n      "label": "Give more in use value than cash value"\n    },\n    {\n      "label": "Rise out of competitive mindset"\n    }\n  ],\n  "left_heading": "Creative Mindset",\n  "right_heading": "Competitive Mindset"\n}',
         specFormat: 'json',
       },
-      audio: {
-        url: null,
-        durationSeconds: null,
-      },
+      audio: [],
     },
     takeaway: {
       body: 'Wattles argues that you never have to beat someone else to succeed; lasting wealth comes from expanding the pie rather than fighting over the slices.',
@@ -656,10 +654,7 @@ describe('media URL resolution', () => {
         'Wattles compares competitive multi-millionaires to prehistoric monster reptiles\u2014necessary for evolutionary development, but ultimately wretched in their private lives and destined to be phased out.',
       applyInLife:
         'Before finalizing your next business deal or sale, evaluate whether what you are providing delivers more practical value to the customer than the cash value you are receiving in return.',
-      audio: {
-        url: null,
-        durationSeconds: null,
-      },
+      audio: [],
     },
     sourceReferences: [
       {
@@ -865,71 +860,280 @@ describe('media URL resolution', () => {
    * below red while every other test in this file, including the absolute-URL one,
    * stays green — the contrast that proves the old coverage never reached this.
    */
-  describe('audio URL resolution (VO-1)', () => {
-    it('resolves a relative audio URL to absolute, the same as images and covers', () => {
-      const leaf = expectOk(
-        mapLeaf(
-          cmsLeaf({ summary: { body: 'x', audio: { url: '/api/media/file/summary.mp3' } } }),
-          BASE_URL,
-        ),
-      );
+  /**
+   * VO-1.1: `audio` went from a single reserved reference to a narrator-keyed array,
+   * each entry carrying a digest of the text it was generated from. The mapper's job
+   * is to verify and resolve each entry independently and fail closed per entry,
+   * never per Leaf (the handoff's own framing).
+   */
+  describe('VO-1.1 slide audio', () => {
+    /** A row shaped the way Payload's array field actually returns it, id included. */
+    const audioRow = (
+      narrator: 'female' | 'male',
+      narratedText: string,
+      overrides: Partial<{
+        url: string;
+        durationSeconds: number;
+        textDigest: string;
+        id: string;
+      }> = {},
+    ): {
+      narrator: 'female' | 'male';
+      url: string;
+      durationSeconds: number;
+      textDigest: string;
+      id: string;
+    } => ({
+      narrator,
+      url: '/api/media/file/clip.mp3',
+      durationSeconds: 12.5,
+      textDigest: sha256(narratedText),
+      id: 'row-1',
+      ...overrides,
+    });
 
-      expect(leaf.summary.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/summary.mp3');
+    describe('omitting audio', () => {
+      it('omits audio entirely when the slide field is absent', () => {
+        // cmsLeaf()'s default sets no audio key at all — the shape every Leaf has
+        // carried since before this package, and must keep carrying.
+        const leaf = expectOk(mapLeaf(cmsLeaf(), BASE_URL));
+
+        expect(leaf.summary).not.toHaveProperty('audio');
+      });
+
+      it('omits audio entirely when the slide carries an empty array', () => {
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: 'x', audio: [] } }), BASE_URL),
+        );
+
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(warnings).toEqual([]);
+      });
+    });
+
+    describe('a valid entry', () => {
+      it('is mapped through with its url resolved to absolute and the row id dropped', () => {
+        const text = 'Placeholder summary.'; // cmsLeaf()'s default summary.body
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [audioRow('female', text)] } }), BASE_URL),
+        );
+
+        expect(leaf.summary.audio).toEqual([
+          {
+            narrator: 'female',
+            url: 'http://127.0.0.1:3001/api/media/file/clip.mp3',
+            durationSeconds: 12.5,
+            textDigest: sha256(text),
+          },
+        ]);
+        expect(warnings).toEqual([]);
+      });
+
+      it('keeps both narrators when each carries its own valid entry', () => {
+        const text = 'Placeholder summary.';
+        const leaf = expectOk(
+          mapLeaf(
+            cmsLeaf({
+              summary: { body: text, audio: [audioRow('female', text), audioRow('male', text)] },
+            }),
+            BASE_URL,
+          ),
+        );
+
+        expect(leaf.summary.audio?.map((entry) => entry.narrator).sort()).toEqual(['female', 'male']);
+      });
+    });
+
+    describe('narrator validity', () => {
+      it('omits an entry whose narrator is not one of the known values, with a warning', () => {
+        const text = 'Placeholder summary.';
+        const row = { ...audioRow('female', text), narrator: 'robot' as 'female' };
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [row] } }), BASE_URL),
+        );
+
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(warnings[0]).toMatch(/Leaf 42/u);
+        expect(warnings[0]).toMatch(/not a known narrator/u);
+      });
+    });
+
+    describe('durationSeconds', () => {
+      /**
+       * Mutation-checked: deleting this check (so a missing/non-positive duration
+       * falls through to the digest comparison) still turns this red, because
+       * `raw.durationSeconds` would then be spread into the mapped entry as
+       * `undefined` and fail `leafSchema`'s `z.number().positive()` — but as a whole
+       * *Leaf* failure, not a per-entry omission. Asserting `leaf.summary.audio` is
+       * absent (not that the Leaf failed to map) is what pins the fail-closed-per-entry
+       * contract rather than just fail-closed-somewhere.
+       */
+      it('omits an entry with no durationSeconds, with a warning', () => {
+        const text = 'Placeholder summary.';
+        const { durationSeconds: _durationSeconds, ...incomplete } = audioRow('female', text);
+        // Cast, with the schema as the check (the same precedent as the diagram
+        // specFormat tests above): Payload's generated type says every row has a
+        // durationSeconds, but a hand-run write or a legacy row is not bound by
+        // that, and this asserts the mapper rejects the row rather than serving it.
+        const row = incomplete as unknown as ReturnType<typeof audioRow>;
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [row] } }), BASE_URL),
+        );
+
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(warnings[0]).toMatch(/durationSeconds/u);
+      });
+
+      it('omits an entry with a non-positive durationSeconds, with a warning', () => {
+        const text = 'Placeholder summary.';
+        const row = audioRow('female', text, { durationSeconds: 0 });
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [row] } }), BASE_URL),
+        );
+
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(warnings[0]).toMatch(/durationSeconds/u);
+      });
     });
 
     /**
-     * `optionalAudio` is called from five places — `mapBodySlide` (summary, payoff)
-     * and directly from scenario, stickyNotes and takeaway. A fix landed on the
-     * function but missed at one call site is exactly the defect this package exists
-     * to remove, so each of the other four is checked independently rather than
-     * trusted by inspection.
+     * The point of this package: a Leaf's text can be edited after its audio is
+     * generated, and this is the only thing that would notice.
      */
-    it('resolves scenario audio too', () => {
-      const leaf = expectOk(
-        mapLeaf(
-          cmsLeaf({
-            scenario: { ...cmsLeaf().scenario, audio: { url: '/api/media/file/scenario.mp3' } },
-          }),
-          BASE_URL,
-        ),
-      );
+    describe('the digest check', () => {
+      it('omits an entry whose textDigest no longer matches the current narrated text, with a warning', () => {
+        const original = 'Placeholder summary.';
+        const edited = 'Placeholder summary, edited after the clip was made.';
+        const row = audioRow('female', original); // digest of the OLD text
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: edited, audio: [row] } }), BASE_URL),
+        );
 
-      expect(leaf.scenario.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/scenario.mp3');
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(leaf.summary.body).toBe(edited); // the text itself still ships
+        expect(warnings[0]).toMatch(/Leaf 42/u);
+        expect(warnings[0]).toMatch(/stale textDigest/u);
+        expect(warnings[0]).toMatch(new RegExp(sha256(edited).slice(0, 8), 'u'));
+      });
+
+      it('hashes the narrated text exactly as stored, with no trimming or normalising', () => {
+        // A digest computed against trimmed text would make this the one case where
+        // an honest, unedited clip looks stale — the opposite of a false positive
+        // being the safe direction everywhere else in this file.
+        const textWithSpace = '  Placeholder summary with padding.  ';
+        const row = audioRow('female', textWithSpace);
+        const leaf = expectOk(
+          mapLeaf(cmsLeaf({ summary: { body: textWithSpace, audio: [row] } }), BASE_URL),
+        );
+
+        expect(leaf.summary.audio).toHaveLength(1);
+      });
     });
 
-    it('resolves payoff audio too', () => {
-      const leaf = expectOk(
-        mapLeaf(
-          cmsLeaf({ payoff: { body: 'x', audio: { url: '/api/media/file/payoff.mp3' } } }),
-          BASE_URL,
-        ),
-      );
+    describe('narrator collisions', () => {
+      /**
+       * Mutation-checked: removing the collision drop (so the loop's last write to
+       * `survivors.set` simply wins) keeps this green on the *value* of the surviving
+       * entry — a "last one wins" bug looks identical to this test's fixture unless it
+       * specifically asserts the array is empty. That is why this asserts absence
+       * rather than checking which of the two entries came through.
+       */
+      it('drops both entries when two share a narrator on the same slide, with a warning', () => {
+        const text = 'Placeholder summary.';
+        const first = audioRow('female', text, { url: '/api/media/file/a.mp3', id: 'row-1' });
+        const second = audioRow('female', text, { url: '/api/media/file/b.mp3', id: 'row-2' });
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [first, second] } }), BASE_URL),
+        );
 
-      expect(leaf.payoff.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/payoff.mp3');
+        expect(leaf.summary).not.toHaveProperty('audio');
+        expect(warnings.some((w) => /two audio entries for narrator female/u.test(w))).toBe(true);
+      });
+
+      it('keeps the other narrator when only one collides', () => {
+        const text = 'Placeholder summary.';
+        const femaleA = audioRow('female', text, { id: 'row-1' });
+        const femaleB = audioRow('female', text, { id: 'row-2' });
+        const male = audioRow('male', text, { id: 'row-3' });
+        const leaf = expectOk(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [femaleA, femaleB, male] } }), BASE_URL),
+        );
+
+        expect(leaf.summary.audio).toEqual([
+          expect.objectContaining({ narrator: 'male' }) as unknown,
+        ]);
+      });
     });
 
-    it('resolves stickyNotes audio too, though it is outside the narration product scope', () => {
-      const leaf = expectOk(
-        mapLeaf(
-          cmsLeaf({
-            stickyNotes: { ...cmsLeaf().stickyNotes, audio: { url: '/api/media/file/notes.mp3' } },
-          }),
-          BASE_URL,
-        ),
-      );
+    describe('stickyNotes has no narrated field to verify against', () => {
+      it('omits a stickyNotes audio entry even when it is otherwise well-formed, with a warning', () => {
+        // "Well-formed" here means a digest of *something* — stickyNotes has no
+        // narrated field for that digest to be checked against, so it is
+        // unverifiable by construction and dropped regardless of its content.
+        const row = audioRow('female', 'anything');
+        const { value: leaf, warnings } = expectMapped(
+          mapLeaf(
+            cmsLeaf({ stickyNotes: { ...cmsLeaf().stickyNotes, audio: [row] } }),
+            BASE_URL,
+          ),
+        );
 
-      expect(leaf.stickyNotes.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/notes.mp3');
+        expect(leaf.stickyNotes).not.toHaveProperty('audio');
+        expect(warnings[0]).toMatch(/stickyNotes/u);
+        expect(warnings[0]).toMatch(/no narrated field/u);
+      });
     });
 
-    it('resolves takeaway audio too', () => {
-      const leaf = expectOk(
-        mapLeaf(
-          cmsLeaf({ takeaway: { body: 'x', audio: { url: '/api/media/file/takeaway.mp3' } } }),
-          BASE_URL,
-        ),
-      );
+    /**
+     * One call site per narrated slide, checked independently rather than trusted by
+     * inspection — `mapAudioEntries` is called from `mapBodySlide` (summary, payoff)
+     * and directly for scenario and takeaway. VO-1 found this exact class of bug: a
+     * fix landed on the function but missed at one call site.
+     *
+     * Mutation-checked by hand: reverting `resolveMediaUrl(url, baseUrl)` to raw
+     * `url` inside `mapAudioEntries` turns every test below red while every
+     * already-absolute fixture elsewhere in this file stays green — the contrast
+     * that proves this file's coverage actually reaches the relative-URL case.
+     */
+    describe('per-slide relative URL resolution', () => {
+      it('resolves summary audio', () => {
+        const text = 'Placeholder summary.';
+        const leaf = expectOk(
+          mapLeaf(cmsLeaf({ summary: { body: text, audio: [audioRow('female', text)] } }), BASE_URL),
+        );
 
-      expect(leaf.takeaway.audio?.url).toBe('http://127.0.0.1:3001/api/media/file/takeaway.mp3');
+        expect(leaf.summary.audio?.[0]?.url).toBe('http://127.0.0.1:3001/api/media/file/clip.mp3');
+      });
+
+      it('resolves scenario audio', () => {
+        const text = 'Placeholder prompt?'; // cmsLeaf()'s default scenario.prompt
+        const leaf = expectOk(
+          mapLeaf(
+            cmsLeaf({ scenario: { ...cmsLeaf().scenario, audio: [audioRow('female', text)] } }),
+            BASE_URL,
+          ),
+        );
+
+        expect(leaf.scenario.audio?.[0]?.url).toBe('http://127.0.0.1:3001/api/media/file/clip.mp3');
+      });
+
+      it('resolves payoff audio', () => {
+        const text = 'Placeholder payoff.';
+        const leaf = expectOk(
+          mapLeaf(cmsLeaf({ payoff: { body: text, audio: [audioRow('female', text)] } }), BASE_URL),
+        );
+
+        expect(leaf.payoff.audio?.[0]?.url).toBe('http://127.0.0.1:3001/api/media/file/clip.mp3');
+      });
+
+      it('resolves takeaway audio', () => {
+        const text = 'Placeholder takeaway.';
+        const leaf = expectOk(
+          mapLeaf(cmsLeaf({ takeaway: { body: text, audio: [audioRow('female', text)] } }), BASE_URL),
+        );
+
+        expect(leaf.takeaway.audio?.[0]?.url).toBe('http://127.0.0.1:3001/api/media/file/clip.mp3');
+      });
     });
   });
 });

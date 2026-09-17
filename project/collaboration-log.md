@@ -678,7 +678,306 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
-### Completed: VO-2 — Ikigai, read aloud — two voices rendered and checked, CMS writes held — 2026-09-17
+### Completed: VO-1.1 — two narrators, a digest, and the contract test that was never there — 2026-09-17
+
+**12 of 12 acceptance criteria met.** Root `lint`, `typecheck` and `test` all clean —
+**1,391 tests across the repo** (shared 77, admin 204, backend 494, mobile 616), up from
+VO-1's 1,367 — **+24, all additions, nothing dropped**: +6 shared (the new `audioRefSchema`
+shape and its narrator-uniqueness refine), +6 admin (`noDuplicateNarrators`, which had zero
+coverage before this — nothing else exercised it), +12 backend (the mapper's audio rewrite
+plus `content.repository.ts`'s new warning-logging path). Branch `vo-1.1-narrator-digest`, off
+`origin/main` at `13dc7c0` (VO-1 and VO-2 both already merged when I started — my checkout was
+stale on `vo-1-audio-path` and I re-read everything from `origin/main` before branching).
+**Not yet pushed** — doing that immediately after this entry, per the handoff's instruction to
+open the PR myself.
+
+**Suggested model was Opus; I ran this on Sonnet 5.** Flagged to the founder before starting,
+given the DB/live-test risk the handoff named — the founder's call was to proceed on Sonnet 5
+rather than switch. Recorded here because the handoff called the model choice out explicitly
+and a future reader comparing packages should know this one didn't follow the recommendation.
+
+| Part | Status |
+|---|---|
+| A — shared schema | ✅ narrator-keyed array, uniqueness refine, `durationSeconds` required |
+| B — Payload field | ✅ array field, visible + read-only, `noDuplicateNarrators` validate |
+| C — the live database | ✅ backed up, proven empty, pushed under supervision, re-verified identical |
+| D — the backend mapper | ✅ per-entry fail-closed filtering, `warnings` channel added to `MappingResult` |
+| E — the live contract test | ✅ passes clean; confirmed red on the named regression; cleanup verified by query |
+
+---
+
+## Part A — the shared schema
+
+`packages/shared/src/content.ts`: `NARRATOR_IDS = ['female', 'male']`, `narratorIdSchema`,
+`audioRefSchema` now `{narrator, url, durationSeconds (required), textDigest (sha256 hex,
+regex-checked)}`. Every slide's `audio` field is `slideAudioSchema` — an array with a
+`.refine` enforcing at most one entry per narrator, factored once and reused across all five
+slides rather than repeated five times. Updated the file's own "frozen content model" banner
+comment with a third "thawed" paragraph, matching the two that already document WP15 and
+WP15.1 — this is exactly the kind of change that comment exists to track.
+
+**Evidence: unit tests**, new `describe('VO-1.1 audio', ...)` block in `content.test.ts` (6
+tests) — accepts no audio, accepts one clip per narrator, rejects two for the same narrator
+(with the exact refine message asserted), rejects a malformed digest (including uppercase —
+the contract is lowercase, checked as a plain string equality by the mapper), rejects a
+missing `durationSeconds`, rejects a narrator outside the enum.
+
+## Part B — the Payload field
+
+`Leaves.ts`: `audioField` is now `type: 'array'`, `admin.readOnly: true` (visible, not
+hidden — the founder can see what's attached; a hand-edited entry would carry a digest that
+matches nothing, so read-only is the honest state), fields `narrator` (select, options built
+from the same `NARRATOR_IDS` shared imports the rest of the collection already reads from
+`@zoomout/shared`), `url`, `durationSeconds`, `textDigest`, all `required: true` at the
+Payload level too — safe to do because the field is machine-authored only, so this never
+blocks a human mid-draft the way `imageFieldParts` deliberately isn't required.
+`noDuplicateNarrators` is a field-level `validate` on the array — the same mechanism
+`scenario.options`' `minRows`/`maxRows` already uses for a structural array constraint,
+rather than routing through `leafRules.ts` (which is for cross-field/publish-readiness rules,
+not this). Exported and given its own `Leaves.test.ts` — **the first test file this
+collection has ever had** — because it is genuine new logic and nothing else touches it; the
+live contract test's fixture happens to be valid, so it would never have noticed this rule
+breaking.
+
+Regenerated `packages/shared/src/cms-generated.ts` via `npm run generate:types
+--workspace=apps/admin` — confirmed this does **not** touch the database at all (ran it,
+watched it complete in under a second with no schema-push prompt, checked the DB schema
+before and after: unchanged). That let me build and fully unit-test Part D against the real
+generated shape before Part C ever touched the live database.
+
+**Evidence:** 6 new unit tests in `Leaves.test.ts`, mutation-checked (disabling the
+uniqueness comparison turns exactly one test red: "rejects two entries for the same
+narrator"). Regenerated types spot-checked by reading the actual diff in
+`cms-generated.ts` (narrator/url/durationSeconds/textDigest all non-nullable within a row,
+because Payload reflects `required: true` inside an array item differently than it does for
+a top-level group field — worth knowing if a future package assumes otherwise).
+
+## Part C — the live database
+
+**The part that could hurt, and where the founder's own hands did the one step I
+mechanically cannot.**
+
+1. **Backup.** `docker exec zoomout-postgres pg_dump -U postgres -d zoomout_cms --format=plain`
+   → `apps/admin/backups/zoomout_cms_pre_vo1.1_20260917_212944.sql` (2.17MB, plain SQL,
+   gitignored — added `apps/admin/backups/` to `.gitignore`). Verified complete: ends with
+   Postgres's own "database dump complete" marker, and `COPY public.leaves (...)` /
+   `COPY public.tracks (...)` both list every column I expected, including all ten audio
+   columns about to be dropped. **Restore:** `docker exec -i zoomout-postgres psql -U
+   postgres -d <a-fresh-database-name> < zoomout_cms_pre_vo1.1_20260917_212944.sql` — into a
+   new database name, not back over `zoomout_cms` directly, so a bad restore can't compound
+   a bad push.
+2. **Proof of emptiness, by query, not assumption.** `SELECT count(*), count(col1),
+   count(col2), ...` (Postgres's `count(col)` already excludes nulls) against all ten audio
+   columns on `leaves` (58 rows) and their `version_*` counterparts on `_leaves_v` (279
+   rows): **every one 0/58 and 0/279.** Full output is in this session's transcript; not
+   re-pasted here since the numbers below already carry the proof.
+3. **Baseline**, recorded to `apps/admin/backups/baseline_*.txt`: 30 Tracks (29 published), 58
+   Leaves (57 published), 90 Track versions, 279 Leaf versions, 201 media, 4 admins. Track 42
+   and Track 50 both `published`, `leafCount` 18 each, exact `updatedAt` recorded. All 36
+   Leaves across both Tracks recorded individually (id, order, title, `_status`,
+   `updatedAt`). Anonymous `GET {payload}/api/leaves?where[trackId][equals]=50` (no auth
+   header — Payload's own `publishedOrAuthenticated` access control) → **18 returned, 18
+   published.**
+4. **Applied under supervision, in a terminal the founder could see and type into — not a
+   non-interactive shell.** `payload run` (via a throwaway script, `getPayload({config})`
+   then exit — deleted immediately after, never committed) triggered drizzle's push prompt.
+   **The exact diff it showed matched my independent, pre-computed expectation
+   column-for-column** — the same 10+10 columns from step 2, nothing else, no other table
+   touched. I showed this to the founder alongside my own verification and asked them to
+   type `y`; they did.
+5. **Re-verified, not just trusted.** Old columns confirmed gone (`\d leaves`, `\d
+   _leaves_v`); ten new tables exist (`leaves_{summary,scenario,payoff,sticky_notes,
+   takeaway}_audio` and their `_leaves_v_version_*` counterparts), **all ten empty, 0
+   rows**. Every baseline number reproduced identically: same totals, Track 42 and 50
+   unchanged (`_status`, `updatedAt`, `leafCount`), **the 36-Leaf detail dump diffed
+   byte-for-byte identical** against the pre-push file. Anonymous Track 50 fetch repeated
+   against a freshly restarted admin server: **18/18 published again**, and `summary.audio`
+   now reads back as `[]` rather than the old group shape.
+
+**One real snag, unrelated to the database itself.** The admin dev server had been running
+for days against the old schema; after the push it needed a restart to pick up the new
+config, and Turbopack's own `.next` cache served a stale pre-bundled `@zoomout/shared` on
+the first restart attempt (`Export NARRATOR_IDS doesn't exist`) even though the rebuilt
+`dist/` on disk was correct — a `.next` wipe fixed it. **The founder was already using the
+admin UI (I could see `GET /admin/collections/leaves/267` in the server log — the exact Leaf
+the roadmap names for a text fix) while I did this**, so I want to be explicit: the restart
+briefly interrupted that server, and I did not warn before killing the first (stale) process.
+Worth a one-line heads-up next time this happens mid-session.
+
+**Evidence:** the `pg_dump` file itself, plus every query and its output (transcript); the
+founder's own confirmation in the terminal; a second, independent anonymous-fetch check
+after the restart.
+
+## Part D — the backend mapper
+
+`content.mapper.ts`: `optionalAudio` is gone, replaced by `mapAudioEntries` — per slide, per
+entry: narrator validity (defensive; Payload's `select` shouldn't admit anything else, but
+`specFormat`'s precedent in this same file says not to trust that), `durationSeconds`
+presence/positivity, digest match (`sha256` of the narrated field **exactly as Payload
+returned it** — no trim, no normalise, checked by its own test), narrator-collision (two
+entries for one narrator → both drop, since array order carries no meaning and there is no
+"first" to prefer). `stickyNotes` has no narrated field, so any entry there is unconditionally
+dropped. Every drop is a warning, never a Leaf failure — `MappingResult<T>`'s success branch
+now carries `warnings: readonly string[]`, and `content.repository.ts`'s `keepValid`/
+`requireValid` gained the `logger.warn` sibling to their existing `logger.error` calls — the
+"mapper's existing mechanism for reporting problems," extended rather than replaced, exactly
+as asked.
+
+**Evidence: unit tests**, `content.mapper.test.ts`'s old `describe('audio URL resolution
+(VO-1)', ...)` block replaced with `describe('VO-1.1 slide audio', ...)` — omission,
+happy-path (both narrators, row id dropped), narrator validity, `durationSeconds` (absent and
+non-positive), the digest check (stale, and a no-trim proof using padded whitespace text),
+narrator collisions (both drop; and a second test confirming an *uncorrelated* narrator
+survives a collision elsewhere), stickyNotes' unconditional drop, and one relative-URL
+resolution test per narrated slide. New `content.repository.test.ts` (3 tests) — the
+repository's first test file — proving `findLeaf` and `listLeavesForTrack` both log via
+`logger.warn` when a mapping succeeds with warnings, and that a clean Leaf logs nothing.
+
+**Every rule mutation-checked by hand, each in isolation, each reverted immediately after —
+not claimed, actually run:**
+
+| Rule disabled | Tests that went red | Everything else |
+|---|---|---|
+| `resolveMediaUrl` on the audio path | 8 — every test using a relative-URL fixture | stayed green |
+| the digest comparison | 1 — exactly the digest-staleness test | stayed green |
+| the collision-drop loop | 2 — both collision tests (the second because "last one wins" still fails its exact-array check) | stayed green |
+| the `durationSeconds` check | 2 — both, failing as a **whole-Leaf** rejection rather than a per-entry one, exactly as predicted in the test's own comment | stayed green |
+| the narrator-validity check | 1 — exactly that test | stayed green |
+| the stickyNotes "no narrated field" guard | 1 — throws a `TypeError` hashing `undefined`, caught cleanly by vitest as a failure | stayed green |
+| `noDuplicateNarrators` (Payload layer) | 1 — exactly that test | stayed green |
+
+No case of "green for the wrong reason" turned up — the closest near-miss was the
+`durationSeconds` mutation, which fails for a *different* reason than its own warning
+message describes (whole-Leaf `safeParse` rejection, not a per-entry omission); the test's
+own comment documents this rather than asserting something the code doesn't do.
+
+## Part E — the backend contract test that `manager.md` described and nobody built
+
+**New:** `content.mapper.test.ts`... no — `content.contract.live.test.ts`, plus
+`vitest.live.config.ts` and `"test:live"` in `package.json`. Excluded from the normal gate by
+a separate config file rather than an `exclude` pattern alone, because an `exclude` in
+`vitest.config.ts` still applies even to a file named explicitly on the command line — a
+plain `exclude` would have meant `vitest run content.contract.live.test.ts` silently ran
+nothing.
+
+**Two credentials, two different systems, deliberately not one.** The pipeline's machine key
+cannot publish (`access/publishing.ts`), so authoring a *published* fixture needs a human
+Payload login — reused `PAYLOAD_ADMIN_EMAIL`/`PAYLOAD_ADMIN_PASSWORD`, the exact pair
+`apps/admin/src/seed/seed.ts` already uses, rather than creating a second identity. A minimal
+Payload REST client is reimplemented locally in the test file (not imported from `apps/admin`
+— that would be a real cross-app dependency for a Next-internal module) after
+`PayloadRestClient` there proved the pattern: JWT login, and — because of the
+`admins JWT <token>`-is-silently-anonymous trap this project has already been bitten by once
+(2026-09-01, a delete loop that reported "0 Leaves deleted" and meant "not logged in") — the
+client asserts `accountType === 'human'` after login rather than trusting a 200. The backend
+read side is a **second,
+unrelated auth system**: a throwaway app reader is created via the real `/auth/signup`
+(falling back to `/auth/login` on a re-run, so it's idempotent rather than accumulating
+throwaway users), and the fetch goes through `/content/tracks/:id` and `/content/leaves/:id`
+with a real bearer token — the same path a reader's phone uses.
+
+**Isolation: a dedicated fixture Track in the existing dev database**, not an isolated
+instance — this project has no tooling to stand up a second Payload, and the existing
+database is what "real Payload" already means for every other check in this package.
+Matched, cleaned and re-created by one fixed, distinctive `bookTitle`
+(`"ZO Live Contract Test Fixture — VO-1.1 (safe to delete)"`) and Leaf `title`, mirroring
+`seed.ts`'s own `RETIRED_TRACK_TITLES` idiom exactly. `beforeAll` deletes any stray copy from
+a previous failed run *before* creating a fresh one; `afterAll` deletes what this run
+created, best-effort (logs, does not throw, so one delete failing cannot mask the other).
+Track 42 and 50 are never queried by id or by any predicate that could match them.
+
+**The fixture is maximal and deliberately uneven**, so one real write proves both the happy
+path and both drop rules: summary/payoff/takeaway carry both narrators with correct digests;
+scenario carries a correct female entry and a **deliberately stale** male one; stickyNotes
+carries one otherwise-well-formed entry that is unconditionally unverifiable. Every other
+optional Leaf field is populated too — scenario image, sticky-notes diagram (with spec and
+format), Dinner Table Knowledge (sourced, so `checkDinnerTableKnowledgeIsSourced` doesn't
+refuse the write), apply-in-life.
+
+**It passed clean on the first real run — and `manager.md`'s own caution is that this is
+exactly when to look again, not relax.** I did: I mutated the mapper (`.slice(0, 1)` on the
+surviving entries, simulating "maps only the first array entry" — the specific regression
+the acceptance criteria name), asked the founder to re-run the live test against the running
+(hot-reloaded) server, and it failed with exactly the right assertion —
+`summary narrators: expected [ 'female' ] to deeply equal [ 'female', 'male' ]`. Reverted,
+confirmed green again via the local suite (I did not ask for a third live run; the revert is
+byte-identical to the first, already-passing version, and root `typecheck`/`test` confirm it
+compiles and the unit suite is undisturbed).
+
+**Cleanup verified by query, not assumed — including after the deliberately failed run.**
+After both the passing run and the failing one, `SELECT ... FROM tracks WHERE book_title LIKE
+'ZO Live Contract Test Fixture%'` and the equivalent for `leaves` both returned **zero rows**.
+vitest's `afterAll` runs on a failed test in the same describe block; this is what confirms
+it actually did, rather than trusting that it should.
+
+**A real, useful side effect: the warning-logging pipe was proven live, not just by unit
+test.** The backend's own structured log from the passing run: `"Leaf 280: scenario audio
+(narrator male) — omitted: stale textDigest (expected 4ab77a0b…, got 453ed5c3…)"` and the
+stickyNotes line beside it, nothing else warned about — independent corroboration of Part D's
+unit-level mutation checks, from a real request against a real database.
+
+**Evidence: one live test** (the round trip itself, and its reverse under the deliberate
+mutation), **one database query** (cleanup verification, both directions), **the backend's
+own structured log line** (the warning pipe, observed rather than inferred), **the founder,
+directly** (ran the live test twice, confirmed both outcomes verbatim in chat).
+
+---
+
+## Where the time went, roughly
+
+Reconnaissance (re-reading from `origin/main`, tracing the auth/db/test conventions already
+in the repo before writing anything) was the largest single share — more than implementation.
+Implementation (Parts A/B/D) was comparatively quick once the shapes were confirmed. Part C
+(backup, proof, push, re-verification) and Part E (the live test, plus two founder-run
+round trips) together were the next largest share, mostly waiting on and verifying real
+systems rather than writing code. The write-up you're reading took a noticeable amount of
+time on its own, given how much needed to be said precisely rather than summarised away.
+
+## What I did not test, and why
+
+- **The device gate.** Could not get a clean "Ikigai still opens" read: `EXPO_PUBLIC_API_URL`
+  defaults to `127.0.0.1:3000`, and port 3000 is held by an unrelated project on this Mac
+  (`NormiesNotebook`) — the same port collision a prior session already recorded. The
+  Ikigai Track screen showed "no Leaves yet" for exactly that reason (no reachable ZoomOut
+  backend on the port the app expects), not because of anything this package changed. The
+  anonymous Payload fetch and the live contract test both exercise the identical data path
+  the app depends on, so I'm confident in the result without the screen — but I did not see
+  the screen itself, and I'm saying so rather than papering over it.
+- **Concurrent writes to the same audio array**, or a mix of a stale digest *and* a narrator
+  collision on the same entry in one write. Both are Tier C — no product path produces either
+  today (VO-2.1 attaches once, all-narrators-or-none), and the per-entry logic treats them as
+  independent checks that would compound correctly by construction, but that is reasoning,
+  not a test.
+- **More than two narrators**, or a Payload row with extra unknown fields — `NARRATOR_IDS`
+  has exactly two entries and nothing plans a third; not worth a test until it's a real case.
+
+## Assumptions made
+
+- **Model:** ran on Sonnet 5 per the founder's explicit choice, not the handoff's suggested
+  Opus (see above).
+- **`generate:types` does not touch the database.** Verified by running it and checking the
+  schema before/after, rather than assumed — but flagging the check itself as an assumption
+  worth someone else's awareness, since it is not documented anywhere and the opposite would
+  have been a reasonable design too.
+- **A dedicated fixture Track in the shared dev database**, not an isolated instance, for
+  Part E — this project has no tooling for the latter, and building it was out of scope.
+
+## Follow-ups for Architect
+
+1. **The port-3000 collision is still live** and blocked this package's device gate exactly
+   as it must have blocked a prior one. Not this package's to fix, but it will keep costing
+   device-gate time on this Mac until either `NormiesNotebook` moves or `EXPO_PUBLIC_API_URL`
+   gets a local override recorded somewhere a session can find it before reaching for the
+   simulator.
+2. **VO-2.1 can now proceed** — the array shape it needs to attach both narrators into exists,
+   live, in the dev database. Per the roadmap, nobody should have run it against the old
+   shape in between, and nobody did (`git status`/`diff --stat` confirm nothing under
+   `apps/pipeline` changed in this branch).
+3. **Restarting the admin dev server mid-session interrupted the founder's own use of it**
+   (see Part C) — worth a one-line "give me a second, restarting the admin server" next time
+   a schema push needs one, rather than doing it silently.
+
+
 
 **6 of 9 acceptance criteria met; 2 are blocked by the founder's mid-package ruling, and 1 — listening to the full tracks — is the founder's, because I cannot hear audio.** The founder heard a six-voice audition and chose **two narrators, for readers to pick between: Achernar (female) and Sadaltager (male)**, then ruled to **hold every CMS write** until Architect rules how a slide stores two voices. `audioRefSchema` is one `{url, durationSeconds}` per slide and `content.ts` is frozen. So **144 clips are rendered, checked and in two review tracks; nothing is uploaded and no Leaf is written.** Branch `vo-2-ikigai-voiceover` in the `ZO-pipeline` worktree, off `origin/main` at `5e9d378` (VO-1 merged). **Not committed**, pending the founder's word.
 

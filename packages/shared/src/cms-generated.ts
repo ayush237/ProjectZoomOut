@@ -229,12 +229,23 @@ export interface Leaf {
   summary?: {
     body?: string | null;
     /**
-     * Reserved for Phase 2 voiceover. Unused in Phase 1.
+     * Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.
      */
-    audio?: {
-      url?: string | null;
-      durationSeconds?: number | null;
-    };
+    audio?:
+      | {
+          narrator: 'female' | 'male';
+          url: string;
+          /**
+           * Seconds. Every real clip is measured.
+           */
+          durationSeconds: number;
+          /**
+           * sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.
+           */
+          textDigest: string;
+          id?: string | null;
+        }[]
+      | null;
   };
   /**
    * A relatable situation with three answer options. Exactly one must be correct — that is the gate that unlocks the Payoff slide.
@@ -276,12 +287,23 @@ export interface Leaf {
       height?: number | null;
     };
     /**
-     * Reserved for Phase 2 voiceover. Unused in Phase 1.
+     * Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.
      */
-    audio?: {
-      url?: string | null;
-      durationSeconds?: number | null;
-    };
+    audio?:
+      | {
+          narrator: 'female' | 'male';
+          url: string;
+          /**
+           * Seconds. Every real clip is measured.
+           */
+          durationSeconds: number;
+          /**
+           * sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.
+           */
+          textDigest: string;
+          id?: string | null;
+        }[]
+      | null;
   };
   /**
    * The deeper explanation, unlocked only after a correct answer.
@@ -289,12 +311,23 @@ export interface Leaf {
   payoff?: {
     body?: string | null;
     /**
-     * Reserved for Phase 2 voiceover. Unused in Phase 1.
+     * Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.
      */
-    audio?: {
-      url?: string | null;
-      durationSeconds?: number | null;
-    };
+    audio?:
+      | {
+          narrator: 'female' | 'male';
+          url: string;
+          /**
+           * Seconds. Every real clip is measured.
+           */
+          durationSeconds: number;
+          /**
+           * sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.
+           */
+          textDigest: string;
+          id?: string | null;
+        }[]
+      | null;
   };
   /**
    * Key points, shown as notes on a board.
@@ -339,12 +372,23 @@ export interface Leaf {
       specFormat?: ('mermaid' | 'json') | null;
     };
     /**
-     * Reserved for Phase 2 voiceover. Unused in Phase 1.
+     * Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.
      */
-    audio?: {
-      url?: string | null;
-      durationSeconds?: number | null;
-    };
+    audio?:
+      | {
+          narrator: 'female' | 'male';
+          url: string;
+          /**
+           * Seconds. Every real clip is measured.
+           */
+          durationSeconds: number;
+          /**
+           * sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.
+           */
+          textDigest: string;
+          id?: string | null;
+        }[]
+      | null;
   };
   /**
    * The one thing to remember, plus an optional deep-cut fact.
@@ -360,12 +404,23 @@ export interface Leaf {
      */
     applyInLife?: string | null;
     /**
-     * Reserved for Phase 2 voiceover. Unused in Phase 1.
+     * Narration clips, written by the pipeline. At most one per narrator. A clip whose text has since changed is dropped at serve time, not deleted here — see textDigest.
      */
-    audio?: {
-      url?: string | null;
-      durationSeconds?: number | null;
-    };
+    audio?:
+      | {
+          narrator: 'female' | 'male';
+          url: string;
+          /**
+           * Seconds. Every real clip is measured.
+           */
+          durationSeconds: number;
+          /**
+           * sha256 (lowercase hex) of the narrated text this clip was generated from. The backend recomputes and compares this on every read.
+           */
+          textDigest: string;
+          id?: string | null;
+        }[]
+      | null;
   };
   /**
    * Where each factual claim comes from. Required for Dinner Table Knowledge, and the audit trail the fair-use position rests on.
@@ -595,8 +650,11 @@ export interface LeavesSelect<T extends boolean = true> {
         audio?:
           | T
           | {
+              narrator?: T;
               url?: T;
               durationSeconds?: T;
+              textDigest?: T;
+              id?: T;
             };
       };
   scenario?:
@@ -621,8 +679,11 @@ export interface LeavesSelect<T extends boolean = true> {
         audio?:
           | T
           | {
+              narrator?: T;
               url?: T;
               durationSeconds?: T;
+              textDigest?: T;
+              id?: T;
             };
       };
   payoff?:
@@ -632,8 +693,11 @@ export interface LeavesSelect<T extends boolean = true> {
         audio?:
           | T
           | {
+              narrator?: T;
               url?: T;
               durationSeconds?: T;
+              textDigest?: T;
+              id?: T;
             };
       };
   stickyNotes?:
@@ -658,8 +722,11 @@ export interface LeavesSelect<T extends boolean = true> {
         audio?:
           | T
           | {
+              narrator?: T;
               url?: T;
               durationSeconds?: T;
+              textDigest?: T;
+              id?: T;
             };
       };
   takeaway?:
@@ -671,8 +738,11 @@ export interface LeavesSelect<T extends boolean = true> {
         audio?:
           | T
           | {
+              narrator?: T;
               url?: T;
               durationSeconds?: T;
+              textDigest?: T;
+              id?: T;
             };
       };
   sourceReferences?:
