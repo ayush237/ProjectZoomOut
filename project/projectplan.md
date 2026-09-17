@@ -284,6 +284,121 @@ Payload's admin list shows it, which turns 72 rows of `leaf-04-payoff.mp3` into 
 
 ---
 
+## Approved: INTRO-1 — the first-run intro, a zoom out through a neuron network — 2026-09-18
+
+**Approved by the founder 2026-09-18** — the four beats, the five rulings and the copy. **Parallel to
+voiceover**: mobile only, no backend, no content, no audio, so it runs while VO-2.1 and VO-3 are in
+flight.
+
+### The finding that shaped it
+
+**The app already draws neurons.** `apps/mobile/src/screens/track/roadmapGeometry.ts` is a pure,
+seeded function — `(states, viewport, seed) → geometry` — emitting nodes with **dendritic arbors**, a
+**spine** of cubic Béziers, and a faint background **web** of unreached tissue. Its own docstring
+records that an earlier mockup was rejected by the founder for reading *"as a constellation, not a
+neuron"*, so **the neuronal quality is already art-directed** rather than something this package
+invents.
+
+`screens/share/constellationLayers.ts` already paints that geometry from `theme.palette` and batches
+curves into one `<Path>` per (colour, width, opacity) — which is what makes a graph this dense
+renderable at all. `TrackRoadmap.tsx` already animates SVG content through a Reanimated
+`Animated.View` wrapper driven by `useSharedValue`. **The exact technique the zoom-out needs is
+already working in this repository.**
+
+So this is a camera move over existing geometry, not a new art project.
+
+**And the intro is a preview of the Track roadmap** — the screen a reader spends their time inside.
+The first thing anyone sees is what the product is, and the product is called ZoomOut. That coherence
+is worth more than the effort it saves.
+
+### The four beats
+
+| # | Line | The camera |
+|---|---|---|
+| 1 | **Your mind is a vast landscape.** | One node at high magnification — a cell body with its dendritic arbors |
+| 2 | **Nothing grows here in a single leap.** | Pulling back; neighbours and the spine curves enter |
+| 3 | **What changes you is how small things connect.** | Still pulling; the `web` and `webDots` resolve |
+| 4 | **Let's zoom out.** | Full graph, and signal travels the spine |
+
+**One continuous camera move across all four, not four slides.** That is what makes it a film rather
+than a carousel, and it is the conceit the product is named after.
+
+**Beat 4's travelling signal is the only genuinely new visual** — an animated `strokeDashoffset` pulse
+along the spine curves. On-system: the network is **teal** (interface) and the pulse is **amber**
+(reward), which is the two-accent split `proposals/design-direction.md` describes.
+
+**Beat 4 is the only beat carrying a control.** Beats 1–3 are film; beat 4 hands off to sign-in, which
+is where *"Let's"* stops being decorative.
+
+### The copy, and the one word changed on review
+
+The founder mixed the final line set from two drafts. The chosen line 3 read *"What changes you is how
+**they** connect"* — which worked in its original set, where the two preceding lines established
+"ideas" as the antecedent. **In this mix nothing plural precedes it, so `they` pointed at nothing.**
+
+On screen the picture supplies the referent. **For a VoiceOver reader hearing four lines, and for the
+Reduce Motion still frame, it does not** — and those are exactly the two readers the composition
+approach exists to serve. Changed to `small things`, which also earns the zoom inside the copy:
+*vast landscape* → *small things* → connected.
+
+**Lines are five to eight words by design, not only by taste.** The founder's first draft of line 3 ran
+seventeen words; at the largest OS text setting that is the line that clips, against a live debt entry
+about exactly that. The constraint improved the writing.
+
+### The five rulings, approved 2026-09-18
+
+| Question | Ruling |
+|---|---|
+| When does it play? | **First launch only, before sign-in** — a device-local flag on the `zoomout.soundEnabled` SecureStore pattern |
+| Skippable? | **Yes, from the first frame.** An App Store reviewer meets this screen too |
+| Advance | **Auto-advance on one continuous zoom**; tap skips ahead. Tap-to-advance would break the single camera move |
+| Duration | **12–16 seconds** |
+| Existing installs on update | **No.** It is a first-run piece |
+
+### Built as a composition, not a video file
+
+| Reason | What a video loses |
+|---|---|
+| **Theme** | A composition reads `theme.palette` and is correct in dark *and* light for free. A video bakes one theme, needs two exports, and drifts the moment a token changes |
+| **Text** | Real `<Text>` on the app's `typography` **scales with the OS text setting and is read by VoiceOver.** Baked text does neither — a deliberate accessibility regression on the one surface every single user sees, in an app carrying a live large-text clipping debt |
+| **Reduce Motion** | A video cannot honour it. A composition swaps to cross-fades: **the poetry survives, the motion does not** |
+| **Cost** | No new dependency and no multi-MB asset. `react-native-svg` 15.15.4 and `react-native-reanimated` 4.5.1 are already dependencies |
+
+**The honest counter-argument, recorded rather than waved away:** a hand-crafted After Effects piece
+can be more beautiful than anything procedural. It is less true here, because the geometry is already
+art-directed and a *camera move over existing geometry* is where procedural is strongest.
+
+### Where it sits, and how it relates to onboarding
+
+**Install → intro → sign-in/sign-up → age gate → account → onboarding's five beats → Leaf 1.**
+
+They stay separate, and account creation sits between them, so first run is not seven taps in a row.
+
+**One refinement to the onboarding section above: the intro now carries the emotional job, so
+onboarding beat 1 keeps only the contract** — 15 minutes, one book, you will have to think. A narrowing
+of beat 1, not a contradiction of it.
+
+**Both packages edit `RootNavigator.tsx`, at different points** — the intro ahead of `AuthStack`,
+onboarding after `signedIn`. Sequential in time, so this is a note rather than a conflict.
+
+### Three risks
+
+**Performance is the real one.** The geometry reports a `pathCount` and the drawing code batches paths
+deliberately. Animating a zoom re-renders that every frame, and the batching is what keeps it viable.
+**Smoothness is a physical-device observation; the simulator is not a performance signal.**
+
+**The intro needs a synthetic graph.** `layoutRoadmap` takes real Leaf states and the intro has no
+Track, so it needs a fixed state array and a **fixed seed** — which is what a brand moment wants
+anyway, since it should be identical on every install and every device. **Render several seeds, look
+at them, pick the prettiest**; do not take the first one that runs.
+
+**Reduce Motion needs a designed fallback, not a disabled animation.** Four lines cross-fading over a
+still frame of the finished network. `src/design/reduceMotionCallSites.test.tsx` is the mechanical
+guard — **verified 2026-09-18 rather than cited from memory**: it spies on Reanimated and renders each
+surface **twice**, accommodation on and off. **The intro is standalone-renderable and generates its own
+fixture, so unlike `TrackRoadmap`'s `NextNodeRing` it can join that guard rather than be excluded from
+it.**
+
 ## Approved, gated on VO-3: the onboarding flow — 2026-09-18
 
 **Approved by the founder 2026-09-18** — the shape below and all five recommendations. **Not handed
@@ -316,7 +431,7 @@ That is permission rather than limitation: show the real books and let the reade
 
 | # | Beat | What it does |
 |---|---|---|
-| 1 | **The promise** | One screen, not a carousel. What this is and what it costs: 15 minutes, one book, you will have to think |
+| 1 | **The promise** | One screen, not a carousel. **Narrowed 2026-09-18 to the contract only** — 15 minutes, one book, you will have to think — because INTRO-1 now carries the emotional job before sign-in |
 | 2 | **Pick your first book** | The real Tracks as full-bleed cards, one line of promise each. Picking adds to Library through the existing mechanic |
 | 3 | **Choose your narrator** | Two cards, female and male, each with a play button and a real sample. **The ruled beat** |
 | 4 | **Into Leaf 1** | Lands in the player, not the catalogue |

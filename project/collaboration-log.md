@@ -23,6 +23,97 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-18 — INTRO-1: the first-run intro
+
+*Manager. **Suggested model: Sonnet** — the design is written out in full below, including which modules to reuse and the technique to use; what is left is wiring and care, not judgement. **The one aesthetic call — which seed looks best — is the founder's at the device gate**, per the 2026-09-09 ruling. Parallel to the voiceover stream: mobile only, no backend, no content, no audio.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-admin`. **This is a linked git worktree, so `git checkout main` will fail** — `main` belongs to the primary checkout at `ZO`. Use **`git fetch origin && git switch -c intro-1-first-run origin/main`**.
+> **Commit, push and open the PR yourself when done.**
+> **Read:** this handoff · `apps/mobile/src/screens/track/roadmapGeometry.ts` (the geometry you consume — **read it, never edit it**) · `apps/mobile/src/screens/share/constellationLayers.ts` (how that geometry gets painted and batched) · `apps/mobile/src/screens/track/TrackRoadmap.tsx` (the Reanimated-over-SVG technique, already working) · `apps/mobile/src/design/motion.ts` · `apps/mobile/src/design/reduceMotionCallSites.test.tsx` · `apps/mobile/src/sound/SoundProvider.tsx` (the SecureStore preference pattern) · `agents/manager.md`.
+> **Do not read or edit:** `apps/backend`, `apps/admin`, `apps/pipeline`, `projectRoadmap.md`, `projectplan.md`.
+
+### Task: INTRO-1 — the first-run intro, a zoom out through a neuron network
+
+**Context:** This is the first thing anyone sees after installing ZoomOut — a ~14-second poetic cold open that plays once, before sign-in. It is not a feature tour. It dramatises the product's name by pulling the camera back from a single neuron to a connected network, and it doubles as a preview of the Track roadmap screen readers will live in.
+
+**Objective:** On first launch the app plays a four-beat, continuously zooming animation over a neuron graph, with four lines of display type, then hands off to sign-in. It never plays again on that install — whether the reader watched it or skipped it. It is correct in both themes, at every OS text size, and under Reduce Motion.
+
+**Scope:**
+- **New** `apps/mobile/src/screens/intro/` — the screen, the beat timing, the synthetic graph fixture, and an intro-local painter if the shared one does not fit
+- **New** a seen-flag store — follow `src/sound/SoundProvider.tsx`'s SecureStore pattern and key it `zoomout.introSeen`
+- `apps/mobile/src/navigation/RootNavigator.tsx` — the insertion point, ahead of `AuthStack`
+- `apps/mobile/src/design/reduceMotionCallSites.test.tsx` — register the new animated surface
+- Tests alongside each of the above
+
+Verify this list against the repository rather than trusting it.
+
+**Requirements:**
+
+- **The four lines, verbatim.** Any difference is a defect, including punctuation:
+  1. `Your mind is a vast landscape.`
+  2. `Nothing grows here in a single leap.`
+  3. `What changes you is how small things connect.`
+  4. `Let's zoom out.`
+- **One continuous camera move across all four beats**, not four slides cutting between scales. Beat 1 sits at high magnification on a single node and its dendritic arbors; by beat 4 the whole graph is in frame. The zoom does not stop and restart at beat boundaries — **the text cross-fades over a camera that never stops moving.**
+- **Consume `layoutRoadmap` from `roadmapGeometry.ts`.** Pass a fixed synthetic `LeafNodeState[]` and a **hardcoded seed**, so the intro draws an identical graph on every install, every launch and every device.
+- **Choose the seed by looking.** Render several, screenshot them, pick the one that reads best, and **say in your report which seeds you compared.** Do not take the first one that runs.
+- **Total duration 12–16 seconds**, with beat 4 holding long enough to read before the control is reachable.
+- **Beat 4 carries the only control** — the hand-off to sign-in. Beats 1–3 carry no affordance but the skip.
+- **A skip control, live from the very first frame**, not only once a beat completes.
+- **Beat 4's travelling signal**: an animated `strokeDashoffset` pulse along the spine curves, in the **amber reward accent** against the **teal** network. This is the only new visual in the package.
+- **Both exit paths set the flag** — finishing and skipping. See the acceptance criteria; this is the failure this package is most likely to ship.
+- **Every animation routes through `motionTimingConfig` / `motionSpringConfig`** so `REDUCE_MOTION_OVERRIDE` is spliced in. Never reach for `ReduceMotion` directly — `motion.ts` is the only place it is imported in `apps/mobile`, and it stays that way.
+- **Under Reduce Motion the animation is swapped, never removed:** the four lines cross-fade over a still frame of the finished network. All four lines still appear; the network is still drawn.
+- **Text is real `<Text>` on the app's `typography`** — `display` variant, centred. **Not Caveat**, which is the sticky-note voice.
+- Colour, spacing and duration come from `src/design/`. **No new tokens and no literals.**
+
+**Out of scope:**
+- **`roadmapGeometry.ts`, `roadmapModel.ts`, `TrackRoadmap.tsx`** — read and reuse, never edit. They are tested across 15–30 Leaves and this package must not disturb that.
+- **`screens/share/constellationLayers.ts`** — reuse `buildDoneConstellationLayers` if it fits your needs. **If it does not, write an intro-local painter; do not modify the share one.**
+- **Onboarding's five beats** — a separate, later package. This one ends at sign-in.
+- **Sound.** The intro is silent; the sound layer has no assets yet.
+- `apps/backend`, `apps/admin`, `packages/shared`.
+- Any new dependency. `react-native-svg` and Reanimated 4 are already present and are all this needs.
+
+**Constraints:**
+- **Batch curves into one `<Path>` per (colour, width, opacity)**, the way `constellationLayers.ts` does. Thousands of individual `<Path>` elements will not render; dozens will.
+- Animate a wrapping `Animated.View`'s transform, the way `TrackRoadmap.tsx` already does. Do not animate the SVG `viewBox` attribute.
+- The flag read must not flash the auth stack before the intro appears. `RootNavigator` already has a `restoring` state for exactly this shape of problem — follow it.
+
+**Inherited knowledge, so a `/clear` does not lose it:**
+- **Reduce Motion ON makes the iOS Simulator swallow every touch in the bottom ~15% of the screen** behind an invisible debugger banner. Turn it off with `xcrun simctl spawn <udid> defaults write com.apple.Accessibility ReduceMotionEnabled -bool NO`. **You will be toggling Reduce Motion deliberately in this package, so you will meet this.**
+- Screenshot pixel space is not the tool's tap-point space — that was the real cause of WP21–23's tap trouble.
+- `simctl` switches theme and text size with zero taps; the route is in WP24's and WP26's log entries.
+
+**Device gate** — what to observe, before any criterion below is claimed:
+
+*Yours, on the simulator:*
+- The four lines are **legible in dark and in light**, with the theme switched during playback rather than between runs
+- Every line is **fully on screen at the largest OS text size** — no clipped glyph, no truncation, no line pushed off the bottom
+- With **Reduce Motion on, all four lines still arrive and the finished network is still drawn** — nothing is missing, only the movement
+- The **skip control responds on the very first frame**
+- **After finishing, relaunching goes straight to sign-in. After skipping, relaunching also goes straight to sign-in.** Both, separately
+
+*Flagged for the founder, on a physical iPhone — do not claim these yourself:*
+- Whether it reads as **one continuous camera move** rather than four slides
+- Whether the zoom **runs smoothly at the densest frame**, which is where the web and webDots resolve
+
+**Acceptance criteria:**
+- [ ] The four lines render in order and a test asserts the **exact strings**, so a transcription slip cannot reach published copy
+- [ ] **Shown exactly once, both exit paths pinned separately:** one test drives the intro to completion and asserts the flag is set; a **second test skips it and asserts the flag is set**; a third asserts that with the flag already set, `RootNavigator` renders `AuthStack` and the intro never mounts. *A test that only exercises the completed path passes while skip silently leaves the flag unset — name and exercise both.*
+- [ ] The intro is registered in `reduceMotionCallSites.test.tsx` and **rendered twice there, accommodation on and off**, matching the three surfaces already covered
+- [ ] Under Reduce Motion, a test asserts all four lines still render and the network is still drawn — the swap, not a removal
+- [ ] The graph is generated from a **fixed seed and fixed synthetic states**, with a test asserting identical geometry across repeated calls
+- [ ] Every animated call site in the intro passes a config built by `motionTimingConfig` / `motionSpringConfig`; `ReduceMotion` is imported nowhere outside `motion.ts`
+- [ ] **No file under `src/screens/track/` or `src/screens/share/` is modified** — confirm from the diff, not from memory
+- [ ] `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` pass — **and your report states the test count and the typechecked file count**, so they can be compared against the previous package's
+
+**Testing expectations:** Unit tests for the seen-flag store (set, read, and the unset default) and for the beat sequencing. Component tests for the intro screen covering both themes, the four strings, and the Reduce Motion branch. The `reduceMotionCallSites` registration is a guard, not a substitute for the component tests. No e2e — this package has no backend surface.
+
+**One thing to flag rather than fix:** if `buildDoneConstellationLayers` turns out not to fit, say so in your report with the reason. That is a finding about a shared primitive, and it is worth more than a silent fork.
+
+---
+
 ### Handoff: 2026-09-18 — VO-2.1: attach both narrators
 
 *Pipeline Manager. **Suggested model: Sonnet** — you built this path already; it changes shape, not intent. The one thing that could have failed silently, whether Python and Node hash text identically, **has been verified rather than left to you** (9 of 9 vectors, below).*
