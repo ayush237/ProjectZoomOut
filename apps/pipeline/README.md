@@ -79,6 +79,10 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_SCENARIO_CANDIDATES` | no | Default 3. How many illustrations the human chooses between at gate 2. |
 | `ZOOMOUT_PIPELINE_DRAFT_MODEL` | no | Also derives the scene plan — one text call per Track. |
 | `ZOOMOUT_PIPELINE_MAX_IMAGES_PER_TRACK` | no | Default 70. **Halts** a run rather than warning — see `assets/budget.py`. |
+| `ZOOMOUT_PIPELINE_NARRATION_VOICE` | for `narrate` | The narrator, chosen by `audition-voices`. No default on purpose. |
+| `ZOOMOUT_PIPELINE_NARRATION_MODEL` | no | Default `gemini-2.5-flash-tts`, over Cloud Text-to-Speech. |
+| `ZOOMOUT_PIPELINE_NARRATION_LANGUAGE` | no | Default `en-US`. |
+| `ZOOMOUT_PIPELINE_MAX_NARRATION_USD` | no | Default 3.0. Counted across every voiceover invocation on a run; **halts** before any call whose worst case would cross it. |
 
 ```bash
 export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline"
@@ -242,6 +246,75 @@ that actually decide whether a Track ships cannot be measured** — does this pl
 this scenario, is there text in the frame, is there a light bloom, is there a hand attached to
 nobody. All of those are absolute prohibitions or hard requirements with no mechanical gate,
 and Track 42's published Leaf 1 breaches two of them right now.
+
+## Voiceover: `audition-voices` and `narrate` (VO-2)
+
+Four slides per Leaf are read aloud — `summary.body`, `scenario.prompt`, `payoff.body`,
+`takeaway.body` — through **Cloud Text-to-Speech** (`gemini-2.5-flash-tts`), billed to the Vertex
+project. A voice set is one narrator for a whole book. The founder chose **two** after the
+2026-09-17 audition, for readers to pick between: **Achernar** (female) and **Sadaltager** (male).
+A Leaf stores one audio reference per slide today, so how a slide carries two is an open contract
+question (`content.ts` is frozen) and `narrate` is run `--render-only` until it is ruled.
+
+**Never `sourceReferences[].quote`.** Those are the book's verbatim words, and reading them
+aloud would be an audio reproduction of copyrighted text (`LEGAL.md`, "Narration"). The list of
+readable fields is `assets/narration.py:NARRATED_FIELDS`, asserted exactly by
+`tests/test_narration_selection.py`; the TTS client takes a `NarrationLine` and nothing else.
+
+```bash
+export ZOOMOUT_PIPELINE_MAX_NARRATION_USD=3.0   # the ruled ceiling, counted across invocations
+
+# Choose the narrator by ear. Nothing is written to the CMS.
+uv run zoomout-pipeline audition-voices --run-id ikigai \
+  --voice Sulafat --voice Achird --line 4:scenario --line 10:takeaway --undirected
+
+# Render (free for anything already rendered), check, and build the review track only —
+# one run per voice; each writes runs/<run>/audio/review/<book>-narration-<voice>.{mp3,md,html}:
+uv run zoomout-pipeline narrate --run-id ikigai --voice Achernar --render-only --max-attempts 3 --listen-for moai
+uv run zoomout-pipeline narrate --run-id ikigai --voice Sadaltager --render-only --max-attempts 3 --listen-for moai
+
+# Then attach, as drafts (single-voice shape; waits for the two-voice ruling):
+uv run zoomout-pipeline narrate --run-id ikigai --voice <voice> --listen-for moai
+```
+
+| Step | What happens | Why |
+|---|---|---|
+| Direction | `prompts/narration_direction.md`, shared block + one per slide type | Per type, never per clip — it has to survive a second book |
+| Synthesis | LINEAR16, cached under a hash of everything asked | Nothing paid for is bought twice; a new voice or direction is a new clip |
+| Budget | Reserves the **longest response Cloud TTS can return** before each call | A clip's length is the model's choice; the ceiling is a stop, not a report |
+| Levelling | Every clip to the same speech loudness, 60 ms head, 350 ms tail, breath cut | A set, not 72 files; VO-3's player can rely on how a clip ends |
+| Encoding | 64 kbps mono mp3, measured by decoding the uploaded bytes | `Media` accepts `audio/mpeg` only; `durationSeconds` is measured, not estimated |
+| Guard | A **blind** transcript (Gemini on Vertex), compared word by word | A clip that says other words is a fabrication in an author's name |
+| Pace | Words per minute **of speech**, pauses excluded, must be 100–330 | Catches a spoken direction even when the transcriber leaves it out |
+| Attach | Find-then-upload by content hash, one whole-group draft PATCH per Leaf, both versions re-fetched | Partial group PATCHes null siblings (WP19); the live Leaf must not move |
+| Review | One mp3 of the whole book in reading order, with a cue sheet of where to listen | Nothing else hears the 72 as a set |
+
+A clip that still fails the guard or the pace check after its attempts (`--max-attempts`, 1–3,
+default 2; attempts already on disk are reused) is **not attached**: its Leaf is held, named, and
+left in the review track for a person. Spend is written back to the run after every call, and a
+timed-out call is charged even when no clip came back.
+
+**Run one `narrate` at a time per run.** Two processes on one run would race on its cost ledger.
+
+**The first direction was read aloud.** It began "Read the text exactly as written: every word,
+in order…", and Gemini-TTS spoke everything after the colon before the Leaf text in 12 of 13
+audition clips. The transcriber left it out of nine of those transcripts. A style prompt
+describes delivery; it never tells the model to read anything.
+
+**Checking which door was used** — Google's own request counts, per service, for the project:
+
+```bash
+TOKEN=$(gcloud auth print-access-token)
+curl -s -G -H "Authorization: Bearer $TOKEN" \
+  "https://monitoring.googleapis.com/v3/projects/zoomout-vertex/timeSeries" \
+  --data-urlencode 'filter=metric.type="serviceruntime.googleapis.com/api/request_count" AND resource.labels.service="texttospeech.googleapis.com"' \
+  --data-urlencode "interval.startTime=$(date -u -v-3H +%Y-%m-%dT%H:%M:%SZ)" \
+  --data-urlencode "interval.endTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
+
+Swap the service for `generativelanguage.googleapis.com` to confirm the Developer API saw
+nothing. `status --run-id <id>` prints the narration transport the run recorded, with the
+endpoint read off the client that made the calls.
 
 ## Rewriting one Leaf: `rewrite-leaf`
 

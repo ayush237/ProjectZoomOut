@@ -6,7 +6,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.llm.client import GeminiClient, LLMError
@@ -72,8 +72,10 @@ def test_a_validation_error_does_not_render_the_keys_it_was_given() -> None:
     payload_secret = "payload-live-lookalike-secret-abc123xyz"
 
     with pytest.raises(ValidationError) as error:
-        # `database_url` omitted deliberately — the exact trigger from WP33's report.
-        PipelineSettings(gemini_api_key=gemini_secret, payload_api_key=payload_secret)
+        # `database_url` omitted deliberately — the exact trigger from WP33's report. Raw
+        # strings on purpose: they are what the environment hands pydantic, and the leak this
+        # guards against lived on that path, so the call is untyped here by design.
+        PipelineSettings(gemini_api_key=gemini_secret, payload_api_key=payload_secret)  # type: ignore[call-arg, arg-type]
 
     rendered = str(error.value)
     assert gemini_secret not in rendered
@@ -100,8 +102,12 @@ def test_the_credential_fields_do_not_repr_their_value() -> None:
     not touch that one — they are independent, and each needs its own assertion or one of
     them can regress silently behind the other passing.
     """
+    # Raw strings, as the environment supplies them — the coercion to `SecretStr` is the
+    # thing under test, so the call is untyped here by design.
     settings = PipelineSettings(
-        database_url=_DB, gemini_api_key="gemini-secret-42", payload_api_key="payload-secret-42"
+        database_url=_DB,
+        gemini_api_key="gemini-secret-42",  # type: ignore[arg-type]
+        payload_api_key="payload-secret-42",  # type: ignore[arg-type]
     )
 
     assert "gemini-secret-42" not in repr(settings.gemini_api_key)
@@ -121,6 +127,6 @@ def test_the_embed_pace_is_configurable_because_vertex_quotas_differ() -> None:
 
     assert settings.embed_requests_per_minute == 600
     assert (
-        PipelineSettings(database_url=_DB, gemini_api_key="k").embed_requests_per_minute
+        PipelineSettings(database_url=_DB, gemini_api_key=SecretStr("k")).embed_requests_per_minute
         == DEFAULT_EMBED_REQUESTS_PER_MINUTE
     )

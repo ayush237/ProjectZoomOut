@@ -21,6 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.types import Command
 from psycopg.rows import dict_row
+from pydantic import SecretStr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -50,7 +51,7 @@ ANALYSIS = BookAnalysis(
 
 def _dependencies(database_url: str, runs_dir: str) -> NodeDependencies:
     settings = PipelineSettings(
-        database_url=database_url, gemini_api_key="unused", runs_dir=Path(runs_dir)
+        database_url=database_url, gemini_api_key=SecretStr("unused"), runs_dir=Path(runs_dir)
     )
 
     @contextmanager

@@ -20,6 +20,10 @@ dependencies = [
     "typer>=0.15",
     "pillow>=12.3.0",
     "anthropic[vertex]>=1.2.0",
+    "google-cloud-texttospeech>=2.37.0",
+    "numpy>=2.1",
+    "lameenc>=1.8.1",
+    "miniaudio>=1.61",
 ]
 
 [project.scripts]

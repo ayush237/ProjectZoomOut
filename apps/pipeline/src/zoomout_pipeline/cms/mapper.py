@@ -12,8 +12,12 @@ and there is no code path that sets it otherwise.
 
 from __future__ import annotations
 
+import copy
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
+from zoomout_pipeline.assets.narration import NARRATED_GROUPS
 from zoomout_pipeline.db.retrieval import Passage
 from zoomout_pipeline.models import (
     UNKNOWN_AUTHOR,
@@ -324,3 +328,166 @@ def rewritten_leaf_patch(
 
     patch["sourceReferences"] = source_references(record, passages)
     return patch
+
+
+# ------------------------------------------------------------------------------- VO-2
+
+
+# Fields that change on every write or that the write itself sets. Everything else a Leaf
+# holds must read back exactly as it was.
+_VOLATILE_LEAF_KEYS = frozenset({"updatedAt", "createdAt", "_status"})
+
+
+@dataclass(frozen=True)
+class AudioRef:
+    """One slide's narration, in Payload's own shape: `{url, durationSeconds}`."""
+
+    url: str
+    duration_seconds: float
+
+    def payload(self) -> dict[str, Any]:
+        return {"url": self.url, "durationSeconds": self.duration_seconds}
+
+
+def narration_patch(
+    *, existing: Mapping[str, Any], audio: Mapping[str, AudioRef]
+) -> dict[str, Any]:
+    """A PATCH body that adds narration to a Leaf **without touching anything else on it.**
+
+    **Whole groups, copied from the document as Payload holds it.** WP19 proved on the
+    scenario group that a partial PATCH nulls the siblings it omits, so
+    `{"summary": {"audio": …}}` would erase the summary's body. Each narrated group is sent
+    complete: a deep copy of `existing[group]` — every field, including ones this module has
+    never heard of, and array rows with their ids — with only `audio` replaced.
+    `scenario_patch` rebuilds its group field by field; this one does not, because four groups
+    rebuilt by hand is four chances to drop a field the schema grew after this was written.
+
+    `existing` is the **draft** document, fetched immediately before this call. Only the four
+    narrated groups can appear in the patch; anything else is refused.
+    """
+    unknown = sorted(set(audio) - set(NARRATED_GROUPS))
+    if unknown:
+        raise ValueError(f"narration may only write {NARRATED_GROUPS}; asked for {unknown}")
+
+    patch: dict[str, Any] = {}
+    for group, ref in audio.items():
+        current = existing.get(group)
+        if not isinstance(current, Mapping) or not current:
+            raise ValueError(
+                f"the Leaf has no {group!r} group to carry forward; refusing to write one "
+                "that would hold nothing but audio"
+            )
+        whole = copy.deepcopy(dict(current))
+        whole["audio"] = ref.payload()
+        patch[group] = whole
+    return patch
+
+
+def _content(value: Any) -> Any:
+    """A value with array-row ids removed, for comparing what a document *says*.
+
+    Row ids are Payload's bookkeeping for which row is which. They are sent back unchanged,
+    but a comparison that failed on a regenerated id would report damage where the content
+    is intact — and the content is what a reader sees.
+    """
+    if isinstance(value, Mapping):
+        return {key: _content(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [
+            _content({k: v for k, v in item.items() if k != "id"})
+            if isinstance(item, Mapping)
+            else _content(item)
+            for item in value
+        ]
+    return value
+
+
+def _without_audio(value: Any) -> Any:
+    if not isinstance(value, Mapping):
+        return value
+    return {key: item for key, item in value.items() if key != "audio"}
+
+
+def pending_changes_besides_narration(
+    *, draft: Mapping[str, Any], live: Mapping[str, Any]
+) -> list[str]:
+    """Fields where a Leaf's latest draft differs from its live version, narration aside.
+
+    **A draft write lands on top of whatever the latest draft already is.** If a Leaf is
+    carrying unpublished edits, the founder's next publish — the one that is meant to add
+    audio — would ship those edits too, and nobody would have decided that. So a non-empty
+    answer stops the write. Differences inside `audio` are excluded, because that is what a
+    re-run of this package itself leaves behind.
+    """
+    changed: list[str] = []
+    for key in sorted((set(draft) | set(live)) - _VOLATILE_LEAF_KEYS):
+        was, now = live.get(key), draft.get(key)
+        if key in NARRATED_GROUPS:
+            was, now = _without_audio(was), _without_audio(now)
+        if _content(was) != _content(now):
+            changed.append(key)
+    return changed
+
+
+@dataclass(frozen=True)
+class WriteCheck:
+    """What a re-fetch showed about one write. Evidence, not the PATCH response."""
+
+    order: int
+    problems: tuple[str, ...]
+
+    @property
+    def passed(self) -> bool:
+        return not self.problems
+
+
+def verify_narration_write(
+    *,
+    order: int,
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    audio: Mapping[str, AudioRef],
+) -> WriteCheck:
+    """Whether the **re-fetched** draft carries exactly the audio written, and nothing else
+    moved.
+
+    Every key the Leaf has is compared, not only the four groups: a write that kept the
+    summary's body and lost `sourceReferences` would pass a sibling check scoped to the
+    groups it meant to touch, and `sourceReferences` is the audit trail.
+    """
+    problems: list[str] = []
+    for group, ref in audio.items():
+        stored = (after.get(group) or {}).get("audio") or {}
+        if stored.get("url") != ref.url:
+            problems.append(f"{group}.audio.url is {stored.get('url')!r}, wrote {ref.url!r}")
+        duration = stored.get("durationSeconds")
+        if not isinstance(duration, int | float) or abs(duration - ref.duration_seconds) > 1e-6:
+            problems.append(
+                f"{group}.audio.durationSeconds is {duration!r}, wrote {ref.duration_seconds}"
+            )
+
+    for key in sorted((set(before) | set(after)) - _VOLATILE_LEAF_KEYS):
+        was, now = before.get(key), after.get(key)
+        if key in audio:
+            was, now = _without_audio(was), _without_audio(now)
+        if _content(was) != _content(now):
+            problems.append(f"{key} changed")
+    return WriteCheck(order=order, problems=tuple(problems))
+
+
+def verify_live_untouched(
+    *, order: int, before: Mapping[str, Any], after: Mapping[str, Any]
+) -> WriteCheck:
+    """Whether the **published** Leaf is exactly as it was, and still published.
+
+    The machine key cannot edit a live document, and the whole arrangement — audio waits in a
+    draft until the founder publishes again — rests on that staying true. So it is checked
+    from the outside on every Leaf rather than trusted from the access rule.
+    """
+    problems: list[str] = []
+    if after.get("_status") != "published":
+        problems.append(f"_status is {after.get('_status')!r}, not 'published'")
+    for key in sorted((set(before) | set(after)) - {"updatedAt"}):
+        if _content(before.get(key)) != _content(after.get(key)):
+            problems.append(f"live {key} changed")
+    return WriteCheck(order=order, problems=tuple(problems))

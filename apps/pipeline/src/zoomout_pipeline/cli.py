@@ -19,7 +19,9 @@ from langgraph.types import Command
 
 from zoomout_pipeline.config import (
     FreeTierForbiddenError,
+    NarrationTransportError,
     get_settings,
+    require_cloud_tts,
     require_paid_tier,
 )
 from zoomout_pipeline.db.engine import ForeignDatabaseError, connect, describe_database
@@ -28,7 +30,7 @@ from zoomout_pipeline.db.schema import apply_schema
 from zoomout_pipeline.graph.state import PipelineState
 from zoomout_pipeline.logging import configure_logging, get_logger
 from zoomout_pipeline.measure import run_samples, summarise
-from zoomout_pipeline.models import Acquisition
+from zoomout_pipeline.models import Acquisition, TransportRecord
 from zoomout_pipeline.runner import run_context
 
 app = typer.Typer(
@@ -101,6 +103,43 @@ def open_run_for_models(graph: Any, run_id: str) -> PipelineState:
         acquisition=record.acquisition.value,
     )
     return state
+
+
+def open_run_for_narration(graph: Any, run_id: str) -> tuple[PipelineState, TransportRecord]:
+    """A run's checkpoint, for a command that will speak its Leaves — and the second door.
+
+    **`open_run_for_models` first, not instead.** Narration also calls Gemini, to listen to
+    what it made, so the paid-tier constraint applies exactly as it does anywhere else. Then
+    the Cloud TTS transport is decided by its own check, because the paid-tier check has
+    never heard of it. Both happen before a client exists.
+
+    Returns the state and the narration `TransportRecord`, still without its `endpoint`: that
+    is read off the constructed client by the caller, and only then written to the run.
+    """
+    state = open_run_for_models(graph, run_id)
+    try:
+        record = require_cloud_tts(state.acquisition, get_settings())
+    except NarrationTransportError as refusal:
+        typer.secho(f"\n{refusal}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(2) from None
+    return state, record
+
+
+def record_narration_transport(
+    graph: Any, run_id: str, record: TransportRecord, endpoint: str
+) -> TransportRecord:
+    """Write the narration door onto the run, with the endpoint the client really reached."""
+    completed = record.model_copy(update={"endpoint": endpoint})
+    graph.update_state({"configurable": {"thread_id": run_id}}, {"narration_transport": completed})
+    _log.info(
+        "run.narration_transport",
+        run_id=run_id,
+        transport=completed.transport.value,
+        project=completed.project,
+        model=completed.model,
+        endpoint=completed.endpoint,
+    )
+    return completed
 
 
 @app.command()
@@ -259,6 +298,12 @@ def status(run_id: Annotated[str, typer.Option()]) -> None:
         )
     else:
         typer.echo("transport  : (not recorded — run predates WP32)")
+    if state.narration_transport is not None:
+        spoken = state.narration_transport
+        typer.echo(
+            f"narration  : {spoken.transport.value} ({spoken.project}) via {spoken.endpoint} "
+            f"— {spoken.model}"
+        )
     typer.echo(f"acquisition: {state.acquisition.value}")
     typer.echo(f"book       : {state.provenance.title if state.provenance else '(not ingested)'}")
     typer.echo(f"chapters   : {state.chapter_count}")
@@ -1276,6 +1321,528 @@ def contact_sheet_command(
 
     written = write_contact_sheet(paths, destination, columns=columns)
     typer.secho(f"{len(paths)} images -> {written}", fg=typer.colors.GREEN, bold=True)
+
+
+# ------------------------------------------------------------------------------ VO-2
+
+
+class RunLedger:
+    """A run's spend, written back to its checkpoint on every entry.
+
+    **Per call, not per Leaf.** The first Sadaltager run lost its network mid-Leaf; spend was
+    only written back after a whole Leaf, so a clip that was paid for and saved to disk never
+    reached the ledger, and had to be found by reconciling the two afterwards.
+    """
+
+    def __init__(self, graph: Any, run_id: str, cost: Any) -> None:
+        self._graph = graph
+        self._config = {"configurable": {"thread_id": run_id}}
+        self.cost = cost
+
+    def record(self, spend: Any) -> None:
+        self.cost.record(spend)
+        self._graph.update_state(self._config, {"cost": self.cost})
+
+
+class _Narration:
+    """What both voiceover commands need, opened and checked once.
+
+    Everything that can refuse — the paid-tier check, the Cloud TTS check, the CMS identity,
+    the Leaf count — refuses here, before the first clip is bought.
+    """
+
+    def __init__(self, graph: Any, deps: Any, run_id: str, *, guard: bool) -> None:
+        from zoomout_pipeline.assets.budget import NarrationBudget
+        from zoomout_pipeline.assets.speech import SpeechClient
+        from zoomout_pipeline.cms.client import PayloadClient
+        from zoomout_pipeline.graph.narration_nodes import (
+            ClipStore,
+            Guard,
+            narration_spent_usd,
+        )
+
+        self.graph = graph
+        self.run_id = run_id
+        self.config = {"configurable": {"thread_id": run_id}}
+        self.state, transport = open_run_for_narration(graph, run_id)
+        state = self.state
+        if state.cms_track_id is None or not state.cms_leaf_ids or state.provenance is None:
+            typer.secho(f"run {run_id} has no Leaves in Payload to narrate", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        settings = deps.settings
+        self.client: PayloadClient = deps.payload_client or PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+        )
+        # **Who, before what.** A wrong auth scheme is served as anonymous with a 200, drafts
+        # vanish, and an empty Track reads as "nothing to do".
+        identity = self.client.whoami()
+        if not identity.get("email"):
+            typer.secho(
+                "Payload served this key as ANONYMOUS — refusing to continue. Check "
+                "ZOOMOUT_PIPELINE_PAYLOAD_API_KEY.",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            raise typer.Exit(1)
+
+        leaves = self.client.list_leaves(track_id=state.cms_track_id)
+        found = {int(leaf["id"]) for leaf in leaves}
+        expected = set(state.cms_leaf_ids.values())
+        if found != expected:
+            typer.secho(
+                f"Track {state.cms_track_id}: Payload returned {len(found)} Leaves and the run "
+                f"wrote {len(expected)} ({sorted(found ^ expected)} differ). Refusing to narrate "
+                "a Track whose Leaves are not the ones this run knows.",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            raise typer.Exit(1)
+        self.leaves: list[dict[str, Any]] = sorted(leaves, key=lambda leaf: int(leaf["orderIndex"]))
+
+        self.speech = SpeechClient(
+            project=settings.vertex_project,
+            model=settings.narration_model,
+            language_code=settings.narration_language,
+        )
+        self.transport = record_narration_transport(
+            graph, run_id, transport, endpoint=self.speech.endpoint
+        )
+        self.budget = NarrationBudget(
+            ceiling_usd=settings.max_narration_usd, spent_usd=narration_spent_usd(state.cost)
+        )
+        self.store = ClipStore(Path(settings.runs_dir) / run_id / "audio")
+        self.guard = Guard(llm=deps.llm, model=settings.analyze_model) if guard else None
+        self.book_title = state.provenance.title
+        self.ledger = RunLedger(graph, run_id, state.cost)
+
+        typer.echo(
+            f"cms        : {identity.get('email')} ({identity.get('accountType', '?')}), "
+            f"Track {state.cms_track_id}, {len(self.leaves)} Leaves"
+        )
+        typer.echo(
+            f"narration  : {self.transport.transport.value} via {self.transport.endpoint} "
+            f"({self.transport.project}), {self.transport.model}"
+        )
+        typer.echo(
+            f"listening  : {self.guard.model if self.guard else 'OFF — no clip will be checked'}"
+        )
+        typer.echo(f"budget     : {self.budget.report()}")
+        typer.echo(f"audio      : {self.store.root}\n")
+
+    def leaf_at(self, order: int) -> dict[str, Any]:
+        for leaf in self.leaves:
+            if int(leaf["orderIndex"]) == order:
+                return dict(leaf)
+        typer.secho(f"no Leaf at orderIndex {order}", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    def record(self, spend: Any) -> None:
+        self.ledger.record(spend)
+
+    def checkpoint(self, **values: Any) -> None:
+        """Spend is written back after every Leaf, so an interrupted run keeps its ledger."""
+        self.graph.update_state(self.config, {"cost": self.state.cost, **values})
+
+
+def _clip_line(clip: Any) -> str:
+    severity = clip.severity.value if clip.severity is not None else "unchecked"
+    cached = " (cached)" if clip.from_cache else ""
+    retried = f", {clip.attempts_made} attempts" if clip.attempts_made > 1 else ""
+    return (
+        f"{clip.line.slide.value:<9}{clip.duration_seconds:>6.1f}s  {severity:<9}{retried}{cached}"
+    )
+
+
+@app.command("audition-voices")
+def audition_voices(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves supply the lines.")],
+    voice: Annotated[
+        list[str], typer.Option(help="A prebuilt Gemini-TTS voice. Repeat for several.")
+    ],
+    line: Annotated[
+        list[str], typer.Option(help="ORDER:SLIDE, e.g. 4:scenario. Repeat for several.")
+    ],
+    undirected: Annotated[
+        bool,
+        typer.Option(
+            help="Also render every line in the first voice with no direction at all, to "
+            "hear what the direction changes."
+        ),
+    ] = False,
+    guard: Annotated[bool, typer.Option(help="Listen to every clip with the guard.")] = True,
+) -> None:
+    """The same lines in several voices, in one file, for a person to choose between.
+
+    **Nothing is written to the CMS.** The clips are real Leaf text, directed exactly as
+    `narrate` would direct them, and cached under the same keys — so the chosen voice's
+    audition clips are reused by the real run rather than bought twice.
+
+    No regeneration here: an audition is a measurement of how each voice behaves, and quietly
+    retrying the one that misread a word would hide the thing being measured.
+    """
+    from zoomout_pipeline.assets.budget import BudgetExceededError
+    from zoomout_pipeline.assets.narration import (
+        NarratedSlide,
+        direction_for,
+        narration_script,
+        title_slug,
+    )
+    from zoomout_pipeline.assets.review_track import consistency, join_in_order, write_review
+    from zoomout_pipeline.assets.speech import SpeechError
+    from zoomout_pipeline.graph.narration_nodes import render_line
+
+    voices = list(dict.fromkeys(v.strip() for v in voice if v.strip()))
+    if not voices:
+        typer.secho("give at least one --voice", fg=typer.colors.RED)
+        raise typer.Exit(2)
+
+    wanted: list[tuple[int, Any]] = []
+    for spec in line:
+        order_text, _, slide_text = spec.partition(":")
+        try:
+            wanted.append((int(order_text), NarratedSlide(slide_text.strip())))
+        except ValueError:
+            typer.secho(f"--line {spec!r} is not ORDER:SLIDE", fg=typer.colors.RED)
+            raise typer.Exit(2) from None
+
+    with run_context() as (graph, deps):
+        session = _Narration(graph, deps, run_id, guard=guard)
+        chosen = []
+        for order, slide in wanted:
+            script = narration_script(session.leaf_at(order))
+            chosen.append(next(item for item in script if item.slide is slide))
+
+        directed: list[Any] = []
+        plain: list[Any] = []
+        try:
+            for narrated in chosen:
+                for name in voices:
+                    clip = render_line(
+                        line=narrated,
+                        speech=session.speech,
+                        voice=name,
+                        prompt=direction_for(narrated.slide),
+                        store=session.store,
+                        budget=session.budget,
+                        record=session.record,
+                        guard=session.guard,
+                        max_attempts=1,
+                    )
+                    directed.append(clip)
+                    typer.echo(f"  {narrated.label:<22} {name:<14} {_clip_line(clip)}")
+                    session.checkpoint()
+                if undirected:
+                    clip = render_line(
+                        line=narrated,
+                        speech=session.speech,
+                        voice=voices[0],
+                        prompt="",
+                        store=session.store,
+                        budget=session.budget,
+                        record=session.record,
+                        guard=session.guard,
+                        max_attempts=1,
+                    )
+                    plain.append(clip)
+                    typer.echo(
+                        f"  {narrated.label:<22} {voices[0] + ' (none)':<14} {_clip_line(clip)}"
+                    )
+                    session.checkpoint()
+        except (BudgetExceededError, SpeechError) as error:
+            typer.secho(f"\nHALTED: {error}", fg=typer.colors.RED, bold=True)
+
+    if not directed:
+        raise typer.Exit(1)
+
+    folder = session.store.root / "audition"
+    slug = title_slug(session.book_title)
+    heard = [clip.heard(session.book_title) for clip in directed]
+    report = consistency(heard)
+    preamble = [
+        f"Voices: {', '.join(voices)}. Model `{session.speech.model}` via "
+        f"`{session.speech.endpoint}`.",
+        "Each line is read by every voice in turn, in the order listed; a longer gap separates "
+        "one line from the next.",
+    ]
+    track, cues = join_in_order(
+        heard, same_group=lambda a, b: (a.line.order, a.line.slide) == (b.line.order, b.line.slide)
+    )
+    written = [
+        write_review(
+            destination=folder / f"{slug}-audition",
+            heading=f"{session.book_title} — voice audition",
+            preamble=preamble,
+            track=track,
+            cues=cues,
+            report=report,
+            show_voice=True,
+        )
+    ]
+    for name in voices:
+        own = [clip for clip in heard if clip.voice == name]
+        own_track, own_cues = join_in_order(own, same_group=lambda a, b: False)
+        written.append(
+            write_review(
+                destination=folder / f"{slug}-voice-{name.lower()}",
+                heading=f"{session.book_title} — {name}",
+                preamble=[f"{name} alone, every audition line."],
+                track=own_track,
+                cues=own_cues,
+                report=consistency(own),
+                show_voice=True,
+            )
+        )
+    if plain:
+        pairs: list[Any] = []
+        for clip in plain:
+            twin = next(
+                c
+                for c in directed
+                if c.voice == voices[0]
+                and c.line.slide is clip.line.slide
+                and c.line.order == clip.line.order
+            )
+            pairs.extend(
+                [
+                    replace_voice(clip.heard(session.book_title), f"{voices[0]} undirected"),
+                    replace_voice(twin.heard(session.book_title), f"{voices[0]} directed"),
+                ]
+            )
+        ab_track, ab_cues = join_in_order(
+            pairs,
+            same_group=lambda a, b: (a.line.order, a.line.slide) == (b.line.order, b.line.slide),
+        )
+        written.append(
+            write_review(
+                destination=folder / f"{slug}-direction-ab",
+                heading=f"{session.book_title} — {voices[0]}, without and with direction",
+                preamble=[
+                    "Each line twice: first with no style prompt at all, then with the "
+                    "slide type's direction. If the two sound the same, the direction is not "
+                    "doing anything."
+                ],
+                track=ab_track,
+                cues=ab_cues,
+                report=consistency(pairs),
+                show_voice=True,
+            )
+        )
+
+    typer.echo("")
+    for files in written:
+        typer.echo(f"  {files.page}")
+    typer.secho(f"\n{session.budget.report()}", fg=typer.colors.GREEN, bold=True)
+
+
+def replace_voice(clip: Any, label: str) -> Any:
+    """The same heard clip under a different voice label, for an A/B sheet."""
+    from dataclasses import replace
+
+    return replace(clip, voice=label)
+
+
+@app.command("narrate")
+def narrate(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be read aloud.")],
+    voice: Annotated[
+        str, typer.Option(help="The narrator. Defaults to ZOOMOUT_PIPELINE_NARRATION_VOICE.")
+    ] = "",
+    limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
+    render_only: Annotated[
+        bool, typer.Option(help="Render, check and build the review track; write nothing.")
+    ] = False,
+    guard: Annotated[bool, typer.Option(help="Listen to every clip with the guard.")] = True,
+    listen_for: Annotated[
+        list[str] | None,
+        typer.Option(help="A word to flag for pronunciation in the cue sheet. Repeatable."),
+    ] = None,
+    max_attempts: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            max=3,
+            help="Attempts per clip when the guard or the pace check fails it. Attempts "
+            "already on disk are reused, so raising this re-buys only clips that still fail.",
+        ),
+    ] = 2,
+) -> None:
+    """Read a run's Leaves aloud: render, check, attach as drafts, and build the review track.
+
+    **Writes drafts only.** The Leaves are published; each write lands as a pending draft
+    version, and the live Leaf has no audio until a human publishes it again.
+
+    Re-running is safe and free for anything already done: clips are cached by what was
+    asked, uploads are found by the hash of their bytes before being made, and a Leaf whose
+    draft already carries exactly this audio is verified rather than written again.
+    """
+    from zoomout_pipeline.assets.budget import BudgetExceededError
+    from zoomout_pipeline.assets.narration import direction_for, narration_script, title_slug
+    from zoomout_pipeline.assets.narration_guard import GuardSeverity
+    from zoomout_pipeline.assets.review_track import consistency, join_in_order, write_review
+    from zoomout_pipeline.assets.speech import SpeechError
+    from zoomout_pipeline.graph.narration_nodes import (
+        NarrationHeldError,
+        NarrationWriteError,
+        attach_leaf_narration,
+        render_line,
+    )
+
+    narrator = voice or get_settings().narration_voice
+    if not narrator:
+        typer.secho(
+            "no narrator. Choose one by audition (`audition-voices`) and pass --voice, or set "
+            "ZOOMOUT_PIPELINE_NARRATION_VOICE.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(2)
+
+    rendered: list[Any] = []
+    halted = ""
+    failed: list[str] = []
+    held: list[str] = []
+    with run_context() as (graph, deps):
+        session = _Narration(graph, deps, run_id, guard=guard)
+        typer.echo(f"narrator   : {narrator}{' — render only' if render_only else ''}\n")
+        narration = dict(session.state.cms_narration)
+        leaves = session.leaves[:limit] if limit else session.leaves
+
+        for leaf in leaves:
+            order = int(leaf["orderIndex"])
+            key = str(order)
+            leaf_id = int(leaf["id"])
+            if session.state.cms_leaf_ids.get(key) != leaf_id:
+                typer.secho(
+                    f"leaf {order}: Payload id {leaf_id} is not the id this run wrote "
+                    f"({session.state.cms_leaf_ids.get(key)}). Stopping.",
+                    fg=typer.colors.RED,
+                    bold=True,
+                )
+                raise typer.Exit(1)
+
+            try:
+                clips = [
+                    render_line(
+                        line=narrated,
+                        speech=session.speech,
+                        voice=narrator,
+                        prompt=direction_for(narrated.slide),
+                        store=session.store,
+                        budget=session.budget,
+                        record=session.record,
+                        guard=session.guard,
+                        max_attempts=max_attempts,
+                    )
+                    for narrated in narration_script(leaf)
+                ]
+            except (BudgetExceededError, SpeechError) as error:
+                # Both are a stop, not a crash: what was rendered is on disk and on the
+                # ledger, and the review is still built from it below.
+                halted = str(error)
+                session.checkpoint()
+                break
+            session.checkpoint()
+            rendered.extend(clips)
+            typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
+            for clip in clips:
+                typer.echo(f"           {_clip_line(clip)}")
+
+            if render_only:
+                continue
+
+            try:
+                attached = attach_leaf_narration(
+                    client=session.client,
+                    leaf_id=leaf_id,
+                    clips=clips,
+                    book_title=session.book_title,
+                    store=session.store,
+                )
+            except NarrationHeldError as held_back:
+                # A clip that is not the approved text: this Leaf waits, the rest carry on.
+                held.append(key)
+                typer.secho(f"           HELD — {held_back}", fg=typer.colors.RED)
+                continue
+            except NarrationWriteError as error:
+                typer.secho(f"\nSTOP at Leaf {order}: {error}", fg=typer.colors.RED, bold=True)
+                failed.append(key)
+                break
+
+            narration[key] = {
+                "leaf_id": leaf_id,
+                "voice": narrator,
+                "slides": attached.media,
+                "wrote": attached.wrote,
+                "verified": attached.passed,
+            }
+            session.checkpoint(cms_narration=narration)
+            state_word = "draft written" if attached.wrote else "draft already held this audio"
+            typer.echo(
+                f"           {state_word}; {attached.uploads} uploaded; "
+                f"{'verified' if attached.passed else 'VERIFICATION FAILED'}"
+            )
+            if not attached.passed:
+                for problem in [
+                    *attached.draft_check.problems,
+                    *attached.live_check.problems,
+                    *attached.problems,
+                ]:
+                    typer.secho(f"             {problem}", fg=typer.colors.RED)
+                failed.append(key)
+                break
+
+    if rendered:
+        heard = [clip.heard(session.book_title) for clip in rendered]
+        report = consistency(heard, listen_terms=listen_for or [])
+        track, cues = join_in_order(heard)
+        files = write_review(
+            destination=session.store.root
+            / "review"
+            / f"{title_slug(session.book_title)}-narration-{narrator.lower()}",
+            heading=f"{session.book_title} — narration review",
+            preamble=[
+                f"Narrator **{narrator}**, `{session.speech.model}` via "
+                f"`{session.speech.endpoint}` ({session.speech.project}).",
+                "Every clip levelled to the same speech loudness, given the same 60 ms head "
+                "and 350 ms tail, and encoded once as 64 kbps mono mp3 — this track is the "
+                "uploaded files, decoded, in reading order.",
+                "Listening model: "
+                + (session.guard.model if session.guard else "**off — no clip was checked**"),
+            ],
+            track=track,
+            cues=cues,
+            report=report,
+        )
+        counts = {level: 0 for level in GuardSeverity}
+        for clip in rendered:
+            if clip.severity is not None:
+                counts[clip.severity] += 1
+        typer.echo(f"\nreview     : {files.audio}\nlisten     : {files.page}")
+        typer.echo(
+            f"guard      : {counts[GuardSeverity.EXACT]} exact, "
+            f"{counts[GuardSeverity.MINOR]} minor, {counts[GuardSeverity.MAJOR]} major, "
+            f"{sum(1 for c in rendered if c.check is None)} unchecked — of {len(rendered)} clips"
+        )
+
+    typer.secho(f"spend      : {session.budget.report()}", fg=typer.colors.GREEN, bold=True)
+    if halted:
+        typer.secho(f"\nHALTED: {halted}", fg=typer.colors.RED, bold=True)
+    if held:
+        typer.secho(
+            f"\n{len(held)} Leaves HELD, their audio not attached, because a clip still did not "
+            f"match its text after regeneration: {', '.join(held)}. Listen to them in the review "
+            "track; nothing about them was written.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+    if not render_only:
+        typer.secho(
+            "\nNothing was published. Each Leaf's audio waits in a pending draft until a human "
+            "publishes it.",
+            fg=typer.colors.YELLOW,
+        )
+    if halted or failed or held:
+        raise typer.Exit(1)
 
 
 @app.command("purge-raw-text")

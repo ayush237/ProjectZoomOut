@@ -142,7 +142,7 @@ def test_the_guard_passes_on_the_pipelines_own_database(
 
 def test_the_config_refuses_a_url_pointing_at_another_service() -> None:
     """The string check that catches the common typo before the live guard has to."""
-    from pydantic import ValidationError
+    from pydantic import SecretStr, ValidationError
 
     from zoomout_pipeline.config import PipelineSettings
 
@@ -151,4 +151,4 @@ def test_the_config_refuses_a_url_pointing_at_another_service() -> None:
         "postgresql://postgres:postgres@127.0.0.1:5432/zoomout",
     ):
         with pytest.raises(ValidationError):
-            PipelineSettings(database_url=url, gemini_api_key="x")
+            PipelineSettings(database_url=url, gemini_api_key=SecretStr("x"))

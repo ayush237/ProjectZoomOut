@@ -45,6 +45,12 @@ class Transport(StrEnum):
 
     VERTEX = "vertex"
     DEVELOPER_API = "developer-api"
+    # VO-2. Cloud Text-to-Speech, which voiceover reaches through its own client and its own
+    # endpoint. **A second egress path for Leaf content**, so it is recorded like the first
+    # rather than arriving unlisted. It is not the Developer API `require_paid_tier` refuses:
+    # Cloud TTS is Customer Data under the GCP DPA's training restriction, billed to the
+    # project, and it never sees an API key from this package.
+    CLOUD_TTS = "cloud-tts"
 
 
 class TransportRecord(BaseModel):
@@ -59,6 +65,15 @@ class TransportRecord(BaseModel):
         default=None, description="The GCP project billed, when the transport is Vertex."
     )
     acquisition: Acquisition
+    # VO-2. Both optional, so every record written before them still validates.
+    #
+    # `endpoint` is **read off the constructed client**, not copied from a constant: the
+    # claim this record exists to make is "the calls went to Cloud TTS", and the SDK that was
+    # imported is not evidence of where it connected.
+    model: str | None = Field(default=None, description="The model the calls named.")
+    endpoint: str | None = Field(
+        default=None, description="The host the client connected to, as the client reports it."
+    )
 
 
 class SourceFormat(StrEnum):

@@ -75,3 +75,52 @@ class ImageBudget:
             f"{self.spent} images across {len(self.per_leaf)} Leaves, "
             f"${self.usd:.2f} at ${usd_per_image(self.model)}/image"
         )
+
+
+@dataclass
+class NarrationBudget:
+    """The voiceover ceiling, in dollars, and a refusal before any call that could cross it.
+
+    **The sibling of `ImageBudget`, and deliberately not the same unit.** An image has a
+    published price, so counting images is counting money. A clip does not: it is billed per
+    second of audio, and the length is the model's decision, made after the request is sent.
+    So each call reserves **the most it could possibly cost** — Cloud TTS's longest response —
+    before it is made, and the actual figure is settled afterwards. A run can therefore stop
+    a little short of its ceiling; it cannot pass it.
+
+    `spent_usd` starts from what the run's ledger already holds for voiceover, because the
+    ceiling is the founder's for the package: an audition, a render and a regeneration are
+    three invocations drawing on one number. A budget that restarted at zero each time would
+    let three $2.90 invocations through a $3 ceiling.
+    """
+
+    ceiling_usd: float
+    spent_usd: float = 0.0
+    calls: int = 0
+
+    def reserve(self, *, worst_case_usd: float, what: str) -> None:
+        """Refuse the call unless its worst case fits. Called **before** the call."""
+        if self.spent_usd + worst_case_usd > self.ceiling_usd:
+            raise BudgetExceededError(
+                f"voiceover has spent ${self.spent_usd:.4f} of its ${self.ceiling_usd:.2f} "
+                f"ceiling, and {what} could cost up to ${worst_case_usd:.4f}. Stopping here — "
+                "the ceiling is the signal to report, not a figure to raise."
+            )
+
+    def settle(self, usd: float) -> None:
+        """Record what a call actually cost, once it has answered."""
+        self.spent_usd += usd
+        self.calls += 1
+        _log.info(
+            "narration.budget.settled",
+            usd=round(usd, 5),
+            spent=round(self.spent_usd, 4),
+            remaining=round(self.ceiling_usd - self.spent_usd, 4),
+        )
+
+    @property
+    def remaining_usd(self) -> float:
+        return self.ceiling_usd - self.spent_usd
+
+    def report(self) -> str:
+        return f"${self.spent_usd:.4f} of the ${self.ceiling_usd:.2f} voiceover ceiling"

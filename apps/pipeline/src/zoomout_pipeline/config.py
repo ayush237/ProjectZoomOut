@@ -85,6 +85,18 @@ DEFAULT_REVISE_MODEL = "gemini-3.1-pro-preview"
 # configuration instead of by editing the number the cost argument above chose.
 DEFAULT_EDITORIAL_ATTEMPTS = 2
 
+# VO-2. Gemini 2.5 Flash TTS over **Cloud Text-to-Speech** — GA, billed to the project's
+# credit, and chosen over three cheaper vendors because it takes natural-language style
+# direction, which is the founder's actual requirement ("it should not read it directly like
+# a robot"). The Pro and 3.1 Flash TTS models cost twice as much per audio token.
+DEFAULT_NARRATION_MODEL = "gemini-2.5-flash-tts"
+DEFAULT_NARRATION_LANGUAGE = "en-US"
+
+# The founder's ruled ceiling for the voiceover package, and the default for any later one.
+# **A stop signal, not a target** (projectplan, ruling 1): the budget halts a run before a
+# call that could cross it, rather than reporting afterwards that one did.
+DEFAULT_MAX_NARRATION_USD = 3.0
+
 
 class PipelineSettings(BaseSettings):
     """Everything the pipeline needs from its environment."""
@@ -163,6 +175,17 @@ class PipelineSettings(BaseSettings):
     max_images_per_track: int = 70
 
     anchors_dir: Path = Path("assets/anchors")
+
+    # --- VO-2: voiceover.
+    narration_model: str = DEFAULT_NARRATION_MODEL
+    # **No default on purpose, until the audition has been heard.** One narrator reads the
+    # whole library, and the first voice in a list is not a decision. `narrate` refuses to
+    # run without one rather than falling back to whatever the SDK's examples use.
+    narration_voice: str = ""
+    narration_language: str = DEFAULT_NARRATION_LANGUAGE
+    # Counted across every voiceover invocation on a run, not per invocation — an audition,
+    # a render and a regeneration all draw on the same ceiling.
+    max_narration_usd: float = DEFAULT_MAX_NARRATION_USD
 
     runs_dir: Path = Path("runs")
 
@@ -277,4 +300,43 @@ def require_paid_tier(acquisition: Acquisition, settings: PipelineSettings) -> T
         "If this book really is public domain, re-ingest it with "
         "`--acquisition public-domain`; provenance is written once and is not patched "
         "after the fact."
+    )
+
+
+# ------------------------------------------------------------ the narration transport
+
+
+class NarrationTransportError(RuntimeError):
+    """Refusing to narrate through anything but Cloud TTS, billed to a named project."""
+
+
+def require_cloud_tts(acquisition: Acquisition, settings: PipelineSettings) -> TransportRecord:
+    """The transport voiceover may use, or a refusal naming the fix.
+
+    **The sibling of `require_paid_tier`, for the second egress path.** Voiceover sends Leaf
+    prose to Google through a client that is not the Gemini client, so the paid-tier check
+    never sees it — which is how an egress path arrives unlisted. This is where it is
+    listed.
+
+    What it can check before a client exists is the project the calls bill to. Cloud TTS
+    under local user credentials needs one named explicitly: Application Default Credentials
+    carry no quota project unless someone set one, and a call without it is refused — or
+    billed somewhere nobody chose. It is the Vertex project because that is the project the
+    credit pays for.
+
+    **What it cannot check is where the client connects.** That is `SpeechClient`'s job: it
+    refuses a host that is not Cloud TTS and reports the one it got, and the caller completes
+    this record's `endpoint` from that report rather than from a constant.
+    """
+    if not settings.vertex_project:
+        raise NarrationTransportError(
+            "voiceover bills Cloud Text-to-Speech to a named GCP project and none is set. "
+            "Use the project the credit pays for:\n"
+            "  export ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex"
+        )
+    return TransportRecord(
+        transport=Transport.CLOUD_TTS,
+        project=settings.vertex_project,
+        acquisition=acquisition,
+        model=settings.narration_model,
     )

@@ -558,6 +558,227 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
+### Completed: VO-2 — Ikigai, read aloud — two voices rendered and checked, CMS writes held — 2026-09-17
+
+**6 of 9 acceptance criteria met; 2 are blocked by the founder's mid-package ruling, and 1 — listening to the full tracks — is the founder's, because I cannot hear audio.** The founder heard a six-voice audition and chose **two narrators, for readers to pick between: Achernar (female) and Sadaltager (male)**, then ruled to **hold every CMS write** until Architect rules how a slide stores two voices. `audioRefSchema` is one `{url, durationSeconds}` per slide and `content.ts` is frozen. So **144 clips are rendered, checked and in two review tracks; nothing is uploaded and no Leaf is written.** Branch `vo-2-ikigai-voiceover` in the `ZO-pipeline` worktree, off `origin/main` at `5e9d378` (VO-1 merged). **Not committed**, pending the founder's word.
+
+| | |
+|---|---|
+| Clips | **144 = 72 × 2**, every one the approved text by the guard. Achernar: 65 exact, 7 minor, 0 major. Sadaltager: 67 exact, 5 minor, 0 major |
+| CMS | **Nothing written, by ruling.** All 18 Leaves re-fetched at the end: `_status: published`, draft identical to live, no audio, `updatedAt` unchanged since the morning's read |
+| Voices | Founder's choice, by ear, from my six-voice shortlist (reasoning below) |
+| Direction | Per slide type, `prompts/narration_direction.md`. **Third version**: the first was read aloud, the second made the model ad-lib. **Founder listened to a with/without A/B and ruled to keep it** |
+| Transport | Cloud TTS only: the client's own endpoint, a `narration_transport` record on the run, and Google's request counts |
+| Spend | **$1.79 on the ledger (≈ $1.80 by Google's count) of $3**, Google Cloud credit. **~$0.32 of it wasted by my first direction** |
+| Listening | **Nobody has listened to either full track. I cannot hear audio.** The evidence is the guard, the measurements, and the founder's ears |
+| Gate | `ruff check`, `ruff format --check`, `mypy` (the configured target: src + tests, 97 files), `pytest` 422 passed. All clean |
+| Artifacts | `ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-{achernar,sadaltager}.{html,mp3,md}`: 29:11 and 29:50. The HTML carries the track and seeks to any cue |
+
+---
+
+## Acceptance criteria
+
+| Criterion | State |
+|---|---|
+| Lint, format, `mypy --strict`, `pytest` clean; nothing outside `apps/pipeline` | ✅ (this log entry is the only other file) |
+| 72 clips attached with URL, measured `durationSeconds`, descriptive `alt` | ⛔ **Held by ruling.** `durationSeconds` is measured by decoding the exact mp3 that would upload. `alt` reads "Narration of the Payoff slide, Leaf 4 of Ikigai, read by Achernar". **The upload path has never touched the live CMS**, so the running server accepting `audio/mpeg` is still unverified |
+| Every Leaf still published with audio in a pending draft, verified by re-fetch | ⛔ Held. The write-and-verify path is built and tested: whole-group PATCH, re-fetch of both versions, refusal of a Leaf with unpublished changes. All 18 re-fetched at the end, untouched |
+| No `sourceReferences[].quote` sent to TTS | ✅ Structurally (one function reads four named fields; the TTS client accepts only its output) and behaviourally (a sentinel in every silent field, through the whole render path including regeneration). Mutation-checked |
+| Voice choice with reasoning; per-slide-type direction written down | ✅ Below; direction in `prompts/narration_direction.md` |
+| Review track exists and you listened | ⚠️ **Two tracks exist.** **I listened to none of it.** The founder listened to the audition before choosing; the full tracks are theirs to hear |
+| Transport recorded as a queryable row; Cloud TTS confirmed, not AI Studio | ✅ `status --run-id ikigai` → `narration : cloud-tts (zoomout-vertex) via texttospeech.googleapis.com — gemini-2.5-flash-tts`. A `narration_transport` row per checkpoint in `checkpoint_blobs` (msgpack, like WP32's `transport`). Google Monitoring below |
+| Spend reported against $3 | ✅ Breakdown below |
+| Anything not happy with is stated | ✅ Below: everything the guard and the measurements flagged, and what they cannot see |
+
+## Needs a decision
+
+1. **Architect: how a slide carries two voices.** Today there is one optional `audio: {url, durationSeconds}` per slide in `content.ts`, one `audio` group per slide in Payload's Leaf, and one in the backend mapper. **Nothing reads it yet (VO-3 is unbuilt) and nothing has been written, so the shape can change now without migrating any data.** It will never be cheaper.
+   - (a) **`audio: AudioRef[]`, each with a `voice` key.** One field, any number of narrators; the player picks by the reader's preference and falls back to the first. A breaking change to an unused type. **My recommendation.**
+   - (b) Keep `audio` as the default voice and add `audioAlternates: AudioRef[]`. Additive, but two places to look.
+   - (c) `audioFemale` / `audioMale`. This writes today's product decision into the schema. Not recommended.
+   - Whichever shape: **make `voice` a ZoomOut key (`female`, `male`), not Google's voice name.** Then a narrator can be re-cast, or a second book voiced differently, without breaking a reader's saved preference. The Google name is already in each file's name and `alt`.
+2. **Product / VO-3: which voice plays before a reader chooses.** Not yet ruled.
+3. **Founder: listen to both full tracks** (about 59 minutes together) before the second publish. Each page's "Listen here first" list has 11 entries; the rest of the listening is the drift check nobody else can do.
+4. **Founder: commit, push and PR?** Nothing is committed yet; this harness commits only on request.
+5. **Content, not narration: two Leaf texts worth a look.** Leaf 5's summary writes the Japanese plural as "takumis", and both voices said "takumi". Leaf 9's payoff says "…a secondary income stream expose you…", which both voices said as "exposes"; the verb is correct for the compound subject, but it reads as a slip.
+
+## The direction took three versions
+
+**v1 was read aloud.** It opened "Read the text exactly as written: every word, in order…". Gemini-TTS spoke everything after that colon before the Leaf text in **12 of 13** directed audition clips: 60–85 s of audio for 11–25 s of text. The 13th opened "Sound like a software developer" where the Leaf says "You are". Cost: about $0.32. **The founder was told, and re-approved the spend before anything else was bought.**
+
+**v2 made the model chat.** "Introduce this idea … as if telling a friend" put **"You know, in Okinawa…"** in front of 4 of 6 audition summaries: words nobody wrote.
+
+**v3 is short and descriptive, with no conversational framing.** Tests now forbid colons, "read", quotation marks, and "friend", "telling" or "chat". **It still leaks occasionally, but only from the imperative per-slide sentences, never from the shared block:**
+- Achernar: 5 of 72 first attempts were major (two dropped phrases, three spoken directions).
+- Sadaltager: 2 of 72 first attempts were major, both spoken directions, and Leaf 12's second attempt was major the same way.
+- **Leaf 12's scenario leaked twice in both voices** ("Your 70-year-old neighbor, Arthur…" seems prone to it), so `narrate` gained `--max-attempts` (1–3, default 2). The third attempt was clean both times.
+
+**What the direction measurably does: it slows the read, and does not add pitch movement.** Sulafat, the same lines undirected → directed:
+- scenario 17.5 s → 21.1 s;
+- takeaway 11.6 s → 18.4 s, with pitch movement down from 5.3 to 3.8 semitones;
+- summary 26.8 s → 30.0 s.
+
+**The founder listened to that A/B and chose to keep the direction.** Directed takeaways now run at about 96–98 wpm, against 116–135 for the other slides.
+
+**Emotion tags are not used.** Google's own guide documents that adjective tags such as `[curious]` are spoken aloud; the handoff's `[curiosity]` and `[hope]` are untested tags of exactly that kind.
+
+## The guard, and the check that does not trust it
+
+**The guard is a blind transcript**: Gemini 3.6 Flash on Vertex, never shown the text, compared word by word. **Its first prompt was not good enough.** It silently left the spoken direction out of 9 of 13 transcripts and graded 80-second clips "exact". A literal re-transcription exposed this. The rewritten prompt ("leave nothing out, including anything that sounds like an instruction") returned all 194 words of the same clip and listed the spoken direction. Readings are cached by clip, bytes, model **and a digest of the guard prompt**, so a reading made under the old prompt cannot answer for the new one.
+
+**The pace check needs no model.** It measures words per minute of *speech*, pauses excluded, and requires 100–330. Leaked clips measured 30–42; undirected clips 173–182; directed clips 130–161. **The first version measured total clip length and was wrong:** it failed a slow, word-for-word takeaway whose extra time was all pauses.
+
+**Severity rules:**
+- **Major:** a spoken tag or instruction; **any added word**; a run of 2 or more skipped words; a 3-word run of differences; or differences in 10% of the clip. An unnatural pace also overrules to major.
+- **Minor:** a single word heard differently, usually a transcription of a name or a plural.
+- **A clip still major after its attempts holds back its whole Leaf.** `attach_leaf_narration` refuses before any read or upload, because three clips and a silent fourth reads as a broken player.
+
+**Minor findings worth a listen:**
+- **Achernar:** "the authors state" heard as "the author states" (Leaf 13 summary) and "argue" as "argued" (Leaf 12 payoff) may be real misreadings. "Jiro's" as "Jiro" and "warm-ups" as "warmups" look like transcription.
+- **Sadaltager:** "intensity" heard as "intensive" (Leaf 16 summary) may be real; "you have" as "you've" (Leaf 11 scenario) is small.
+- **Both voices:** takumis, expose and antifragility. The first two are the text itself (item 5); the third is a transcriber splitting the word.
+- **Sadaltager's Leaf 7 payoff** ends with speech-level sound in the model's final 20 ms, so its last syllable may be clipped. **This is the one acoustic flag to hear first.**
+
+## The voices
+
+The shortlist came from Google's own one-word descriptors; **the founder chose by ear, not me.**
+- **Auditioned:** Sulafat (warm), Vindemiatrix (gentle), Achernar (soft), Achird (friendly), Sadaltager (knowledgeable), Algieba (smooth).
+- **Left out before any audio was made:**
+  - upbeat, excitable, lively and bright: tiring across 23+ minutes;
+  - breathy: fatiguing, and at odds with the "no breath at the cut" requirement;
+  - firm and informative: newsreader risk. Kore, the docs' default, is in this group, and the handoff said not to take the first voice in the list;
+  - youthful, forward, gravelly and casual.
+
+## Transport, checked three ways
+
+1. **The client's own endpoint.** It is read off the constructed GAPIC client and refused unless it is a Cloud TTS host: `texttospeech.googleapis.com`. The client has no API-key parameter; it uses ADC with `zoomout-vertex` named as the quota project.
+2. **Recorded on the run.** `narration_transport` (transport `cloud-tts`, project, model, endpoint) sits beside the existing Gemini `transport` and is printed by `status`.
+3. **Google's request counts** (Cloud Monitoring, `api/request_count`, `zoomout-vertex`, last 12 h):
+   - `texttospeech.googleapis.com`: SynthesizeSpeech **185 × 200** and 1 × 499.
+   - **`generativelanguage.googleapis.com` (AI Studio): no requests.**
+   - `aiplatform.googleapis.com`: the guard's calls, each counted under two method names, plus 5 × 429 that were retried.
+
+   The 185 reconciles exactly: 183 clips on disk, plus Leaf 13's payoff (timed out on our side but completed on Google's, and charged twice by design), plus one v1 clip that was in flight when I stopped the first audition. The recipe is in the README.
+
+## What VO-3 inherits: the files, as they are
+
+- **Format:** mp3, 64 kbps CBR, mono, 24 kHz (MPEG-2 Layer III). That is the only audio type `Media` accepts.
+- **Levels:** −20 dBFS over speech frames, with a −2 dBFS peak ceiling.
+- **Edges:**
+  - 60 ms before the first sound;
+  - **350 ms of digital silence after the last**;
+  - a 5 ms fade-in and a 30 ms fade-out;
+  - any low sound lasting more than 250 ms after the last word is treated as a breath and cut.
+- **`durationSeconds`:** decoded from the exact bytes, to 2 decimal places, **including about 50 ms of encoder padding**.
+- **Clip lengths (Achernar):**
+  - summary 22–38 s, median 27;
+  - scenario 11–26 s, median 18;
+  - payoff 18–42 s, median 34;
+  - takeaway 12–29 s, median 15.
+
+  A whole book is about 29–30 minutes per voice.
+- **Names:** files are `ikigai-leaf-04-payoff-achernar-<sha256[:10]>.mp3`, and `alt` reads "Narration of the Payoff slide, Leaf 4 of Ikigai, read by Achernar". The hash makes "already uploaded?" a filename lookup.
+- **Two voices per slide plus a reader preference**, pending item 1.
+
+## Spend: $1.79 on the ledger of the $3 ceiling (Google Cloud)
+
+| | USD |
+|---|---|
+| First audition, direction v1 (read aloud): **wasted** | 0.303 |
+| Diagnostics that found it (a literal transcription, a guard validation) | 0.016 |
+| v2 probe (2 clips) | 0.015 |
+| Six-voice audition, v2 | 0.150 |
+| v3 summary probe (2 clips) | 0.020 |
+| Achernar: 69 new clips (3 reused from the audition and probe), 6 retries | 0.652 |
+| Sadaltager: 69 new clips (3 reused), 3 retries | 0.627 |
+| Estimated charge for one timed-out call | 0.006 |
+
+**The ledger is reconciled against the files:** every paid clip has one speech entry and every reading one guard entry. Four entries have no file, all on purpose: two diagnostics, the timeout estimate, and the timed-out Leaf 13 payoff charged a second time.
+
+**Against Google's count,** the ledger is about $0.02 short (the v1 clip I killed in flight) and about $0.006 over (the timeout estimate, which Google shows as a client-cancelled 499). **So true spend is about $1.80.**
+
+The machine's network dropped mid-Sadaltager. That run only wrote spend back per Leaf, so one paid clip and its reading were missing; they were found and added from the files. **Spend is now written back after every call**, and a timed-out call is now charged even when every retry fails. Only timeouts are charged; refused connections and 429s never reach generation.
+
+## Evidence: which is a test, which is tooling, which is nobody
+
+- **Tests (422 passing).** They cover:
+  - the four-field boundary, as behaviour, structure and entry point;
+  - draft-only writes, checked on the wire;
+  - the whole-group PATCH against WP19's nulling;
+  - re-fetch verification of both versions;
+  - refusal of a Leaf with unpublished changes;
+  - find-then-skip uploads;
+  - the served-bytes proof;
+  - the hold;
+  - budget reserved before the call;
+  - never buying the same clip twice;
+  - bounded regeneration;
+  - speech-only pace;
+  - the guard's blindness and its severity rules;
+  - host refusal and a single retry layer;
+  - timeout accounting, and spend written back per call;
+  - per-voice register;
+  - audio levelling, edges, duration and pitch, on synthetic signals.
+- **Mutation checks, by hand: 19 of 19 turned a test red.** Each file was restored byte-identical (checked by md5). The mutations:
+  - a quote made reachable (two ways);
+  - a partial group PATCH;
+  - the draft flag dropped;
+  - no find-then-skip;
+  - live status left unchecked;
+  - audio uploaded as png;
+  - budget not reserved first;
+  - pace ignored;
+  - the library retry left on;
+  - any host accepted;
+  - the guard shown the text;
+  - unpublished changes ignored;
+  - a failing clip attached;
+  - served bytes not compared;
+  - a stale guard reading reused;
+  - timeouts on a failed call not charged;
+  - every failure charged;
+  - spend not written back per call.
+
+  One was first missed ("live status unchecked") and needed a new test: a Leaf that was never published.
+- **Tooling:** the guard, the pace and pitch measurements, the cue sheets, and Google's request counts.
+- **Nobody:** whether it sounds like a person who means it. The founder heard the six-voice audition; nobody has heard the full tracks.
+
+## Other findings
+
+- **WP33.1's "mypy clean" was `mypy src` (50 files), not the configured target (src + tests).** Its `SecretStr` change had left 12 type errors in the tests. Fixed here. Two raw-string calls exist to test the environment path, and those keep a commented ignore.
+- **The generated TTS client declares no default timeout and no default retry.** Both are now passed on every call (`retry=None`), so a library update cannot quietly add a second retry layer.
+- **ADC user credentials carry no quota project.** The client names `zoomout-vertex` explicitly.
+- **`miniaudio.decode` resamples to 44.1 kHz unless told otherwise.** The duration survives; every other measurement would not.
+- **A no-op sleep paired with the real clock makes the rate limiter spin for a real minute.** That cost four minutes of test time until the fakes got a clock that advances.
+- **The first cue sheet had two flaws.** It keyed notes by (Leaf, slide), so an audition's six readings of a line collapsed into one. It also compared a soprano's pitch with a baritone's. Both fixed: notes are keyed by voice, and the register limit is relative to each voice's own spread. The flat 2-semitone limit had flagged 15 of Sadaltager's clips; that was his normal range.
+- **`upload_media` never caught `URLError`**, unlike its sibling `_request`. Fixed; a test confirms the image path still sends `image/png`.
+
+## Deferred: Tier C worklist
+
+- No CLI-level test of `narrate` or `audition-voices`. The node functions are tested, and both commands were run live.
+- No live-model test suite for the TTS client or the guard.
+- **The upload/attach path has never run against the live CMS** (held).
+- `narration_transport` is msgpack in `checkpoint_blobs`, read through `status`. There is no plain-SQL egress table.
+- `audition-voices` has no output-name option, so a second audition overwrites the first. The v3 probe called the render step directly to avoid that.
+- Review pages embed the whole track, about 19 MB each.
+- Two `narrate` processes on one run would race on the cost ledger. Run them one after the other; the README says so.
+- The listening page used for the audition grid (per-clip players) was a one-off script, not pipeline code.
+
+## How to finish, once item 1 is ruled
+
+1. Change `narration_patch` and `verify_narration_write` to the ruled shape. Their tests already cover the whole-group and re-fetch behaviour.
+2. For each voice, run `narrate --run-id ikigai --voice <v> --max-attempts 3 --listen-for …`. Every clip and reading is cached, so the only cost is the uploads and 18 PATCHes.
+3. The founder publishes the Leaves again.
+
+**Files:** all under `apps/pipeline/`.
+- New: `assets/{narration,speech,audio,narration_guard,review_track}.py`, `graph/narration_nodes.py`, `prompts/narration_{direction,guard}.md`, `tests/narration_fakes.py` and seven test files.
+- Changed: `cli.py`, `config.py`, `cost.py`, `models.py`, `graph/state.py`, `cms/{client,mapper}.py`, `llm/client.py`, `assets/{__init__,budget}.py`, `README.md`, `pyproject.toml` and `uv.lock`, plus nine existing test files.
+- New dependencies: `google-cloud-texttospeech`, `numpy`, `lameenc` and `miniaudio`. `lameenc` is LGPL, which is fine for internal tooling that isn't distributed.
+
+**Time:** about 9 hours of wall clock. Roughly 2.5 h on reading and building, 2 h on the three direction versions and their evidence, 3 h waiting on renders (including the network drop and resume), and 1.5 h on reconciliation, calibration and this report.
+
+---
+
 ### Completed: VO-1 — the two blockers in front of voiceover — 2026-09-17
 
 **7 of 7 acceptance criteria met.** Root `lint`, `typecheck` and `test` all clean —

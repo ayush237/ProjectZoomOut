@@ -1,1 +1,1 @@
-"""Scenario illustrations and sticky-note diagrams."""
+"""Scenario illustrations, sticky-note diagrams, and voiceover."""

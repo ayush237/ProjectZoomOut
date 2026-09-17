@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from zoomout_pipeline.config import (
     FREE_TIER_ACQUISITIONS,
@@ -32,7 +33,7 @@ CLOSED = (Acquisition.PURCHASED, Acquisition.LICENSED, Acquisition.UNDOCUMENTED)
 def _free_tier(tmp_path: Path) -> PipelineSettings:
     return PipelineSettings(
         database_url="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline_test",
-        gemini_api_key="test-key",
+        gemini_api_key=SecretStr("test-key"),
         use_vertex=False,
         runs_dir=tmp_path / "runs",
     )
