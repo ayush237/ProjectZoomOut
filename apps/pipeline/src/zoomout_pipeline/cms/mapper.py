@@ -13,7 +13,7 @@ and there is no code path that sets it otherwise.
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -340,17 +340,60 @@ _VOLATILE_LEAF_KEYS = frozenset({"updatedAt", "createdAt", "_status"})
 
 @dataclass(frozen=True)
 class AudioRef:
-    """One slide's narration, in Payload's own shape: `{url, durationSeconds}`."""
+    """One narrator's narration of one slide, in Payload's own array-row shape (VO-1.1):
+    `{narrator, url, durationSeconds, textDigest}`.
 
+    `narrator` is a `NarratorId` value (`"female"` / `"male"`) — `assets.narration.
+    narrator_for_voice` is what resolves a rendered clip's provider voice to it. `textDigest`
+    must be `assets.narration.text_digest(line.text)` — the text the clip was actually made
+    from, not a later re-read (see that function's docstring for why the distinction matters).
+    """
+
+    narrator: str
     url: str
     duration_seconds: float
+    text_digest: str
 
     def payload(self) -> dict[str, Any]:
-        return {"url": self.url, "durationSeconds": self.duration_seconds}
+        return {
+            "narrator": self.narrator,
+            "url": self.url,
+            "durationSeconds": self.duration_seconds,
+            "textDigest": self.text_digest,
+        }
+
+
+def _audio_row_matches(row: Any, ref: AudioRef) -> bool:
+    """Whether an existing Payload array row already says what `ref` would write.
+
+    Compares the four content fields only — never `id`, which is Payload's own bookkeeping and
+    does not exist until after the first write.
+    """
+    return (
+        isinstance(row, Mapping)
+        and row.get("narrator") == ref.narrator
+        and row.get("url") == ref.url
+        and row.get("durationSeconds") == ref.duration_seconds
+        and row.get("textDigest") == ref.text_digest
+    )
+
+
+def narration_already_attached(*, existing: Any, refs: Sequence[AudioRef]) -> bool:
+    """Whether a slide's existing `audio` array already holds exactly these entries.
+
+    **Order carries no meaning** (content.ts), so this compares by narrator rather than by
+    position — matched one-for-one against `refs`, which `hasUniqueNarrators` (content.ts) and
+    `noDuplicateNarrators` (Leaves.ts) both already guarantee holds at most one row per
+    narrator on the CMS side.
+    """
+    if not isinstance(existing, list) or len(existing) != len(refs):
+        return False
+    by_narrator = {row.get("narrator"): row for row in existing if isinstance(row, Mapping)}
+    return all(_audio_row_matches(by_narrator.get(ref.narrator), ref) for ref in refs)
 
 
 def narration_patch(
-    *, existing: Mapping[str, Any], audio: Mapping[str, AudioRef]
+    *, existing: Mapping[str, Any], audio: Mapping[str, Sequence[AudioRef]]
 ) -> dict[str, Any]:
     """A PATCH body that adds narration to a Leaf **without touching anything else on it.**
 
@@ -363,14 +406,17 @@ def narration_patch(
     rebuilt by hand is four chances to drop a field the schema grew after this was written.
 
     `existing` is the **draft** document, fetched immediately before this call. Only the four
-    narrated groups can appear in the patch; anything else is refused.
+    narrated groups can appear in the patch; anything else is refused. `audio`'s values are
+    **all narrators for that slide, together** (VO-1.1's array) — never a partial write of one
+    narrator alongside another already in Payload, which is why `narration_already_attached`
+    exists as a pre-check rather than a merge.
     """
     unknown = sorted(set(audio) - set(NARRATED_GROUPS))
     if unknown:
         raise ValueError(f"narration may only write {NARRATED_GROUPS}; asked for {unknown}")
 
     patch: dict[str, Any] = {}
-    for group, ref in audio.items():
+    for group, refs in audio.items():
         current = existing.get(group)
         if not isinstance(current, Mapping) or not current:
             raise ValueError(
@@ -378,7 +424,7 @@ def narration_patch(
                 "that would hold nothing but audio"
             )
         whole = copy.deepcopy(dict(current))
-        whole["audio"] = ref.payload()
+        whole["audio"] = [ref.payload() for ref in refs]
         patch[group] = whole
     return patch
 
@@ -446,7 +492,7 @@ def verify_narration_write(
     order: int,
     before: Mapping[str, Any],
     after: Mapping[str, Any],
-    audio: Mapping[str, AudioRef],
+    audio: Mapping[str, Sequence[AudioRef]],
 ) -> WriteCheck:
     """Whether the **re-fetched** draft carries exactly the audio written, and nothing else
     moved.
@@ -454,17 +500,46 @@ def verify_narration_write(
     Every key the Leaf has is compared, not only the four groups: a write that kept the
     summary's body and lost `sourceReferences` would pass a sibling check scoped to the
     groups it meant to touch, and `sourceReferences` is the audit trail.
+
+    Each slide's array is matched by `narrator`, not by position — **order carries no
+    meaning** (content.ts), so a re-fetch that came back with the same two rows swapped is not
+    a problem this check may report.
     """
     problems: list[str] = []
-    for group, ref in audio.items():
-        stored = (after.get(group) or {}).get("audio") or {}
-        if stored.get("url") != ref.url:
-            problems.append(f"{group}.audio.url is {stored.get('url')!r}, wrote {ref.url!r}")
-        duration = stored.get("durationSeconds")
-        if not isinstance(duration, int | float) or abs(duration - ref.duration_seconds) > 1e-6:
+    for group, refs in audio.items():
+        stored = (after.get(group) or {}).get("audio")
+        if not isinstance(stored, list):
+            problems.append(f"{group}.audio is {stored!r}, expected an array of {len(refs)} row(s)")
+            continue
+        by_narrator: dict[str, Mapping[str, Any]] = {
+            row["narrator"]: row
+            for row in stored
+            if isinstance(row, Mapping) and isinstance(row.get("narrator"), str)
+        }
+        expected_narrators = sorted(ref.narrator for ref in refs)
+        if sorted(by_narrator) != expected_narrators:
             problems.append(
-                f"{group}.audio.durationSeconds is {duration!r}, wrote {ref.duration_seconds}"
+                f"{group}.audio narrators are {sorted(by_narrator)}, wrote {expected_narrators}"
             )
+        for ref in refs:
+            row = by_narrator.get(ref.narrator)
+            if row is None:
+                continue  # already reported as a missing narrator above
+            if row.get("url") != ref.url:
+                problems.append(
+                    f"{group}.audio[{ref.narrator}].url is {row.get('url')!r}, wrote {ref.url!r}"
+                )
+            duration = row.get("durationSeconds")
+            if not isinstance(duration, int | float) or abs(duration - ref.duration_seconds) > 1e-6:
+                problems.append(
+                    f"{group}.audio[{ref.narrator}].durationSeconds is {duration!r}, wrote "
+                    f"{ref.duration_seconds}"
+                )
+            if row.get("textDigest") != ref.text_digest:
+                problems.append(
+                    f"{group}.audio[{ref.narrator}].textDigest is {row.get('textDigest')!r}, "
+                    f"wrote {ref.text_digest!r}"
+                )
 
     for key in sorted((set(before) | set(after)) - _VOLATILE_LEAF_KEYS):
         was, now = before.get(key), after.get(key)

@@ -27,6 +27,7 @@ from zoomout_pipeline.assets.budget import NarrationBudget
 from zoomout_pipeline.assets.narration import (
     NARRATED_FIELDS,
     NARRATED_GROUPS,
+    NARRATOR_VOICES,
     NarratedSlide,
     NarrationDirectionError,
     NarrationLine,
@@ -44,6 +45,7 @@ from zoomout_pipeline.assets.narration_guard import (
 )
 from zoomout_pipeline.assets.speech import SpeechClient
 from zoomout_pipeline.graph.narration_nodes import ClipStore, Guard, render_line
+from zoomout_pipeline.models import NarratorId
 
 from .conftest import ScriptedLLM
 from .narration_fakes import SENTINEL, FakeSpeechBackend, leaf_doc, speech_client
@@ -65,6 +67,27 @@ def test_narration_reads_exactly_four_fields_in_reading_order() -> None:
     ]
     assert NARRATED_GROUPS == ("summary", "scenario", "payoff", "takeaway")
     assert "stickyNotes" not in {slide.value for slide in NarratedSlide}
+
+
+def test_narrator_voices_mirror_content_ts_exactly() -> None:
+    """`NarratorId` mirrors `NARRATOR_IDS` in `packages/shared/src/content.ts` — `["female",
+    "male"]` — and `NARRATOR_VOICES` is the founder's ruled Cloud TTS voice for each, chosen
+    after the 2026-09-17 six-voice audition (collaboration-log.md, VO-2). If this fails because
+    a narrator was added or re-cast: stop. That is an Architect ruling and a `content.ts`
+    change, not an edit here.
+    """
+    assert list(NarratorId) == [NarratorId.FEMALE, NarratorId.MALE]
+    assert [member.value for member in NarratorId] == ["female", "male"]
+    assert dict(NARRATOR_VOICES) == {NarratorId.FEMALE: "Achernar", NarratorId.MALE: "Sadaltager"}
+
+
+def test_narrator_for_voice_refuses_anything_not_ruled() -> None:
+    from zoomout_pipeline.assets.narration import narrator_for_voice
+
+    assert narrator_for_voice("Achernar") is NarratorId.FEMALE
+    assert narrator_for_voice("Sadaltager") is NarratorId.MALE
+    with pytest.raises(NarrationSourceError, match="Sulafat"):
+        narrator_for_voice("Sulafat")  # an audition voice, never ruled for attachment
 
 
 def test_the_script_is_the_four_bodies_and_nothing_else() -> None:

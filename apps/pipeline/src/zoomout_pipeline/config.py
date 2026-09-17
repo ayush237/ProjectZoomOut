@@ -178,10 +178,9 @@ class PipelineSettings(BaseSettings):
 
     # --- VO-2: voiceover.
     narration_model: str = DEFAULT_NARRATION_MODEL
-    # **No default on purpose, until the audition has been heard.** One narrator reads the
-    # whole library, and the first voice in a list is not a decision. `narrate` refuses to
-    # run without one rather than falling back to whatever the SDK's examples use.
-    narration_voice: str = ""
+    # Which Cloud TTS voice speaks for which of the two ruled narrators is
+    # `assets.narration.NARRATOR_VOICES` (VO-1.1's two-narrator ruling made a single runtime
+    # `--voice` the wrong shape: `narrate` now always renders and attaches both).
     narration_language: str = DEFAULT_NARRATION_LANGUAGE
     # Counted across every voiceover invocation on a run, not per invocation — an audition,
     # a render and a regeneration all draw on the same ceiling.

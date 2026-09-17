@@ -224,6 +224,15 @@ class SlideKey(StrEnum):
     TAKEAWAY = "takeaway"
 
 
+class NarratorId(StrEnum):
+    """The two narrators a reader can choose between, matching NARRATOR_IDS in content.ts
+    exactly (VO-1.1). Keys are ZoomOut's, not Google's — see `assets.narration.NARRATOR_VOICES`
+    for which provider voice speaks for which of these."""
+
+    FEMALE = "female"
+    MALE = "male"
+
+
 class Citation(BaseModel):
     """A claim's link to the passage that supports it.
 

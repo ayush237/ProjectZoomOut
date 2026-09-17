@@ -42,6 +42,7 @@ from functools import lru_cache
 from types import MappingProxyType
 from typing import Any
 
+from zoomout_pipeline.models import NarratorId
 from zoomout_pipeline.prompts import load_prompt
 
 
@@ -92,6 +93,41 @@ class NarrationSourceError(RuntimeError):
 
 class NarrationDirectionError(RuntimeError):
     """The direction file does not have the shape the four slide types need."""
+
+
+# ------------------------------------------------------------------------ narrator identity
+
+# The founder's ruled choice (2026-09-17, after the six-voice audition): which Cloud TTS voice
+# speaks for which of `NarratorId`'s two ZoomOut-keyed narrators (VO-1.1, mirroring
+# NARRATOR_IDS in content.ts). Re-casting a narrator to a different provider voice, or voicing
+# a second book differently, is a deliberate change to this mapping — never a string threaded
+# through as a CLI default the way the single-voice `ZOOMOUT_PIPELINE_NARRATION_VOICE` was.
+NARRATOR_VOICES: Mapping[NarratorId, str] = MappingProxyType(
+    {
+        NarratorId.FEMALE: "Achernar",
+        NarratorId.MALE: "Sadaltager",
+    }
+)
+
+_VOICE_NARRATORS: Mapping[str, NarratorId] = MappingProxyType(
+    {voice: narrator for narrator, voice in NARRATOR_VOICES.items()}
+)
+
+
+def narrator_for_voice(voice: str) -> NarratorId:
+    """The ZoomOut narrator id a rendered clip's provider voice belongs to.
+
+    Refuses rather than guesses: a voice outside `NARRATOR_VOICES` (an audition voice, a typo)
+    has no ZoomOut identity to attach under, and attaching one anyway would invent a third
+    narrator no reader can ever have chosen.
+    """
+    try:
+        return _VOICE_NARRATORS[voice]
+    except KeyError:
+        raise NarrationSourceError(
+            f"{voice!r} is not a ZoomOut narrator voice ({sorted(_VOICE_NARRATORS)}); only the "
+            "two ruled voices may be attached to a Leaf"
+        ) from None
 
 
 # ---------------------------------------------------------------------------- the text
@@ -243,6 +279,26 @@ def clip_digest(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def text_digest(text: str) -> str:
+    """`textDigest`: sha256 hex of a narrated field's text, **exactly as Payload holds it.**
+
+    No trim, no normalise, no case change — `text`, never `speakable(text)`. This must be
+    computed from `NarrationLine.text`, the field as it was when the line was built for
+    synthesis: that is what the clip actually says, which is the only thing a digest can
+    honestly claim to describe. Computing it instead from a *later* re-read of the Leaf would
+    describe the current text rather than the narrated one, and silently defeat the one thing
+    this digest exists to catch — the backend recomputes the same hash from whatever Payload
+    serves at read time and drops any entry that no longer matches (content.ts).
+
+    Cross-checked against Node's `createHash('sha256').update(t,'utf8').digest('hex')` on nine
+    vectors before this was written (VO-2.1 handoff, 2026-09-18): ASCII, em dashes, curly
+    quotes, padded whitespace, three real Leaf bodies, and both Unicode normal forms of
+    "Héctor García", which correctly hash differently. See the vector tests in
+    `tests/test_narration_write.py`.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def short_title(book_title: str) -> str:
     """ "Ikigai: The Japanese Secret to…" -> "Ikigai". The name a person would use."""
     head = book_title.split(":", 1)[0].strip()
@@ -301,6 +357,7 @@ __all__ = [
     "MAX_FIELD_BYTES",
     "NARRATED_FIELDS",
     "NARRATED_GROUPS",
+    "NARRATOR_VOICES",
     "NarratedSlide",
     "NarrationDirectionError",
     "NarrationLine",
@@ -311,8 +368,10 @@ __all__ = [
     "direction_for",
     "load_direction",
     "narration_script",
+    "narrator_for_voice",
     "short_title",
     "speakable",
+    "text_digest",
     "title_slug",
     "voice_slug",
 ]

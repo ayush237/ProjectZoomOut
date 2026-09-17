@@ -79,7 +79,6 @@ confused with `DATABASE_URL` or `PAYLOAD_DATABASE_URL`.
 | `ZOOMOUT_PIPELINE_SCENARIO_CANDIDATES` | no | Default 3. How many illustrations the human chooses between at gate 2. |
 | `ZOOMOUT_PIPELINE_DRAFT_MODEL` | no | Also derives the scene plan — one text call per Track. |
 | `ZOOMOUT_PIPELINE_MAX_IMAGES_PER_TRACK` | no | Default 70. **Halts** a run rather than warning — see `assets/budget.py`. |
-| `ZOOMOUT_PIPELINE_NARRATION_VOICE` | for `narrate` | The narrator, chosen by `audition-voices`. No default on purpose. |
 | `ZOOMOUT_PIPELINE_NARRATION_MODEL` | no | Default `gemini-2.5-flash-tts`, over Cloud Text-to-Speech. |
 | `ZOOMOUT_PIPELINE_NARRATION_LANGUAGE` | no | Default `en-US`. |
 | `ZOOMOUT_PIPELINE_MAX_NARRATION_USD` | no | Default 3.0. Counted across every voiceover invocation on a run; **halts** before any call whose worst case would cross it. |
@@ -247,14 +246,16 @@ this scenario, is there text in the frame, is there a light bloom, is there a ha
 nobody. All of those are absolute prohibitions or hard requirements with no mechanical gate,
 and Track 42's published Leaf 1 breaches two of them right now.
 
-## Voiceover: `audition-voices` and `narrate` (VO-2)
+## Voiceover: `audition-voices` and `narrate` (VO-2, reshaped VO-2.1)
 
 Four slides per Leaf are read aloud — `summary.body`, `scenario.prompt`, `payoff.body`,
 `takeaway.body` — through **Cloud Text-to-Speech** (`gemini-2.5-flash-tts`), billed to the Vertex
-project. A voice set is one narrator for a whole book. The founder chose **two** after the
-2026-09-17 audition, for readers to pick between: **Achernar** (female) and **Sadaltager** (male).
-A Leaf stores one audio reference per slide today, so how a slide carries two is an open contract
-question (`content.ts` is frozen) and `narrate` is run `--render-only` until it is ruled.
+project. The founder chose **two** narrators after the 2026-09-17 audition, for readers to pick
+between: **Achernar** (female) and **Sadaltager** (male) — `assets/narration.py:NARRATOR_VOICES`
+is the mapping from `NarratorId` to the provider voice, mirroring `NARRATOR_IDS` in the frozen
+`content.ts`. A slide's `audio` is an array (VO-1.1), one entry per narrator, and `narrate`
+always renders and attaches **both together**: a Leaf attaches only once every narrated slide
+passes in both voices, never one narrator alone.
 
 **Never `sourceReferences[].quote`.** Those are the book's verbatim words, and reading them
 aloud would be an audio reproduction of copyrighted text (`LEGAL.md`, "Narration"). The list of
@@ -268,13 +269,12 @@ export ZOOMOUT_PIPELINE_MAX_NARRATION_USD=3.0   # the ruled ceiling, counted acr
 uv run zoomout-pipeline audition-voices --run-id ikigai \
   --voice Sulafat --voice Achird --line 4:scenario --line 10:takeaway --undirected
 
-# Render (free for anything already rendered), check, and build the review track only —
-# one run per voice; each writes runs/<run>/audio/review/<book>-narration-<voice>.{mp3,md,html}:
-uv run zoomout-pipeline narrate --run-id ikigai --voice Achernar --render-only --max-attempts 3 --listen-for moai
-uv run zoomout-pipeline narrate --run-id ikigai --voice Sadaltager --render-only --max-attempts 3 --listen-for moai
+# Render (free for anything already rendered), check, and build a review track per narrator —
+# writes runs/<run>/audio/review/<book>-narration-<voice>.{mp3,md,html}:
+uv run zoomout-pipeline narrate --run-id ikigai --render-only --max-attempts 3 --listen-for moai
 
-# Then attach, as drafts (single-voice shape; waits for the two-voice ruling):
-uv run zoomout-pipeline narrate --run-id ikigai --voice <voice> --listen-for moai
+# Then attach, as drafts — both narrators, one PATCH per Leaf:
+uv run zoomout-pipeline narrate --run-id ikigai --listen-for moai
 ```
 
 | Step | What happens | Why |
@@ -286,13 +286,20 @@ uv run zoomout-pipeline narrate --run-id ikigai --voice <voice> --listen-for moa
 | Encoding | 64 kbps mono mp3, measured by decoding the uploaded bytes | `Media` accepts `audio/mpeg` only; `durationSeconds` is measured, not estimated |
 | Guard | A **blind** transcript (Gemini on Vertex), compared word by word | A clip that says other words is a fabrication in an author's name |
 | Pace | Words per minute **of speech**, pauses excluded, must be 100–330 | Catches a spoken direction even when the transcriber leaves it out |
-| Attach | Find-then-upload by content hash, one whole-group draft PATCH per Leaf, both versions re-fetched | Partial group PATCHes null siblings (WP19); the live Leaf must not move |
-| Review | One mp3 of the whole book in reading order, with a cue sheet of where to listen | Nothing else hears the 72 as a set |
+| Attach | Both narrators' clips together; find-then-upload by content hash; one whole-group draft PATCH per Leaf, each `audio` a two-row array; both versions re-fetched | Partial group PATCHes null siblings (WP19); a reader must never get one narrator mid-book; the live Leaf must not move |
+| Review | One mp3 per narrator, in reading order, with a cue sheet of where to listen | Nothing else hears the 72 (per voice) as a set |
 
 A clip that still fails the guard or the pace check after its attempts (`--max-attempts`, 1–3,
-default 2; attempts already on disk are reused) is **not attached**: its Leaf is held, named, and
-left in the review track for a person. Spend is written back to the run after every call, and a
-timed-out call is charged even when no clip came back.
+default 2; attempts already on disk are reused) holds its **whole Leaf**: not attached, named,
+and left in the review track for a person — and now that holds across both narrators, not just
+across a Leaf's four slides. Spend is written back to the run after every call, and a timed-out
+call is charged even when no clip came back.
+
+**`textDigest`** is `sha256` hex of the narrated field exactly as the clip was made from it —
+`assets/narration.py:text_digest`, never `speakable()`'s TTS-rewritten form. The backend
+recomputes the same hash from whatever Payload serves and silently drops any entry that no
+longer matches, so this is the one place a stray `.strip()` would make clips vanish with no
+error anywhere; `tests/test_narration_write.py::TestTextDigest` is the guard.
 
 **Run one `narrate` at a time per run.** Two processes on one run would race on its cost ledger.
 
