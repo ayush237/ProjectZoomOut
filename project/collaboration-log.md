@@ -745,7 +745,201 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
-### Completed: VO-1.1 — two narrators, a digest, and the contract test that was never there — 2026-09-17
+### Completed: VO-2.1 — the 144 clips reach the CMS — 2026-09-18
+
+**9 of 9 acceptance criteria met.** Ran on Sonnet 5, as suggested. `runs/ikigai` (183 raw
+clips, 228 MB) buys almost everything: only 4 of 144 attached clips were freshly rendered,
+matching the handoff's prediction exactly. Branch `vo-2.1-attach-narrators` in the
+`ZO-pipeline` worktree, off `origin/main` at `9cf0b5b` (VO-1.1 merged; the array shape was
+live before this package touched anything). Rebasing onto two unrelated planning commits that
+landed on `origin/main` mid-session (onboarding/VO-3 scope, `project/projectplan.md` and
+`projectRoadmap.md` — not read in depth, out of this role's remit) before push; neither
+touches anything this package did.
+
+| | |
+|---|---|
+| Attached | **144 = 18 Leaves × 4 slides × 2 narrators**, every entry with a URL, a positive `durationSeconds` and a 64-char lowercase `textDigest` — verified by an independent script, outside the pipeline's own code, that re-fetches all 18 Leaves and recomputes every digest from scratch |
+| Re-rendered | **Exactly 4**: Leaf 5's summary and Leaf 9's payoff, both voices. Cost **$0.0346** (handoff estimated ≈$0.05) |
+| CMS | First real write to the live server. **Every one of 144 uploads accepted `audio/mpeg`** — VO-1's promise, unverified until today |
+| Live Leaves | All 18 re-fetched: `_status: published`, all four `audio` arrays `[]`, `updatedAt` unchanged |
+| Held, then cleared | Leaf 12's scenario — see "What went sideways," below |
+| Gate | `ruff check`, `ruff format --check`, `mypy` (the configured target: src + tests, **97 files**, unchanged from VO-1.1), `pytest` **438 passed** (VO-2's baseline: 422). Nothing outside `apps/pipeline` touched — confirmed by `git diff --stat` against every non-pipeline path the handoff named |
+| Spend | **$0.0346** against the **$1.21** remaining. Ledger now $1.8230 of the $3.00 ceiling (Google Cloud) |
+
+---
+
+## Part A — the reshape
+
+`cms/mapper.py`: `AudioRef` gained `narrator` and `text_digest`; `payload()` now emits all
+four fields. `narration_patch` takes `Mapping[str, Sequence[AudioRef]]` and writes each
+group's `audio` as a full array — still one whole-group PATCH per Leaf, per VO-2's original
+design, now carrying two rows instead of one. `verify_narration_write` matches array rows by
+`narrator`, never by position (`content.ts`: order carries no meaning), and checks all three
+content fields — url, duration, digest — per row. New `narration_already_attached` replaces
+the old `dict == dict` idempotency check with a narrator-keyed, id-tolerant comparison, since
+Payload's own row `id`s don't exist before the first write and must never be compared.
+
+`graph/narration_nodes.py`: `attach_leaf_narration` now takes **one Leaf's eight clips**
+(every narrated slide, both narrators) and refuses before any read or upload if the set isn't
+exactly that — checked as a full set against `{slide} × NARRATOR_VOICES`, not just a count, so
+a caller that duplicated one narrator instead of supplying the other is refused with the same
+clarity as one that's simply short a voice. `textDigest` is computed from `clip.line.text` —
+**not** a fresh re-read of the Leaf at write time. That was a real design fork, reasoned
+through rather than assumed: a fresh re-read would describe "the text right now," which
+matches itself trivially and would silently paper over the one race this digest exists to
+catch (text edited after the clip was made, before the write lands). `line.text` describes
+what the clip actually says, so a mismatch at serve time means what it's supposed to mean.
+
+`assets/narration.py`: new `NARRATOR_VOICES` (`NarratorId → Google voice name`, Achernar →
+female, Sadaltager → male — the founder's audition ruling, now written down once rather than
+carried in a CLI default) and `narrator_for_voice`, which refuses any other voice — an
+audition voice or a typo has no ZoomOut identity to attach under. New `text_digest`: sha256
+hex of a field's text, exactly as `NarrationLine.text` holds it. `models.py` gained
+`NarratorId(StrEnum)`, mirroring `NARRATOR_IDS` in `content.ts` the same way `SlideKey`
+already mirrors `SLIDE_KEYS` — same file, same precedent, same reasoning.
+
+`cli.py`: `narrate` no longer takes `--voice`. It always renders and attaches **both** ruled
+narrators together — the only shape that can satisfy "both or none" without a second,
+merge-shaped write path I did not want to build and could not have made atomic. `--render-only`
+now builds a review track per narrator in one invocation instead of one invocation per voice.
+`config.py`'s `narration_voice` setting is gone — dead the moment `--voice` was, and nothing
+else read it (checked: the only other caller, `audition-voices`, takes its own `--voice` list
+and never touched the setting).
+
+**Evidence: unit tests**, `test_narration_write.py`'s "patch" and "verify" sections extended
+for the array shape (narrator-keyed matching, stale-digest detection, missing-narrator
+detection, order-independence proven directly — not just relied on); a new `TestTextDigest`
+class (9 tests); two new "attach" tests for the cross-voice refusal (missing entirely, and a
+duplicate that leaves one narrator short); `test_narration_selection.py` gained the
+`NARRATOR_IDS`-mirror test and a refusal test for `narrator_for_voice`. `narration_fakes.py`'s
+`leaf_doc()` fixture now returns `"audio": []` per slide, matching what VO-1.1 proved the live
+migration actually produces (Part C of that report) rather than the old single-reference
+placeholder.
+
+## Part B — the digest, the load-bearing test
+
+**Cross-language agreement was already checked in the handoff and is not re-verified here** —
+this file guards the Python side only. `TestTextDigest` asserts, independently of
+`text_digest` itself (every expected value is computed inline with `hashlib.sha256(...)
+.hexdigest()`, never by calling the function under test twice): ASCII, a closed-up em dash,
+curly quotes, two real Leaf-shaped bodies, no trim, no case-fold, and both Unicode normal
+forms of "Héctor García" hashing differently — proving no `unicodedata.normalize` anywhere in
+the path. One more assertion lives inside the main attach test rather than standalone: the
+fixture's scenario prompt has a closed-up em dash, so `.text` and `.spoken` genuinely differ,
+and the attached `textDigest` is checked against `text_digest(.text)` and explicitly *not*
+equal to `text_digest(.spoken)` — the one regression (digesting the TTS-rewritten form instead
+of the stored field) a bare unit test on `text_digest` alone cannot catch, because
+`RenderedClip.line` is the same object `narration_script` built; only a real attach exercises
+the seam where a future edit could substitute the wrong one in.
+
+**Independently, outside every test:** the verification script that checked all 144 live
+entries (Part D, below) recomputed each digest from the JSON Payload actually returned and
+compared byte-for-byte — the closest thing to the backend's own recompute-and-compare this
+package can perform without the backend itself.
+
+## Part C — mutation-checked, by hand, each reverted immediately after (md5-verified)
+
+| Guard disabled | Test that went red | Everything else |
+|---|---|---|
+| the missing-narrator refusal | `test_a_leaf_missing_one_narrators_clips_entirely_is_refused` — and the run log shows *why* it matters: with the guard off, a female-only call attaches cleanly (`uploads=4 wrote=True`), which is exactly the one-voice-mid-book failure this exists to prevent | stayed green |
+| the duplicate-clip refusal | `test_a_leaf_with_a_duplicate_clip_for_one_narrator_is_refused` | stayed green |
+| the stale-digest check in `verify_narration_write` | `test_verification_catches_a_stale_digest` | stayed green |
+| the missing-narrator check in `verify_narration_write` | `test_verification_catches_a_missing_narrator` | stayed green |
+| `narrator_for_voice`'s refusal | `test_narrator_for_voice_refuses_anything_not_ruled` | stayed green |
+
+All three touched files (`narration_nodes.py`, `mapper.py`, `narration.py`) confirmed
+byte-identical (`md5`) to their pre-mutation state after every revert.
+
+## Part D — the live write, verified independently of the pipeline's own claims
+
+Ran `narrate --run-id ikigai --limit 1` first — one Leaf, alone — before trusting the tool with
+all eighteen. Then, rather than trust `attached.passed`, re-fetched Leaf 262 by raw `curl`,
+copied its stored `summary.body` text out of the JSON by hand, and computed `sha256` on it in a
+separate Python process: matched the stored `textDigest` exactly, on all three narrated fields
+I checked. Confirmed the *published* read of the same Leaf still carried `audio: []` on all
+four slides and an `updatedAt` from before this session. Only then ran the full eighteen.
+
+**The independent check, at scale:** a script (not part of the pipeline, not part of the test
+suite — plain `urllib` and `hashlib`) fetched all 18 Leaves twice each (draft and live) after
+the run, and for every one of 144 array entries: recomputed `sha256` of the live field text and
+compared to the stored `textDigest`; checked `durationSeconds > 0`; checked a non-empty `url`;
+checked the live Leaf's four arrays are `[]` and `_status` is `published`. Zero problems.
+Output included below because it is the artifact this package exists to produce:
+
+```
+144 audio entries checked across 18 Leaves x 4 slides. Expected: 18 x 4 x 2 = 144.
+Sample row: {"id": "6aac55dcafe0951eb0cc55f3", "narrator": "female",
+  "url": "/api/media/file/ikigai-leaf-00-summary-achernar-d88c742c88.mp3",
+  "durationSeconds": 24.41,
+  "textDigest": "863efeea57955fd20437d786e8e300b546288e6b89784d0f0f0dd13369d318c3"}
+ALL CLEAN.
+```
+
+**Payload's real array shape, for VO-3:** each entry carries an `id` — a 24-character hex
+string, Payload's own row identity, absent before the first write and stable across re-fetches
+after. Order in the response is whatever order the PATCH sent (this package always writes
+female then male, because `NARRATOR_VOICES` iterates that way) — **not sorted, not guaranteed,
+and content.ts is explicit that nothing may rely on it.** An untouched slide's `audio` reads
+back as `[]`, never `null` and never omitted.
+
+**What went sideways, worth knowing:** the first full run held Leaf 12 — its scenario has
+leaked a spoken direction under regeneration since VO-2 first hit it, and the README's own
+documented recipe uses `--max-attempts 3`, which I did not pass on the first attempt (I used
+the command's default, 2). Re-ran with `--max-attempts 3`; the third attempt was already on
+disk from VO-2's original audition, so the fix cost nothing and the seventeen already-attached
+Leaves were re-verified, not re-written (`wrote=False, uploads=0` on every one — idempotency
+held under a full second invocation, which is evidence for that mechanism I didn't have to
+construct separately). **Worth a decision:** the CLI default of 2 attempts is a real trap for
+a book with even one line like Leaf 12's — a future package should either default to 3 or the
+README should say, before the first run rather than after a held Leaf, "known-difficult books
+want `--max-attempts 3` from the start."
+
+**No Leaf carried unpublished changes.** `pending_changes_besides_narration` never fired
+across all eighteen — stated because a check that never once triggers is easy to stop
+believing in without a session that watched it stay silent for a reason (nothing else touched
+these Leaves since VO-1.1's migration).
+
+## What I did not test, and why
+
+- **CLI-level test of `narrate`.** Unchanged from VO-1.1/VO-2: the node functions are tested,
+  the command was run live, twice, against the real CMS.
+- **A clip list with all eight expected pairs present plus a ninth, wrong-voice clip.** The
+  `extra` branch in `attach_leaf_narration`'s validation exists and the voice-refusal it
+  depends on (`narrator_for_voice`) is unit-tested, but nothing exercises the two together
+  through the attach path itself. Tier C — no caller in this codebase can currently produce
+  this shape.
+- **Google Cloud Monitoring request counts.** VO-2 and VO-1.1 both verified the transport
+  (Cloud TTS, not AI Studio) this way in depth. This package's spend is four clips through the
+  same, unmodified `SpeechClient`; I relied on that prior verification rather than repeating it
+  for $0.03 of traffic.
+- **The mobile app.** Could not: `EXPO_PUBLIC_API_URL` still resolves to port 3000, which is
+  still held by an unrelated Next.js app on this Mac (confirmed independently — not ZoomOut's
+  backend, which is what the handoff's device-gate note already said). Payload itself (port
+  3001, where this package actually writes) answered every request normally throughout.
+
+## Assumptions made
+
+- **`textDigest` sourced from `clip.line.text`, not a fresh Payload read at write time** —
+  reasoned through above (Part A), not merely the more convenient choice.
+- **A slide's `audio` order is female-then-male** because that's `NARRATOR_VOICES`'s
+  iteration order — never relied on downstream, and the verification script sorts before
+  comparing.
+
+## Deferred: Tier C worklist (inherited, unchanged, plus one addition)
+
+Everything VO-2's original report deferred still applies (no live-model test suite for the TTS
+client or guard, `audition-voices` has no output-name option, two `narrate` processes would
+race on the cost ledger, the review pages are ~19 MB each). Added: the `extra`-clips branch
+noted above.
+
+## How to finish
+
+Nothing left in this package. The founder publishes all 18 Leaves; VO-3 builds the player and
+the narrator preference (per `projectplan.md`'s 2026-09-18 ruling: set at onboarding, not
+chosen inside VO-3's own UI) against the array shape reported in Part D.
+
+---
+
 
 **12 of 12 acceptance criteria met.** Root `lint`, `typecheck` and `test` all clean —
 **1,391 tests across the repo** (shared 77, admin 204, backend 494, mobile 616), up from

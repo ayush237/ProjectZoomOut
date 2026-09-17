@@ -88,7 +88,10 @@ def leaf_doc(order: int = 4, *, sentinel: str | None = None, leaf_id: int = 266)
     quotes above all — so a test can prove it reached nothing.
     """
     mark = f" {sentinel}" if sentinel else ""
-    silent_audio = {"url": None, "durationSeconds": None}
+    # VO-1.1: a narrated slide's `audio` is an array, empty until a narrator is attached —
+    # confirmed against the live migration (collaboration-log.md, VO-1.1 Part C): `summary.
+    # audio` reads back as `[]`, not the old single-reference group shape.
+    silent_audio: list[dict[str, Any]] = []
     return {
         "id": leaf_id,
         "trackId": 50,
@@ -101,7 +104,7 @@ def leaf_doc(order: int = 4, *, sentinel: str | None = None, leaf_id: int = 266)
         "updatedAt": "2026-09-15T14:23:17.600Z",
         "summary": {
             "body": "The author argues that flow occurs between boredom and anxiety.",
-            "audio": dict(silent_audio),
+            "audio": list(silent_audio),
         },
         "scenario": {
             "prompt": "You are building a routine form for your team—a task you could do on "
@@ -112,11 +115,11 @@ def leaf_doc(order: int = 4, *, sentinel: str | None = None, leaf_id: int = 266)
                 {"id": "a3", "text": f"Delegate it{mark}", "isCorrect": False},
             ],
             "image": {"url": "/api/media/file/leaf-04-scenario-8.png", "alt": f"A desk{mark}"},
-            "audio": dict(silent_audio),
+            "audio": list(silent_audio),
         },
         "payoff": {
             "body": "A slight stretch creates the middle path where deep focus becomes possible.",
-            "audio": dict(silent_audio),
+            "audio": list(silent_audio),
         },
         "stickyNotes": {
             "notes": [
@@ -124,13 +127,13 @@ def leaf_doc(order: int = 4, *, sentinel: str | None = None, leaf_id: int = 266)
                 {"id": "n2", "note": f"Anxiety is too hard{mark}"},
             ],
             "diagram": None,
-            "audio": dict(silent_audio),
+            "audio": list(silent_audio),
         },
         "takeaway": {
             "body": "You cannot always choose your work, but you can choose how you do it.",
             "dinnerTableKnowledge": f"Flow was named by Mihaly Csikszentmihalyi{mark}",
             "applyInLife": f"Add one constraint to a dull task today{mark}",
-            "audio": dict(silent_audio),
+            "audio": list(silent_audio),
         },
         "sourceReferences": [
             {

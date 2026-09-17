@@ -19,14 +19,22 @@ Cache → budget → Cloud TTS → **disk** → level and edge → mp3 → measu
 
 ## Attach — per Leaf
 
+**Both narrators or none** (VO-2.1): `attach_leaf_narration` takes one Leaf's clips across
+*every* narrated slide **and every narrator together** — eight clips, not four. A reader who
+chose one narrator must never be handed the other mid-book, so the all-or-nothing rule VO-2
+already applied across a Leaf's four slides now applies across its two voices as well, in the
+same refusal, before anything is read or uploaded.
+
 1. **Refuse a Leaf that already has unpublished changes.** A draft write lands on the latest
    draft, and the founder's next publish would ship those changes along with the audio.
 2. Snapshot both versions to disk, so a damaged write can be put back by hand.
 3. **Find-then-upload** each clip by its content-hashed filename, and compare the bytes
    Payload serves with the bytes rendered — WP33.1's transfer proof, per clip.
-4. **One PATCH**, of the four narrated groups whole, as a draft.
-5. **Re-fetch both versions and compare.** The draft must hold exactly this audio and
-   nothing else changed; the live Leaf must be exactly as it was, and still published.
+4. **One PATCH**, of the four narrated groups whole, each `audio` now a two-row array keyed by
+   narrator — still one write per Leaf, not one per voice.
+5. **Re-fetch both versions and compare.** The draft must hold exactly this audio, both
+   narrators, and nothing else changed; the live Leaf must be exactly as it was, and still
+   published.
 """
 
 from __future__ import annotations
@@ -55,10 +63,13 @@ from zoomout_pipeline.assets.audio import (
 from zoomout_pipeline.assets.budget import NarrationBudget
 from zoomout_pipeline.assets.narration import (
     NARRATED_FIELDS,
+    NARRATOR_VOICES,
     NarrationLine,
     clip_alt,
     clip_digest,
     clip_filename,
+    narrator_for_voice,
+    text_digest,
 )
 from zoomout_pipeline.assets.narration_guard import (
     GUARD_NODE,
@@ -82,6 +93,7 @@ from zoomout_pipeline.assets.speech import (
 from zoomout_pipeline.cms.mapper import (
     AudioRef,
     WriteCheck,
+    narration_already_attached,
     narration_patch,
     pending_changes_besides_narration,
     verify_live_untouched,
@@ -535,7 +547,7 @@ class AttachedLeaf:
     order: int
     leaf_id: int
     wrote: bool
-    media: dict[str, dict[str, Any]]
+    media: dict[str, dict[str, dict[str, Any]]]
     draft_check: WriteCheck
     live_check: WriteCheck
     uploads: int = 0
@@ -554,17 +566,44 @@ def attach_leaf_narration(
     book_title: str,
     store: ClipStore,
 ) -> AttachedLeaf:
-    """Upload one Leaf's clips and attach them to its draft, then prove what was stored."""
+    """Upload one Leaf's clips — every narrated slide, both narrators — and attach them to its
+    draft, then prove what was stored.
+
+    `clips` must be exactly one clip per (slide, narrator) pair: both of `NARRATOR_VOICES`,
+    all four of `NARRATED_FIELDS`. A caller with only one narrator's clips is refused rather
+    than partially attached — see the module docstring.
+    """
     orders = {clip.line.order for clip in clips}
     if len(orders) != 1:
         raise NarrationWriteError(f"one Leaf's clips expected, got Leaves {sorted(orders)}")
     order = orders.pop()
+
+    present = [(clip.line.slide, clip.voice) for clip in clips]
+    if len(present) != len(set(present)):
+        duplicates = sorted({str(key) for key in present if present.count(key) > 1})
+        raise NarrationWriteError(f"Leaf {order}: more than one clip for {duplicates}")
+
+    # Both narrators or none — extended from "every slide" (VO-2) to "every slide, every
+    # narrator" (VO-2.1). Checked as a full set, not just a count, so a caller that swapped
+    # one narrator's clips for a duplicate of the other's is refused too, not just one short.
+    expected = {(slide, voice) for slide in NARRATED_FIELDS for voice in NARRATOR_VOICES.values()}
+    missing = sorted(str(key) for key in expected - set(present))
+    if missing:
+        raise NarrationWriteError(
+            f"Leaf {order}: missing clips for {missing} — both narrators are required on "
+            "every narrated slide, or none are attached"
+        )
+    extra = sorted(str(key) for key in set(present) - expected)
+    if extra:
+        raise NarrationWriteError(f"Leaf {order}: clips for {extra} are not a ruled narrator")
+
     failing = [clip for clip in clips if not clip.passed]
     if failing:
         raise NarrationHeldError(
             f"Leaf {order} held: "
             + "; ".join(
-                f"{clip.line.slide.value} at {clip.articulation_wpm:.0f} words a minute of speech"
+                f"{clip.line.slide.value} ({clip.voice}) at {clip.articulation_wpm:.0f} words a "
+                "minute of speech"
                 + (f" ({', '.join(clip.check.findings())})" if clip.check is not None else "")
                 for clip in failing
             )
@@ -586,12 +625,13 @@ def attach_leaf_narration(
         )
     store.snapshot(order, draft=before_draft, live=before_live)
 
-    refs: dict[str, AudioRef] = {}
-    media: dict[str, dict[str, Any]] = {}
+    refs: dict[str, list[AudioRef]] = {}
+    media: dict[str, dict[str, dict[str, Any]]] = {}
     problems: list[str] = []
     uploads = 0
     for clip in clips:
         group, _field = NARRATED_FIELDS[clip.line.slide]
+        narrator = narrator_for_voice(clip.voice)
         filename = clip_filename(
             book_title=book_title, line=clip.line, voice=clip.voice, content_hash=clip.sha256
         )
@@ -622,8 +662,14 @@ def attach_leaf_narration(
                 f"{clip.sha256[:12]}… — refusing to attach a file that is not the one checked"
             )
 
-        refs[group] = AudioRef(url=url, duration_seconds=clip.duration_seconds)
-        media[group] = {
+        ref = AudioRef(
+            narrator=narrator.value,
+            url=url,
+            duration_seconds=clip.duration_seconds,
+            text_digest=text_digest(clip.line.text),
+        )
+        refs.setdefault(group, []).append(ref)
+        media.setdefault(group, {})[narrator.value] = {
             "media_id": doc.get("id"),
             "url": url,
             "filename": filename,
@@ -632,13 +678,16 @@ def attach_leaf_narration(
             "sha256": clip.sha256,
             "voice": clip.voice,
             "digest": clip.digest,
+            "textDigest": ref.text_digest,
             "attempt": clip.attempt,
             "severity": clip.severity.value if clip.severity is not None else None,
         }
 
     already = all(
-        ((before_draft.get(group) or {}).get("audio") or {}) == ref.payload()
-        for group, ref in refs.items()
+        narration_already_attached(
+            existing=(before_draft.get(group) or {}).get("audio"), refs=refs_for_group
+        )
+        for group, refs_for_group in refs.items()
     )
     if not already:
         client.update_leaf_draft(

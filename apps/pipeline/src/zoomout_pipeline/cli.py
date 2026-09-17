@@ -1645,9 +1645,6 @@ def replace_voice(clip: Any, label: str) -> Any:
 @app.command("narrate")
 def narrate(
     run_id: Annotated[str, typer.Option(help="The run whose Leaves should be read aloud.")],
-    voice: Annotated[
-        str, typer.Option(help="The narrator. Defaults to ZOOMOUT_PIPELINE_NARRATION_VOICE.")
-    ] = "",
     limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
     render_only: Annotated[
         bool, typer.Option(help="Render, check and build the review track; write nothing.")
@@ -1667,17 +1664,26 @@ def narrate(
         ),
     ] = 2,
 ) -> None:
-    """Read a run's Leaves aloud: render, check, attach as drafts, and build the review track.
+    """Read a run's Leaves aloud, in **both** ruled narrators, and attach them as drafts.
 
-    **Writes drafts only.** The Leaves are published; each write lands as a pending draft
-    version, and the live Leaf has no audio until a human publishes it again.
+    **Both narrators or none** (VO-2.1). Every Leaf is rendered and checked in both of
+    `NARRATOR_VOICES` before either is attached, and a Leaf attaches only once both pass on
+    every narrated slide — the founder's rule that a reader who picks one narrator must never
+    be handed the other mid-book. **Writes drafts only.** The Leaves are published; each write
+    lands as a pending draft version, and the live Leaf has no audio until a human publishes
+    it again.
 
     Re-running is safe and free for anything already done: clips are cached by what was
     asked, uploads are found by the hash of their bytes before being made, and a Leaf whose
     draft already carries exactly this audio is verified rather than written again.
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError
-    from zoomout_pipeline.assets.narration import direction_for, narration_script, title_slug
+    from zoomout_pipeline.assets.narration import (
+        NARRATOR_VOICES,
+        direction_for,
+        narration_script,
+        title_slug,
+    )
     from zoomout_pipeline.assets.narration_guard import GuardSeverity
     from zoomout_pipeline.assets.review_track import consistency, join_in_order, write_review
     from zoomout_pipeline.assets.speech import SpeechError
@@ -1688,22 +1694,16 @@ def narrate(
         render_line,
     )
 
-    narrator = voice or get_settings().narration_voice
-    if not narrator:
-        typer.secho(
-            "no narrator. Choose one by audition (`audition-voices`) and pass --voice, or set "
-            "ZOOMOUT_PIPELINE_NARRATION_VOICE.",
-            fg=typer.colors.RED,
-        )
-        raise typer.Exit(2)
-
     rendered: list[Any] = []
     halted = ""
     failed: list[str] = []
     held: list[str] = []
     with run_context() as (graph, deps):
         session = _Narration(graph, deps, run_id, guard=guard)
-        typer.echo(f"narrator   : {narrator}{' — render only' if render_only else ''}\n")
+        narrators = ", ".join(
+            f"{narrator.value}={name}" for narrator, name in NARRATOR_VOICES.items()
+        )
+        typer.echo(f"narrators  : {narrators}{' — render only' if render_only else ''}\n")
         narration = dict(session.state.cms_narration)
         leaves = session.leaves[:limit] if limit else session.leaves
 
@@ -1721,11 +1721,12 @@ def narrate(
                 raise typer.Exit(1)
 
             try:
+                lines = narration_script(leaf)
                 clips = [
                     render_line(
                         line=narrated,
                         speech=session.speech,
-                        voice=narrator,
+                        voice=voice_name,
                         prompt=direction_for(narrated.slide),
                         store=session.store,
                         budget=session.budget,
@@ -1733,7 +1734,8 @@ def narrate(
                         guard=session.guard,
                         max_attempts=max_attempts,
                     )
-                    for narrated in narration_script(leaf)
+                    for voice_name in NARRATOR_VOICES.values()
+                    for narrated in lines
                 ]
             except (BudgetExceededError, SpeechError) as error:
                 # Both are a stop, not a crash: what was rendered is on disk and on the
@@ -1745,7 +1747,7 @@ def narrate(
             rendered.extend(clips)
             typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
             for clip in clips:
-                typer.echo(f"           {_clip_line(clip)}")
+                typer.echo(f"           {clip.voice:<12} {_clip_line(clip)}")
 
             if render_only:
                 continue
@@ -1770,7 +1772,7 @@ def narrate(
 
             narration[key] = {
                 "leaf_id": leaf_id,
-                "voice": narrator,
+                "narrators": {narrator.value: name for narrator, name in NARRATOR_VOICES.items()},
                 "slides": attached.media,
                 "wrote": attached.wrote,
                 "verified": attached.passed,
@@ -1793,33 +1795,37 @@ def narrate(
 
     if rendered:
         heard = [clip.heard(session.book_title) for clip in rendered]
-        report = consistency(heard, listen_terms=listen_for or [])
-        track, cues = join_in_order(heard)
-        files = write_review(
-            destination=session.store.root
-            / "review"
-            / f"{title_slug(session.book_title)}-narration-{narrator.lower()}",
-            heading=f"{session.book_title} — narration review",
-            preamble=[
-                f"Narrator **{narrator}**, `{session.speech.model}` via "
-                f"`{session.speech.endpoint}` ({session.speech.project}).",
-                "Every clip levelled to the same speech loudness, given the same 60 ms head "
-                "and 350 ms tail, and encoded once as 64 kbps mono mp3 — this track is the "
-                "uploaded files, decoded, in reading order.",
-                "Listening model: "
-                + (session.guard.model if session.guard else "**off — no clip was checked**"),
-            ],
-            track=track,
-            cues=cues,
-            report=report,
-        )
+        for voice_name in NARRATOR_VOICES.values():
+            own = [clip for clip in heard if clip.voice == voice_name]
+            if not own:
+                continue
+            report = consistency(own, listen_terms=listen_for or [])
+            track, cues = join_in_order(own)
+            files = write_review(
+                destination=session.store.root
+                / "review"
+                / f"{title_slug(session.book_title)}-narration-{voice_name.lower()}",
+                heading=f"{session.book_title} — narration review",
+                preamble=[
+                    f"Narrator **{voice_name}**, `{session.speech.model}` via "
+                    f"`{session.speech.endpoint}` ({session.speech.project}).",
+                    "Every clip levelled to the same speech loudness, given the same 60 ms head "
+                    "and 350 ms tail, and encoded once as 64 kbps mono mp3 — this track is the "
+                    "uploaded files, decoded, in reading order.",
+                    "Listening model: "
+                    + (session.guard.model if session.guard else "**off — no clip was checked**"),
+                ],
+                track=track,
+                cues=cues,
+                report=report,
+            )
+            typer.echo(f"\nreview     : {files.audio}\nlisten     : {files.page}")
         counts = {level: 0 for level in GuardSeverity}
         for clip in rendered:
             if clip.severity is not None:
                 counts[clip.severity] += 1
-        typer.echo(f"\nreview     : {files.audio}\nlisten     : {files.page}")
         typer.echo(
-            f"guard      : {counts[GuardSeverity.EXACT]} exact, "
+            f"\nguard      : {counts[GuardSeverity.EXACT]} exact, "
             f"{counts[GuardSeverity.MINOR]} minor, {counts[GuardSeverity.MAJOR]} major, "
             f"{sum(1 for c in rendered if c.check is None)} unchecked — of {len(rendered)} clips"
         )
