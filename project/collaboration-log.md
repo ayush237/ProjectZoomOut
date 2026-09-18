@@ -923,6 +923,78 @@ It is being folded in here rather than waiting for a convenient package because 
 
 ## Completions (Manager → Architect)
 
+### Completed: INTRO-1 — the first-run intro — 2026-09-18
+
+**Code complete, fully tested, not visually verified. That second half is not a footnote — three explicit requirements (the seed-by-eye comparison, the five simulator device-gate checks, "do not take the first one that runs") are unmet, not passed quietly.** Two independent, pre-existing environment problems on this machine blocked every avenue to a running build, detailed below. Branch `intro-1-first-run` in the `ZO-admin` worktree, off `origin/main` at `fa905c1` (fast-forwarded once more before push to pick up VO-3's handoff — unrelated, `project/` only, confirmed by `git diff --name-only` before merging).
+
+| | |
+|---|---|
+| Automated gate | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` — all green, root level, all four workspaces |
+| Mobile tests | **657** (616 baseline + **41 new**: 35 across 6 new suites, plus 4 added to `navigation.test.tsx` and 2 to `reduceMotionCallSites.test.tsx`) |
+| Typecheck | **966** files across the four-workspace `tsc` run; **117** under `apps/mobile/src` |
+| Visual verification | **None.** Every "on the simulator" claim in this report is a test assertion, not an observation — see "What I could not do," which is the most important section here |
+
+---
+
+## What changed
+
+**New `apps/mobile/src/screens/intro/`:**
+- `IntroScreen.tsx` — the screen. One continuous camera move (`scale`/`focusX`/`focusY`, three `withTiming`s sharing one span that ends as beat 4 begins) from a tight frame on the fixture's `next` cell to the whole graph fitted to the viewport. Four lines crossfade on their own timeline, identical in both Reduce Motion branches — a fade is already the accommodation, so nothing there needs to swap. The camera and the beat-4 amber pulse do swap: under Reduce Motion they jump straight to their resting values with **no Reanimated animation object created at all**, rather than an animated-then-suppressed one.
+- `introBeats.ts` — the four lines verbatim, their timestamps, and `INTRO_HANDOFF_MS`, derived once so the camera's span and the sign-in control's timer cannot disagree about when beat 4 starts.
+- `introCamera.ts` — pure `{scale, focus}` math: `fitScale` (contain-fit, centred) and `introCameraFrames` (beat 1's tight frame, beat 4's fitted one).
+- `introFixture.ts` — the fixed synthetic graph: 22 states (5 `done`, 1 `next`, 16 `locked`), a literal seed. **22, not a number in `PRODUCT.md`'s 15–30 range chosen for realism** — at 18 the fixture's graph fits inside most current iPhones at scale 1, making "zoom out" a no-op on the devices this ships to; 22 is taller than a Pro Max, so the fit-scale is genuinely below 1 on real hardware. Reasoning is in the file; the seed itself (`8_675_309`) was **not** chosen by the comparison the handoff asked for — see below.
+- `introLayers.ts` — an intro-local painter, teal (`palette.primary`) for reached tissue and `palette.border` for unreached, no core buds. **`buildDoneConstellationLayers` does not fit, which is the finding the handoff asked me to report rather than silently work around**: it paints every soma's ring and core bud in `palette.reward`, the earned-progress colour, and nobody has read anything before sign-in. Reusing it would put reward amber on every node in the fixture; the handoff is explicit that amber belongs only to beat 4's pulse. Also exposes the spine as one joined subpath (`chainedPath`) rather than one `M` per gap — the batched static layers use `curvePath` per curve same as the reference files, but the animated pulse needs a single continuous dash phase, and concatenating per-curve `M...` output would reset that phase at every gap, reading as several signals firing at once instead of one travelling the line.
+- `introSeenStore.ts` / `useIntroSeen.ts` — the SecureStore flag (`zoomout.introSeen`, `SoundProvider.tsx`'s pattern) and the `restoring`/`unseen`/`seen` hook `RootNavigator` gates on.
+
+**`apps/mobile/src/navigation/RootNavigator.tsx`:** intro gate inserted ahead of `AuthStack`, inside the `status !== 'signedIn'` branch only — checking it unconditionally would show the intro to an *existing signed-in reader* on their next cold start after this update ships, since `introSeen` is a new flag nobody has ever set. `status === 'restoring'` still gates first; `intro.status === 'restoring'` gates second, same blank-frame shape, so a slow SecureStore read cannot flash `AuthStack` before the intro appears.
+
+**Tests:** `IntroScreen.test.tsx` (both themes, the four verbatim strings, skip-from-frame-one, the skip→hand-off swap timed against `INTRO_HANDOFF_MS`, both Reduce Motion branches) · `introBeats.test.ts` / `introCamera.test.ts` / `introFixture.test.ts` / `introLayers.test.ts` (pure-logic coverage, including the "no reward colour anywhere" and "geometry is identical across repeated calls" acceptance criteria) · `navigation.test.tsx` gained an `Intro` block — shows-before-auth-stack, flag-set-on-skip, flag-set-on-completion (fake timers, see below), flag-already-set-skips-straight-to-auth-stack · `reduceMotionCallSites.test.tsx` gained `IntroScreen` as a fourth surface, both branches, with the exact call counts derived by hand (17 reduced-motion, 22 full-motion) and confirmed against the real spy rather than assumed.
+
+**A fake-timers finding worth keeping**, since nothing in this repo's tests used them before: `jest.advanceTimersByTime` fires a `setTimeout` callback's `setState` synchronously, but the resulting React commit needs a microtask tick to flush through `act` even so — a bare `act(() => jest.advanceTimersByTime(ms))` leaves the pre-update tree on screen with no error. `await act(async () => { jest.advanceTimersByTime(ms); await Promise.resolve(); await Promise.resolve(); })` — two empty microtask turns, one was not enough — is the smallest fix I found by hand, isolated as `advanceTimersAndFlush` in `IntroScreen.test.tsx`.
+
+---
+
+## What I could not do
+
+**Nothing in this app rendered on a screen this session.** Two separate, pre-existing environment problems, neither caused by this package:
+
+1. **A native rebuild fails on this machine, unrelated to anything in this diff.** `expo run:ios` (after fixing an unrelated CocoaPods/Ruby locale crash — this host's shell has no `LANG` set, and `pod install` needs `LANG=en_US.UTF-8`) fails compiling `expo-modules-jsi`, a transitive Expo SDK dependency already pinned in the lockfile before this package touched anything: `JavaScriptCodable+Date.swift:53:50: error: type of expression is ambiguous without a type annotation`. This machine has exactly one Xcode installed, 26.3, building against the iOS 26.2 simulator SDK with `-swift-version 6` — a newer Swift compiler than whatever `expo-modules-jsi`'s pinned version was written against. **This will block anyone else's native rebuild on this same machine too**, including VO-3's, if that package's Manager tries one here for the audio-session device gate. Worth a decision — pin an older Xcode, or bump the dependency — before it costs a second package the same afternoon.
+2. **The one pre-built `.app` already on the simulators (2026-09-10, predates this package) would not pick up a fresh Metro server.** I lost real time here chasing what turned out to be my own mistake — I killed my own standalone Metro process assuming `expo run:ios` would start its own, then it failed before reaching that step, so port 8082 had nothing listening for a while and every reconnect attempt was silently doomed. Once I caught that and restarted Metro, the dev-client's `com.zoomout.app://expo-development-client/?url=...` deep link (confirmed correct against `@expo/cli`'s own `UrlCreator.ts`) still never produced a single request in Metro's log, tried against two different simulators including a brand-new one created for exactly this (to rule out stale Keychain — SecureStore/Keychain data **does** survive uninstall+reinstall on this simulator, a finding in itself if anyone else assumes otherwise). Since even a successful reconnect would only have shown the **2026-09-10 binary's old code**, not this package's, item 1 is the one that actually matters — fixing item 2 without item 1 would not have gotten me a picture of `IntroScreen` either.
+3. **Web is not an option without adding a dependency.** `expo start --web` refuses: `react-native-web` is not installed. I did not install it — a new dependency purely to work around a device-gate gap is a bigger, murkier change than the gap itself, and not mine to add unilaterally.
+
+**Consequence, stated plainly against the handoff's own list:**
+- [ ] "Choose the seed by looking... say which seeds you compared" — **not done.** `INTRO_SEED = 8_675_309` is a literal I picked with no rendering at all, justified in `introFixture.ts`'s comments by the reasoning I could do without eyes (node count, camera fit-scale arithmetic) but never looked at.
+- [ ] `INTRO_FOCUS_SCALE = 6` (beat 1's magnification) — same: reasoned from the dendrite-reach constants in `roadmapGeometry.ts`, never seen.
+- [ ] All five "yours, on the simulator" device-gate bullets — legible in both themes with a live switch, largest OS text size, Reduce Motion's still frame, skip-from-frame-one, both relaunch-after-finish and relaunch-after-skip — **none observed.** Everything under these headings above is a test passing, not a screen I looked at, and I have tried to say so everywhere rather than let a passing test read as a device check.
+- [x] Everything else on the handoff's acceptance list — the eight items that are genuinely test-shaped (exact strings, both exit paths, the `reduceMotionCallSites` registration, the Reduce Motion swap, deterministic geometry, the motion-config routing, the `screens/track`/`screens/share` no-touch guarantee, the four root commands) — is met and independently re-checked; see "What changed" for which test covers which.
+
+**I am not confident the intro looks right.** The camera math, the paint, and the pulse are all real, wired, and covered by unit tests down to "is the scale actually below 1 on real hardware" — but "does it read as one continuous move," "is the seed's graph shape pleasant," and "is the text legible over a busy beat-1 close-up" are exactly the three questions no test in this package can answer, and I have not answered them by looking either. Treat the seed and the scale constant as placeholders a first device pass should revisit, not as settled.
+
+---
+
+## Assumptions, stated so the next session does not have to reconstruct them
+
+- **The camera uses `withTiming` with an explicit ease, not a `spring` preset**, despite `motion.ts`'s spring-over-linear default. Reasoned in `IntroScreen.tsx`'s own comment: the spring presets are tuned for short discrete feedback, and a spring stretched to ~10s either idles near zero velocity for most of its length or overshoots the "whole graph in frame" target and settles back into it, which reads as a bump rather than a pull-back. Flagging because it is a departure from a named convention, not because I think it is wrong.
+- **The seen-flag gate sits inside `status !== 'signedIn'`, not ahead of the whole navigator.** Explained in `RootNavigator.tsx`'s docstring: gating unconditionally would show the intro to an already-signed-in reader on the first cold start after this ships, since the flag is new and nobody has ever set it for existing installs.
+- **`buildDoneConstellationLayers` is not reused** — the handoff invited this finding explicitly ("if it does not fit, say so... that is a finding about a shared primitive"); see "What changed" above for the reward-amber reason.
+- **No dedicated test file for `useIntroSeen.ts` itself** — its `restoring`/`unseen`/`seen` transitions are exercised through `navigation.test.tsx`'s `Intro` block against the real store rather than in isolation, which seemed like better coverage than the same three states asserted twice.
+
+## Test count, against nothing
+
+The handoff asks for a comparison to "the previous package's" count. The last several completions in this file are pipeline packages (VO-2.1, VO-1.1, VO-2, VO-1, WP33.1, WP33) — Python, a different test runner, a different app. I do not have a same-app mobile baseline close enough in this file to compare against honestly, so I am reporting **657 mobile tests / 34 suites, up from 616 / 28** (verified via `git diff HEAD~1 HEAD` on the two modified test files rather than assumed) rather than inventing a comparison that would look precise and would not be.
+
+## Where the time went
+
+Rough, not measured: **implementation** (the screen, the camera/paint/beat modules) a little under half; **tests** (including the fake-timers debugging) a quarter; **the device-verification attempt** — native build, deep-link reconnection, the fresh-simulator and Keychain detour, web as a last option — genuinely the single largest block, run through in "What I could not do" above rather than repeated here; the write-up, the rest.
+
+## Follow-ups / tech debt for Architect
+
+1. **The Xcode/`expo-modules-jsi` incompatibility (above) is environment, not code, but it is repo-relevant**: any Manager package needing an on-device check on *this* machine hits the same wall until someone either pins an older Xcode or moves the dependency version. Worth surfacing before VO-3 spends a package finding it independently.
+2. **The seed and `INTRO_FOCUS_SCALE` need a real look** — the single most consequential unresolved item in this package. Whoever picks this up next should treat "does the intro look right" as unanswered, not assume the code passing tests means it does.
+3. **`ZO-admin`'s `node_modules` was stale relative to the lockfile** (missing `react-native-svg` entirely — an existing dependency, not one this package added) and needed a plain `npm install` before anything using it would even typecheck. Fixed as part of this session; noting it in case another fresh worktree hits the same thing and wastes time wondering why an existing screen won't import.
+
+---
+
 ### Completed: VO-2.1 — the 144 clips reach the CMS — 2026-09-18
 
 **9 of 9 acceptance criteria met.** Ran on Sonnet 5, as suggested. `runs/ikigai` (183 raw

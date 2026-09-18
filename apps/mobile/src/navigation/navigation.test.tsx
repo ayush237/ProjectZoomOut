@@ -1,11 +1,18 @@
-import { act, cleanup, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
 import { MemoryTokenStore } from '../api/tokenStore';
 import { AuthProvider } from '../auth/AuthProvider';
 import { ThemeProvider, type ThemeMode } from '../design';
+import { INTRO_HANDOFF_MS } from '../screens/intro/introBeats';
+import { getIntroSeen, setIntroSeen } from '../screens/intro/introSeenStore';
 import { RootNavigator } from './RootNavigator';
+
+/** `jest.setup.js`'s in-memory keychain stand-in — reset so one test's intro-seen state
+ *  cannot leak into the next. */
+type ResettableSecureStore = typeof SecureStore & { __reset: () => void };
 
 /**
  * The navigators, rendered.
@@ -24,8 +31,21 @@ const METRICS: Metrics = {
   frame: { x: 0, y: 0, width: 393, height: 852 },
 };
 
+/**
+ * Every test in this file except the `Intro` block below exercises auth branching, not
+ * the intro — INTRO-1 made `RootNavigator` check a second, independent flag before it
+ * will render `AuthStack`, so without this every "signed out" test here would now land
+ * on the intro instead of `sign-in-screen`. Defaulting to "already seen" keeps those
+ * tests testing what they have always tested; the `Intro` block clears this itself.
+ */
+beforeEach(async () => {
+  (SecureStore as ResettableSecureStore).__reset();
+  await setIntroSeen();
+});
+
 afterEach(async () => {
   await cleanup();
+  jest.useRealTimers();
 });
 
 function json(body: unknown, status = 200): Response {
@@ -168,5 +188,78 @@ describe('TabShell', () => {
     await waitFor(() => {
       expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
     });
+  });
+});
+
+describe('Intro', () => {
+  // Undoes the file's own default (see the top-level `beforeEach`): these tests are
+  // about the flag itself, so they start from "not seen", same as a fresh install.
+  beforeEach(() => {
+    (SecureStore as ResettableSecureStore).__reset();
+  });
+
+  it('shows the intro ahead of the auth stack on an install that has not seen it', async () => {
+    const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
+
+    await waitFor(() => {
+      expect(view.getByTestId('intro-screen')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('sign-in-screen')).toBeNull();
+  });
+
+  it('sets the flag and lands on sign-in when skipped', async () => {
+    const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
+
+    await waitFor(() => {
+      expect(view.getByTestId('intro-skip')).toBeOnTheScreen();
+    });
+
+    await fireEvent.press(view.getByTestId('intro-skip'));
+
+    await waitFor(() => {
+      expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
+    });
+    await expect(getIntroSeen()).resolves.toBe(true);
+  });
+
+  it('sets the flag and lands on sign-in when driven to completion', async () => {
+    // Fake timers must be live before mount: `IntroScreen`'s hand-off timer is
+    // scheduled the instant its effect first runs, during `renderApp` below.
+    jest.useFakeTimers();
+
+    const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
+
+    expect(view.getByTestId('intro-skip')).toBeOnTheScreen();
+
+    // `jest.advanceTimersByTime` fires the timer's `setState` synchronously, but
+    // React's own commit needs a microtask tick to flush through `act` — see
+    // `IntroScreen.test.tsx`'s `advanceTimersAndFlush` for the same fix.
+    await act(async () => {
+      jest.advanceTimersByTime(INTRO_HANDOFF_MS);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(view.getByTestId('intro-continue')).toBeOnTheScreen();
+
+    await fireEvent.press(view.getByTestId('intro-continue'));
+
+    jest.useRealTimers();
+
+    await waitFor(() => {
+      expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
+    });
+    await expect(getIntroSeen()).resolves.toBe(true);
+  });
+
+  it('never mounts the intro, and goes straight to sign-in, when the flag is already set', async () => {
+    await setIntroSeen();
+
+    const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
+
+    await waitFor(() => {
+      expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('intro-screen')).toBeNull();
   });
 });

@@ -1,9 +1,11 @@
 import { AccessibilityInfo } from 'react-native';
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { ReduceMotion } from 'react-native-reanimated';
+import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 import type { PublicScenarioSlide, UnlockedAchievement } from '@zoomout/shared';
 
 import { AchievementUnlock } from '../components/AchievementUnlock';
+import { IntroScreen } from '../screens/intro/IntroScreen';
 import { PayoffSlide } from '../screens/leaf/PayoffSlide';
 import { ScenarioSlide } from '../screens/leaf/ScenarioSlide';
 import { ThemeProvider } from './index';
@@ -34,12 +36,15 @@ import { ThemeProvider } from './index';
  * it off (proving the full-motion branch is no longer the unflagged one).
  *
  * **Scope, stated because it is a real boundary rather than an oversight.** This
- * covers the three animated surfaces that can be rendered on their own. The fourth,
- * `TrackRoadmap`'s `NextNodeRing`, is a private component inside a screen that needs a
- * full graph fixture. It now routes through the same shared override as everywhere
- * else — WP28.1 closed the inline `ReduceMotion.Never` copy WP28 flagged — but it stays
- * uncovered by *this* guard for the fixture reason, and is verified on-device instead
- * (WP28.1's report). Named here so it stays a stated boundary, not a rediscovery.
+ * covers the animated surfaces that can be rendered on their own — `PayoffSlide`,
+ * `ScenarioSlide`, `AchievementUnlock`, and (INTRO-1) `IntroScreen`, whose graph is a
+ * fixed fixture rather than a real Track and so needs no server data to mount either.
+ * `TrackRoadmap`'s `NextNodeRing` is the one left out: a private component inside a
+ * screen that needs a full graph fixture built from real Leaves. It routes through the
+ * same shared override as everywhere else — WP28.1 closed the inline `ReduceMotion.Never`
+ * copy WP28 flagged — but it stays uncovered by *this* guard for the fixture reason, and
+ * is verified on-device instead (WP28.1's report). Named here so it stays a stated
+ * boundary, not a rediscovery.
  */
 
 interface RecordedCall {
@@ -66,8 +71,9 @@ jest.mock('react-native-reanimated', () => {
     spied[name] = (...args: unknown[]): unknown => {
       // Reached through `globalThis` because Jest hoists this factory above every
       // binding in the module scope, so it cannot close over `calls` directly.
-      (globalThis as { __reanimatedCalls?: { factory: string; args: unknown[] }[] })
-        .__reanimatedCalls?.push({ factory: name, args });
+      (
+        globalThis as { __reanimatedCalls?: { factory: string; args: unknown[] }[] }
+      ).__reanimatedCalls?.push({ factory: name, args });
 
       return original(...args);
     };
@@ -93,6 +99,12 @@ const ACHIEVEMENT: UnlockedAchievement = {
   unlockedAt: '2026-09-10T00:00:00.000Z',
 };
 
+/** `IntroScreen` reads safe-area insets; the others here do not. */
+const METRICS: Metrics = {
+  insets: { top: 47, left: 0, right: 0, bottom: 34 },
+  frame: { x: 0, y: 0, width: 393, height: 852 },
+};
+
 /**
  * Every reduce-motion value handed to a Reanimated factory during this render.
  *
@@ -105,7 +117,11 @@ function overridesPassed(): unknown[] {
 
   for (const call of calls) {
     for (const arg of call.args) {
-      if (arg === ReduceMotion.Never || arg === ReduceMotion.System || arg === ReduceMotion.Always) {
+      if (
+        arg === ReduceMotion.Never ||
+        arg === ReduceMotion.System ||
+        arg === ReduceMotion.Always
+      ) {
         seen.push(arg);
       }
 
@@ -207,6 +223,36 @@ describe('the reduce-motion override, at the call sites that need it', () => {
       expect(overrides.length).toBeGreaterThanOrEqual(2);
       expect(new Set(overrides)).toEqual(new Set([ReduceMotion.Never]));
     });
+
+    it('reaches every text crossfade the intro runs, with the camera and pulse silent', async () => {
+      mockReducedMotion(true);
+
+      await render(
+        <SafeAreaProvider initialMetrics={METRICS}>
+          <ThemeProvider mode="dark">
+            <IntroScreen onExit={jest.fn()} />
+          </ThemeProvider>
+        </SafeAreaProvider>,
+      );
+
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThan(0);
+      });
+
+      /**
+       * The camera and the beat-4 pulse make **no** Reanimated call at all under Reduce
+       * Motion — `IntroScreen.tsx`'s camera effect returns before reaching `withTiming`,
+       * and the pulse `<AnimatedPath>` is not even mounted — so every recorded call here
+       * is one of the four lines' crossfades. Each non-final line
+       * (`withTiming` + inner `withDelay(withTiming)` + `withSequence` + outer
+       * `withDelay`) is 5 calls; the last line (`withTiming` + `withDelay`) is 2:
+       * 3 × 5 + 2 = 17.
+       */
+      const overrides = overridesPassed();
+
+      expect(overrides.length).toBeGreaterThanOrEqual(17);
+      expect(new Set(overrides)).toEqual(new Set([ReduceMotion.Never]));
+    });
   });
 
   /**
@@ -284,6 +330,33 @@ describe('the reduce-motion override, at the call sites that need it', () => {
       const overrides = overridesPassed();
 
       expect(overrides.length).toBeGreaterThanOrEqual(4);
+      expect(new Set(overrides)).toEqual(new Set([ReduceMotion.Never]));
+    });
+
+    it('reaches the camera, the pulse, and every text crossfade in full motion too', async () => {
+      mockReducedMotion(false);
+
+      await render(
+        <SafeAreaProvider initialMetrics={METRICS}>
+          <ThemeProvider mode="dark">
+            <IntroScreen onExit={jest.fn()} />
+          </ThemeProvider>
+        </SafeAreaProvider>,
+      );
+
+      await waitFor(() => {
+        expect(calls.length).toBeGreaterThan(0);
+      });
+
+      /**
+       * Camera: 3 independent `withTiming`s (scale, focusX, focusY) plus the pulse's
+       * `withRepeat(withTiming(...))` — 5. Text: the same 17 as the reduced-motion
+       * branch above, since the crossfade is not conditional on the accommodation at
+       * all — it is already the safe kind of motion. 5 + 17 = 22.
+       */
+      const overrides = overridesPassed();
+
+      expect(overrides.length).toBeGreaterThanOrEqual(22);
       expect(new Set(overrides)).toEqual(new Set([ReduceMotion.Never]));
     });
   });
