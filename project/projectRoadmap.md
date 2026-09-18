@@ -46,11 +46,27 @@ worktree** — branch from `origin/main` instead.
 
 ### What a fresh Architect should do first
 
-**Archive `collaboration-log.md`.** It is **250KB / ~64k tokens** and the total startup load is
-**~148k** — against `token-budget.md`'s 40k target and worse than the 2026-09-15 rescue's starting
-point. **It was deliberately not archived at this clear because VO-3 was mid-package**, which
-`token-budget.md` forbids for a reason that has already cost a round trip. **Do it at VO-3's sign-off**,
-and take INTRO-1, VO-1.1, VO-2 and VO-2.1 out together.
+**✅ The log archive is done — 2026-09-18.** `collaboration-log.md` went **256KB → 114KB (~64k → ~28k
+tokens)**. WP29–WP33.1 plus VO-1's and VO-2's handoffs moved to
+`project/archive/collaboration-log-ikigai.md`. **Done mid-package rather than at VO-3's sign-off, on the
+founder's instruction** — safe here because VO-3's handoff is the most recent entry and was never at
+risk of pruning, and because `ZO-vo3` had no commits and no edit to the log when the cut was made. The
+2026-09-02 failure this rule guards against was a session reading a file and finding its handoff gone;
+that handoff is still the first entry.
+
+**Two things remain, and the second needs a ruling rather than a script.**
+
+1. **The deeper cut, at VO-3's sign-off** — INTRO-1, VO-1.1, VO-2 and VO-2.1 come out together, leaving
+   VO-3's own pair. Roughly another 20k tokens.
+2. **The debt register is now the largest remaining item** and `token-budget.md` says explicitly that
+   shrinking it is *"a real decision about what to stop tracking, not a tidy-up."* **Open debt that is
+   not loaded is debt that gets forgotten.** Do not script this one.
+
+**One defect found and fixed in passing:** VO-1.1's and VO-2's completion reports had been appended
+with **no `### Completed:` header**, which made them invisible to a structural scan of the log — they
+did not appear in any listing of its entries. Headers restored, bodies untouched, each marked with an
+HTML comment saying so. **This is the project's own recurring failure in a new place:** a record existed,
+was honest, and was not on a list anyone reads.
 
 ## Phase 1 status board
 
