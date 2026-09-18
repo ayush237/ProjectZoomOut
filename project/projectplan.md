@@ -292,7 +292,7 @@ that nothing may rely on it**, and VO-2.1's verification sorts before comparing.
 | 4 | **VO-2.1** — attach both narrators as drafts; first live run of the upload path | Pipeline Manager | Sonnet |
 | 5 | **Listen to both review tracks** (~59 min) | founder | — |
 | 6 | **Publish the 18 Leaves again** | founder | — |
-| 7 | **VO-3** — player, narrator choice, audio session, the footer | Manager | Sonnet |
+| 7 | **VO-3** — player, **the stored narrator preference and its default**, audio session, the footer. **Not a first-run chooser** — see the pinned split below | Manager | Sonnet |
 
 **VO-1.1 is Opus, unlike VO-1, because of what it touches.** It pushes a schema change that
 **drops columns** on the database holding your only real books — Payload is in dev push mode (no

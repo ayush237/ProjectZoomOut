@@ -23,6 +23,93 @@ This file is what lets a fresh session (after `/clear` or the next day) pick up 
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-18 — VO-3: the player, and the narrator preference
+
+*Manager. **Suggested model: Sonnet** — every risk in this package is procedural and the procedures are written below, including the silent-switch trap that is the classic way audio ships broken. There is no judgement to buy; the founder observes the two things that need ears. **Runs in parallel with INTRO-1**, which is live in `ZO-admin` — see the conflict note.*
+
+> **Where you work:** a **new** worktree. From `/Users/ayushgupta/Documents/ZoomOut/ZO`, the founder creates it with `git worktree add /Users/ayushgupta/Documents/ZoomOut/ZO-vo3 -b vo-3-player origin/main`, then `npm install` inside it. **`main` lives in `ZO` and nowhere else** — never run `git checkout main` in a linked worktree.
+> **Commit, push and open the PR yourself when done.**
+> **Read:** this handoff · `apps/backend/src/content/content.mapper.ts` (**the audio contract — read the per-entry filtering before writing anything**) · `packages/shared/src/content.ts` (`NARRATOR_IDS`, `audioRefSchema`, `slideAudioSchema` — **mirror, never edit**) · `apps/mobile/src/sound/SoundProvider.tsx` (the SecureStore preference pattern) · `apps/mobile/src/screens/leaf/` (the four narrated slides) · `apps/mobile/src/design/motion.ts` · `agents/manager.md`.
+> **Do not read or edit:** `apps/pipeline`, `apps/admin`, `projectRoadmap.md`, `projectplan.md`.
+
+### Task: VO-3 — the four narrated slides play, in the reader's narrator
+
+**Context:** Ikigai's 18 Leaves are published and carry 144 audio clips — both narrators, on all four narrated slides. **Verified against the live CMS on 2026-09-18: 18 Leaves, 144 rows, 8 per Leaf, all `published`, narrators `female` and `male`.** Nothing in the app plays any of it. This package is the last one between the reader and the feature.
+
+**Objective:** On Summary, Scenario, Payoff and Takeaway, a reader can play the slide's narration in their chosen narrator. The choice is a stored preference with a default, changeable from Profile. Audio is audible with the phone's silent switch on, stops when the reader leaves the slide, and behaves when something interrupts it.
+
+**Scope:**
+- **New** `apps/mobile/src/audio/` — the player, the audio-session setup, and the narrator preference store
+- `apps/mobile/src/screens/leaf/` — the control on the four narrated slides
+- `apps/mobile/src/screens/ProfileScreen.tsx` — the narrator control
+- `package.json` — one audio dependency, installed with `npx expo install`, never hand-edited
+- Tests alongside each
+
+Verify this against the repository rather than trusting it.
+
+**The audio contract — read `content.mapper.ts` before designing around it.** It filters **per entry, fail-closed**, and drops a row for an unknown narrator, an empty URL, a non-positive `durationSeconds`, a **stale `textDigest`**, or a narrator collision. `resolveMediaUrl` has already made the URL absolute. **Three consequences you must handle:**
+
+1. **A slide can arrive with `audio: []`.** Normal, not an error — the server has legitimately suppressed it.
+2. **A slide can arrive with only *one* narrator**, because the filtering is per row. VO-2.1's both-or-none rule is enforced at *attach* time and cannot be enforced at *serve* time.
+3. **Order carries no meaning.** Match on `narrator`, never on position or on `id`.
+
+**Requirements:**
+
+- **The narrator preference is device-local**, on `SoundProvider`'s SecureStore pattern, keyed `zoomout.narrator`. **The default is `male` (Sadaltager)** — the founder's ruling 2026-09-18, made after listening to both tracks in full.
+- **VO-3 owns the preference, its default, and the Profile control. It does not own first-run choosing.** The onboarding flow — a separate, later package — writes this same key. **Do not build an onboarding prompt, a first-play chooser, or any second way to set this.** The 2026-09-18 ruling rejected asking on first play by name.
+- **If the reader's narrator is missing for a slide but the other is present, play nothing.** Show the same state as no audio. **Never substitute the other voice** — "a reader who picks one narrator must never be handed the other mid-book" is the founder's rule, and this is the only place it can be honoured at serve time.
+- **Audio must be audible when the phone's silent switch is on.** This is the single most common way a feature like this ships broken: it works on the simulator and on a desk, and is silent on a real phone in a pocket. Configure the audio session explicitly; do not rely on a default.
+- **Audio stops when the reader leaves the slide**, and when the Leaf player unmounts. A narrator still talking over the next slide is the obvious failure.
+- **Audio stops when the app backgrounds.** Do not request a background-audio capability — this is a 15-minute foreground learning session, and the entitlement is a store-review surface for no gain.
+- **An interruption (a call, another app) pauses rather than corrupts state.** On return the control is in a sane state, playing or paused, never stuck mid-spinner.
+- **One control, identical on all four slides.** Verify whether `SlideFrame` is the right seam or whether the four slides need it passed individually — do not assume.
+- The control carries an **accessibility label** that names the action and the narrator. Do not suppress or fight VoiceOver; a screen-reader user may never use this button and must still be able to move through the slide.
+- Use the Expo SDK 57 audio package (`expo-audio`; `expo-av` is the deprecated predecessor). **Confirm which one this SDK ships and install with `npx expo install`** so the version is SDK-matched.
+- Colour, spacing, duration from `src/design/`. Any animation routes through `motionTimingConfig` / `motionSpringConfig`; **`ReduceMotion` is imported nowhere outside `motion.ts`.**
+
+**Out of scope:**
+- **Onboarding's narrator choice** — a later package, as above.
+- **The Sticky Notes slide.** Four narrated slides only; `PRODUCT.md` excludes it deliberately.
+- **Download, caching, or offline playback.** The app is online-only by decision.
+- **Background audio, lock-screen controls, playback speed, scrubbing.** A play/pause control is the package.
+- **Sound effects.** A different layer with no assets yet.
+- `apps/backend`, `apps/admin`, `apps/pipeline`, `packages/shared` — the contract is already correct; if you believe it is not, **report it rather than changing it.**
+
+**Conflict note — INTRO-1 is live in `ZO-admin` on `intro-1-first-run`, also in `apps/mobile`.** Three predictable collisions; whoever merges second rebases:
+1. **A preferences module.** INTRO-1 adds `zoomout.introSeen`. **Keep your narrator preference in `src/audio/`, not in a shared preferences module**, so neither package has to invent the same abstraction.
+2. **`reduceMotionCallSites.test.tsx`** — INTRO-1 registers a surface there. If you add an animated one, you will both touch adjacent lines.
+3. **`package.json`** — you add an audio dependency; INTRO-1 adds none.
+
+**Device gate** — what to observe, before any criterion is claimed:
+
+*Yours, on the simulator:*
+- A narrated slide shows the control; a slide the server sent no audio for shows the **no-audio state, not a broken button**
+- Switching the narrator in Profile changes which voice plays on the next play
+- Leaving the slide mid-playback **stops the audio**
+- The control is reachable and labelled at the largest OS text size, in both themes
+
+*Flagged for the founder, on a physical iPhone — do not claim these yourself:*
+- **Audio is audible with the ringer switch set to silent.** This is the one that cannot be checked on a simulator and is the reason this gate exists
+- A real interruption — take a call mid-clip — leaves the control in a sane state
+
+**Acceptance criteria:**
+- [ ] All four narrated slides play their clip, and a test pins that **Sticky Notes has no control**
+- [ ] **The default is `male` with the key unset**, asserted directly — not inferred from a UI that happens to show it
+- [ ] **A slide carrying only the non-preferred narrator plays nothing** and renders the no-audio state — a test constructs exactly that payload, since the server can produce it and the attach-time guard cannot prevent it
+- [ ] A slide with `audio: []` renders the no-audio state without error
+- [ ] Clips are selected by matching `narrator`, **never by array position or `id`** — pinned by a test whose fixture lists male first, so a positional implementation fails
+- [ ] **Audio stops on unmount and on leaving the slide** — both pinned, since they are different code paths and only one of them is the obvious one
+- [ ] The audio session is configured explicitly for silent-switch playback, and a test asserts the configuration call happens — the audible check itself is the founder's, on device
+- [ ] Changing the narrator in Profile writes `zoomout.narrator` and a subsequent read returns it
+- [ ] `ReduceMotion` is imported nowhere outside `motion.ts`
+- [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` pass — **and your report states the test count and compares it to the previous mobile package's**
+
+**Testing expectations:** Unit tests for the preference store (unset default, set, read) and for narrator selection against the three server shapes — both narrators, one narrator, none. Component tests for the four slides and Sticky Notes' absence, in both themes. Mock the audio package at its boundary; do not assert on real playback. No e2e.
+
+**One thing to flag rather than fix:** `content.mapper.ts` builds a `warnings` channel when it drops a row, and as far as I can tell **nothing surfaces those warnings anywhere.** If you confirm that, report it — it means a suppressed clip is invisible in production, and that is a finding about the contract rather than about your package.
+
+---
+
 ### Handoff: 2026-09-18 — INTRO-1: the first-run intro
 
 *Manager. **Suggested model: Sonnet** — the design is written out in full below, including which modules to reuse and the technique to use; what is left is wiring and care, not judgement. **The one aesthetic call — which seed looks best — is the founder's at the device gate**, per the 2026-09-09 ruling. Parallel to the voiceover stream: mobile only, no backend, no content, no audio.*
