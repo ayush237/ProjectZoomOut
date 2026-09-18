@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react
 import type { ReactElement, ReactNode } from 'react';
 import { Text as RNText } from 'react-native';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 
 import { MemoryTokenStore } from '../api/tokenStore';
 import { NavigationContainer, useRoute, type RouteProp } from '@react-navigation/native';
@@ -608,6 +609,35 @@ describe('Profile achievements', () => {
     expect(view.getByTestId('achievement-tile-month-of-mornings')).toBeOnTheScreen();
     expect(view.getByText('First Leaf')).toBeOnTheScreen();
     expect(view.getByText('Month of Mornings')).toBeOnTheScreen();
+  });
+});
+
+describe('Profile narrator (VO-3)', () => {
+  afterEach(async () => {
+    await SecureStore.deleteItemAsync('zoomout.narrator');
+  });
+
+  it('shows the default selected, and changing it writes the preference back', async () => {
+    const view = await renderSignedIn(<ProfileScreen />, new FakeBackend());
+
+    await waitFor(() => {
+      expect(view.getByTestId('profile-narrator')).toBeOnTheScreen();
+    });
+
+    // The founder's ruling: unset reads as male, and that must be what the card shows
+    // before anyone has touched it — not merely what the store returns.
+    expect(view.getByTestId('narrator-option-male').props['accessibilityState']).toEqual(
+      expect.objectContaining({ checked: true }),
+    );
+
+    await fireEvent.press(view.getByTestId('narrator-option-female'));
+
+    await waitFor(() => {
+      expect(view.getByTestId('narrator-option-female').props['accessibilityState']).toEqual(
+        expect.objectContaining({ checked: true }),
+      );
+    });
+    await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
   });
 });
 

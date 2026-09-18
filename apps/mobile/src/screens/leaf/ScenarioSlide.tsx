@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { PublicScenarioSlide } from '@zoomout/shared';
 
+import { NarrationControl } from '../../audio';
 import { Button, Icon, SlideImage, Text } from '../../components';
 import {
   MIN_TOUCH_TARGET,
@@ -140,6 +141,8 @@ export function ScenarioSlide({
           )}
 
           <Text variant="h3">{data.prompt}</Text>
+
+          <NarrationControl audio={data.audio} label="Scenario" />
         </View>
 
         <View style={{ gap: theme.spacing.md }}>

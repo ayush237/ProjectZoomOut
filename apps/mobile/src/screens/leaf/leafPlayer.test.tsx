@@ -135,6 +135,32 @@ describe('ScenarioSlide', () => {
   });
 });
 
+describe('ScenarioSlide — narration (VO-3)', () => {
+  it('plays the clip for the reader’s narrator alongside the prompt', async () => {
+    await renderScenario({
+      data: {
+        ...SCENARIO,
+        audio: [
+          {
+            narrator: 'male',
+            url: 'https://cdn.example.com/scenario-male.mp3',
+            durationSeconds: 9,
+            textDigest: 'a'.repeat(64),
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId('narration-control')).toBeTruthy();
+  });
+
+  it('shows no control when the server sent no audio for this slide', async () => {
+    await renderScenario({ data: SCENARIO });
+
+    expect(screen.queryByTestId('narration-control')).toBeNull();
+  });
+});
+
 /* -------------------------------------------------------------------------- */
 /* Tier A — the payoff gate, on the client                                     */
 /* -------------------------------------------------------------------------- */

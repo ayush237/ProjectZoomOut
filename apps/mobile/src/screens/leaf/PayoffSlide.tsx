@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import type { PayoffSlide as PayoffSlideData } from '@zoomout/shared';
 
+import { NarrationControl } from '../../audio';
 import { Icon, Text } from '../../components';
 import {
   duration,
@@ -177,6 +178,10 @@ export function PayoffSlide({ data, justUnlocked }: PayoffSlideProps): React.JSX
             only screen optimised for reading rather than tapping. */}
         <Text variant="payoff">{data.body}</Text>
       </Animated.View>
+
+      {/* Plain, not part of the reward animation above it — a utility control has no
+          business springing open with the unlock. */}
+      <NarrationControl audio={data.audio} label="Payoff" />
     </View>
   );
 }

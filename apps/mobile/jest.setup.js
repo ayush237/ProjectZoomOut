@@ -45,6 +45,20 @@ jest.mock('expo-secure-store', () => {
 });
 
 /**
+ * `expo-audio` (VO-3) is a native module with no JS implementation under Node — the
+ * same reason `expo-secure-store` is mocked here rather than per test, and for the
+ * same consequence: any screen that merely imports something under `src/audio/`
+ * (`ProfileScreen`'s narrator setting, say) would otherwise crash every test that
+ * renders it, whether or not that test cares about audio at all.
+ *
+ * `fakeExpoAudio` is a small, controllable stand-in: a `playing` flag a component can
+ * genuinely react to across a re-render, and `play`/`pause`/`setAudioModeAsync` as
+ * jest mocks. A test that needs to assert against them imports the same module
+ * directly from `src/testing/fakeExpoAudio` — it is the live mock, not a copy of it.
+ */
+jest.mock('expo-audio', () => require('./src/testing/fakeExpoAudio'));
+
+/**
  * Reanimated's worklet runtime is native, and importing the real package under Node
  * throws before a single test runs — `loadUnpackers` reaches for a TurboModule that
  * does not exist. The shipped mock renders `Animated.View` as a plain `View` and makes
