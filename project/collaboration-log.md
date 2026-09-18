@@ -80,16 +80,25 @@ Verify this against the repository rather than trusting it.
 2. **`reduceMotionCallSites.test.tsx`** — INTRO-1 registers a surface there. If you add an animated one, you will both touch adjacent lines.
 3. **`package.json`** — you add an audio dependency; INTRO-1 adds none.
 
+**Inherited environment knowledge — read this before you try to build anything. INTRO-1 lost its single largest block of time here on 2026-09-18.**
+
+- **A native iOS build fails on this Mac and it is not your code.** `expo-modules-jsi` will not compile under Xcode 26.3 / Swift 6 (`JavaScriptCodable+Date.swift:53:50: type of expression is ambiguous`). It is a transitive Expo dependency pinned long before this package. **Do not spend the afternoon on it.** One Xcode is installed; there is no older one to fall back on.
+- **Use Expo Go for the visual gate.** `npx expo start`, scan with Expo Go on the founder's phone. Every plugin in `app.json` is in the Expo Go runtime, as are `react-native-svg` and `react-native-reanimated`.
+- **But be honest about one limit: Expo Go is itself an app with its own audio session.** Its configuration may mask or override yours, so **a silent-switch result in Expo Go is evidence, not proof** — in either direction. If audio is inaudible on silent there, do not conclude your code is wrong; if it is audible, do not claim the criterion outright. **Report what you observed and under which runtime**, and leave the standalone-build confirmation as a named open item.
+- If you do attempt `pod install`, this host's shell has **no `LANG` set** and CocoaPods crashes without it — prefix with `LANG=en_US.UTF-8`.
+- **SecureStore survives uninstall and reinstall on the iOS Simulator.** Your narrator preference will persist across a reinstall, so testing an unset default that way will mislead you. Clear the key or use a fresh simulator.
+- A fresh worktree needs its own `npm install` before anything typechecks — `ZO-admin`'s was stale and missing `react-native-svg` entirely.
+
 **Device gate** — what to observe, before any criterion is claimed:
 
-*Yours, on the simulator:*
+*Yours, on Expo Go (the simulator's native build is broken — see above):*
 - A narrated slide shows the control; a slide the server sent no audio for shows the **no-audio state, not a broken button**
 - Switching the narrator in Profile changes which voice plays on the next play
 - Leaving the slide mid-playback **stops the audio**
 - The control is reachable and labelled at the largest OS text size, in both themes
 
 *Flagged for the founder, on a physical iPhone — do not claim these yourself:*
-- **Audio is audible with the ringer switch set to silent.** This is the one that cannot be checked on a simulator and is the reason this gate exists
+- **Audio is audible with the ringer switch set to silent.** The reason this gate exists — and, per the environment note above, **the one observation Expo Go may not be able to settle.** If it cannot, say so; it becomes a named open item rather than a claimed criterion
 - A real interruption — take a call mid-clip — leaves the control in a sane state
 
 **Acceptance criteria:**

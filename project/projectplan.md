@@ -369,6 +369,76 @@ Payload's admin list shows it, which turns 72 rows of `leaf-04-payoff.mp3` into 
 
 ---
 
+### INTRO-1 — code signed off 8/8; the device gate is open — 2026-09-18
+
+**Merged as PR #54 by the founder before this review.** **Merged is not signed off, and the
+distinction is the whole point here.** The eight test-shaped acceptance criteria are met and
+re-checked. **Three requirements are unmet and were reported as unmet rather than quietly passed:**
+the seed-by-eye comparison, `INTRO_FOCUS_SCALE`, and all five simulator device-gate bullets.
+
+**Gate counts traced:** **657 mobile tests / 34 suites, up from 616 / 28** — the 616 baseline is
+VO-1.1's report, and the increase is +41 with nothing dropped. 966 files typechecked across four
+workspaces, 117 under `apps/mobile/src`. **The report declined to invent a comparison** when it could
+not find a same-app baseline in the log, which is the correct instinct and worth more than a
+confident number would have been.
+
+**The report is the best kind this project has had**, and the reason is one sentence in it: *"Every
+'on the simulator' claim in this report is a test assertion, not an observation."* Three packages in
+this project's history shipped because a green suite was allowed to read as a device check. This one
+refused to make that trade and said so in the summary rather than the appendix.
+
+### Ruling — how the intro actually gets looked at
+
+**Expo Go, and it works today.** Verified 2026-09-18 rather than assumed: `app.json` declares
+`expo-font`, `expo-secure-store`, `expo-web-browser`, `expo-asset` and `expo-sharing` — **every one
+of them in the Expo Go runtime** — and `react-native-svg` and `react-native-reanimated` are in it
+too. **The intro needs no backend at all**: a synthetic graph, before sign-in, so neither the API URL
+nor the port-3000 squatter matters. `npx expo start`, scan with Expo Go on the founder's phone.
+
+**That is better than the gate the handoff specified**, not a workaround for it — it puts the intro on
+real hardware, which is where the two founder-reserved observations belonged anyway. **One honest
+caveat:** Expo Go's runtime is not a release build, so *"does it stutter"* is indicative rather than
+final.
+
+**On the Xcode wall, do not pin an older Xcode.** Ordered cheapest-first:
+
+1. **Expo Go** — unblocks today, costs nothing, sufficient for INTRO-1.
+2. **`npx expo prebuild --clean`** — `ios/` is **generated, not committed** (verified: `git ls-files
+   apps/mobile/ios` is empty), so regenerating risks nothing. A native project generated under a
+   different toolchain is a common cause of exactly this failure.
+3. Only then: bump the Expo patch version, or **EAS Build**, which compiles on a known-good cloud
+   toolchain and needs no local Xcode.
+
+**Pinning an older Xcode is last, and the reason is not effort.** It is a machine-level change
+affecting everything else on the Mac, and it fights the platform — **App Store submission will
+require a current Xcode regardless**, so pinning converts a problem due today into a larger one due
+at Stage 5. This machine has exactly one Xcode (26.3, build 17C529) and no older one to fall back to.
+
+### Three findings from the report worth keeping
+
+**`buildDoneConstellationLayers` does not fit a pre-sign-in surface, and the reason is a real one.**
+It paints every soma ring and core bud in `palette.reward` — the earned-progress amber — and
+**nobody has read anything before sign-in.** Reusing it would have put reward amber on every node,
+against the two-accent rule that reserves amber for beat 4's pulse. The handoff asked for this to be
+reported rather than silently forked, and it was.
+
+**The fixture uses 22 Leaf states, not 18, and that is the sharper decision.** At 18 the graph fits
+inside most current iPhones at scale 1, **which makes "zoom out" a no-op on the hardware it ships
+to.** 22 is taller than a Pro Max, so the fit-scale is genuinely below 1. A package that had used 18
+would have passed every test and shown a camera that never moved.
+
+**SecureStore survives uninstall and reinstall on the iOS Simulator.** So `zoomout.introSeen` persists
+across a reinstall, and **anyone checking "does the intro show on first launch" by reinstalling will
+conclude it is broken.** Clear the key or use a fresh simulator or device. This would have cost the
+next session an hour.
+
+### What is still open
+
+**The seed (`8_675_309`) and `INTRO_FOCUS_SCALE` (`6`) are placeholders, not settings.** Both were
+derived by arithmetic and never rendered. **Look first, then decide whether a follow-up package is
+needed** — they may be fine, and pre-committing to INTRO-1.1 before anyone has looked would be
+inventing work.
+
 ## Approved: INTRO-1 — the first-run intro, a zoom out through a neuron network — 2026-09-18
 
 **Approved by the founder 2026-09-18** — the four beats, the five rulings and the copy. **Parallel to
