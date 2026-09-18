@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import type { SummarySlide as SummarySlideData } from '@zoomout/shared';
 
+import { NarrationControl } from '../../audio';
 import { Text } from '../../components';
 import { useTheme } from '../../design';
 import { SlideFrame } from './SlideFrame';
@@ -28,6 +29,7 @@ export function SummarySlide({ data }: { readonly data: SummarySlideData }): Rea
           Summary
         </Text>
         <Text variant="body">{data.body}</Text>
+        <NarrationControl audio={data.audio} label="Summary" />
       </View>
     </SlideFrame>
   );

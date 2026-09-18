@@ -404,6 +404,101 @@ WP15.4 set the precedent: **verified against the live dev DB, not only a fresh c
 
 ## Completions (Manager → Architect)
 
+### Completed: VO-3 — the player, and the narrator preference — 2026-09-18
+
+**Code complete, fully tested, not device-verified.** Every test-shaped acceptance criterion is met and green; the device gate is not, for a reason outside this package's control — detailed below, not passed over quietly. Branch `vo-3-player` in the `ZO-vo3` worktree, off `origin/main` at `c675fac`. Not yet rebased onto the two `project/`-only commits origin/main gained while this ran (`b378258`, `3c7e2c3` — log archiving and a roadmap rewrite; confirmed via `git diff --name-only vo-3-player..origin/main` before this report, no overlap with anything below) — will rebase immediately before push.
+
+| | |
+|---|---|
+| Automated gate | `npm run lint`, `npm run typecheck`, `npm test` — all green, root level, all four workspaces. `npm run build` — **backend and mobile green; admin fails**, pre-existing and unrelated (see below) |
+| Mobile tests | **690** (657 baseline + **33 new**: 32 across 8 new suites, plus 1 added to `surfaces.test.tsx`'s existing Profile block) |
+| Typecheck | Root `tsc` clean across `packages/shared`, `apps/admin`, `apps/backend`, `apps/mobile` |
+| Device verification | **None obtained.** Expo Go itself never finished installing on the simulator — see "What I could not do." Every "Yours, on Expo Go" bullet in the handoff's device gate is therefore unverified, not just the silent-switch one, which was always the founder's alone |
+
+---
+
+## What changed
+
+**New `apps/mobile/src/audio/`:**
+- `narratorPreference.ts` / `useNarrator.ts` — the SecureStore-backed preference (`zoomout.narrator`, default `male`), following `introSeenStore.ts`'s pattern exactly rather than `SoundProvider`'s Context: nothing on screen needs the value from two places at once, so there is no shared state to keep in sync, and the handoff's own conflict note asked for no new shared-preferences abstraction.
+- `selectNarration.ts` — pure `(audio, narrator) → AudioRef | undefined`, matching on the `narrator` field only.
+- `audioSession.ts` — `configureNarrationAudioSession()`, one explicit `setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: false })` call. Both flags happen to match the library's documented defaults today; both are asserted explicitly anyway; that mismatch-with-nothing is the point — a future SDK default change cannot silently take this out from under a reader.
+- `useNarration.ts` — the player: wraps `expo-audio`'s `useAudioPlayer`/`useAudioPlayerStatus`, exposes `{ playing, toggle }`. No local "is playing" flag — the control's state is a direct read of the player's own status, so an OS interruption can only ever leave it showing "paused" or "playing," never a state of its own invention.
+- `NarrationControl.tsx` — the one control, used identically on Summary, Scenario, Payoff and Takeaway. Renders nothing when there is no clip for the current narrator (the same rule `optionalImage`/`SlideImage` already apply to every other optional asset — see "Assumptions" below).
+
+**`apps/mobile/src/components/Icon.tsx`:** two entries, `play`/`pause` (`play-circle`/`pause-circle`).
+
+**The four slides** (`SummarySlide.tsx`, `ScenarioSlide.tsx`, `PayoffSlide.tsx`, `TakeawaySlide.tsx`): each places `<NarrationControl audio={...} label="..." />` directly, next to its narrated text. **Not through `SlideFrame`** — verified rather than assumed, per the handoff's instruction: `PayoffSlide` does not use `SlideFrame` at all (WP23.1's deliberate exception), so a `SlideFrame`-based seam would have missed a quarter of the slides. Payoff's placement is a plain sibling below the reward panel, not inside its animated `Animated.View` — a utility control has no business springing open with the unlock.
+
+**`apps/mobile/src/screens/ProfileScreen.tsx`:** a new `NarratorCard`, two Pressables ("Female"/"Male", `accessibilityRole="radio"`), between the achievement grid and the account-details card. Reader-facing labels only — never the pipeline's provider voice names (Achernar/Sadaltager), matching `content.ts`'s own stated reason for keeping `narrator` and `voice` apart.
+
+**`apps/mobile/package.json` / `app.json`:** `expo-audio@~57.0.5` via `npx expo install` (SDK-matched); the installer added itself to `app.json`'s `plugins` array automatically — not hand-edited. `expo-av` was not installed; SDK 57 ships `expo-audio` as the current package, confirmed from the installed package's own `.d.ts` rather than assumed from memory.
+
+**`apps/mobile/jest.setup.js`:** `expo-audio` mocked globally, alongside `expo-secure-store` and the others already there — see "A real bug this caught," below, for why this had to move here rather than stay per-test-file.
+
+**Tests:** `narratorPreference.test.ts` (default/set/read/unrecognised-value-falls-back), `selectNarration.test.ts` (the three server shapes, plus the positional fixture the acceptance criteria asked for), `audioSession.test.ts` (the exact config call), `NarrationControl.test.tsx` (eleven cases: the three render shapes, the accessibility label and its update, play→pause toggle, session config, background-stops, unmount-stops, and the leave-the-slide harness described below), one new test each in `SummarySlide.test.tsx` / `PayoffSlide.test.tsx` / `TakeawaySlide.test.tsx` (new files; neither slide had one before) confirming the control is wired to the right data, two added to `ScenarioSlide`'s existing block in `leafPlayer.test.tsx`, one new `StickyNotesSlide.test.tsx` pinning no control renders **even given a fixture with `audio` populated** — the mapper can never actually produce that, so this guards the component itself, not just today's data — and one added to `surfaces.test.tsx`'s Profile block, pressing the real rendered card and asserting the SecureStore write. New shared test helper `apps/mobile/src/testing/fakeExpoAudio.ts` — a small reactive fake (`play`/`pause` mutate a `playing` flag and notify a listener a component's `useAudioPlayerStatus` subscribes to), used by both the global mock and any test that needs to assert on it directly.
+
+---
+
+## A real bug this caught, not just a test-writing issue
+
+Two, actually, both found by writing the tests the acceptance criteria asked for rather than by inspection — worth recording because neither would have shown up in a lighter test pass.
+
+**1. `useNarrator`'s async preference read can outlive the first render, and nothing was switching the player's source when it did.** `useNarrator` starts synchronous state at the hard-coded default (`male`) and corrects it once a SecureStore read resolves — same shape as `useIntroSeen`. But `useAudioPlayer` creates its native player once, from a `useState` lazy initializer, and (as far as I can tell from its `.d.ts` — there is no JS source in this package, only types) does not react to its `source` argument changing on a later render. Put together: **every reader whose narrator preference is not the hard-coded default would, on every single visit to a narrated slide, briefly construct a player bound to the wrong clip on the first render, then never actually switch it** when the real preference arrived a moment later — the UI would relabel itself correctly while the underlying player kept pointing at the other narrator's audio. Caught by the "matches by narrator... second" test failing with the right clip's URL simply never appearing among created players. Fixed by splitting `NarrationControl` into an outer component (decides whether to render anything, no player created yet) and an inner `NarrationButton` **keyed on `entry.url`** — a changed narrator now unmounts the stale player (through the same cleanup already written for the unmount/leave-slide requirement) and mounts a fresh one bound to the right source from the start, rather than trying to reach into an existing one.
+
+**2. `unmount()` is async in this RTL version, same as `render`/`rerender`.** Missed it the same way the existing top-of-file comment in `leafPlayer.test.tsx` warns about for `render` — an un-awaited call returns before the tree (and its cleanup effects) has actually committed. The unmount test passed 0 calls where it expected 1 until I checked the type (`() => Promise<void>`, confirmed from the installed package's own `.d.ts`) and added the `await`. Unrelated to this package's own code, but worth a line here since it is exactly the kind of thing that reads as a real bug on a first failure.
+
+## A regression this almost shipped, caught before the report rather than in it
+
+`ProfileScreen.tsx` importing `useNarrator` from the `src/audio` barrel transitively pulled in `NarrationControl.tsx` → `useNarration.ts` → `expo-audio`'s real module — which has no JS implementation under Node — into **every** test that renders `ProfileScreen`, including `surfaces.test.tsx`, which existed before this package and asserts nothing about audio. Running the full suite (not just the new files) is what caught it: `surfaces.test.tsx` failed with a native-module `TypeError` at import time. Fixed by mocking `expo-audio` once, globally, in `jest.setup.js` — the same shape `expo-secure-store` already gets there, and for the identical reason the file's own docstring gives: a native module with no JS implementation belongs in one place, not scattered as a per-test-file `jest.mock`. The five per-file mocks I had written before finding this were all removed as redundant once the global one existed.
+
+## A finding that corrects the handoff itself, not something I did
+
+**"`content.mapper.ts` builds a warnings channel when it drops a row, and as far as I can tell nothing surfaces those warnings anywhere"** — checked, because the handoff asked me to. **This is not true as written.** `apps/backend/src/content/content.repository.ts`'s `keepValid` and `requireValid` both already call a private `logWarnings`, which does `this.logger.warn({ warnings, kind }, 'Content served with some entries withheld')` whenever a mapped document's `warnings` array is non-empty (`content.repository.ts:169`, `:190`, `:208-214`). A suppressed clip is not invisible — it reaches structured logs at `warn` level, tagged with the Leaf id, slide, narrator and digest prefixes `mapAudioEntries` already builds into the message. What it does **not** have is any admin-UI-facing surface — nothing in Payload shows "3 audio entries withheld on this Leaf" — so the finding is real in a narrower form than stated: this is a log line an operator has to be watching for, not a blank space in the app. Whether that is enough is a product question, not a code one, and not mine to rule on — reporting the corrected fact.
+
+---
+
+## What I could not do
+
+**No device or Expo Go verification, at all.** The handoff's own first instruction was to confirm `expo-audio` loads under Expo Go before building anything else. I could not get that far.
+
+1. **The port-8081 Metro server already running belongs to another session** (`ZO`'s primary checkout, confirmed via `ps`) — left untouched. Started my own on `8083` instead: `npx expo start --ios --go --port 8083` from `ZO-vo3/apps/mobile`.
+2. **Expo Go itself never finished downloading onto the simulator.** `nettop` on the Expo CLI's process showed an established connection to `cdn-185-199-108-133.github.com:443` sitting at a fixed **57,599,029 bytes received**, unchanged across two samples taken **~29 seconds apart**, after **12+ minutes** of elapsed time and near-zero CPU — a stalled transfer, not a slow one. Not a rejection and not evidence about `expo-audio`'s Expo Go compatibility either way; I simply never got a running Expo Go to test anything in. Killed the process and confirmed port 8083 free again once it was clear waiting further would not help.
+3. **My own reasoned, unverified guess, stated as exactly that:** `expo-audio` is Expo's own first-party playback SDK (the direct successor to `expo-av`, which had Expo Go playback support for years), and nothing this package calls (`useAudioPlayer`, `useAudioPlayerStatus`, `setAudioModeAsync`) touches the recording-permission surface that typically needs a project-specific native config Expo Go's prebuilt binary cannot apply. That is a prior, not an observation — treat it as such.
+4. **`react-native-web` is still not installed** (confirmed still absent, as INTRO-1's report found) — did not add it unilaterally, for the same reason INTRO-1 gave: a new dependency purely to route around a device-gate gap is a bigger, murkier change than the gap itself.
+5. **Consequence, stated against the handoff's own device-gate list:** every "Yours, on Expo Go" bullet — narrated slide shows the control, switching narrator changes the voice, leaving the slide stops audio, largest text size in both themes — is **unverified by me**, on top of the two already flagged for the founder on a physical iPhone (silent-switch audibility, a real interruption). The founder's own attempt, at a moment when the network path to Expo's simulator CDN is not stuck, is genuinely the fastest way to get a real answer here — mine was not a close call, `nettop` showed zero forward progress.
+
+**`apps/admin`'s build fails in this worktree, unrelated to anything above.** `next build` cannot collect `/api/graphql-playground`'s config: `PAYLOAD_SECRET` and `PAYLOAD_DATABASE_URL` are both undefined. `apps/admin/.env` is gitignored and this worktree never had one — `git worktree add` does not carry untracked files, and nothing in this package's scope ever touched `apps/admin` to notice. Confirmed pre-existing rather than caused by this diff: the primary `ZO` checkout has its own `apps/admin/.env`; this worktree does not, and never did. I attempted to copy it across — **the copy was blocked by a deny rule on reading that file**, which is the correct outcome and I did not try to route around it. `apps/backend` and `apps/mobile` — the two workspaces this package actually touches — both build clean. The founder can close this gap in seconds by copying their own `apps/admin/.env` into `ZO-vo3` if a fully green root `npm run build` is wanted; I cannot.
+
+---
+
+## Assumptions, stated so the next session does not have to reconstruct them
+
+- **The "no-audio state" renders nothing, not a placeholder.** The handoff says a slide missing a clip shows "the same state as no audio... not a broken button" without specifying what that state looks like. I followed this codebase's own precedent for every other optional asset (`optionalImage`/`SlideImage`: "renders nothing at all when there is no image, rather than reserving an empty box" — WP23.1's explicit ruling) rather than inventing a visible "narration unavailable" indicator. Reasoning: voiceover is Ikigai-only today (VO-2's scope), so every other Track's narrated slides would otherwise carry a permanent, meaningless "unavailable" label. If the founder wants a visible indicator instead, that is a one-file change (`NarrationControl`'s early return) and worth a look on a device before deciding, not from this write-up.
+- **`NarrationControl` is two components, not one** (`NarrationControl` deciding, `NarrationButton` owning the player, keyed on `entry.url`) — not asked for explicitly, but load-bearing for the bug in "A real bug this caught" above. Flagging the shape change in case a future package reaches for `NarrationControl` expecting a single flat component.
+- **Reader-facing narrator labels are "Female"/"Male"**, invented for this package — the handoff and the schema both stop at the `female`/`male` ids and say nothing about display copy. Plain and literal seemed safer than guessing at product voice for two words; easy to change in one place (`NARRATOR_LABELS`, defined identically in `NarrationControl.tsx` and `ProfileScreen.tsx`) if the founder wants something else.
+- **`NarratorCard`'s placement on Profile** — between the achievement grid and the account-details card — is my call, not specified. Reasoning: it is a preference, not identity (email/timezone) or a stat (streak/achievements), so it sits between the two groups rather than inside either.
+- **The audio session is configured on every `NarrationButton` mount, not once globally** — no "already configured" guard. Simpler, avoids module-level mutable state that would need resetting between tests, and `setAudioModeAsync` is cheap and idempotent; the cost is a handful of redundant native calls per Leaf session, which seemed like the right trade against a stateful guard nothing asked for.
+
+## Test count, against the last mobile package
+
+**690 / 42 suites, up from 657 / 34** (INTRO-1, this same file, verified by re-reading its own report rather than assumed). +33 tests in +8 new suite files, plus one test each added to two existing suites (`leafPlayer.test.tsx` for Scenario, `surfaces.test.tsx` for Profile) — suite count only moves for genuinely new files, which is why it is +8 rather than +10.
+
+## Where the time went
+
+Rough, not measured, in descending order: **reading** (the mapper's audio contract, the shared schema, every existing slide component, `expo-audio`'s actual `.d.ts` rather than assumed API, the SoundProvider/introSeenStore precedents) — this was large, and deliberate, given how much of the handoff's risk was procedural-but-precise; **tests**, including the two real bugs above and the debugging to find them, a close second; **the Expo Go attempt**, thirteen-plus minutes of it dead weight once the stall is accounted for; **implementation** itself, genuinely the smallest slice — the design was mostly settled by the time of writing; the gate and this report, the rest.
+
+## Follow-ups / tech debt for Architect
+
+1. **The device gate is entirely open**, not partially — every "Yours, on Expo Go" item plus the two always-founder items. Worth deciding whether VO-3 should be considered mergeable on code+tests alone (as INTRO-1 effectively was) or should wait on someone reaching a working Expo Go session, given this is now the *second* package in a row to lose real time to this machine's device-verification path (INTRO-1: native build/Xcode; VO-3: Expo Go itself failing to download). If this is becoming a pattern rather than two unlucky packages, it may be worth its own investigation rather than being re-discovered a third time.
+2. **`content.mapper.ts`'s warnings-are-invisible concern, as tracked, overstates the gap** — see "A finding that corrects the handoff itself" above. They reach structured logs; they do not reach the admin UI. Worth updating wherever this was tracked as an open item, since "nothing surfaces them" and "they reach logs but not the admin panel" call for different fixes if either is ever prioritised.
+3. **`apps/admin`'s build is not runnable in this worktree** without the founder copying their own `.env` across — a `ZO-vo3`-specific gap, cost me nothing beyond the discovery since admin was never in scope, but the same wall would stop anyone else's `npm run build` here too.
+4. **The no-audio-state design ("renders nothing") is a judgement call, not a ruling** — see "Assumptions" above. Worth a real look once someone can see the app.
+
+**Anything I am not happy with, stated even though I shipped it:** the whole package rests on `expo-audio`'s hooks behaving the way their `.d.ts` and doc comments describe, since I have never once seen them run. The two bugs I did catch were both about exactly this kind of gap between documented and actual behaviour, and I have no way to rule out a third.
+
+---
+
 ### Completed: INTRO-1 — the first-run intro — 2026-09-18
 
 **Code complete, fully tested, not visually verified. That second half is not a footnote — three explicit requirements (the seed-by-eye comparison, the five simulator device-gate checks, "do not take the first one that runs") are unmet, not passed quietly.** Two independent, pre-existing environment problems on this machine blocked every avenue to a running build, detailed below. Branch `intro-1-first-run` in the `ZO-admin` worktree, off `origin/main` at `fa905c1` (fast-forwarded once more before push to pick up VO-3's handoff — unrelated, `project/` only, confirmed by `git diff --name-only` before merging).

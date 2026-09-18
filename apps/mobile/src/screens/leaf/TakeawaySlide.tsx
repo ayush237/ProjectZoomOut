@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import type { TakeawaySlide as TakeawaySlideData } from '@zoomout/shared';
 
+import { NarrationControl } from '../../audio';
 import { Icon, Text } from '../../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../../design';
 import { SlideFrame } from './SlideFrame';
@@ -46,6 +47,7 @@ export function TakeawaySlide({
             `--text-h1-size` specifically, and it is "the one line to leave with" per
             this slide's own reason for existing. Real data (`data.body`), just bigger. */}
         <Text variant="h1">{data.body}</Text>
+        <NarrationControl audio={data.audio} label="Takeaway" />
       </View>
 
       {/**

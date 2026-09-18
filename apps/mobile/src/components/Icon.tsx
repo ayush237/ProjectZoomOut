@@ -71,6 +71,9 @@ const ICONS = {
   idea: 'bulb-outline',
   soundOn: 'volume-medium',
   soundOff: 'volume-mute',
+  /** Slide narration (VO-3). */
+  play: 'play-circle',
+  pause: 'pause-circle',
 
   /* Achievements (WP5b). */
   /**

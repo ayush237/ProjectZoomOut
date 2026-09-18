@@ -1,12 +1,13 @@
 import { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import type { AchievementStatus } from '@zoomout/shared';
+import { NARRATOR_IDS, type AchievementStatus, type NarratorId } from '@zoomout/shared';
 
 import type { DayStatus } from '../api/client';
+import { useNarrator } from '../audio';
 import { useApi, useAuth } from '../auth/AuthProvider';
 import { badgeBlobPath, Button, Icon, Screen, StatusMessage, Text } from '../components';
-import { useTheme } from '../design';
+import { MIN_TOUCH_TARGET, useTheme } from '../design';
 import { useAsyncResource } from './useAsyncResource';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
 
@@ -54,6 +55,8 @@ export function ProfileScreen(): React.JSX.Element {
         <StreakCard />
 
         <AchievementGrid />
+
+        <NarratorCard />
 
         <View
           style={{
@@ -256,6 +259,89 @@ function AchievementGrid(): React.JSX.Element | null {
           <AchievementTile key={entry.id} achievement={entry} />
         ))}
       </View>
+    </View>
+  );
+}
+
+/** Reader-facing names — never the pipeline's provider voice names. See
+ *  `NarrationControl`'s own copy of this table for why the two stay apart. */
+const NARRATOR_LABELS: Record<NarratorId, string> = {
+  female: 'Female',
+  male: 'Male',
+};
+
+/**
+ * VO-3: which voice narrates a Leaf's four narrated slides.
+ *
+ * **Owns the preference and its default, not first-run choosing** — a separate,
+ * later onboarding package writes the same `zoomout.narrator` key before a reader
+ * ever reaches this screen. This card only ever *changes* an existing choice.
+ *
+ * Reads once per mount via `useNarrator`, the same trade `useIntroSeen` makes: nothing
+ * else on screen needs the value at the same time, so there is no Context to keep in
+ * sync.
+ */
+function NarratorCard(): React.JSX.Element {
+  const theme = useTheme();
+  const { narrator, setNarrator } = useNarrator();
+
+  return (
+    <View
+      testID="profile-narrator"
+      style={{
+        backgroundColor: theme.surfaceFor('card'),
+        borderRadius: theme.radius.lg,
+        borderWidth: theme.borderWidth.hairline,
+        borderColor: theme.palette.border,
+        padding: theme.spacing.xl,
+        gap: theme.spacing.md,
+      }}
+    >
+      <Text variant="caption" tone="textMuted">
+        Narrator
+      </Text>
+
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+        {NARRATOR_IDS.map((id) => {
+          const selected = narrator === id;
+
+          return (
+            <Pressable
+              key={id}
+              testID={`narrator-option-${id}`}
+              onPress={() => {
+                setNarrator(id);
+              }}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={`${NARRATOR_LABELS[id]} narrator`}
+              style={({ pressed }) => ({
+                flex: 1,
+                minHeight: MIN_TOUCH_TARGET,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: theme.spacing.md,
+                borderRadius: theme.radius.lg,
+                borderWidth: selected ? theme.borderWidth.focus : theme.borderWidth.hairline,
+                borderColor: selected ? theme.palette.primary : theme.palette.border,
+                backgroundColor: pressed
+                  ? theme.surfaceFor('pressed')
+                  : selected
+                    ? theme.surfaceFor('raised')
+                    : theme.surfaceFor('card'),
+              })}
+            >
+              <Text variant="body" tone={selected ? 'primary' : 'textPrimary'}>
+                {NARRATOR_LABELS[id]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text variant="small" tone="textMuted">
+        Changes which voice plays on your next Leaf.
+      </Text>
     </View>
   );
 }
