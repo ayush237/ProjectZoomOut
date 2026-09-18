@@ -2,33 +2,55 @@
 
 Owned by Architect.
 
-## Where things stand — 2026-09-17
+## Where things stand — 2026-09-18
 
-**Read this first if you are a fresh session.** Both build phases and the visual redesign are complete and merged. **The whole critical path is now the in-person pilot: Leaf 4's bloom, then publish Ikigai's eighteen Leaves, then a dev build on the founder's phone.**
+**Read this first if you are a fresh session.** Rewritten 2026-09-18 at an Architect clear. **The
+previous version was dated 2026-09-17 and was wrong in its headline claim** — it said Ikigai's
+eighteen Leaves were still drafts and the critical path was publishing them. They have been published
+and verified since.
 
-> **⚠️ Check your branch before trusting anything below.** On 2026-09-16 all three checkouts — `ZO`, `ZO-pipeline`, `ZO-admin` — were parked on stale feature branches, so every session was reading pre-archive planning docs. `ZO-pipeline`'s predated WP32's own sign-off and would have told a Pipeline Manager session that the paid-tier check does not exist. **`git checkout main && git pull` first.** The 91k startup load is only real on `main`.
+> **⚠️ Check your branch before trusting anything below.** Checkouts in this project have repeatedly
+> sat on stale feature branches. `git log --oneline -1 origin/main` — never `HEAD`.
 
-- **The app works end to end on a device and now looks like the design.** The redesign ran WP21–WP28 plus four follow-ups — eleven packages, all fourteen surfaces, ported from Claude Design's exported source at `design/claude_design/`. **Not deployed**; it runs against a laptop.
-- **✅ WP27 is merged — the redesign is fully on `main`.** Verified 2026-09-16: **zero open PRs**, and `origin/main:apps/mobile/src/components/Icon.tsx:91` reads `achievement: 'leaf'`. The trophy glyph the design rejects is gone from all three consumers. *This bullet said the opposite for five days.*
-- **The pipeline produces publishable books.** *The Science of Getting Rich* is Track 42 — 18 Leaves, grounded, illustrated, reviewed at gate 2, published, raw text purged.
-- **The library is still 27 placeholder Tracks plus Track 42, and it exists only on the founder's machine.** That did not move during the redesign, and it is the honest gap.
-- **WP28 proved there was never a tap bug** — four packages had mis-attributed correct app behaviour to the tooling. Two causes, both the app working as written. Read that decision before trusting any older note about "simulator flakiness".
-- **Open now:** **Leaf 4's bloom, then the founder publishes Ikigai's eighteen Leaves** — that is the whole critical path to the in-person pilot. · WP29 (the Leaf player's footer, **handed off 2026-09-11 and never started**) · WP26.1 (proposed, **still unanswered**).
-- **Founder ruling 2026-09-15: stay on the free setup until Ikigai is published and real readers have seen it.** No paid billing, no Claude on Vertex, no deployment. **Reviews come from friends, in person, on the founder's own phone over LAN.** This deprioritises WP12, WP13 and the cross-family work until the pilot reports back.
-- **Ikigai is published as a Track and its eighteen Leaves are still drafts** — a book that can be added and cannot be read. The founder filled the four Track-level fields by hand and published Track 50 on 2026-09-15; the Leaves were not published with it. **Publishing them is the pilot's critical path**, and it comes after Leaf 4's bloom, not before — the machine account cannot edit a published document, so publishing first freezes that breach permanently.
-- **✅ The paid-tier constraint is a real check as of WP32** (signed off 2026-09-15, merged as PR #47). `require_paid_tier` exists and is called from two sites, keyed off the Track's `acquisition` rather than a hand-set flag; `FREE_TIER_ACQUISITIONS` is a whitelist of one; **`ZOOMOUT_PIPELINE_PAID_TIER` is gone from the code entirely** — verified 2026-09-16, it now survives only in prose. Every run records its transport. **What the check cannot do is verify the label is true** — that is the Content Curation Policy's job, and it is now the only thing standing behind an otherwise sound check. **Proven against the real hazard on 2026-09-16, by accident:** WP33's shell had a free-tier Gemini key set and `USE_VERTEX` unset, against a book recorded `undocumented` — precisely the configuration three previous reports relied on discipline to avoid. `generate-assets` refused, exit 2. **That is the check verified in the state that actually matters rather than a contrived one.**
-- **Ikigai is done as text and images, and its last known style breach is fixed** — Track 50, **published as a Track with its 18 Leaves still drafts**, `acquisition: undocumented`. WP33 replaced Leaf 4's bloom on the first attempt for $0.1455. **Publishing the eighteen Leaves is now the founder's action and the whole critical path.**
-- **✅ IKIGAI IS PUBLISHED AND THE APP SERVES IT — 2026-09-17.** All eighteen Leaves published together; **verified anonymously: 18 of 18, every `_status` published, 18/18 scenario images and diagrams present, media serving HTTP 200.** The publish pre-flight passed first (WP33.1, 18/18 byte-identical, $0.00). **Track 50 was pre-checked against `trackSchema` and passes all seven requirements** — including `coverUrl` and a purchase link *with a scheme*, which is exactly where Track 42 silently broke. **The backend answers correctly** (`401 INVALID_TOKEN` unauthenticated, `/health` 200 on IPv4).
-- **What remains of the pilot is one step: a dev build on the founder's phone, shown to friends.** **The likely failure is the API URL, not the content** — `config.ts` defaults to `127.0.0.1:3000`, which on a real device means *the phone itself*. Both `EXPO_PUBLIC_API_URL` and `CONTENT_API_URL` need the Mac's LAN IP or media 404s on the phone while working on the laptop (WP15.8's path).
-- **🔊 Voiceover is in build — two narrators, reader's choice, four slides, Ikigai only.** 144 clips rendered and checked for $1.79 of a $3 credit ceiling; **none attached yet**, because two voices needed a schema change. Order: commit VO-2 → **VO-1.1** (schema + contract test, Opus) → founder fixes two Leaf texts → VO-2.1 (attach) → founder listens (~59 min) and publishes → VO-3 (player). **Do not clean `ZO-pipeline/apps/pipeline/runs/`** — 228 MB of paid renders live only there. **VO-1.1 merged (12/12); VO-2.1 merged and signed off 9/9 — 144 clips attached as drafts for $0.0346, ledger $1.8230 of $3.00.** **Published and verified independently 2026-09-18 — 18 Leaves, 144 audio rows, 8 per Leaf, all `published`, both narrators, queried against the live CMS.** **VO-3 handed off**, in a third worktree alongside INTRO-1. **No pipeline gate catches a typo** — `textDigest` proves the clip matches the text, not that the text is right. **Blocked on the founder:** Leaf 9 (271) is published reading `investments exposeyou to` — a space lost in a hand edit — and **the backend is not running at all**, port 3000 being held by an unrelated Next project. **Next after voiceover: an onboarding flow — designed and approved 2026-09-18, gated on VO-3.** Five beats ending inside the reader's first Leaf; the narrator is one of them, not the point. See `projectplan.md`.
-- **What that does and does not mean, because the sentence is easy to over-read.** It confirms **transfer and wiring** — the cleared image is the served image, and no candidate landed on the wrong Leaf (WP20's Leaf-11 defect family). **It did not re-examine any image.** Seventeen Leaves still rest on their *generation-time* guard verdict alone; only Leaf 4 has ever been guarded as attached. **That residual was ruled acceptable deliberately** for an in-person pilot where unpublish-then-fix exists — it is not a clean bill of health, and it should not be quoted as one when Ikigai goes further than friends.
-- **Track 42's scenario images all render the same scene** — a seated figure at a table in a dim interior, whatever the scenario. **Verified by pulling four from the live CMS and looking at them**: Leaf 13's *"buy a new house for your family"* is a man alone at a desk with a calculator. Four causes, none of them the scenario text — see WP30's handoff. **Track 42's published images are deliberately left alone** until WP30's before/after exists, because that comparison is what answers whether to regenerate them.
-- **WP28.1 closed the reduce-motion staleness window** (signed off 2026-09-11, 6/7 observed, merged as PR #43). The override now sits on **both** branches of all four animated surfaces, and the flag genuinely lives in one place again — `ReduceMotion` is imported nowhere in `apps/mobile` outside `motion.ts`. **Its one unobserved criterion is a ~60-second founder check**, top of the debt register.
-- **Parked with no handoffs:** WP12 deployment · WP13 password reset · WP14 hardening. **WP12's value rose with the redesign** — deploying now shows the new language, not the old — and it carries the answer-length publish check plus a visual sweep of every redesigned screen.
-- **Book #2 is chosen: *Ikigai*, PDF at `ZO-admin/booksSource/Ikigai.pdf`.** In copyright, and **that is already ruled acceptable for building** (2026-08-13, restated in `proposals/content-curation-policy.md`). What stays deferred is *what ships at launch*. The pipeline ingests PDF — `parse_pdf`, `pymupdf` — so there is no format blocker.
-- **Founder items live in `launch-blockers.md` Part 3.** Still open: the curation policy itself, the streak-vs-library call, unpublishing "The mountain is you", a domain, SFX assets.
+**Four worktrees, and `main` lives in `ZO` alone.** `ZO` (Architect, `main`) · `ZO-admin` (Manager) ·
+`ZO-pipeline` (Pipeline Manager) · `ZO-vo3` (Manager, VO-3). **Never `git checkout main` in a linked
+worktree** — branch from `origin/main` instead.
 
-**Before adding anything to `project/`, read `token-budget.md`.** Every session pays for these files at startup.
+### What is true today
+
+- **Voiceover is real and live.** Ikigai's eighteen Leaves are **published and carry 144 audio clips**
+  — both narrators, four slides each. **Verified 2026-09-18 by direct query against the CMS**: 18
+  Leaves, 144 rows, 8 per Leaf, all `_status: published`, narrators `female` and `male`. Spend
+  **$1.8230 of the $3.00 ceiling.**
+- **The default narrator is male (Sadaltager)** — ruled by the founder after listening to both 29:11
+  tracks in full.
+- **VO-3 is the live package** — the mobile player and the narrator preference. Handed off 2026-09-18
+  to Manager on Sonnet in `ZO-vo3`. **It is the last thing between a reader and the feature.**
+- **INTRO-1 is done** — the first-run cold open, merged as PR #54, 8/8 criteria, **device gate observed
+  by the founder on a real phone.** `INTRO_SEED` and `INTRO_FOCUS_SCALE` are settled values.
+- **The onboarding flow is designed and approved, gated on VO-3.** Five beats ending inside the
+  reader's first Leaf. Not handed off, deliberately: beat 3 consumes VO-3's audio layer.
+- **The library is 28 Tracks of which two are real** — Track 42 (*The Science of Getting Rich*) and
+  Track 50 (*Ikigai*). Everything else is placeholder. **That is still the honest gap.**
+- **Nothing is deployed.** It all runs on the founder's Mac. Reviews come from friends, in person —
+  the 2026-09-15 ruling to stay on the free setup still stands.
+
+### The three environment facts that cost time if rediscovered
+
+- **A native iOS build fails on this Mac** — `expo-modules-jsi` will not compile under Xcode 26.3 /
+  Swift 6, and only one Xcode is installed. **Device gates run on Expo Go instead**, confirmed working
+  on the founder's phone 2026-09-18. Do not pin an older Xcode; see the decisions log.
+- **Port 3000 is held by an unrelated Next.js app**, so the backend cannot bind. Payload is on 3001.
+- **SecureStore survives uninstall and reinstall on the iOS Simulator**, so any first-run flag persists
+  across a reinstall.
+
+### What a fresh Architect should do first
+
+**Archive `collaboration-log.md`.** It is **250KB / ~64k tokens** and the total startup load is
+**~148k** — against `token-budget.md`'s 40k target and worse than the 2026-09-15 rescue's starting
+point. **It was deliberately not archived at this clear because VO-3 was mid-package**, which
+`token-budget.md` forbids for a reason that has already cost a round trip. **Do it at VO-3's sign-off**,
+and take INTRO-1, VO-1.1, VO-2 and VO-2.1 out together.
 
 ## Phase 1 status board
 
