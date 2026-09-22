@@ -18,31 +18,51 @@ worktree** — branch from `origin/main` instead.
 
 ### What is true today
 
-- **Voiceover is real and live.** Ikigai's eighteen Leaves are **published and carry 144 audio clips**
-  — both narrators, four slides each. **Verified 2026-09-18 by direct query against the CMS**: 18
-  Leaves, 144 rows, 8 per Leaf, all `_status: published`, narrators `female` and `male`. Spend
-  **$1.8230 of the $3.00 ceiling.**
-- **The default narrator is male (Sadaltager)** — ruled by the founder after listening to both 29:11
-  tracks in full.
-- **VO-3 is the live package** — the mobile player and the narrator preference. Handed off 2026-09-18
-  to Manager on Sonnet in `ZO-vo3`. **It is the last thing between a reader and the feature.**
+- **A reader can hear Ikigai, on a real phone. Voiceover is finished end to end.** VO-3 merged
+  2026-09-22 (`060a286`); the eighteen Leaves are published and carry **144 audio clips** — both
+  narrators, four slides each — verified by direct query against the CMS. Spend closed at **$1.8230 of
+  the $3.00 ceiling.** **The default narrator is male (Sadaltager)**, ruled by the founder after
+  listening to both 29:11 tracks in full.
+- **Nothing is in flight.** No open PR, no branch ahead of `main` but one August-6th planning commit on
+  `wp0-monorepo-scaffolding` that must never be merged. All three Manager worktrees are clean.
+- **Onboarding is the next feature and is now unblocked** — design approved 2026-09-18, five beats
+  ending inside the reader's first Leaf. It was gated on VO-3 because beat 3 consumes the audio layer.
+  **Read its dependency before scoping it: beat 2's first-book picker makes Track covers the entire
+  visual, and Track 42's cover is still a founder item.**
 - **INTRO-1 is done** — the first-run cold open, merged as PR #54, 8/8 criteria, **device gate observed
   by the founder on a real phone.** `INTRO_SEED` and `INTRO_FOCUS_SCALE` are settled values.
-- **The onboarding flow is designed and approved, gated on VO-3.** Five beats ending inside the
-  reader's first Leaf. Not handed off, deliberately: beat 3 consumes VO-3's audio layer.
 - **The library is 28 Tracks of which two are real** — Track 42 (*The Science of Getting Rich*) and
-  Track 50 (*Ikigai*). Everything else is placeholder. **That is still the honest gap.**
+  Track 50 (*Ikigai*). Everything else is placeholder. **That is still the honest gap, and it is now
+  the largest one** — the app works, and there is almost nothing in it to read.
 - **Nothing is deployed.** It all runs on the founder's Mac. Reviews come from friends, in person —
-  the 2026-09-15 ruling to stay on the free setup still stands.
+  the 2026-09-15 ruling to stay on the free setup still stands. **`MEDIA_BASE_URL` is a prerequisite**
+  (debt register), because deployment is where `CONTENT_API_URL`'s double duty stops being survivable.
 
-### The three environment facts that cost time if rediscovered
+### The environment facts that cost time if rediscovered
 
+- **Media URLs are absolute, and built from `CONTENT_API_URL`.** Payload stores media relatively
+  (`/api/media/file/…`); the backend resolves it against `CONTENT_API_URL`, whose default is
+  `http://127.0.0.1:3001/api`. **On a real phone that is the phone**, so every image and every audio
+  clip silently fails while text loads fine. **Set `CONTENT_API_URL` to the Mac's LAN address for any
+  device session** — `http://192.168.1.102:3001/api` on 2026-09-22. Cost a whole session on 2026-09-22,
+  presenting as two unrelated-looking bugs: narration doing nothing, and a diagram "showing its prompt"
+  (which was `SlideImage`'s alt-text fallback, working correctly).
+- **The device gate runs on an Android phone over Expo Go.** Worth stating because the rest of this
+  section reads iOS — the VO-3 crash was `expo.modules.audio.AudioPlayer` receiving a
+  `java.lang.Integer`, which is an Android stack.
 - **A native iOS build fails on this Mac** — `expo-modules-jsi` will not compile under Xcode 26.3 /
   Swift 6, and only one Xcode is installed. **Device gates run on Expo Go instead**, confirmed working
   on the founder's phone 2026-09-18. Do not pin an older Xcode; see the decisions log.
-- **Port 3000 is held by an unrelated Next.js app**, so the backend cannot bind. Payload is on 3001.
+- **~~Port 3000 is held by an unrelated Next.js app, so the backend cannot bind.~~** **Corrected
+  2026-09-22 — the backend was measured running healthy on port 3000** (`/health` returns
+  `{"status":"ok"}`). The Next.js app simply is not always running. Payload is on 3001. **VO-3's row
+  once carried "moves the backend off port 3000" as scope; that never reached its handoff** and is now
+  a conditional, not a blocker — it returns only if that other app is started first.
 - **SecureStore survives uninstall and reinstall on the iOS Simulator**, so any first-run flag persists
   across a reinstall.
+- **The `ZO` worktree cannot run the mobile test suite** — its `node_modules` is stale against the
+  lockfile and 42 suites fail at module resolution in `jest.setup.js` before a single test executes.
+  Run mobile tests from the worktree that owns the package, or `npm install` in `ZO` first.
 
 ### The token budget — where it stands 2026-09-22
 
@@ -174,8 +194,8 @@ Legend: ✅ done · 🔵 in progress · ⬜ not started · 🔒 blocked
 | **VO-1** | **Foundations** — audio mime types on `Media`; `resolveMediaUrl` applied to audio | Manager | ✅ **Signed off 2026-09-17 (7/7)** — verified against the diff: **all five audio call sites** routed through `baseUrl`, `stickyNotes` included, and the mutation contrast reported as asked. `audio/mpeg` only, with the reasoning stated. **The image-only-processing question came back with a real answer** — Payload's own `canResizeImage`/`isImage` checks gate resizing, so audio skips it without a parallel branch. **And it asked three questions rather than assuming, one of which found a hole in our process docs** | Branch `vo-1-audio-path` |
 | **VO-2** | **Generation** — 144 clips, two narrators. **Opus** | **Pipeline Manager** | ✅ **Signed off 2026-09-17 at 6/9, by design** — **$1.79 of $3.** The founder chose two narrators mid-package, which made the CMS write impossible against a one-voice schema, so writes were held. **Two unmet criteria move to VO-2.1; the third — listening to the full tracks — was never meetable by an agent that cannot hear, and that was Architect's error in the handoff.** Verified: 183 raw renders cached (not 144 mp3s — encoding happens at upload), clip cache keyed on text, Google's own counts show zero AI Studio calls. **19 of 19 mutations went red.** The report's best finding is the guard's: its transcriber silently dropped spoken instructions in 9 of 13 transcripts, and it now has a model-free pace check behind it | **Uncommitted** in `ZO-pipeline` — commit, PR, merge |
 | **VO-1.1** | **Narrator-keyed audio + `textDigest`**, the live DB push, the backend contract test | Manager | ✅ **Signed off 2026-09-18 (12/12)** — **1,391 tests, +24 and nothing dropped**, the count reported and reconciled per the new habit. Database backed up, dropped columns proven empty, baseline re-verified. **The contract test that `manager.md` claimed for weeks now exists**, and goes red on the named regression. **Ran on Sonnet 5, not the suggested Opus** — flagged before starting, founder's call, 12/12; see the decision below | Merged as PR #52 |
-| **VO-2.1** | **Attach both narrators as drafts** — first live run of the upload path | **Pipeline Manager** | 📤 **Handed off 2026-09-18** | **$1.21 of the $3 ceiling left.** Blocked on the founder republishing Leaf 9 |
-| **VO-3** | **Playback** — player, narrator choice, audio session. **Absorbs WP29.** Also **moves the backend off port 3000** | Manager | ⬜ **Not written — deliberately** | Needs VO-2.1's files and the default-narrator ruling |
+| **VO-2.1** | **Attach both narrators as drafts** — first live run of the upload path | **Pipeline Manager** | ✅ **Signed off 2026-09-18 (9/9)** — **144 = 18 Leaves × 4 slides × 2 narrators**, every entry with a URL, a positive `durationSeconds` and a 64-char digest, verified by a script outside the pipeline's own code that re-fetched all 18 Leaves and recomputed every digest. **Only 4 of 144 clips were freshly rendered** — the run cache bought the rest, at **$0.0346** against a $1.21 remainder. Ledger closed at **$1.8230 of the $3.00 ceiling** | Merged |
+| **VO-3** | **Playback** — player, narrator choice, audio session. **Absorbs WP29** | Manager | ✅ **Signed off 2026-09-22** — and **the risk the package named before shipping is exactly the one that bit**: its report said the whole thing rested on `expo-audio`'s hooks behaving as their `.d.ts` describes, *"since I have never once seen them run."* On a real phone `useAudioPlayer` releases its native player on unmount by itself, undocumented, so the package's own cleanup called `pause()` on a released object. **Fixed same day and mutation-checked against the exact failure** — `releaseFakePlayer()` reproduces the native error, and stripping `safely()` from any one of three call sites fails the new test. **Verified at sign-off by running the suite, not reading the report: 42 suites / 691 tests.** Two debt rows below | **Merged 2026-09-22 (`060a286`)** |
 | WP22.3 | Roadmap vertical rhythm derived from label height | Manager | ✅ **Signed off 2026-09-10** — spacing now floors at a worst-case two-line label at the reader's real text scale; also fixed a pre-existing memo bug that would have made the whole feature inert | Merged as PR #41. **Unverified on Track 42's long titles** |
 | — | *WP12 deployment · WP13 password reset · WP14 test hardening* | Manager | ⏸ **parked** | see `launch-blockers.md` |
 
@@ -318,6 +338,8 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 > **Resolved rows are archived** in `project/archive/debt-resolved-through-2026-09-15.md` (split 2026-09-15). This register holds **open** debt only. Archive at each sign-off, not when it hurts — see `token-budget.md`.
 | Item | Impact | Flagged by | Status |
 |---|---|---|---|
+| **⚠️ `CONTENT_API_URL` does two different jobs, and they diverge off localhost** | Its own docstring calls it the backend's **private** path to Payload — *"called anonymously and over private networking"*. It is also the base every **public** media URL is built from, so the client is handed the backend's private address. Same string only while backend and client share a host. **They already do not** — this cost a full session on 2026-09-22, presenting as narration doing nothing and a diagram rendering its alt text. Today it is papered over by an untracked `.env` pinning one Mac's LAN IP, which breaks when the router reassigns it. **At deployment it is not papered over at all**: Cloud Run's private Payload URL and its public media URL are nothing alike. Fix is a separate `MEDIA_BASE_URL`, defaulting to `CONTENT_API_URL` so local dev is unchanged | Architect, 2026-09-22, diagnosed against the running backend | ⬜ **Open — blocks WP12 (deployment), and a device session any time the LAN IP moves** |
+| **`safely()` swallows a failed `play()`, so a dead narration button looks like a working one** | `useNarration.ts` routes all three native call sites through one `safely()` wrapper. **Correct for two of them** — on unmount and on backgrounding, "not playing" is already true, so the exception carries nothing to act on, and that is exactly what its docstring argues. **The third is `toggle`'s play branch, where the reasoning does not hold**: a reader tapped, nothing happened, and the only trace is a `console.warn`. This is *why* 2026-09-22's media-URL bug presented as silence rather than as an error. Nothing is wrong with the crash fix — it stopped a real crash and was mutation-checked | Architect, 2026-09-22, at VO-3's sign-off | ⬜ **Open — small; pair it with `MEDIA_BASE_URL`, since that package is already in this file** |
 | ~~**INTRO-1's seed and focus scale are placeholders nobody has looked at**~~ | ✅ **Closed 2026-09-18 — the founder looked, on a real phone, via Expo Go, and it reads right.** `INTRO_SEED = 8_675_309` and `INTRO_FOCUS_SCALE = 6` are now settled. **The route mattered as much as the result:** the values were derived by arithmetic and could not be confirmed any other way, and a native build was — and still is — broken on this machine | Manager, INTRO-1 | ✅ Closed |
 | **A native iOS build fails on this Mac — `expo-modules-jsi` under Xcode 26.3 / Swift 6** | `JavaScriptCodable+Date.swift:53:50: type of expression is ambiguous`. A transitive Expo dependency pinned before INTRO-1 existed, so **it blocks any package needing a native rebuild here**, VO-3 included. Only one Xcode is installed | Manager, INTRO-1 | **Open, with a route around it — ruled 2026-09-18: Expo Go first, then `expo prebuild --clean`, then a patch bump or EAS Build. Not an older Xcode** |
 | **SecureStore survives uninstall and reinstall on the iOS Simulator** | So `zoomout.introSeen` persists across a reinstall, and **anyone checking "does the intro show on first launch" by reinstalling will conclude it is broken.** Clear the key, or use a fresh simulator or device | Manager, INTRO-1 | ℹ️ **Not debt — inherited knowledge.** Carry into any handoff whose gate involves a first-run flag |
