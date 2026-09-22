@@ -386,6 +386,75 @@ Verify this list against the repository rather than trusting it.
 
 ## Completions (Manager → Architect)
 
+### Completed: COVER-1 — two covers that are ours — 2026-09-22
+
+**Done. Both covers generated, guard-clean on the first candidate, $0.275 of the $0.50 ceiling, neither Track touched.** Branch `cover-1-track-covers` in `ZO-pipeline`, off `origin/main` at `af437dc`, fast-forwarded onto `07e76b9` (the debt-register sweep — `project/`-only, no overlap) immediately before this report.
+
+| | |
+|---|---|
+| Automated gate | `ruff check .`, `ruff format --check .`, `mypy` (configured target: `zoomout_pipeline` + `tests`), `pytest` — all green |
+| Files (mypy) | **99**, up from VO-2.1's **97** — `graph/cover_nodes.py` and `tests/test_cover_nodes.py`, exactly the two new source files |
+| Tests | **441 passed, 6 deselected** (the `live` marker, unchanged), up from VO-2.1's **438** — the 3 new tests in `test_cover_nodes.py`, no drop anywhere else |
+| Spend | 2 images × $0.134 + 2 guard reads × $0.0035 = **$0.2750** of $0.50 |
+| Device gate | Contact sheet and both chosen files on disk, absolute paths below. Founder uploads through the admin UI — I do not have and did not seek a wider key |
+
+---
+
+## What changed
+
+**New `apps/pipeline/src/zoomout_pipeline/graph/cover_nodes.py`** — `COVER_BRIEFS` (the two briefs below), `cover_image_prompt`/`cover_alt_text` (the cover's sibling of `asset_nodes.scenario_image_prompt`/`scenario_alt_text`, reusing `scene_block` rather than duplicating it), and `generate_cover_candidates` — the orchestration: one candidate per brief, then a second attempt spent **only** on whichever brief the guard refused, never as a free second option for one that already passed. Not wired into the graph or `PipelineState` at all, on purpose — there is no run or Leaf behind a cover, and WP17's precedent for `generate-assets` (a deliberate invocation rather than a node) applied here too.
+
+**New `apps/pipeline/src/zoomout_pipeline/prompts/cover_track42.md`** and **`cover_ikigai.md`** — the two subject briefs, as version-controlled prompt text per the engineering standard, not string literals.
+
+**New `apps/pipeline/tests/test_cover_nodes.py`** — Tier B, three cases: both briefs pass first try and neither gets a bonus second candidate; one refusal is retried and the brief that already passed is not; two refusals in a row halt on the budget rather than looping. The guard's own coverage is `test_style_guard.py`'s; this exercises the new retry-allocation logic, which is the only thing here that could actually be wrong.
+
+**Modified `apps/pipeline/src/zoomout_pipeline/cli.py`** — the `generate-covers` command, plus `_track_snapshot` (a thin `PayloadClient.get_track` wrapper for the before/after `updatedAt` proof). `git diff --stat` confirms nothing outside `apps/pipeline` changed.
+
+## Subject: read from the Leaves, then deliberately not copied from them
+
+Read all eighteen published Leaves on both Tracks (Payload REST, unauthenticated — both are published) before writing either brief. **Both Tracks' scenario prompts are modernised** — Track 42 is web agencies and freelance design studios, Ikigai is software sprints and grocery runs — rewritten for a reader deciding what to do *today*. A cover built from one of those scenarios would show 2026, not the book, so I deliberately did not use them as the subject:
+
+- **Track 42 — a shopkeeper weighing goods on a brass scale in an early-1900s general store.** The book is Wattles, 1910; "the period and its craft" per the handoff. The existing scenario art for this Track (`leaf-00`, `leaf-13`, checked directly) is a modern coffee-roasting business and a man at a desk with a calculator and a city skyline — confirming the modernisation is real and consistent, and that copying it would have produced exactly the wrong cover.
+- **Ikigai — an elderly person tending a small vegetable garden beside a home, at dawn.** Not from a modernised scenario but from the book's own recurring, undisguised content: Leaf 11 names Okinawan *moai* (community gardening groups), Leaf 12 Okinawan elders keeping active roles, Leaf 5 *takumi* craftsmanship, Leaf 0 opens on "jumping out of bed each morning" — which a dawn garden scene illustrates about as literally as this style contract allows. `runs/ikigai/images/leaf-11-scenario-1.png` (a shared community garden) and `leaf-05-scenario-1.png` (a potter's wheel) were the closest existing precedent for "this book's world" and shaped the choice directly.
+
+Both briefs open with the concrete situation, in `.md` files rather than as prompt string literals, per the engineering standard.
+
+## The budget trap, resolved rather than avoided
+
+`images.py`'s existing $0.134/image rate models the **1K/2K** resolution tier; 4K is $0.24 and unmodelled "because `DEFAULT_ASPECT_RATIO` never requests it." A 2:3 cover request is a different **aspect ratio**, not a different **resolution**, and those are independent parameters on `google.genai.types.ImageConfig` — confirmed by reading the installed SDK's own field docs (`image_size` "Supported values are 1K, 2K, 4K. If not specified, the model will use default value 1K") and cross-checked against ai.google.dev/gemini-api/docs/pricing, which prices by pixel tier only: "$0.134 per 1K/2K image," no mention of aspect ratio. `images.py`'s `ImageConfig` call never sets `image_size`, at 4:3 or at 2:3, so it stays in the 1K default either way. **The existing rate already covers this request; nothing needed fixing.** Stated in the command's own output before it spends anything, not just in this report.
+
+## Verification
+
+- **Guard**, quoted per image, not summarised: both `track-42-cover-01.png` and `track-50-cover-01.png` — *"clean: no text, no glow, no floating iconography, no reserved amber."*
+- **I looked, beyond the guard.** Zoomed into both windows/light areas (flat polygons with hard edges — "a doorway's spill as a lighter polygon," not falloff), Track 42's jars and cloth bolts (no labels), the scale and the shopkeeper's hands (no currency symbols, no digits), Ikigai's face and hands (angled down, non-identifiable, attached to a body — `figures=1` so the `_an_empty_frame_has_no_hands_in_it` contradiction the schema guards against never applied). Both read as the book, not as stock art, at thumbnail size and at full size.
+- **Dimensions, read back rather than trusted**: both **848×1264**, ratio 0.6709 against a 2:3 target of 0.6667 — 0.6% off, inside the ±1% tolerance the command checks. Requested 2:3 and received 2:3.
+- **Neither Track was touched.** `updatedAt` before and after, both unchanged: Track 42 `2026-09-02T08:40:38.384Z`, Track 50 `2026-09-15T14:23:17.600Z`. Read through `PayloadClient.get_track`, not a second HTTP caller — see the boundary note below.
+- **Acquisition, confirmed against the pipeline's own `books` table, not taken from the handoff's prose**: Track 42 `public-domain` (`first_run_id='wattles-01'`), Ikigai `undocumented` (`first_run_id='ikigai'`) — matches what the handoff stated, independently verified. Both route to Vertex in this environment (`ZOOMOUT_PIPELINE_USE_VERTEX=true`), confirmed in the command's own transport line rather than assumed; had `use_vertex` been unset, Ikigai's `undocumented` acquisition would have been refused by `require_paid_tier` before a single image was bought, which is the scenario this check exists for.
+
+## A boundary I nearly broke
+
+First draft of `_track_snapshot` called `urllib.request` directly — reasoning that a published Track needs no auth (`Tracks.ts`: `read: publishedOrAuthenticated`), so a second, unauthenticated HTTP path felt harmless. `pytest` disagreed: `test_boundaries.py::test_http_is_confined_to_the_cms_client` and `test_the_cms_client_is_the_only_module_that_speaks_http` both failed, correctly — the rule is "one door," not "one door for writes." Fixed by routing through `PayloadClient.get_track(track_id, draft=False)` instead, which meant constructing the client with the machine account's key even though this command never writes with it. Recording this because it is exactly the shape of mistake `agents/pipeline-manager.md` warns about — reasoning locally to a conclusion the codebase already has a test for — and the test caught it before it shipped, which is the point of it existing.
+
+## What I did not spend, on purpose
+
+**Every candidate generated is on the contact sheet, and there are only two — one per Track.** Both passed the guard on the first try, and `generate_cover_candidates` never spends a second attempt on a brief that already has a clean candidate (see "What changed" above). That was a deliberate reading of the $0.50 ceiling as a hard cap to design against rather than a target to spend up to, but it has a real cost: **the founder's "eye" gate is choosing between one option per book, not several.** I did not generate alternates after the fact either, on the same reasoning `agents/pipeline-manager.md` gives for spend generally — a ceiling is something to stop at and report against, not something to use up because there's room left ($0.225 remains). If the founder opens the contact sheet and wants real alternatives to compare, that is a `generate-covers` re-run with the budget raised deliberately, not something I should have decided unilaterally at $0.275. Flagging it here rather than treating "it passed the guard" as "it's definitely the right image" — nobody but the founder has actually judged either one yet.
+
+## Follow-ups for Architect
+
+1. **The founder's action**: open `runs/covers/contact-sheet.png`, and if satisfied, upload the two chosen files to Tracks 42 and 50 through the admin UI. Paths below.
+2. **Worth a deliberate decision, not an assumption**: whether one candidate per cover is enough, or whether COVER-1.1 (or a `--candidates` re-run) should buy a second option per book for real comparison. See "What I did not spend" above.
+3. **Minor, not fixed**: `scene_block` (`graph/asset_nodes.py`) says "Decided for this Leaf from its scenario" — reused verbatim for a cover, where there is no Leaf. Cosmetic (it does not change what the model draws), and fixing it touches a file outside this package's stated reuse list (`images.py`, `style_guard.py`, `contact_sheet.py`) for a wording-only change, so I left it and I'm naming it instead.
+
+## Where the two chosen files are (absolute paths — this checkout, not `ZO`)
+
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/covers/track-42-cover-01.png` — Track 42, *The Science of Getting Rich*
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/covers/track-50-cover-01.png` — Track 50, *Ikigai*
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/covers/contact-sheet.png` — both, side by side
+
+`runs/` is gitignored; these exist only on this disk, not in the diff.
+
+---
+
 ### Completed: VO-3 — the player, and the narrator preference — 2026-09-18
 
 > **⚠️ Addendum, 2026-09-22 — the founder got a device working, and this package's one named risk landed exactly where it was expected to.** From "Anything I am not happy with" below: *"the whole package rests on `expo-audio`'s hooks behaving the way their `.d.ts` and doc comments describe, since I have never once seen them run."* On a real Android phone: `useAudioPlayer` releases its native player on unmount **on its own** — true of the library, not documented anywhere in its `.d.ts` — and this package's own unmount cleanup (`useNarration.ts`, written to satisfy the "audio stops on unmount" acceptance criterion) was running *after* that release had already happened, calling `player.pause()` on a released native object. Native exception, uncaught, one render crash per slide left while a narrated one was mounted: `Cannot use shared object that was already released`. Fixed same day: all three native call sites in `useNarration.ts` (the unmount cleanup, the `AppState` background listener, and `toggle`) now go through a `safely()` wrapper that catches and `console.warn`s rather than lets the native exception propagate — the desired end state, "not playing," is already true once the player is released, so there is nothing left to do. **Mutation-checked against the exact failure**: `fakeExpoAudio.ts` gained `releaseFakePlayer()`, which reproduces the observed native error on demand; a new test in `NarrationControl.test.tsx` calls it before unmounting and confirms no exception propagates — stripping `safely()` from any one of the three call sites reproduces the founder's exact crash and fails that one test, confirmed by hand before restoring the fix. 691 mobile tests now (was 690). Everything else in this report is as it was on 2026-09-18; this is the one correction. **This is also the reason the device gate mattered as much as it did** — no unit test, mocking `expo-audio` at its own boundary as the testing expectations asked for, could ever have caught a bug in the boundary's own undocumented behaviour.
