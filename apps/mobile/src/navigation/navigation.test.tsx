@@ -8,6 +8,7 @@ import { AuthProvider } from '../auth/AuthProvider';
 import { ThemeProvider, type ThemeMode } from '../design';
 import { INTRO_HANDOFF_MS } from '../screens/intro/introBeats';
 import { getIntroSeen, setIntroSeen } from '../screens/intro/introSeenStore';
+import { getOnboardingSeen, setOnboardingSeen } from '../screens/onboarding/onboardingSeenStore';
 import { RootNavigator } from './RootNavigator';
 
 /** `jest.setup.js`'s in-memory keychain stand-in — reset so one test's intro-seen state
@@ -32,15 +33,20 @@ const METRICS: Metrics = {
 };
 
 /**
- * Every test in this file except the `Intro` block below exercises auth branching, not
- * the intro — INTRO-1 made `RootNavigator` check a second, independent flag before it
- * will render `AuthStack`, so without this every "signed out" test here would now land
- * on the intro instead of `sign-in-screen`. Defaulting to "already seen" keeps those
- * tests testing what they have always tested; the `Intro` block clears this itself.
+ * Every test in this file except the `Intro` and `Onboarding` blocks below exercises
+ * auth branching, not either gate. INTRO-1 made `RootNavigator` check a second,
+ * independent flag before it will render `AuthStack`; ONBOARD-1 added a third — a
+ * signed-in reader whose Library is empty and whose onboarding flag is unset now lands
+ * on `OnboardingPromise`, not `Tabs`. Without both flags set here, every "signed in"
+ * test in this file would land on an onboarding beat instead of `explore-screen`,
+ * since `signedInBackend` below stubs `/library` as empty. Defaulting to "already seen"
+ * on both keeps those tests testing what they have always tested; the `Intro` and
+ * `Onboarding` blocks each clear their own flag.
  */
 beforeEach(async () => {
   (SecureStore as ResettableSecureStore).__reset();
   await setIntroSeen();
+  await setOnboardingSeen();
 });
 
 afterEach(async () => {
@@ -261,5 +267,198 @@ describe('Intro', () => {
       expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
     });
     expect(view.queryByTestId('intro-screen')).toBeNull();
+  });
+});
+
+describe('Onboarding', () => {
+  // Undoes the file's own default (see the top-level `beforeEach`): these tests are
+  // about the flag and the Library check themselves, so they start from "not seen",
+  // same as a fresh install or a fresh account.
+  beforeEach(async () => {
+    (SecureStore as ResettableSecureStore).__reset();
+    await setIntroSeen();
+  });
+
+  const REAL_TRACK = {
+    id: 't1',
+    bookTitle: 'Ikigai: The Japanese Secret to a Long and Happy Life',
+    author: 'An Author',
+    coverUrl: 'https://example.test/cover.png',
+    description: 'A description.',
+    isPlaceholder: false,
+  };
+
+  const LEAF_SUMMARY = { id: 'l1', trackId: 't1', orderIndex: 0, title: 'Leaf One', isPlaceholder: false };
+
+  const DELIVERED_LEAF = {
+    id: 'l1',
+    trackId: 't1',
+    orderIndex: 0,
+    title: 'Leaf One',
+    summary: { body: 'Summary.', audio: [] },
+    scenario: { prompt: 'Prompt?', options: [] },
+    payoff: null,
+    payoffUnlocked: false,
+    stickyNotes: { notes: [] },
+    takeaway: { body: 'Takeaway.' },
+    sourceReferences: [],
+  };
+
+  const LIBRARY_ENTRY = {
+    track: REAL_TRACK,
+    addedAt: '2026-09-01T00:00:00.000Z',
+    status: 'active',
+    progress: { trackId: 't1', totalLeaves: 1, completedLeaves: 0, nextLeafId: 'l1', isComplete: false },
+  };
+
+  /**
+   * A signed-in backend with one real Track and everything beats 1–4 touch, so the
+   * full-flow test below can walk end to end without a dozen separate stubs.
+   * `initialLibraryEntries` is the one thing that varies per test — empty for a new
+   * reader, non-empty for an existing one.
+   *
+   * **Stateful, not a fixed stub** — `/library/tracks/t1` (`addToLibrary`) appends to
+   * the same `entries` array a later `/library` (`listLibrary`) read returns. Beat 3's
+   * resume lookup depends on seeing what beat 2 just added; a static stub would silently
+   * send it down the same "could not find the entry" fallback path a real failure does,
+   * which is exactly the bug this backend originally shipped with in this test.
+   */
+  function onboardingBackend(initialLibraryEntries: unknown[]): typeof fetch {
+    const entries = [...initialLibraryEntries];
+
+    return (input) => {
+      const url = urlOf(input);
+
+      if (url.includes('/auth/refresh')) return Promise.resolve(json(SESSION));
+      if (url.includes('/users/me')) return Promise.resolve(json(PROFILE));
+      if (url.includes('/library/tracks/')) {
+        entries.push(LIBRARY_ENTRY);
+        return Promise.resolve(json({ unlocked: [] }));
+      }
+      if (url.includes('/content/tracks/t1/leaves')) {
+        return Promise.resolve(json({ leaves: [LEAF_SUMMARY] }));
+      }
+      if (url.includes('/content/leaves/l1')) return Promise.resolve(json(DELIVERED_LEAF));
+      if (url.includes('/progress/leaves/l1/start')) {
+        return Promise.resolve(
+          json({
+            progress: {
+              userId: PROFILE.id,
+              leafId: 'l1',
+              attemptCount: 0,
+              firstTryCorrect: false,
+              correctAt: null,
+              completedAt: null,
+              xpAwarded: 0,
+            },
+          }),
+        );
+      }
+      if (url.includes('/content/tracks')) {
+        return Promise.resolve(json({ tracks: [REAL_TRACK], page: 1, totalPages: 1, totalTracks: 1 }));
+      }
+      if (url.includes('/library')) {
+        return Promise.resolve(json({ entries }));
+      }
+
+      return Promise.resolve(json({ error: { code: 'NOT_FOUND', message: 'no stub' } }, 404));
+    };
+  }
+
+  it('shows the promise beat to a signed-in reader with an empty Library and no flag', async () => {
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+    });
+  });
+
+  it('shows only the narrator beat to a signed-in reader with a non-empty Library and no flag', async () => {
+    // The Library check `useIntroSeen`'s own gate never needed — mutation check:
+    // swap the branch and this is the test (alongside the one above) that reds.
+    const view = await renderApp({
+      refreshToken: 'stored',
+      fetchFn: onboardingBackend([LIBRARY_ENTRY]),
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-narrator-screen')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('onboarding-promise-screen')).toBeNull();
+  });
+
+  it('goes straight to Explore when the flag is already set, even with an empty Library', async () => {
+    // The flag wins outright, regardless of what the Library check would have said.
+    await setOnboardingSeen();
+
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('onboarding-promise-screen')).toBeNull();
+  });
+
+  it('sets the flag and lands on Explore when the promise beat is skipped', async () => {
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-promise-skip')).toBeOnTheScreen();
+    });
+
+    await fireEvent.press(view.getByTestId('onboarding-promise-skip'));
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    // Explore's first-run state (ONBOARD-1's skip ruling) — an empty Library, however
+    // it got that way, lands on the same designed state, never a blank catalogue.
+    expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
+    await expect(getOnboardingSeen()).resolves.toBe(true);
+  });
+
+  it('walks a new reader through all three beats into Leaf 1, not the catalogue', async () => {
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
+
+    await waitFor(() => {
+      expect(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`)).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+    // The server-computed resume target (`nextLeafId: 'l1'` on the freshly-added
+    // Track), not `listLeaves(trackId)[0]` — see `OnboardingNarratorScreen`'s own
+    // comment on `finish`.
+    await waitFor(() => {
+      expect(view.getByTestId('leaf-player')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('explore-screen')).toBeNull();
+    await expect(getOnboardingSeen()).resolves.toBe(true);
+  });
+
+  it('lands an existing reader on Tabs, not the player, after choosing a narrator', async () => {
+    const view = await renderApp({
+      refreshToken: 'stored',
+      fetchFn: onboardingBackend([LIBRARY_ENTRY]),
+    });
+
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    await expect(getOnboardingSeen()).resolves.toBe(true);
   });
 });

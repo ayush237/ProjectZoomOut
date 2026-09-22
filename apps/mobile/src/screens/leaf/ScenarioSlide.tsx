@@ -22,6 +22,8 @@ import {
   useReducedMotion,
   useTheme,
 } from '../../design';
+import { ScenarioGateCoachMark } from '../onboarding/ScenarioGateCoachMark';
+import { useScenarioGateCoachMark } from '../onboarding/useScenarioGateCoachMark';
 import { SlideFrame } from './SlideFrame';
 
 const OPTION_LABELS = ['A', 'B', 'C'] as const;
@@ -64,6 +66,7 @@ export function ScenarioSlide({
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
   const [selected, setSelected] = useState<string | null>(null);
+  const coachMark = useScenarioGateCoachMark();
 
   const answered = correctOptionId !== null;
   const wrongCount = wrongOptionIds.length;
@@ -143,6 +146,15 @@ export function ScenarioSlide({
           <Text variant="h3">{data.prompt}</Text>
 
           <NarrationControl audio={data.audio} label="Scenario" />
+
+          {/* Beat 5 (ONBOARD-1): shown once per install, the first time this reader
+              reaches this gate — see `useScenarioGateCoachMark`'s own docstring for why
+              that is not the same as "only during the five-beat flow". Gone once
+              answered even if never dismissed: at that point the mechanic has already
+              explained itself. */}
+          {coachMark.visible && !answered ? (
+            <ScenarioGateCoachMark onDismiss={coachMark.dismiss} />
+          ) : null}
         </View>
 
         <View style={{ gap: theme.spacing.md }}>
@@ -233,6 +245,7 @@ export function ScenarioSlide({
           label="Check answer"
           onPress={() => {
             if (liveSelection !== null) {
+              coachMark.dismiss();
               onSubmit(liveSelection);
             }
           }}

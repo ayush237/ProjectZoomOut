@@ -93,6 +93,15 @@ export function ExploreScreen(): React.JSX.Element {
    */
   const membershipKnown = library.status === 'ready';
 
+  /**
+   * ONBOARD-1's first-run state, derived rather than flagged — see the header below.
+   * Read from the fetched set alone, not layered with `overrides`: a reader who adds a
+   * book sees the heading catch up on the next refresh (return-to-screen already
+   * triggers one via `useRefreshOnFocus`), which is the same latency the membership
+   * buttons themselves already accept between an add and a full re-fetch.
+   */
+  const emptyLibrary = membershipKnown && library.data?.size === 0;
+
   const inLibrary = useCallback(
     (trackId: string): boolean => overrides.get(trackId) ?? library.data?.has(trackId) ?? false,
     [overrides, library.data],
@@ -216,18 +225,36 @@ export function ExploreScreen(): React.JSX.Element {
            * scrolling into it.
            */
           ListHeaderComponent={
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'flex-end',
-                justifyContent: 'space-between',
-                gap: theme.spacing.md,
-              }}
-            >
-              <Text variant="display">Explore</Text>
-              <Text variant="caption" tone="textMuted" testID="explore-count">
-                {list.length} of {tracks.data?.totalTracks ?? list.length}
-              </Text>
+            <View style={{ gap: theme.spacing.sm }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-end',
+                  justifyContent: 'space-between',
+                  gap: theme.spacing.md,
+                }}
+              >
+                <Text variant="display">{emptyLibrary ? 'Pick your first book' : 'Explore'}</Text>
+                <Text variant="caption" tone="textMuted" testID="explore-count">
+                  {list.length} of {tracks.data?.totalTracks ?? list.length}
+                </Text>
+              </View>
+
+              {/**
+               * ONBOARD-1's first-run state — derived from the Library's own
+               * membership count, not a separate flag. This is what a reader who
+               * skipped onboarding (at any beat) lands on: the same catalogue everyone
+               * sees, reframed for someone who has not added anything yet. It reverts
+               * to the plain heading the moment that stops being true, on its own,
+               * because nothing here is remembered past "is the Library empty right
+               * now" — a reader who removes every book sees this again too, which is
+               * the correct reading of "first run": not a one-time flag, a state.
+               */}
+              {emptyLibrary ? (
+                <Text variant="body" tone="textMuted" testID="explore-first-run">
+                  Add one below to get started — about fifteen minutes, one book at a time.
+                </Text>
+              ) : null}
             </View>
           }
           ListHeaderComponentStyle={{ paddingBottom: theme.spacing.sm }}

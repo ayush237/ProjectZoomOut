@@ -6,10 +6,11 @@ import {
 } from '@react-navigation/native';
 import { ActivityIndicator, View } from 'react-native';
 
-import { useAuth } from '../auth/AuthProvider';
+import { useApi, useAuth } from '../auth/AuthProvider';
 import { useTheme, type Theme } from '../design';
 import { IntroScreen } from '../screens/intro/IntroScreen';
 import { useIntroSeen } from '../screens/intro/useIntroSeen';
+import { useOnboardingGate } from '../screens/onboarding/useOnboardingGate';
 import { AppStack } from './AppStack';
 import { AuthStack } from './AuthStack';
 
@@ -34,10 +35,21 @@ import { AuthStack } from './AuthStack';
  * (finish and skip) call `intro.markSeen`, which flips local state to `'seen'`
  * immediately and persists in the background, landing back on this same branch — which
  * now falls through to `AuthStack`, exactly as a fresh sign-out would.
+ *
+ * **ONBOARD-1: the mirror image, on the signed-in side.** `useOnboardingGate` only ever
+ * fetches once `status === 'signedIn'` (its own `enabled` guard), so it cannot race the
+ * auth restore and cannot fire for a reader who is not signed in at all. Its `restoring`
+ * gets the same blank frame `intro.status === 'restoring'` already does, for the same
+ * reason: a reader whose Library check has not landed yet must not see `Tabs` flash in
+ * front of a flow they have not been offered. `AppStack`'s `initialRouteName` is where
+ * the decision actually lands — one prop, the same mechanism `AuthStack` already uses
+ * for the social-signup age gate, not a second navigator.
  */
 export function RootNavigator(): React.JSX.Element {
   const { status } = useAuth();
   const intro = useIntroSeen();
+  const api = useApi();
+  const onboarding = useOnboardingGate(api, status === 'signedIn');
   const theme = useTheme();
 
   // React Navigation keeps its own theme for the surfaces it draws itself — screen
@@ -71,10 +83,21 @@ export function RootNavigator(): React.JSX.Element {
     }
   }
 
+  if (status === 'signedIn' && onboarding.status === 'restoring') {
+    return <RestoringView theme={theme} />;
+  }
+
+  const appInitialRoute =
+    onboarding.status === 'full'
+      ? 'OnboardingPromise'
+      : onboarding.status === 'narratorOnly'
+        ? 'OnboardingNarrator'
+        : 'Tabs';
+
   return (
     <NavigationContainer theme={navigationTheme}>
       {status === 'signedIn' ? (
-        <AppStack />
+        <AppStack initialRouteName={appInitialRoute} onboardingMarkSeen={onboarding.markSeen} />
       ) : (
         <AuthStack initialRouteName={status === 'needsSignupDetails' ? 'AgeGate' : 'SignIn'} />
       )}
