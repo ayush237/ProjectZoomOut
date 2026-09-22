@@ -460,7 +460,87 @@ Verify this list against the repository rather than trusting it.
 
 ## Completions (Manager → Architect)
 
-### Completed: COVER-1 — two covers that are ours — 2026-09-22
+### Completed: ONBOARD-1 — the five-beat activation flow, promise to first Leaf — 2026-09-23
+
+**Code complete, fully tested, mutation-checked, and live-verified against the real backend** for every data-shape claim the flow depends on — the mobile-UI rendering itself is the one thing left for a device. Branch `onboard-1-activation-flow` in the `ZO-vo3` worktree, off `origin/main` (no commits landed there while this ran, so no merge was needed), pushed. PR: [#58](https://github.com/ayush237/ProjectZoomOut/pull/58).
+
+| | |
+|---|---|
+| Automated gate | `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` — all green, root level, all four workspaces |
+| Mobile tests | **735**, up from PILOT-1's **695** — **+40**: 29 in 7 new files, +6 in `navigation.test.tsx`'s new `Onboarding` block, +5 in `leafPlayer.test.tsx`'s new coach-mark block |
+| Live verification | Every API assumption the flow makes — pagination, the sample Track's narration, the resume target — confirmed against the real backend, real Payload, real Postgres. Not a simulation: page one of the live catalogue currently holds only Ikigai, and the second real Track only appears on page two, which is finding 2's warning happening for real, not hypothetically |
+| Device verification | **None.** See "What I could not do" |
+
+---
+
+## What changed
+
+**The gate (`RootNavigator.tsx`, `useOnboardingGate.ts`).** Mirrors `useIntroSeen`'s `restoring`/`unseen`/`seen` shape, widened to `restoring`/`full`/`narratorOnly`/`seen` — the split `useIntroSeen` never needed, because intro's gate answers from one local flag and this one also has to ask whether the account already has books. Both reads (`getOnboardingSeen()`, `api.listLibrary()`) run in parallel, gated so `listLibrary()` only ever fires once `status === 'signedIn'`. **Fails open to `seen` on a Library-fetch error** — a returning reader kept out of an app they already use by a failed check is worse than an unlucky first-timer occasionally skipping the flow.
+
+**Three new screens, not five** (`screens/onboarding/`). Beat 4 is an action — `navigate('LeafPlayer', {...})`, the existing route — not a destination; beat 5 is a coach-mark inside `ScenarioSlide`, not a route. All three (`OnboardingPromiseScreen`, `OnboardingPickBookScreen`, `OnboardingNarratorScreen`) are registered on `AppStack` itself, not a separate navigator — the only way beat 3 can hand off to the real `LeafPlayer` by name without a second copy of that screen. `RootNavigator` picks `AppStack`'s `initialRouteName` from the gate's status, the exact mechanism `AuthStack` already uses for the social-signup age gate. `markSeen` reaches all three via the `children` (render-prop) form of `Stack.Screen`, as a plain prop — a Context would work too, but for one function used by exactly three screens a prop is the smaller, more traceable seam.
+
+**Beat 2** fetches every real Track across every page (`fetchRealTracks.ts` — see "A real bug this caught" for why page one alone is not enough), renders each as a new full-bleed `OnboardingBookCard` (not `TrackCard`, finding 1 — that component is a fixed 64px row shared by three list screens, and stretching it to fill the screen would distort art sized for a thumbnail), and calls the existing `addToLibrary` — no new endpoint.
+
+**Beat 3** always samples Ikigai's narration (`fetchNarratorSample.ts`), matched by a title fragment rather than a hardcoded id, regardless of which book was picked in beat 2 — the approved design's own ruling, since no other Track has narration yet. `useNarration` (the hook `NarrationControl` is built on) had to be exported from `audio/index.ts` directly: `NarrationControl` picks its clip from the reader's *stored* preference, which cannot be coerced into playing an arbitrary narrator's sample on demand — exactly what a preview needs before a preference exists. "Continue" persists the choice through the existing `setNarrator`, then either resumes into `LeafPlayer` at the picked Track's server-computed `nextLeafId` (sourced the same way `LibraryScreen`'s own `openLeaf` does — finding 4) or, for the narrator-only variant, lands on `Tabs`.
+
+**Beat 5** (`ScenarioGateCoachMark.tsx`, `useScenarioGateCoachMark.ts`). A dismissible inline callout, not a spotlight overlay — see "Design decisions" below for why. Shown once per install the first time *this reader* reaches a scenario slide, on its own SecureStore flag independent of the main onboarding-seen one (also explained below). Dismisses on an explicit close and on submitting any answer.
+
+**`ExploreScreen.tsx`'s first-run state.** Condition-derived, not flagged: `emptyLibrary = membershipKnown && library.data?.size === 0`. This is what a reader who skips at any beat lands on — the same catalogue everyone sees, with the heading and a one-line explanation reframed for someone who has not added anything yet. It reverts to the plain heading the moment the Library stops being empty, on its own, with nothing to remember past that.
+
+---
+
+## Design decisions the handoff left to me, and why
+
+1. **The achievement banner is suppressed on beat 2**, not shown as it is on Explore. `addToLibrary` earns `first-book` on the exact tap that adds a book, and a celebratory banner about a mechanic ("achievements") a reader has not been introduced to yet competes with the beat that follows rather than adding to it. The achievement itself is not lost — it is recorded server-side identically either way, and the founder's own eye can decide later whether Profile's grid should be where a reader who took this path first meets it.
+2. **Beat 5 is a callout, not a spotlight overlay.** The familiar coach-mark visual needs the target's measured screen position to cut a hole in a dimmed background — real engineering for a payoff this slide does not need, because the scenario gate is not a hidden affordance a reader could miss; it is the whole slide. What a first-time reader is missing is *why* answering matters, not *where* to look, and one line explaining that does the actual job.
+3. **Beat 5's eligibility is per-reader, not per-onboarding-variant.** Its own SecureStore flag is separate from the main `onboardingSeenStore` one, on purpose: an existing account (the narrator-only variant) never opens a Leaf through onboarding at all, so keying the coach-mark to the same flag would mean that reader never sees it, on this slide or any other, the first time they genuinely reach it through normal use.
+4. **An existing account lands on `Tabs` after choosing a narrator, its normal home** — not stated in the approved design, proposed as the sensible default per the handoff's own suggestion. Flagging it explicitly since it was marked as mine to confirm or push back on.
+5. **Skip appears on beats 1 and 2, not 3.** Completing beat 3 costs no more than skipping it would — there is no meaningfully different destination for "I don't want to pick a narrator" versus "I picked the default and moved on" — so a separate control there would be a control with nothing distinct to do.
+6. **The sample Track is matched by a title fragment ("Ikigai"), not a hardcoded id.** IDs are CMS-specific and not something mobile code should assume stable across environments or re-seeds; a title is what beat 2 already shows the reader, and a substring match survives a copy edit to the subtitle that an exact-string match would not.
+
+---
+
+## A real bug this caught, not just a test-writing issue
+
+**`route.params` is `undefined`, not `{}`, when a screen is a stack's own `initialRouteName` and nobody passed params.** `OnboardingNarratorScreen` originally read `route.params.pickedTrack` unguarded — fine for beat 2's handoff, which always supplies params, and a crash for the narrator-only variant, which opens this screen directly with none. Caught by `navigation.test.tsx`'s own new tests, not by `OnboardingNarratorScreen.test.tsx`'s first draft — that file's harness passed `initialParams={{}}` for the no-`pickedTrack` case, which is not the same shape and does not reproduce the crash at all. Fixed in both directions: `route.params?.pickedTrack` in the component, and the test harness rewritten to omit `initialParams` entirely rather than pass an empty object, so it actually exercises what `AppStack` really does.
+
+**A second gap, in my own test design rather than the app.** My first version of "the achievement banner is suppressed" rendered the screen inside a real `Stack.Navigator` and asserted after `navigate` had been called — by which point the real transition had already unmounted the screen, so the assertion could not have failed regardless of whether the banner had rendered. A deliberate mutation (rendering `<AchievementUnlock>` for real) passed every test in the file the first time, which is what caught it. Rewritten to render the screen directly with a mocked `navigation` prop, so it stays mounted and the question is answerable at all — re-mutated afterward to confirm the rewritten version actually reds.
+
+---
+
+## Live verification performed, and what it actually proves
+
+Ran the exact sequence the flow depends on against the real backend and Payload (`ZO-vo3`, alternate ports, the founder's own Metro left untouched — same care as PILOT-1's report): sign up a fresh reader, `listTracks` page by page, `addToLibrary`, `listLeaves`, `getLeaf`, `listLibrary` again.
+
+- **`listTracks(1, 20)` returns exactly one real Track — Ikigai — and 20 placeholders. The second real Track, "The Science of Getting Rich", is on page two.** This is finding 2's warning, live: had beat 2 trusted page one alone, a reader would see one book to choose from, not "two or three." `fetchRealTracks`'s pagination is load-bearing today, not defensive.
+- **`addToLibrary('50')` returns `unlocked: [{ id: 'first-book', ... }]`** — confirms the achievement-suppression decision above is a real scenario, not a hypothetical one.
+- **`listLibrary()` afterward reports `nextLeafId: "262"`** for that Track — matching the id PILOT-1's own live check found for Ikigai's first Leaf, confirming beat 3→4's resume lookup is correct against the real rollup, not just a fixture I wrote to agree with itself.
+- **`getLeaf('262').summary.audio` carries both `female` and `male` entries** — beat 3's sample will have something to play for both cards on a real device, today.
+
+**What this does not prove:** any of it rendering — the cards, the sample actually playing audibly, the coach-mark's placement, whether beat 1's copy reads as intended. Same boundary PILOT-1's report drew, for the same reason: the founder's own Metro and simulator session was active throughout and was left alone rather than disturbed.
+
+---
+
+## Assumptions, stated so the next session does not have to reconstruct them
+
+- **The onboarding-seen flag is written once, at the moment either variant would otherwise leave the flow** — beat 1/2's skip, beat 3's "Continue" in both variants. There is no partial-completion state; a reader who force-quits mid-flow simply sees it again from beat 1 next launch, the same "no 'seen, but…'" rule `introSeenStore.ts` already states for itself.
+- **`OnboardingBookCard` and the narrator `CardShell` are new, small components rather than props on existing ones**, matching finding 1 and finding 5's own instruction not to force-fit a component built for a different layout.
+- **The full-bleed card shows every real Track, with no cap.** The approved design says "two or three"; today's corpus happens to be exactly two. Nothing here assumes a specific count — a third real Track would simply be a third card, unpaginated, since the whole point of beat 2 is a short, deliberate list, not a scrolling catalogue.
+- **Beat 2's list is not paginated for scrolling, only fetched completely up front.** `useMoreTracks` (Explore's own lazy pagination) was deliberately not reused here — that hook is built for a long list loaded incrementally as a reader scrolls; beat 2 needs the opposite, everything at once, up front, for a short list.
+
+## Test count, against the last mobile package
+
+**735, up from PILOT-1's 695 — +40.** New files: `onboardingSeenStore.test.ts` (3), `useOnboardingGate.test.ts` (7), `fetchRealTracks.test.ts` (4), `fetchNarratorSample.test.ts` (5), `useScenarioGateCoachMark.test.ts` (3), `OnboardingPickBookScreen.test.tsx` (3), `OnboardingNarratorScreen.test.tsx` (4) — 29 total. Existing files: `navigation.test.tsx`'s new `Onboarding` block (+6), `leafPlayer.test.tsx`'s new coach-mark block (+5). No suite removed, no test weakened to make the count.
+
+## Where the time went
+
+Rough, in descending order: **reading**, unusually large for this package — `RootNavigator`/`AppStack`/`AuthStack`'s existing shape, `LeafPlayerScreen`'s own data-fetching before I knew it needed a `startLeaf` stub, `TrackProgressSummary` and how `LibraryScreen` already sources `nextLeafId`, `useNarration`'s actual return shape — because the design was fully specified but almost nothing about *how the existing code already solves adjacent problems* was, and getting that wrong would have meant a second, divergent way of doing something this codebase already does once; **implementation**, three screens, a gate, a coach-mark, and the full-bleed card, genuinely large; **mutation-checking and the two bugs it found**, including redesigning a test file mid-package once its first version turned out to prove nothing; **live verification**; the gate and this report, the rest.
+
+## Follow-ups / tech debt for Architect
+
+1. **The device gate is entirely open** — needs the founder, on Android over Expo Go, exactly as the handoff asked. Its own precondition — COVER-1's real cover art uploaded — is a CMS step the founder does by hand (COVER-1's own handoff: "You do not attach them"), so whether it has actually happened is not something I can confirm from here; worth checking before the device pass rather than discovering it mid-walkthrough.
+2. **Profile's achievement grid was not checked** for whether `first-book`, earned silently on beat 2, actually surfaces there once a reader visits. Assumption 1 above rests on it being visible somewhere; if it turns out Profile's grid is not where an already-unlocked-but-never-banner'd achievement shows up, the suppression decision may need revisiting.
+3. **Beat 1's exact copy is a first draft**, explicitly the founder's own call per the handoff's device gate. The numbers (15 minutes, 500 XP) are hand-synced to `env.ts`'s current defaults and will drift silently if those ever change — there is no mechanism that could catch that drift short of someone noticing.
 
 **Done. Both covers generated, guard-clean on the first candidate, $0.275 of the $0.50 ceiling, neither Track touched.** Branch `cover-1-track-covers` in `ZO-pipeline`, off `origin/main` at `af437dc`, fast-forwarded onto `07e76b9` (the debt-register sweep — `project/`-only, no overlap) immediately before this report.
 
