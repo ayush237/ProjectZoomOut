@@ -34,6 +34,94 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-22 — PILOT-1: only real content, and assets that reach a phone
+
+*Manager. **Suggested model: Sonnet** — all three parts have their design written out below, including the two traps. There is no judgement left to buy; what this package needs is care with two-layer guards, and the layers are named.*
+
+> **Where you work:** reuse `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`. Its branch `vo-3-player` is merged and its `node_modules` is current — I ran the mobile suite there on 2026-09-22, 42 suites / 691 tests green, while the same suite fails to even resolve modules in `ZO`. From inside it: `git fetch origin && git checkout -b pilot-1-real-content origin/main`. **Never `git checkout main` in a linked worktree** — `main` lives in `ZO` alone.
+> **Commit, push and open the PR yourself when done.**
+> **Read:** this handoff · `apps/backend/src/content/contentVisibility.ts` (**read this first — the placeholder guard already exists and you must not rebuild it**) · `apps/backend/src/content/content.repository.ts` (`listTracks`, and the comment explaining why the query filter is not the control) · `apps/backend/src/content/content.service.ts` · `apps/backend/src/config/env.ts` · `apps/backend/src/content/content.mapper.ts` (`resolveMediaUrl` and every call site) · `apps/mobile/src/audio/useNarration.ts` · `agents/manager.md`.
+> **Do not read:** `project/projectRoadmap.md`, `project/projectplan.md`, `apps/pipeline`, the rest of `collaboration-log.md`.
+
+### Task: PILOT-1 — the pilot build shows two real books, and a broken asset stops being silent
+
+**Suggested model:** Sonnet — the design is written below; the risk is procedural and the procedures are named.
+
+**Context:** The app is finished and a reader can hear Ikigai on a phone. Two things stand between that and showing it to someone. **The library displays 29 books of which 27 are placeholders**, because the guard that hides them is keyed to `NODE_ENV === 'production'` and a pilot runs on a dev backend. And **every media URL is built from `CONTENT_API_URL`, whose own docstring calls it the backend's private path to Payload** — so on a real phone every image and every audio clip resolved to `127.0.0.1` and failed while text loaded fine. That cost a full session on 2026-09-22 and presented as two unrelated-looking bugs. It is currently papered over by an untracked `.env` pinning one Mac's LAN address.
+
+**Objective:** A backend that can be told to serve only real content without pretending to be production, media URLs built from a base that is separately configurable, and a narration button that cannot fail silently. No behaviour changes for anyone who sets neither new variable.
+
+**Scope:** `apps/backend/src/config/env.ts` · `apps/backend/src/content/` (`content.mapper.ts`, `content.repository.ts`, `content.service.ts`, `contentVisibility.ts`) · `apps/backend/src/progress/progress.service.ts` (it calls `isVisibleIn` directly — see Part B) · `apps/mobile/src/audio/useNarration.ts` and its tests. Verify this list rather than trusting it.
+
+## Part A — `MEDIA_BASE_URL`, because one value is doing two jobs
+
+`CONTENT_API_URL` is documented as the backend's **private** path to Payload, *"called anonymously and over private networking."* It is also the base `resolveMediaUrl` uses to build the **public** URLs a client fetches. Those are the same string only while backend and client share a host, which stopped being true the moment a phone was involved, and which will not be true at all on Cloud Run.
+
+- Add `MEDIA_BASE_URL` to `env.ts`. **It defaults to whatever `CONTENT_API_URL` resolves to**, so an unset deployment behaves exactly as today.
+- Every media URL is built from it: `coverUrl`, `scenario.image`, `stickyNotes.diagram`, and **all four slides' audio**. Audio is the one most likely to be missed — VO-1 found five separate call sites.
+- Do **not** change `resolveMediaUrl`'s logic. Its handling of already-absolute URLs and non-`/`-prefixed values is deliberate and documented; only the base it receives changes.
+
+**The trap:** a test that sets both variables to the same value cannot tell which one the mapper used. **Set them to different hosts and assert the output carries `MEDIA_BASE_URL`'s.**
+
+## Part B — `HIDE_PLACEHOLDER_CONTENT`, and the guard that already exists
+
+**Read `contentVisibility.ts` before writing anything.** The mechanism is built, correct, and layered on purpose. You are making its trigger configurable, not building a filter.
+
+- Add `HIDE_PLACEHOLDER_CONTENT`, **defaulting to `NODE_ENV === 'production'`** so nothing changes for anyone who does not set it.
+- **Pick the parsing mechanism yourself, and do not reach for `z.coerce.boolean()`.** This is the **first boolean variable in this schema** — I checked, there is no precedent to copy — and `z.coerce.boolean()` is the wrong tool: it is `Boolean(string)`, so `HIDE_PLACEHOLDER_CONTENT=false` parses as **true**. Whatever you choose, `"false"` must mean false and an unrecognised value must be rejected loudly rather than silently falling one way. **There is a criterion on this.**
+- Note that the default depends on another field, so it cannot be a plain `.default()` on the key alone. That shape is yours to choose too.
+- Route `isVisibleIn`'s placeholder half through the flag. `NODE_ENV` keeps deciding everything else it decides.
+- **The draft check is not part of this.** `isVisibleIn` refuses drafts in every environment; that stays absolutely true regardless of the flag.
+
+**Two traps, and they are the reason this is not a one-line change.**
+
+**First: the query filter is not the control, and the code says so.** `listTracks` adds a `where[isPlaceholder][not_equals]` parameter as an *optimisation*, and its comment explains that `ContentService` must keep applying the guard independently because "a query filter is one typo in a parameter name away from silently matching nothing." Both layers must honour the new flag, and **the service guard must be proven to hold on its own** — see the acceptance criteria.
+
+**Second: grading bypasses `ContentService` entirely.** `progress.service.ts` calls `isVisibleIn` and `resolveVisibleLeaf` directly, because grading needs the full Leaf including the answer key. `contentVisibility.ts`'s docstring is explicit that two copies of this decision would drift, and names the direction: *a reader grading a Leaf that production is supposed to be hiding.* **If the flag reaches `ContentService` and not the progress path, a reader can still answer and earn XP on a hidden placeholder Leaf.** That is this package's version of the WP3/WP4 lesson.
+
+**Also note the cache key.** `listTracks` keys its TTL cache on the environment precisely so a cache warmed in one mode does not serve the other's results. **Whatever now decides visibility must be what the key reflects** — if the flag can change independently of `NODE_ENV`, an environment-keyed cache is wrong.
+
+## Part C — a failed `play()` stops being silent
+
+`useNarration.ts` routes three native call sites through one `safely()` wrapper. **Two of them are right and stay exactly as they are**: on unmount and on backgrounding, "not playing" is already true, so the exception carries nothing to act on — that is what its docstring argues, and it is correct.
+
+**The third is `toggle`'s play branch, where the reasoning does not hold.** A reader taps, the native call fails, and the only trace is a `console.warn`. This is precisely why the media-URL bug presented as a dead button rather than as an error.
+
+- A failed **play** must leave the reader with something they can see. Keep it modest — the control returning to a visibly un-started state, or a brief inline "couldn't play" — **not** a modal, and not a persistent error banner.
+- `pause`-on-unmount and `pause`-on-background keep swallowing. Do not "fix" them.
+- **Design decision left to you, deliberately:** whether that surfaces as control state or as a small message. Pick one, state why in the report. Both are defensible; what is not defensible is silence.
+
+**Out of scope:**
+- **Track 42's and Ikigai's cover URLs.** Both hotlink other people's servers; both are founder items and need an asset that does not exist yet. Do not substitute, generate, or blank them.
+- Onboarding, deployment, `NODE_ENV`'s other behaviours, anything under `apps/pipeline`, and any change to the content model's *shape*.
+- Unpublishing or editing any Track. The flag hides; it does not mutate content.
+
+**Constraints:** Config via environment only, through `env.ts`'s existing zod schema — no new config mechanism. Both new variables are **additive with behaviour-preserving defaults**; a deployment that sets neither must be byte-identical to today, and that is a criterion, not an aspiration. Structured logging where content is withheld already exists in `content.service.ts:63` — extend it rather than adding a parallel channel.
+
+**Device gate:** *(observe, on the founder's Android phone over Expo Go, backend reachable on the LAN)*
+- With `HIDE_PLACEHOLDER_CONTENT=true`, **Explore shows two books — Ikigai and The Science of Getting Rich — and no "Placeholder Filler Track" anywhere**, including after scrolling to the end of the list.
+- With it unset, the placeholders are back. The founder must be able to flip this without editing code.
+- **A Leaf still plays end to end with narration audible**, images visible on the scenario and sticky-notes slides — i.e. Part A changed nothing that was working.
+- With `MEDIA_BASE_URL` deliberately pointed at a host that does not exist, **tapping play produces something the reader can see**, and the app does not crash.
+
+**Acceptance criteria:**
+- [ ] `MEDIA_BASE_URL` set to a *different* host from `CONTENT_API_URL` produces media URLs on `MEDIA_BASE_URL`'s host — asserted for `coverUrl`, `scenario.image`, `stickyNotes.diagram` **and all four slides' audio**, in one test where the two values provably differ
+- [ ] With `MEDIA_BASE_URL` unset, a full Leaf's serialised output is **identical to before this change** — pinned by a test, not by inspection
+- [ ] **A maximal-fixture contract test passes**: a record with every optional media field populated, read back through the real system, every field present and on the right host. `manager.md`'s rule, and this package is exactly the shape that broke WP15 — dropped optional fields are indistinguishable from absent ones
+- [ ] `HIDE_PLACEHOLDER_CONTENT` unset reproduces today's behaviour exactly, in both `development` and `production`
+- [ ] **`HIDE_PLACEHOLDER_CONTENT=false` means false** — pinned by a test, because the obvious mechanism (`z.coerce.boolean()`) gets this exactly backwards, and an unrecognised value is rejected at startup rather than defaulted
+- [ ] With the flag on, `GET /content/tracks` returns only non-placeholder Tracks — **and the service guard alone still withholds them with the repository's query filter disabled**, proving the two layers are independent as `listTracks`' comment requires
+- [ ] With the flag on, **the progress/grading path also refuses a placeholder Leaf** — exercised through `progress.service.ts`, not only through `ContentService`, because grading reaches `isVisibleIn` by its own route
+- [ ] The draft check is unaffected: a draft is refused with the flag in either position, in every environment
+- [ ] `listTracks`' cache cannot serve one visibility mode's results in the other — demonstrated, since the key's basis has changed
+- [ ] A failed `play()` produces reader-visible feedback; a failed `pause()` on unmount and on backgrounding still produces none
+- [ ] Every test above is **mutation-checked as a separate reversion** — break one behaviour, confirm that test and only that test reds. WP33.1 showed a combined mutation cannot tell a fix from its bodyguard
+- [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` all pass — **and the report states the test count and compares it to VO-3's 691 mobile tests**, reconciling any drop
+
+**Testing expectations:** Tier A for Part B — a reader obtaining or grading content the product is meant to be hiding is squarely in `manager.md`'s Tier A definition, whatever this list says. Tier B for Part A's wiring, plus the maximal-fixture contract test, which is the load-bearing artefact. Part C needs one test on the play path and one confirming the other two still swallow; the existing `releaseFakePlayer()` gives you the failure on demand. **Say which evidence is a unit test, which is a query, and which is you looking on the device.** If a criterion turns out unmeetable as written, say so and say why — that has happened twice and both times the handoff was wrong, not the package.
+
+---
+
 ### Handoff: 2026-09-18 — VO-3: the player, and the narrator preference
 
 *Manager. **Suggested model: Sonnet** — every risk in this package is procedural and the procedures are written below, including the silent-switch trap that is the classic way audio ships broken. There is no judgement to buy; the founder observes the two things that need ears. **Runs in parallel with INTRO-1**, which is live in `ZO-admin` — see the conflict note.*
