@@ -34,6 +34,80 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff: 2026-09-22 — ONBOARD-1: the five-beat activation flow, promise to first Leaf
+
+*Manager. **Suggested model: Sonnet** — the design is fully specified (five beats, five rulings, approved 2026-09-18) and every contract it touches has been read and confirmed below; what's left is disciplined wiring plus a small number of named, bounded decisions, not open-ended judgement.*
+
+> **Read first:** this handoff · `apps/mobile/src/navigation/RootNavigator.tsx` · `apps/mobile/src/screens/intro/useIntroSeen.ts` + `introSeenStore.ts` (the pattern to mirror) · `apps/mobile/src/audio/useNarrator.ts` + `narratorPreference.ts` · `apps/mobile/src/api/client.ts` (`addToLibrary`, `listTracks`, `listLibrary`) · `apps/mobile/src/screens/TrackDetailScreen.tsx:141` and `LibraryScreen.tsx` (`nextLeafId`) · `apps/mobile/src/components/TrackCard.tsx` · `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` · `project/projectplan.md:557` (`## Approved, gated on VO-3: the onboarding flow — 2026-09-18`, the full approved design and five rulings) · `agents/manager.md`.
+> **Depends on COVER-1's art being uploaded** (founder action, tracked separately) before the device gate means anything — see Out of scope.
+
+### Task: ONBOARD-1 — the five-beat activation flow, promise to first Leaf
+
+**Context:** The app works end to end and a reader can hear Ikigai on a phone, but a new signed-up reader lands cold on Explore's catalogue with no framing for the session cap, no help picking a first book, and no introduction to the unlock gate. This is the last piece standing between account creation and a reader actually experiencing the product. VO-3 (the audio layer beat 3 depends on) is merged; that was the only reason this wasn't handed off already.
+
+**Objective:** A new signed-in reader with an empty Library sees five beats — promise, pick a book, choose a narrator, land in Leaf 1, a coach-mark on the unlock gate — then never sees the flow again on that install. An existing signed-in reader with a non-empty Library sees the narrator beat only. Skipping at any point lands on a designed Explore first-run state, never a blank one.
+
+**Scope:**
+- `apps/mobile/src/navigation/RootNavigator.tsx` — the new gate, mirroring `useIntroSeen`'s pattern but on the signed-in side
+- New: `apps/mobile/src/screens/onboarding/` — the flow itself (five beat screens/components, `useOnboardingSeen` + `onboardingSeenStore.ts`, mirroring `screens/intro/`)
+- New: a full-bleed cover-card component for beat 2 (`TrackCard` is a 64px row card — see finding 1 below — do not try to reuse it as-is)
+- `apps/mobile/src/screens/ExploreScreen.tsx` — the first-run empty state (the skip ruling)
+- `apps/mobile/src/screens/leaf/ScenarioSlide.tsx` — beat 5's coach-mark
+- Reused, not modified: `apps/mobile/src/audio/useNarrator.ts`, `narratorPreference.ts`, the `useNarration`/`NarrationControl` playback pattern, `apps/mobile/src/api/client.ts`'s `addToLibrary`/`listTracks`/`listLibrary`
+- Verify this list rather than trust it — I read the current code but you're the one shipping against it
+
+**Five findings from reading the actual code, not just the design doc — this changes what you'd otherwise guess:**
+1. **`TrackCard.tsx` is a 64px row card** (`COVER_WIDTH = 64`), shared by Explore/Library/Journey. Beat 2 needs "two or three full-bleed cards and nothing else on the screen" — a new component, not a variant prop on this one.
+2. **`isPlaceholder` is already on the client-visible `Track` type** (`packages/shared/content.ts:443`). Beat 2 does not need PILOT-1's `HIDE_PLACEHOLDER_CONTENT` at all — filter `!track.isPlaceholder` client-side. `listTracks` is paginated (`page`, `perPage = 20` default); page through until you've seen all of them, not just page 1 — with 2 real Tracks among 28, trusting page 1 alone risks showing only one book if they don't happen to sort together.
+3. **`addToLibrary(trackId)` returns only unlocked achievements**, not progress — and it unlocks `first-book`, which `ExploreScreen` shows as a banner today (`ExploreScreen.tsx:118`, its own comment: *"the only place it can be seen"*). Decide deliberately whether beat 2 shows that banner mid-flow or suppresses it, and say which and why in the report — both are defensible, silence is not (same shape as PILOT-1's Part C decision).
+4. **There is already a correct, server-computed "next Leaf."** `TrackDetailScreen.tsx:141` and `LibraryScreen.tsx` both key off `progress.nextLeafId` — "the first incomplete Leaf," chosen by the server. Beat 4 must reuse this, via whatever call actually returns it for a freshly-added Track (`listLibrary()` looks right — confirm before relying on it, since `addToLibrary`'s own response doesn't carry it). **Do not compute "first Leaf" as `listLeaves(trackId)[0]`** — that's a second implementation of a decision the server already owns, the exact shape this project's rules exist to catch.
+5. **No coach-mark component exists anywhere in this codebase today.** Beat 5 is a new pattern, not a reuse — budget for it accordingly.
+
+**Requirements, by beat:**
+- **Beat 1 (the promise):** one static screen, the contract only — 15 minutes, one book, you will have to think (`SESSION_CAP_SECONDS = 900`, `SESSION_CAP_XP = 500`, `env.ts:194-195` — keep the copy's numbers in sync with these; they are not read dynamically by the client). No carousel.
+- **Beat 2 (pick your first book):** full-bleed cards for the real Tracks only (finding 2). Picking calls `addToLibrary` (finding 3) and proceeds to beat 3.
+- **Beat 3 (choose your narrator):** two cards, `female` and `male` (`NARRATOR_IDS`), each playing a real sample on tap. **Since only Ikigai has narration** (VO-2/VO-2.1), use one fixed Ikigai clip for both narrator cards regardless of which book was picked in beat 2 — this is the existing 2026-09-18 ruling ("sample generically… revisit when [coverage] does"), not a bug. Proposed default: Leaf 1's Summary slide for both narrators — confirm the actual clip length/content reads well before committing to it. Choosing calls the existing `setNarrator` from `narratorPreference.ts` — do not add a second mechanism.
+- **Beat 4 (into Leaf 1):** opens `LeafPlayer` with `{ leafId: <the Track's nextLeafId>, trackId, trackTitle }` (finding 4) — lands in the player, not `Tabs`.
+- **Beat 5 (the gate teaches itself):** a coach-mark on `ScenarioSlide`'s unlock gate, shown once per install, the first time a new reader reaches it (finding 5) — your call on the exact visual, state your reasoning.
+- **The gate in `RootNavigator.tsx`:** mirror `useIntroSeen`'s `'restoring' | 'unseen' | 'seen'` shape, but the "seen" condition for an existing account is **`onboardingSeenStore`'s flag OR the reader's Library is already non-empty** — the ruling that existing installs must not be sent through a first-book picker. This means the gate needs a Library check before it can decide, which the intro's pure-local-flag gate never needed — design this deliberately rather than bolting a second async dependency onto `useIntroSeen`'s shape unchanged.
+- **Existing installs (narrator beat only):** after choosing, land on `Tabs` (their normal home) — **not** `LeafPlayer`, since they already have progress and there is no single "their" Leaf to open. This isn't stated in the approved design; I'm proposing it as the sensible default. Flag it back to me if you disagree rather than silently picking something else.
+- **Skip:** available wherever the design says so; lands on Explore's new first-run empty state, always — never a blank catalogue.
+- **Reduce Motion:** every animated beat needs a designed fallback (fade, not disabled), and this package's new surfaces should join the existing mechanical guard the intro already uses (`design/reduceMotionCallSites.test.tsx` — read how `IntroScreen` joined it before writing a new animated surface that doesn't).
+
+**Out of scope:**
+- The second age gate, a notifications permission prompt, an interests/goals questionnaire, a feature-tour carousel — all four explicitly ruled out 2026-09-18. Their absence is a criterion, not just "don't add."
+- Terms-of-service / privacy acceptance placement — belongs to Stage 5, not onboarding.
+- Pre-auth taste Leaf / any form of client-side grading — ruled out because it duplicates a server-decided guarantee. Onboarding starts after account creation, full stop.
+- Backend changes of any kind. Everything this package needs — `isPlaceholder`, `addToLibrary`, `nextLeafId`, the narrator preference key — already exists.
+- **Both Track covers rendering correctly is not this package's job to fix.** It depends on the founder having uploaded COVER-1's art before you start the device gate. If the covers are still the old hotlinks when you get there, stop and say so rather than device-gating beat 2 against art that's about to change.
+
+**Constraints:** SecureStore for the onboarding-seen flag and the narrator write, matching every existing preference in this app — no new storage mechanism. New screens follow the existing design system (`useTheme`, `Text`, `Icon`) — no new visual primitives without a documented reason. The new full-bleed card component should be visually consistent with `TrackCard`'s existing conventions (elevation as surface, not shadow) even though it isn't the same component.
+
+**Device gate:** *(Android, Expo Go, on a backend with COVER-1's real art already uploaded)*
+- A fresh sign-up with an empty Library sees all five beats in order, ending inside Leaf 1's player — not the catalogue.
+- Force the app into a state with an existing account and a non-empty Library (e.g. an account that's already added a Track): only the narrator beat appears, and choosing lands on the normal tab shell.
+- Skipping at the earliest skippable point lands on Explore's first-run state — not a blank list, not a crash.
+- The chosen narrator is audible in beat 3's sample and is still the active narrator inside Leaf 1's own narration control, without re-selecting it.
+- Closing and reopening the app never shows onboarding again on this install (until a reinstall).
+- The founder's own eye on: whether beat 1's exact copy lands as intended, and whether the flow feels like the intended first impression — not just that it renders.
+
+**Acceptance criteria:**
+- [ ] A new signed-in reader with an empty Library sees beats 1→2→3→4→5 in order; an existing signed-in reader with a non-empty Library sees the narrator beat only and then lands on `Tabs` — both paths pinned by a test exercising `RootNavigator`'s actual gate, not a beat component in isolation, and the branch condition (empty vs. non-empty Library) is mutation-checked as its own reversion
+- [ ] Beat 2 shows exactly the Tracks where `isPlaceholder === false`, verified with a fixture where a placeholder Track sorts before a real one in `listTracks`' pagination, so a test that only reads page 1 would fail
+- [ ] Picking a book calls the existing `addToLibrary` — no new endpoint — and the achievement-banner decision (finding 3) is implemented as stated and reported, not left ambiguous
+- [ ] Choosing a narrator writes through the existing `setNarrator`/`narratorPreference.ts` — verified by reading the same SecureStore key Profile's own narrator control reads, not a parallel key
+- [ ] Beat 3 plays a real, distinct sample per narrator card, and does not require Track 42 to have any narration
+- [ ] Beat 4 opens `LeafPlayer` with the Track's actual `nextLeafId`, sourced the same way `TrackDetailScreen`/`LibraryScreen` already source it — not `listLeaves(trackId)[0]` or any second implementation
+- [ ] Skipping at any skippable point lands on Explore's designed first-run state, pinned by a test — not verified by inspection
+- [ ] The onboarding-seen flag is per-install (SecureStore) and survives app restart but not reinstall, mirroring `introSeenStore.ts`'s own test coverage
+- [ ] None of the four excluded items (second age gate, notifications prompt, interests questionnaire, feature-tour carousel) appear anywhere in the diff — confirmed by reading it, stated in the report
+- [ ] Every new animated surface is covered by the existing Reduce Motion mechanical guard (`reduceMotionCallSites.test.tsx` or its equivalent for this package), accommodation on and off
+- [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` all pass — report states the mobile test count against PILOT-1's 695, reconciling any drop
+
+**Testing expectations:** Tier A for the empty-vs-non-empty-Library branch in `RootNavigator` (get this wrong and either a new reader skips onboarding entirely, or a returning reader with real progress gets shoved through a first-book picker) and for confirming none of the four excluded items exist. Tier B for the rest — rendering, copy, card layout, the coach-mark. Say which evidence is a unit test, which is a query, and which is you looking on the device.
+
+---
+
 ### Handoff: 2026-09-22 — COVER-1: two covers that are ours
 
 *Pipeline Manager. **Suggested model: Sonnet** — the design is written out below, the generator and the guard both exist, and the aesthetic judgement belongs to the founder's eye rather than to the session. What this package needs is care with a budget model that does not cover the request being made, and that trap is named.*

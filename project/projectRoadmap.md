@@ -29,10 +29,11 @@ worktree** — branch from `origin/main` instead.
   cover pick + admin-UI upload, PILOT-1 on the mobile-UI device gate (Android, Expo Go) — see the status
   board for the full detail. One August-6th planning commit on `wp0-monorepo-scaffolding` still must never
   be merged.
-- **Onboarding is the next feature and is now unblocked** — design approved 2026-09-18, five beats
-  ending inside the reader's first Leaf. It was gated on VO-3 because beat 3 consumes the audio layer.
-  **Read its dependency before scoping it: beat 2's first-book picker makes Track covers the entire
-  visual, and Track 42's cover is still a founder item.**
+- **Onboarding is handed off** — ONBOARD-1, 2026-09-22, five beats ending inside the reader's first
+  Leaf. **Scoped against the live code, not just the design doc** — see the handoff's five findings,
+  the largest being that beat 2 needs a new full-bleed card component. **Sequenced behind the founder
+  uploading COVER-1's art** — beat 2's first-book picker makes Track covers the entire visual of the
+  screen, and the device gate is meaningless against the old hotlinks.
 - **INTRO-1 is done** — the first-run cold open, merged as PR #54, 8/8 criteria, **device gate observed
   by the founder on a real phone.** `INTRO_SEED` and `INTRO_FOCUS_SCALE` are settled values.
 - **The library is 28 Tracks of which two are real** — Track 42 (*The Science of Getting Rich*) and
@@ -260,7 +261,7 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | Feature | Priority | Status | Notes |
 |---|---|---|---|
 | **INTRO-1 — the first-run intro, a zoom out through a neuron network** | P1 | ✅ **Done — merged (PR #54), 8/8 criteria, device gate observed 2026-09-18** | Code signed off on the tests (657 mobile, up from 616, nothing dropped); **the gate was then observed by the founder on a real phone via Expo Go.** **That settles the three questions no test could answer** — one continuous camera move, the graph's shape, text legibility over beat 1 — **so `INTRO_SEED = 8_675_309` and `INTRO_FOCUS_SCALE = 6` are settled values, not placeholders.** Residual: a live theme switch and largest-OS-text were verified by test, not by eye |
-| **Onboarding flow — five beats, ending inside the first Leaf** | P1 | 🟡 **Design approved 2026-09-18; gated on VO-3, not handed off** | **An activation flow, not a preference wizard** — the narrator is one beat of five, not the point. Promise → pick a book → choose a narrator → land in Leaf 1, with the unlock gate taught by a coach-mark rather than an explainer screen. **Explore's first-run state is in scope**, because skip has to land somewhere designed. **Not handed off because beat 3 consumes VO-3's audio layer** and criteria written against an unbuilt contract are the mistake that caused three out-of-scope excursions. Full design and the five rulings: `projectplan.md` |
+| **Onboarding flow — five beats, ending inside the first Leaf** | P1 | 📤 **Handed off 2026-09-22 as ONBOARD-1** — VO-3's merge cleared the only gate | **An activation flow, not a preference wizard** — the narrator is one beat of five, not the point. Promise → pick a book → choose a narrator → land in Leaf 1, with the unlock gate taught by a coach-mark rather than an explainer screen. **Explore's first-run state is in scope**, because skip has to land somewhere designed. Grounded in the live code before handoff, not just the design doc — five findings recorded in the handoff, the largest being that `TrackCard` is a 64px row card and beat 2 needs a new full-bleed component. **Sequenced behind COVER-1's art upload** — the device gate is meaningless against the old hotlinked covers. Full design and the five rulings: `projectplan.md:557` |
 | WP0 — Monorepo scaffolding (npm workspaces, TS strict, shared types, Postgres + migrations, CI) | P0 | ✅ **Done** — signed off 2026-08-06, PR #1 | 9/10 criteria verified by execution, CI green. 10th carried forward, see below |
 | Verify Expo app boots in the iOS simulator | P0 — gates WP6 | 🔵 Appended to WP2.1 (2026-08-08) | Xcode now installed. Was the last open WP0 criterion |
 | WP1 — Content admin tool: Payload 3.x CMS setup | P0 | **Handed off** 2026-08-06 | Blocks all content — see `PRODUCT.md` Phased scope. Approval workflow deferred; Payload makes it a config change later |
