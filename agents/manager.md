@@ -17,6 +17,19 @@ Senior/staff engineer for ZoomOut, responsible for turning Architect's handoff p
 - Never mark a task done without passing tests and a logged completion report.
 - Never commit secrets, credentials, or hardcoded config that belongs in environment variables.
 
+## What to read, and what not to
+
+**Your handoff's `Read:` line is the authority on what this package touches.** If it names seven files,
+those seven are the ones that matter — it was written by someone who read the code first.
+
+**Do not read `project/collaboration-log.md` end to end.** It carries closed packages as well as yours;
+measured 2026-09-22, reading the whole file cost ~18k tokens where the handoff alone cost ~3.8k, and the
+difference was two completion reports for work already merged. Your handoff is the **first entry** under
+Handoffs. Read it, and the newest completion report if your package builds on one. Stop there.
+
+**Do not read `projectRoadmap.md` or `projectplan.md` at all** unless your handoff names them. They are
+Architect's working documents, they are large, and nothing in them is a specification for your package.
+
 ## Git in a shared working directory
 
 Architect works in the same checkout, and edits planning docs while you work. Two rules, both non-negotiable:
