@@ -11,6 +11,28 @@ export interface Narration {
 }
 
 /**
+ * Calls a native `AudioPlayer` method, swallowing the exception `expo-audio` throws
+ * when the underlying native object has already been released.
+ *
+ * **Found on a real Android device, not in any test.** `useAudioPlayer` releases its
+ * native player on unmount on its own — true of the library, not documented in its
+ * `.d.ts` — and there is no signal available here for whether that has already
+ * happened by the time one of this hook's own effects runs. The observed failure:
+ * `Cannot use shared object that was already released`, thrown synchronously from the
+ * native bridge. The state a caller here wants — this clip is not playing — is already
+ * true once the player is released, so the exception carries nothing to act on; it is
+ * `console.warn`ed rather than silently dropped, since it is still a real signal that
+ * cleanup order surprised us, and worth seeing if it starts happening often.
+ */
+function safely(call: () => void): void {
+  try {
+    call();
+  } catch (caught) {
+    console.warn('[narration] native player call failed — likely already released', caught);
+  }
+}
+
+/**
  * Drives one narration clip through `expo-audio`.
  *
  * **Takes a required `entry`, never `undefined`.** `NarrationControl` only mounts the
@@ -46,7 +68,9 @@ export function useNarration(entry: AudioRef): Narration {
   // and toggling visibility) could silently split them.
   useEffect(() => {
     return () => {
-      player.pause();
+      safely(() => {
+        player.pause();
+      });
     };
   }, [player]);
 
@@ -56,7 +80,9 @@ export function useNarration(entry: AudioRef): Narration {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (next) => {
       if (next !== 'active') {
-        player.pause();
+        safely(() => {
+          player.pause();
+        });
       }
     });
 
@@ -67,9 +93,13 @@ export function useNarration(entry: AudioRef): Narration {
 
   const toggle = useCallback(() => {
     if (status.playing) {
-      player.pause();
+      safely(() => {
+        player.pause();
+      });
     } else {
-      player.play();
+      safely(() => {
+        player.play();
+      });
     }
   }, [player, status.playing]);
 
