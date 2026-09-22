@@ -12,7 +12,12 @@ import { NarrationControl } from './NarrationControl';
  * here reaches the live mock the component under test is already using — not a copy
  * of it. No local `jest.mock('expo-audio', ...)` is needed in this file.
  */
-import { fakeAudioPlayers, fakeSetAudioModeAsync, resetFakeAudio } from '../testing/fakeExpoAudio';
+import {
+  fakeAudioPlayers,
+  fakeSetAudioModeAsync,
+  releaseFakePlayer,
+  resetFakeAudio,
+} from '../testing/fakeExpoAudio';
 
 type ResettableSecureStore = typeof SecureStore & { __reset: () => void };
 
@@ -215,5 +220,33 @@ describe('NarrationControl — playback', () => {
     await rerender(<TwoSlideHarness onSummary={false} />);
 
     expect(summaryPlayer.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not crash when expo-audio has already released the player before this app\'s own cleanup runs', async () => {
+    /**
+     * Found on a real Android device (not producible any other way under Node):
+     * `useAudioPlayer` releases its native player on unmount on its own, and that can
+     * happen before `useNarration`'s own cleanup calls `pause()`, which then throws
+     * "Cannot use shared object that was already released" from the native bridge.
+     * Mutation check: delete `safely(...)` around any of the three call sites in
+     * `useNarration.ts` and this test fails — either this `unmount()` throws (for the
+     * cleanup-effect and background-listener sites) or the earlier `press` above does.
+     */
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { unmount } = await renderControl([MALE]);
+
+    const player = fakeAudioPlayers().find((entry) => entry.source === MALE.url);
+    if (player === undefined) {
+      throw new Error('expected a fake player to have been created');
+    }
+    releaseFakePlayer(player);
+
+    await unmount();
+
+    expect(player.pause).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('native player call failed'),
+      expect.any(Error),
+    );
   });
 });

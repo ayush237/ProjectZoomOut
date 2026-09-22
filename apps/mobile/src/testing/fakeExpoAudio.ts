@@ -23,10 +23,28 @@ export interface FakeAudioPlayer {
    *  component wired up, independent of anything visible in the rendered tree. */
   readonly source: unknown;
   playing: boolean;
+  /** Set by `releaseFakePlayer` to reproduce `expo-audio`'s own unmount-triggered
+   *  release happening before this app's code gets a chance to call `pause()`. */
+  released: boolean;
   readonly play: jest.Mock<void, []>;
   readonly pause: jest.Mock<void, []>;
   readonly remove: jest.Mock<void, []>;
   readonly _listeners: Set<() => void>;
+}
+
+/** The exact message observed on a real Android device — see `useNarration.ts`'s
+ *  `safely` helper. */
+const ALREADY_RELEASED_MESSAGE = 'Cannot use shared object that was already released';
+
+/**
+ * Reproduces `expo-audio` having already released a player by the time this app's own
+ * cleanup runs — found on-device, not producible any other way under Node, since
+ * nothing here models the real native release timing. Call before unmounting (or
+ * before whatever should observe the release) to mutation-check `useNarration`'s
+ * `safely` wrapper: remove that wrapper and the test using this goes red.
+ */
+export function releaseFakePlayer(player: FakeAudioPlayer): void {
+  player.released = true;
 }
 
 function newSetAudioModeAsyncMock(): jest.Mock<Promise<void>, [unknown]> {
@@ -63,12 +81,19 @@ export function useAudioPlayer(source: unknown): FakeAudioPlayer {
       id: `fake-player-${String(players.length)}`,
       source,
       playing: false,
+      released: false,
       _listeners: new Set(),
       play: jest.fn(() => {
+        if (created.released) {
+          throw new Error(ALREADY_RELEASED_MESSAGE);
+        }
         created.playing = true;
         notify(created);
       }),
       pause: jest.fn(() => {
+        if (created.released) {
+          throw new Error(ALREADY_RELEASED_MESSAGE);
+        }
         created.playing = false;
         notify(created);
       }),
