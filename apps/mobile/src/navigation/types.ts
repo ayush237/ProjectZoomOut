@@ -98,4 +98,26 @@ export type AppStackParamList = {
    * route than "just finished the last Leaf" still renders correctly.
    */
   TrackComplete: { readonly trackId: string };
+
+  /**
+   * The five-beat activation flow (ONBOARD-1). Three screens, not five — beat 4 is an
+   * action (`navigate('LeafPlayer', ...)`, the same route above) rather than a
+   * destination, and beat 5 is a coach-mark inside `ScenarioSlide`, not a route at all.
+   *
+   * Registered on this stack, not a separate navigator, precisely so beat 3 can reach
+   * `LeafPlayer` by name — a second navigator would need its own copy of that screen or
+   * a cross-navigator jump neither React Navigation nor this codebase's existing shape
+   * supports. `RootNavigator` picks which of these three (or `Tabs`) the stack **opens**
+   * on via `initialRouteName`, the same mechanism `AuthStack` already uses for the
+   * social-signup age gate.
+   */
+  OnboardingPromise: undefined;
+  OnboardingPickBook: undefined;
+  /**
+   * Shared by both onboarding paths this package draws (WP18's approved design, five
+   * beats for a new reader / one beat for an existing account reopening the app after
+   * this feature ships) — `pickedTrack` is present only for the first: absent, beat 3
+   * is standing in alone, and "Continue" lands on `Tabs` instead of `LeafPlayer`.
+   */
+  OnboardingNarrator: { readonly pickedTrack?: { readonly id: string; readonly title: string } };
 };

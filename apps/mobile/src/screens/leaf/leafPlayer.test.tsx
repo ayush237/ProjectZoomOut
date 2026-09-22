@@ -1,4 +1,5 @@
 import { render, renderHook, screen, userEvent, waitFor } from '@testing-library/react-native';
+import * as SecureStore from 'expo-secure-store';
 import type {
   AnswerOutcome,
   CompletionOutcome,
@@ -9,9 +10,15 @@ import type {
 
 import { ApiError, NetworkError } from '../../api/errors';
 import { ThemeProvider } from '../../design';
+import {
+  getScenarioGateCoachMarkSeen,
+  setScenarioGateCoachMarkSeen,
+} from '../onboarding/scenarioGateCoachMarkStore';
 import { ScenarioSlide } from './ScenarioSlide';
 import { flush } from '../../testing/flush';
 import { useLeafSession } from './useLeafSession';
+
+type ResettableSecureStore = typeof SecureStore & { __reset: () => void };
 
 /**
  * The Leaf player.
@@ -158,6 +165,78 @@ describe('ScenarioSlide — narration (VO-3)', () => {
     await renderScenario({ data: SCENARIO });
 
     expect(screen.queryByTestId('narration-control')).toBeNull();
+  });
+});
+
+describe('ScenarioSlide — the unlock-gate coach-mark (ONBOARD-1)', () => {
+  // Scoped to this block rather than added to the file's shared setup: the coach-mark
+  // is the one thing here that writes to SecureStore, and only this block's tests
+  // depend on that write not leaking between them.
+  beforeEach(() => {
+    (SecureStore as ResettableSecureStore).__reset();
+  });
+
+  it('shows the tip the first time this reader reaches the gate', async () => {
+    await renderScenario();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scenario-gate-coach-mark')).toBeTruthy();
+    });
+  });
+
+  it('never shows again once dismissed, on this install', async () => {
+    const user = userEvent.setup();
+    await renderScenario();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scenario-gate-coach-mark-dismiss')).toBeTruthy();
+    });
+    await user.press(screen.getByTestId('scenario-gate-coach-mark-dismiss'));
+
+    expect(screen.queryByTestId('scenario-gate-coach-mark')).toBeNull();
+    await expect(getScenarioGateCoachMarkSeen()).resolves.toBe(true);
+  });
+
+  it('dismisses on Check answer too, not only the explicit close', async () => {
+    // Engaging with the mechanic is itself the lesson landing — a reader should not
+    // have to *also* tap the close button once they have already answered.
+    const user = userEvent.setup();
+    await renderScenario();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('scenario-gate-coach-mark')).toBeTruthy();
+    });
+
+    await user.press(screen.getByTestId('scenario-option-opt-a'));
+    await user.press(screen.getByTestId('scenario-check'));
+
+    expect(screen.queryByTestId('scenario-gate-coach-mark')).toBeNull();
+    await expect(getScenarioGateCoachMarkSeen()).resolves.toBe(true);
+  });
+
+  it('stays hidden for a reader who has already seen it', async () => {
+    await setScenarioGateCoachMarkSeen();
+
+    await renderScenario();
+
+    // Nothing to wait for reaching visible — asserting it never does, alongside a real
+    // render so a coach-mark that ignored the flag entirely would still be caught.
+    await waitFor(() => {
+      expect(screen.getByTestId('scenario-option-opt-a')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('scenario-gate-coach-mark')).toBeNull();
+  });
+
+  it('does not show once the scenario is already answered', async () => {
+    // A reader landing back on an answered slide (e.g. re-opening a Leaf mid-book)
+    // should not be taught a mechanic they have already used.
+    await renderScenario({ correctOptionId: 'opt-c' });
+
+    // The screen has settled (the check button's absence, gated on `answered`, proves
+    // the render this coach-mark's own condition also reads is complete) — nothing
+    // further to await for a flag this test never sets true.
+    expect(screen.queryByTestId('scenario-check')).toBeNull();
+    expect(screen.queryByTestId('scenario-gate-coach-mark')).toBeNull();
   });
 });
 
