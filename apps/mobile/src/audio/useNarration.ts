@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import type { AudioRef } from '@zoomout/shared';
@@ -8,11 +8,17 @@ import { configureNarrationAudioSession } from './audioSession';
 export interface Narration {
   readonly playing: boolean;
   readonly toggle: () => void;
+  /**
+   * Whether the most recent attempt to start playback failed. Cleared the moment a
+   * later `toggle` tries again. Always `false` on a fresh clip.
+   */
+  readonly playbackFailed: boolean;
 }
 
 /**
  * Calls a native `AudioPlayer` method, swallowing the exception `expo-audio` throws
- * when the underlying native object has already been released.
+ * when the underlying native object has already been released, and reporting whether
+ * it had to.
  *
  * **Found on a real Android device, not in any test.** `useAudioPlayer` releases its
  * native player on unmount on its own — true of the library, not documented in its
@@ -23,12 +29,18 @@ export interface Narration {
  * true once the player is released, so the exception carries nothing to act on; it is
  * `console.warn`ed rather than silently dropped, since it is still a real signal that
  * cleanup order surprised us, and worth seeing if it starts happening often.
+ *
+ * **The return value exists for exactly one caller.** `toggle`'s play branch is the
+ * only call site where "the release exception fired" changes what happens next — see
+ * its own comment. The other two call sites ignore it, unchanged.
  */
-function safely(call: () => void): void {
+function safely(call: () => void): boolean {
   try {
     call();
+    return true;
   } catch (caught) {
     console.warn('[narration] native player call failed — likely already released', caught);
+    return false;
   }
 }
 
@@ -47,15 +59,25 @@ function safely(call: () => void): void {
  * keys its child on it — sidesteps the question entirely: a new key means a new
  * player, created with the right source from the start.
  *
- * **State is read from the player, never tracked separately.** There is no local
- * "is playing" flag here that could drift from what `expo-audio` actually did — the
- * control's icon and label are a direct function of `useAudioPlayerStatus`, so an OS
- * interruption (a call, another app) can only ever leave the control showing "paused"
- * or "playing", never a state of its own invention stuck mid-spinner.
+ * **"Is playing" is read from the player, never tracked separately.** There is no local
+ * flag for it that could drift from what `expo-audio` actually did — the control's icon
+ * and label are a direct function of `useAudioPlayerStatus`, so an OS interruption (a
+ * call, another app) can only ever leave the control showing "paused" or "playing",
+ * never a state of its own invention stuck mid-spinner.
+ *
+ * **`playbackFailed` has two sources, because a failed play has two shapes.** A native
+ * call can throw synchronously — the already-released case `safely` exists for — which
+ * `status` never learns about, because nothing reached the player for it to report on.
+ * Or the call can return normally and fail *after*, the way an unreachable
+ * `MEDIA_BASE_URL` (PILOT-1) does: `status.error` is `expo-audio`'s own signal for
+ * that, and it is not `null` for the already-released case, so neither source alone
+ * covers both. `attemptFailed` below is local state for the first; `status.error` is
+ * read live for the second; `playbackFailed` is true if either is.
  */
 export function useNarration(entry: AudioRef): Narration {
   const player = useAudioPlayer(entry.url);
   const status = useAudioPlayerStatus(player);
+  const [attemptFailed, setAttemptFailed] = useState(false);
 
   useEffect(() => {
     void configureNarrationAudioSession();
@@ -93,15 +115,29 @@ export function useNarration(entry: AudioRef): Narration {
 
   const toggle = useCallback(() => {
     if (status.playing) {
+      // Unlike the play branch below, a failed pause here has nowhere further to go:
+      // the reader asked for "not playing", and — per `safely`'s docstring — that is
+      // already the true state once the native call has failed this way. Swallowed
+      // like the unmount and backgrounding sites.
       safely(() => {
         player.pause();
       });
     } else {
-      safely(() => {
+      // The one call site where the reasoning above does not hold: the reader asked
+      // for "playing", the native call failed, and leaving that unsignalled is exactly
+      // how the MEDIA_BASE_URL defect (PILOT-1) presented as a dead button rather than
+      // an error. Cleared optimistically first so a retry does not stay stuck on a
+      // previous synchronous failure once it succeeds — `status.error` clears itself
+      // the same way, on `expo-audio`'s own account of its behaviour.
+      setAttemptFailed(false);
+      const succeeded = safely(() => {
         player.play();
       });
+      if (!succeeded) {
+        setAttemptFailed(true);
+      }
     }
   }, [player, status.playing]);
 
-  return { playing: status.playing, toggle };
+  return { playing: status.playing, toggle, playbackFailed: attemptFailed || status.error !== null };
 }

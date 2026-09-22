@@ -118,3 +118,94 @@ describe('loadConfig', () => {
     expect(Object.isFrozen(config)).toBe(true);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* MEDIA_BASE_URL (PILOT-1) — defaults to CONTENT_API_URL's resolved value     */
+/* -------------------------------------------------------------------------- */
+
+describe('MEDIA_BASE_URL', () => {
+  it('defaults to the built-in CONTENT_API_URL default when neither is set', () => {
+    const config = loadConfig(validEnvironment());
+
+    expect(config.MEDIA_BASE_URL).toBe('http://127.0.0.1:3001/api');
+    expect(config.MEDIA_BASE_URL).toBe(config.CONTENT_API_URL);
+  });
+
+  it("defaults to CONTENT_API_URL's own value when only that is set", () => {
+    const config = loadConfig({
+      ...validEnvironment(),
+      CONTENT_API_URL: 'https://cms.internal.example/api',
+    });
+
+    expect(config.MEDIA_BASE_URL).toBe('https://cms.internal.example/api');
+  });
+
+  it('takes its own value when set to a host different from CONTENT_API_URL', () => {
+    const config = loadConfig({
+      ...validEnvironment(),
+      CONTENT_API_URL: 'http://cms-private.internal:3001/api',
+      MEDIA_BASE_URL: 'https://cdn.example.test',
+    });
+
+    expect(config.MEDIA_BASE_URL).toBe('https://cdn.example.test');
+    expect(config.CONTENT_API_URL).toBe('http://cms-private.internal:3001/api');
+  });
+
+  it('rejects a value that is not an http(s) URL', () => {
+    expect(() => loadConfig({ ...validEnvironment(), MEDIA_BASE_URL: 'not-a-url' })).toThrow(
+      ConfigurationError,
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* HIDE_PLACEHOLDER_CONTENT (PILOT-1) — the flag `contentVisibility.ts` reads  */
+/* -------------------------------------------------------------------------- */
+
+describe('HIDE_PLACEHOLDER_CONTENT', () => {
+  it('defaults to false outside production, unset', () => {
+    expect(loadConfig({ ...validEnvironment(), NODE_ENV: 'development' }).HIDE_PLACEHOLDER_CONTENT).toBe(
+      false,
+    );
+    expect(loadConfig({ ...validEnvironment(), NODE_ENV: 'test' }).HIDE_PLACEHOLDER_CONTENT).toBe(
+      false,
+    );
+  });
+
+  it('defaults to true in production, unset — reproducing the pre-PILOT-1 behaviour exactly', () => {
+    const config = loadConfig({ ...validEnvironment(), NODE_ENV: 'production' });
+
+    expect(config.HIDE_PLACEHOLDER_CONTENT).toBe(true);
+  });
+
+  it('can be set to true outside production, independently of NODE_ENV', () => {
+    const config = loadConfig({
+      ...validEnvironment(),
+      NODE_ENV: 'development',
+      HIDE_PLACEHOLDER_CONTENT: 'true',
+    });
+
+    expect(config.HIDE_PLACEHOLDER_CONTENT).toBe(true);
+  });
+
+  it('"false" means false, even in production — z.coerce.boolean() would get this backwards', () => {
+    // The trap the handoff named: Boolean('false') is true. An environment that
+    // explicitly opts OUT must not be coerced back into the production default.
+    const config = loadConfig({
+      ...validEnvironment(),
+      NODE_ENV: 'production',
+      HIDE_PLACEHOLDER_CONTENT: 'false',
+    });
+
+    expect(config.HIDE_PLACEHOLDER_CONTENT).toBe(false);
+  });
+
+  it.each(['1', '0', 'yes', 'no', 'TRUE', 'False', ''])(
+    'rejects %j rather than silently picking a side',
+    (value) => {
+      expect(() =>
+        loadConfig({ ...validEnvironment(), HIDE_PLACEHOLDER_CONTENT: value }),
+      ).toThrow(ConfigurationError);
+    },
+  );
+});

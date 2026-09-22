@@ -1,10 +1,10 @@
 import { isProductionPublishable, type Leaf, type Track } from '@zoomout/shared';
 
-import type { AppConfig } from '../config/env.js';
 import { ContentNotFoundError } from './content.errors.js';
 
 /**
- * Whether a piece of content may be served, in a given environment.
+ * Whether a piece of content may be served, under the current `HIDE_PLACEHOLDER_CONTENT`
+ * setting.
  *
  * Extracted from `ContentService` in WP4 rather than left as a private method, because
  * the learning loop needs the same answer. Grading has to fetch the *full* Leaf through
@@ -13,9 +13,12 @@ import { ContentNotFoundError } from './content.errors.js';
  * be exactly one copy of it. Two copies would drift, and the direction they drift in is
  * a reader grading a Leaf that production is supposed to be hiding.
  *
- * Outside production the published check still applies: a draft is never servable
- * anywhere. Only the placeholder half of `isProductionPublishable` is relaxed, because
- * placeholder content is the whole of Phase 1 development.
+ * **Takes the resolved flag, not `NODE_ENV` (PILOT-1).** `HIDE_PLACEHOLDER_CONTENT`
+ * defaults to `environment === 'production'`, so callers that pass
+ * `config.HIDE_PLACEHOLDER_CONTENT` reproduce the original NODE_ENV-only behaviour
+ * exactly when the flag is left unset — but a pilot can now hide placeholders on a
+ * dev backend without pretending to be production. The draft check is untouched by any
+ * of this: a draft is never servable, regardless of the flag.
  */
 
 /** The two fields the decision turns on. Both `Track` and `Leaf` satisfy this. */
@@ -25,10 +28,10 @@ export interface VisibilityCandidate {
 }
 
 export function isVisibleIn(
-  environment: AppConfig['NODE_ENV'],
+  hidePlaceholderContent: boolean,
   content: VisibilityCandidate,
 ): boolean {
-  return environment === 'production'
+  return hidePlaceholderContent
     ? isProductionPublishable(content)
     : content.status === 'published';
 }
@@ -60,12 +63,12 @@ export interface LeafVisibilitySource {
  */
 export async function resolveVisibleLeaf(
   source: LeafVisibilitySource,
-  environment: AppConfig['NODE_ENV'],
+  hidePlaceholderContent: boolean,
   leafId: string,
 ): Promise<Leaf> {
   const leaf = await source.findLeaf(leafId);
 
-  if (!isVisibleIn(environment, leaf)) {
+  if (!isVisibleIn(hidePlaceholderContent, leaf)) {
     throw new ContentNotFoundError('Leaf');
   }
 
@@ -82,7 +85,7 @@ export async function resolveVisibleLeaf(
     throw error;
   }
 
-  if (!isVisibleIn(environment, track)) {
+  if (!isVisibleIn(hidePlaceholderContent, track)) {
     throw new ContentNotFoundError('Leaf');
   }
 

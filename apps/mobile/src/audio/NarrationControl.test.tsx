@@ -14,6 +14,7 @@ import { NarrationControl } from './NarrationControl';
  */
 import {
   fakeAudioPlayers,
+  failFakePlayer,
   fakeSetAudioModeAsync,
   releaseFakePlayer,
   resetFakeAudio,
@@ -248,5 +249,126 @@ describe('NarrationControl — playback', () => {
       expect.stringContaining('native player call failed'),
       expect.any(Error),
     );
+    // Part C (PILOT-1): pause-on-unmount keeps swallowing — no visible trace, unlike a
+    // failed play below. Nothing to query the DOM for after `unmount`; the absence of a
+    // throw above is the proof, and this line documents that the two are the same claim.
+  });
+
+  /* ---------------------------------------------------------------------- */
+  /* Part C (PILOT-1) — a failed play is visible; a failed pause stays quiet  */
+  /* ---------------------------------------------------------------------- */
+
+  it('stops the clip when the app backgrounds, even with an already-released player, and stays quiet about it', async () => {
+    /**
+     * The background listener's `pause()` is the third of the three `safely`-wrapped
+     * call sites, and the one closest in shape to the unmount case above — same
+     * "not playing is already the true state" reasoning. Not yet covered by any
+     * existing test with the player actually released; separate from the unmount test
+     * because backgrounding does not unmount anything, so there is a live component
+     * here to assert "no visible error" against, which the unmount test cannot do.
+     */
+    let handler: ((state: string) => void) | undefined;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      handler = listener as (state: string) => void;
+      return { remove: jest.fn() };
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const user = userEvent.setup();
+    await renderControl([MALE]);
+    await user.press(screen.getByTestId('narration-control'));
+
+    const player = fakeAudioPlayers().find((entry) => entry.source === MALE.url);
+    if (player === undefined) {
+      throw new Error('expected a fake player to have been created');
+    }
+    releaseFakePlayer(player);
+
+    await flush(() => {
+      handler?.('background');
+    });
+
+    expect(player.pause).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('native player call failed'),
+      expect.any(Error),
+    );
+    expect(screen.queryByTestId('narration-playback-error')).toBeNull();
+  });
+
+  it('shows the reader something when a play attempt throws synchronously', async () => {
+    /**
+     * The already-released case, on the *play* branch instead of pause. Releasing
+     * before any press means the very first `play()` throws — mutation check: revert
+     * `useNarration.ts`'s `attemptFailed`/`setAttemptFailed` plumbing (keep `safely`
+     * itself) and this goes red while the release/unmount tests above stay green,
+     * proving this is a distinct assertion and not a duplicate of them.
+     */
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    await renderControl([MALE]);
+
+    const player = fakeAudioPlayers().find((entry) => entry.source === MALE.url);
+    if (player === undefined) {
+      throw new Error('expected a fake player to have been created');
+    }
+    releaseFakePlayer(player);
+
+    expect(screen.queryByTestId('narration-playback-error')).toBeNull();
+
+    await user.press(screen.getByTestId('narration-control'));
+
+    expect(player.play).toHaveBeenCalledTimes(1);
+    const message = screen.getByTestId('narration-playback-error');
+    expect(message.props['accessibilityLabel']).toBe("error: Couldn't play summary narration.");
+  });
+
+  it('shows the reader something when playback fails asynchronously, the MEDIA_BASE_URL shape', async () => {
+    /**
+     * `player.play()` itself does not throw for an unreachable host — real `expo-audio`
+     * reports it on `status.error` instead, which is what `failFakePlayer` reproduces.
+     * This is the actual shape PILOT-1's device bug took, and it is a genuinely
+     * different code path from the synchronous-throw test above: mutation check by
+     * deleting the `|| status.error !== null` half of `useNarration`'s
+     * `playbackFailed` and only this test fails.
+     */
+    const user = userEvent.setup();
+    await renderControl([MALE]);
+    await user.press(screen.getByTestId('narration-control'));
+
+    const player = fakeAudioPlayers().find((entry) => entry.source === MALE.url);
+    if (player === undefined) {
+      throw new Error('expected a fake player to have been created');
+    }
+    expect(screen.queryByTestId('narration-playback-error')).toBeNull();
+
+    await flush(() => {
+      failFakePlayer(player, 'could not load source');
+    });
+
+    expect(screen.getByTestId('narration-playback-error')).toBeTruthy();
+  });
+
+  it('clears the failure message once a retry actually plays', async () => {
+    // Not a persistent banner (Part C's constraint): it must go away on its own once
+    // the thing it was reporting is no longer true, with no separate dismissal.
+    const user = userEvent.setup();
+    await renderControl([MALE]);
+
+    const player = fakeAudioPlayers().find((entry) => entry.source === MALE.url);
+    if (player === undefined) {
+      throw new Error('expected a fake player to have been created');
+    }
+    releaseFakePlayer(player);
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await user.press(screen.getByTestId('narration-control'));
+    expect(screen.getByTestId('narration-playback-error')).toBeTruthy();
+
+    player.released = false;
+    await user.press(screen.getByTestId('narration-control'));
+
+    expect(screen.queryByTestId('narration-playback-error')).toBeNull();
+    expect(player.playing).toBe(true);
   });
 });

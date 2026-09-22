@@ -44,19 +44,20 @@ export class PayloadContentRepository implements ContentRepository {
   /**
    * A page of Tracks.
    *
-   * **In production the placeholder filter is pushed into the Payload query** (ruled
-   * 2026-08-11). WP3 filtered after fetching, which left `totalTracks` counting rows
-   * the reader never saw — a page of placeholders returned zero Tracks and claimed
-   * there were twenty, and paging through them showed empty pages.
+   * **When `HIDE_PLACEHOLDER_CONTENT` is set the placeholder filter is pushed into the
+   * Payload query** (ruled 2026-08-11; the trigger widened from `NODE_ENV === 'production'`
+   * to this flag in PILOT-1). WP3 filtered after fetching, which left `totalTracks`
+   * counting rows the reader never saw — a page of placeholders returned zero Tracks and
+   * claimed there were twenty, and paging through them showed empty pages.
    *
    * This is an **optimisation, not the control.** `ContentService` still applies
-   * `isProductionPublishable` to everything this returns, and must keep doing so: a
-   * query filter is one typo in a parameter name away from silently matching nothing,
-   * and the failure mode of *that* is placeholder content reaching production readers.
+   * `isVisibleIn` to everything this returns, and must keep doing so: a query filter is
+   * one typo in a parameter name away from silently matching nothing, and the failure
+   * mode of *that* is placeholder content reaching a reader it should be hidden from.
    * `content.service.test.ts` asserts the guard independently for exactly this reason.
    */
   public async listTracks(page: number, perPage: number): Promise<TrackPage> {
-    const hidePlaceholders = this.config.NODE_ENV === 'production';
+    const hidePlaceholders = this.config.HIDE_PLACEHOLDER_CONTENT;
 
     const query: Record<string, string | number> = {
       page,
@@ -67,9 +68,10 @@ export class PayloadContentRepository implements ContentRepository {
     };
 
     const response = await this.cached(
-      // The environment is part of the key. Without it a cache warmed in one mode would
-      // serve the other's results — invisible in a single-process deployment and
-      // extremely confusing the first time it is not.
+      // The visibility mode is part of the key — `HIDE_PLACEHOLDER_CONTENT` now, not
+      // `NODE_ENV` directly, since the two can disagree (PILOT-1). Without this a cache
+      // warmed in one mode would serve the other's results — invisible in a
+      // single-process deployment and extremely confusing the first time it is not.
       `tracks:${String(page)}:${String(perPage)}:${hidePlaceholders ? 'published' : 'all'}`,
       () => this.client.get<PayloadListResponse<CmsTrack>>('/tracks', query),
     );
@@ -79,7 +81,7 @@ export class PayloadContentRepository implements ContentRepository {
       // documents are dropped and logged rather than thrown. Fetching one specific
       // Track behaves differently on purpose — see `findTrack`.
       tracks: this.keepValid(
-        response.docs.map((document) => mapTrack(document, this.config.CONTENT_API_URL)),
+        response.docs.map((document) => mapTrack(document, this.config.MEDIA_BASE_URL)),
         'Track',
       ),
       page: response.page,
@@ -102,7 +104,7 @@ export class PayloadContentRepository implements ContentRepository {
       throw new ContentNotFoundError('Track');
     }
 
-    return this.requireValid(mapTrack(document, this.config.CONTENT_API_URL), 'Track');
+    return this.requireValid(mapTrack(document, this.config.MEDIA_BASE_URL), 'Track');
   }
 
   public async listLeavesForTrack(trackId: string): Promise<readonly Leaf[]> {
@@ -116,7 +118,7 @@ export class PayloadContentRepository implements ContentRepository {
     );
 
     return this.keepValid(
-      response.docs.map((document) => mapLeaf(document, this.config.CONTENT_API_URL)),
+      response.docs.map((document) => mapLeaf(document, this.config.MEDIA_BASE_URL)),
       'Leaf',
     );
   }
@@ -135,7 +137,7 @@ export class PayloadContentRepository implements ContentRepository {
       throw new ContentNotFoundError('Leaf');
     }
 
-    return this.requireValid(mapLeaf(document, this.config.CONTENT_API_URL), 'Leaf');
+    return this.requireValid(mapLeaf(document, this.config.MEDIA_BASE_URL), 'Leaf');
   }
 
   /** Exposed for tests and for an operational purge; not called on the request path. */

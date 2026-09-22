@@ -417,10 +417,11 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
 
     try {
       // The sanctioned repository read again — see `requireVisibleLeaf`. Filtered
-      // through the same predicate, so a placeholder Leaf hidden in production is not
-      // counted and cannot hold a Track open that a reader has actually finished.
+      // through the same predicate, so a placeholder Leaf hidden by
+      // HIDE_PLACEHOLDER_CONTENT is not counted and cannot hold a Track open that a
+      // reader has actually finished.
       const leaves = (await this.content.listLeavesForTrack(trackId)).filter((leaf) =>
-        isVisibleIn(this.config.NODE_ENV, leaf),
+        isVisibleIn(this.config.HIDE_PLACEHOLDER_CONTENT, leaf),
       );
 
       const summary = await this.summariseTrack(userId, trackId, leaves);
@@ -496,14 +497,14 @@ export class ProgressService implements PayoffAccessPolicy, TrackProgressReader 
    *
    * Going around `ContentService` means going around its guards, so they are reapplied
    * here from the same shared helper rather than reimplemented. Without this the loop
-   * would happily grade — and pay XP for — a Leaf that production is meant to be hiding,
-   * or one whose Track has been taken down.
+   * would happily grade — and pay XP for — a Leaf that `HIDE_PLACEHOLDER_CONTENT` is
+   * meant to be hiding, or one whose Track has been taken down.
    *
    * @throws {ContentNotFoundError} if the Leaf or **its Track** is absent, unpublished,
-   *   or placeholder in production.
+   *   or a withheld placeholder.
    */
   private async requireVisibleLeaf(leafId: string): Promise<Leaf> {
-    return resolveVisibleLeaf(this.content, this.config.NODE_ENV, leafId);
+    return resolveVisibleLeaf(this.content, this.config.HIDE_PLACEHOLDER_CONTENT, leafId);
   }
 
   /**

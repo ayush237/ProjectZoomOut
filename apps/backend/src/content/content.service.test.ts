@@ -19,11 +19,12 @@ import type { PayoffAccessPolicy } from './payoffAccess.js';
 const stubLogger = (): AppLogger =>
   ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }) as unknown as AppLogger;
 
-const configFor = (nodeEnv: string): AppConfig =>
+const configFor = (nodeEnv: string, hidePlaceholderContent?: 'true' | 'false'): AppConfig =>
   loadConfig({
     NODE_ENV: nodeEnv,
     DATABASE_URL: 'postgres://user:pass@127.0.0.1:5432/zoomout',
     AUTH_JWT_SECRET: 'x'.repeat(48),
+    ...(hidePlaceholderContent === undefined ? {} : { HIDE_PLACEHOLDER_CONTENT: hidePlaceholderContent }),
   });
 
 const track = (overrides: Partial<Track> = {}): Track => ({
@@ -99,10 +100,11 @@ const serviceIn = (
   tracks: Track[],
   leaves: Leaf[] = [],
   payoffUnlocked = true,
+  hidePlaceholderContent?: 'true' | 'false',
 ): ContentService =>
   new ContentService(
     repositoryReturning(tracks, leaves),
-    configFor(nodeEnv),
+    configFor(nodeEnv, hidePlaceholderContent),
     stubLogger(),
     policyReturning(payoffUnlocked),
   );
@@ -161,6 +163,88 @@ describe('placeholder content', () => {
 
     await expect(service.getLeaf('l1', READER)).rejects.toBeInstanceOf(ContentNotFoundError);
   });
+
+  /**
+   * Every test above already proves the service guard holds with the repository's own
+   * query filter disabled — `repositoryReturning` has no placeholder-filtering logic at
+   * all, so whatever this service withholds, it withheld itself. `content.repository.ts`'s
+   * own comment names this file for exactly that reason. The tests below are PILOT-1's
+   * addition: the trigger is now `HIDE_PLACEHOLDER_CONTENT`, and it must be settable
+   * independently of `NODE_ENV` in both directions.
+   */
+  describe('HIDE_PLACEHOLDER_CONTENT, independently of NODE_ENV (PILOT-1)', () => {
+    it('hides placeholders on a development backend when the flag is explicitly true', async () => {
+      // The whole point of PILOT-1: showing only real content without pretending to be
+      // production.
+      const result = await serviceIn(
+        'development',
+        [track({ isPlaceholder: true })],
+        [],
+        true,
+        'true',
+      ).listTracks(1, 20);
+
+      expect(result.tracks).toHaveLength(0);
+    });
+
+    it('shows placeholders on a production backend when the flag is explicitly false', async () => {
+      // The inverse, and the one z.coerce.boolean() would get backwards: "false" must
+      // mean false even where the default would otherwise hide.
+      const result = await serviceIn(
+        'production',
+        [track({ isPlaceholder: true })],
+        [],
+        true,
+        'false',
+      ).listTracks(1, 20);
+
+      expect(result.tracks).toHaveLength(1);
+    });
+
+    it('leaves NODE_ENV-only behaviour unchanged when the flag is left unset, in both environments', async () => {
+      // Not a new assertion so much as a guard on the two tests above: if this one ever
+      // failed, it would mean the default stopped tracking NODE_ENV, which is the "byte
+      // identical when unset" constraint from a different angle.
+      const content = [track({ isPlaceholder: true })];
+
+      const inDev = await serviceIn('development', content, [], true, undefined).listTracks(1, 20);
+      const inProd = await serviceIn('production', content, [], true, undefined).listTracks(1, 20);
+
+      expect(inDev.tracks).toHaveLength(1);
+      expect(inProd.tracks).toHaveLength(0);
+    });
+
+    /**
+     * `listTracks` above exercises `isVisible`, but `getLeaf`/`getLeafSummary` reach
+     * visibility through the *other* helper, `resolveVisibleLeaf` — a separate call
+     * site in `content.service.ts` that a `listTracks`-only test cannot see. Caught by
+     * mutation-checking this package's own work: reverting `getLeaf`'s call site back to
+     * `NODE_ENV` left every test in this file green until these two were added.
+     */
+    it('404s a placeholder Leaf fetched via getLeaf on a development backend when the flag is true', async () => {
+      const service = serviceIn(
+        'development',
+        [track({ isPlaceholder: false })],
+        [leaf({ isPlaceholder: true })],
+        true,
+        'true',
+      );
+
+      await expect(service.getLeaf('l1', READER)).rejects.toBeInstanceOf(ContentNotFoundError);
+    });
+
+    it('serves a placeholder Leaf via getLeafSummary on a production backend when the flag is false', async () => {
+      const service = serviceIn(
+        'production',
+        [track({ isPlaceholder: false })],
+        [leaf({ isPlaceholder: true })],
+        true,
+        'false',
+      );
+
+      await expect(service.getLeafSummary('l1')).resolves.toMatchObject({ id: 'l1' });
+    });
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -177,6 +261,26 @@ describe('draft content', () => {
 
     expect(result.tracks).toHaveLength(0);
   });
+
+  it.each(['true', 'false'] as const)(
+    'is invisible with HIDE_PLACEHOLDER_CONTENT explicitly %s — the flag only relaxes the placeholder half',
+    async (hidePlaceholderContent) => {
+      // PILOT-1's acceptance criterion, stated directly: the draft check is unaffected
+      // by the flag, in either position. `isVisibleIn`'s two branches both start from
+      // `isProductionPublishable`/`status === 'published'`, so a draft fails either one
+      // — but that is an implementation detail this test does not trust, it pins the
+      // outcome.
+      const result = await serviceIn(
+        'development',
+        [track({ status: 'draft', isPlaceholder: false })],
+        [],
+        true,
+        hidePlaceholderContent,
+      ).listTracks(1, 20);
+
+      expect(result.tracks).toHaveLength(0);
+    },
+  );
 });
 
 /* -------------------------------------------------------------------------- */

@@ -27,11 +27,12 @@ import { ProgressService } from './progress.service.js';
 const stubLogger = (): AppLogger =>
   ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }) as unknown as AppLogger;
 
-const configFor = (nodeEnv = 'test'): AppConfig =>
+const configFor = (nodeEnv = 'test', hidePlaceholderContent?: 'true' | 'false'): AppConfig =>
   loadConfig({
     NODE_ENV: nodeEnv,
     DATABASE_URL: 'postgres://user:pass@127.0.0.1:5432/zoomout',
     AUTH_JWT_SECRET: 'x'.repeat(48),
+    ...(hidePlaceholderContent === undefined ? {} : { HIDE_PLACEHOLDER_CONTENT: hidePlaceholderContent }),
   });
 
 const READER = '11111111-1111-4111-8111-111111111111';
@@ -100,6 +101,8 @@ function harness(
     row?: LeafProgressRow | null;
     leaf?: ReturnType<typeof buildLeaf>;
     nodeEnv?: string;
+    /** Left unset, the flag defaults from `nodeEnv` — see `configFor`. */
+    hidePlaceholderContent?: 'true' | 'false';
     track?: ReturnType<typeof buildTrack>;
     trackLeaves?: readonly ReturnType<typeof buildLeaf>[];
     /** Start the day already over the cap, so a completion earns nothing. */
@@ -167,7 +170,7 @@ function harness(
       // Only the reads the service actually makes are implemented. The cast is the
       // price of not stubbing the rest of the repository.
       content as unknown as ContentRepository,
-      configFor(options.nodeEnv),
+      configFor(options.nodeEnv, options.hidePlaceholderContent),
       stubLogger(),
       trackStatus,
       sessions,
@@ -283,6 +286,31 @@ describe('the placeholder guard on the grading path', () => {
 
     await expect(service.submitAnswer(READER, 'l1', 'o1')).resolves.toBeDefined();
   });
+
+  /**
+   * PILOT-1's Trap 2: grading reaches `isVisibleIn`/`resolveVisibleLeaf` through
+   * `requireVisibleLeaf`, entirely bypassing `ContentService` — so the flag has to be
+   * threaded to *this* call site specifically, not just to `ContentService`'s. Without
+   * it, a reader could answer and earn XP on a Leaf that `HIDE_PLACEHOLDER_CONTENT` is
+   * hiding everywhere else — the exact failure `contentVisibility.ts`'s own docstring
+   * names.
+   */
+  describe('HIDE_PLACEHOLDER_CONTENT, independently of NODE_ENV (PILOT-1)', () => {
+    it('404s a placeholder Leaf on a development backend when the flag is explicitly true', async () => {
+      const { service } = harness({ nodeEnv: 'development', hidePlaceholderContent: 'true' });
+
+      await expect(service.submitAnswer(READER, 'l1', 'o1')).rejects.toBeInstanceOf(
+        ContentNotFoundError,
+      );
+    });
+
+    it('grades a placeholder Leaf on a production backend when the flag is explicitly false', async () => {
+      // The inverse case, and the one z.coerce.boolean() would get backwards.
+      const { service } = harness({ nodeEnv: 'production', hidePlaceholderContent: 'false' });
+
+      await expect(service.submitAnswer(READER, 'l1', 'o1')).resolves.toBeDefined();
+    });
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -364,6 +392,50 @@ describe('completeLeaf', () => {
     repository.findReaderTimezone.mockResolvedValue(null);
 
     await expect(service.completeLeaf(READER, 'l1')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  /**
+   * `finishTrackIfDone` (private, reached only through `completeLeaf`) filters the
+   * Track's Leaves through `isVisibleIn` too — a *third* call site for the flag,
+   * distinct from `requireVisibleLeaf` and separately mutation-checked: reverting just
+   * this one back to `NODE_ENV` left every other test in this file green.
+   */
+  describe('HIDE_PLACEHOLDER_CONTENT and Track completion (PILOT-1)', () => {
+    it('completes the Track once every VISIBLE Leaf is done, excluding a hidden placeholder from the count', async () => {
+      const realLeaf = buildLeaf({ id: 'l1', isPlaceholder: false });
+      const placeholderLeaf = buildLeaf({ id: 'l2', isPlaceholder: true });
+      const { service, repository } = harness({
+        leaf: realLeaf,
+        row: rowOf({ leafId: 'l1', correctAt: new Date() }),
+        trackLeaves: [realLeaf, placeholderLeaf],
+        nodeEnv: 'development',
+        hidePlaceholderContent: 'true',
+      });
+      repository.listCompletedLeafIds.mockResolvedValue(['l1']);
+
+      const outcome = await service.completeLeaf(READER, 'l1');
+
+      expect(outcome.trackCompleted).toBe(true);
+    });
+
+    it('leaves the Track open while the flag keeps an unfinished placeholder Leaf visible', async () => {
+      // Same fixtures, flag off: the placeholder counts again, and it has not been
+      // completed, so the Track must not report done.
+      const realLeaf = buildLeaf({ id: 'l1', isPlaceholder: false });
+      const placeholderLeaf = buildLeaf({ id: 'l2', isPlaceholder: true });
+      const { service, repository } = harness({
+        leaf: realLeaf,
+        row: rowOf({ leafId: 'l1', correctAt: new Date() }),
+        trackLeaves: [realLeaf, placeholderLeaf],
+        nodeEnv: 'development',
+        hidePlaceholderContent: 'false',
+      });
+      repository.listCompletedLeafIds.mockResolvedValue(['l1']);
+
+      const outcome = await service.completeLeaf(READER, 'l1');
+
+      expect(outcome.trackCompleted).toBe(false);
+    });
   });
 });
 
