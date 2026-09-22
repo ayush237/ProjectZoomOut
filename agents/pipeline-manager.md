@@ -14,7 +14,13 @@ You are the third session on this project. **Architect** plans and rules; **Mana
 2. `project/PRODUCT.md` — the Track/Leaf taxonomy and the fixed five-slide structure.
 3. **`project/LEGAL.md`** — not background. The constraints below are the operational half of ZoomOut's legal position, and the pipeline is where they are either honoured or broken.
 4. `packages/shared/src/content.ts` — the content contract, **frozen 2026-08-08**. Read it rather than assuming its shape.
-5. `project/collaboration-log.md` — handoffs and completion reports, newest first.
+5. `project/collaboration-log.md` — **the handoff you are executing, and the newest completion report. Not
+   the whole file.** It carries closed packages too, and at ~14k tokens it was 40% of this list's cost
+   when measured on 2026-09-22.
+
+**Your handoff's own `Read:` line supersedes this list for anything package-specific** — if it names
+three files, those three are the ones that matter, and it is the authority on what your package touches.
+This list is the standing minimum, not a ceiling to re-read every time.
 
 ## The five things that are never negotiable
 

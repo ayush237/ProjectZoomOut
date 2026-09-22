@@ -109,6 +109,46 @@ If Manager is mid-change, don't have Architect read half-finished code and draw 
 
 We deliberately don't `@import` the persona files into `CLAUDE.md`. `CLAUDE.md` loads identically for every session, so importing both personas there would put both in both sessions and defeat the point of the split.
 
+## Which model each session runs on — added 2026-09-22
+
+**Every handoff has named a suggested model since 2026-08-28. Nothing ever said what the *sessions*
+run on, and that is the larger number** — a handoff's model choice governs one package, while a
+session's governs every turn it takes.
+
+**Default all three sessions to Sonnet. Switch to Opus deliberately, for the turn or the package that
+needs it, not for the session.**
+
+| Session | Default | Reach for Opus when |
+|---|---|---|
+| **Architect** | **Sonnet** | Ruling on a legal or content-integrity question · reviewing a package whose value is a *finding* rather than code · designing a milestone from scratch |
+| **Manager** | **Sonnet** | The handoff says Opus — which per `agents/architect.md` means the finding matters more than the code |
+| **Pipeline Manager** | **Sonnet** | Same rule, and it is where most Opus packages have landed: the legal gates live here |
+
+**Why Architect specifically, given it is the session that plans.** Architect runs longest, reads the
+most, and re-sends all of it every turn — so it draws hardest on the limit *per unit of thinking*. Most
+of what it does is bookkeeping the record already answers: updating a status board, writing a handoff
+whose design is settled, archiving a log. **The judgement is concentrated in a few turns, not spread
+across the session.** Start on Sonnet and switch up for those turns.
+
+**The reverse mistake is the expensive one, and `agents/architect.md` already names it:** getting the
+model wrong in the cheap direction costs a package; getting it wrong in the expensive direction costs
+it every time. That asymmetry is about *packages*, where a bad finding ships. It does not transfer to
+routine session turns, where there is no finding to miss.
+
+## Turn off the connectors this project does not use — added 2026-09-22
+
+**Measured 2026-09-22: 72 connector tools were loaded into an Architect session — Notion 45, Google
+Drive 11, Claude Docs 8, visualize 2, scheduled-tasks 6.** This project's entire record is in git and
+its content lives in Payload. It uses none of them.
+
+**Tool definitions sit in context on every single request**, so an unused connector is a recurring cost
+paid per turn, not per session — the one kind of cost archiving cannot touch. Notion and Google Drive
+were turned off on 2026-09-22, which also made them off by default for new sessions.
+
+**Check with `/context` when a session feels heavy** — `token-budget.md`'s Lever 6 has said to do this
+since 2026-08-29 and nobody had, which is why 56 unused tools rode along for a month.
+
+
 ## Context hygiene
 
 **Architect clears too — added 2026-09-02.** This rule existed for Manager since Phase 1 and Architect was never held to it, so one Architect session ran continuously from WP15 to WP20. **Every turn re-sends the whole conversation**, so a session that deep pays for every earlier package on every message. That was the single largest consumer of the weekly limit, and the fix costs nothing: the roadmap and the log are the memory, and Architect wrote them.

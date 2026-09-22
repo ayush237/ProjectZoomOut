@@ -86,6 +86,16 @@ Use it for "where is X handled", "which files touch Y". Do not use it for implem
 
 It breaks down what is actually occupying the window — system prompt, `CLAUDE.md`, MCP servers, subagents, skills. **A chatty MCP server is a common hidden cost**: its tool definitions can sit in context on every request. Worth checking rather than assuming.
 
+**Measured at last on 2026-09-22, and this lever was right.** An Architect session had **72 connector
+tools loaded: Notion 45, Google Drive 11, Claude Docs 8, visualize 2, scheduled-tasks 6.** This project's
+record is in git and its content is in Payload; it touches none of them. **56 tools rode along on every
+request of every session for a month** because this lever said "worth checking" and nobody checked.
+
+**This is the one cost in this document that archiving cannot reach.** Document load is paid once per
+session and shrinks when you archive. Tool definitions are paid **per request** and shrink only when the
+connector is turned off. Notion and Google Drive were turned off on 2026-09-22 — see
+`GETTING_STARTED.md`, which carries the standing rule.
+
 ---
 
 ## Two things deliberately *not* recommended

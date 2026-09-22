@@ -44,29 +44,57 @@ worktree** — branch from `origin/main` instead.
 - **SecureStore survives uninstall and reinstall on the iOS Simulator**, so any first-run flag persists
   across a reinstall.
 
-### What a fresh Architect should do first
+### The token budget — where it stands 2026-09-22
 
-**✅ The log archive is done — 2026-09-18.** `collaboration-log.md` went **256KB → 114KB (~64k → ~28k
-tokens)**. WP29–WP33.1 plus VO-1's and VO-2's handoffs moved to
-`project/archive/collaboration-log-ikigai.md`. **Done mid-package rather than at VO-3's sign-off, on the
-founder's instruction** — safe here because VO-3's handoff is the most recent entry and was never at
-risk of pruning, and because `ZO-vo3` had no commits and no edit to the log when the cut was made. The
-2026-09-02 failure this rule guards against was a session reading a file and finding its handoff gone;
-that handoff is still the first entry.
+**Document load is ~109k → ~98k, and the ruling below is what takes it to ~70k.** Against
+`token-budget.md`'s 40k target. Done on 2026-09-22 after the founder's external analysis; the applicable
+fixes from it are below, and the two that were already done are recorded so nobody does them twice.
 
-**Two things remain, and the second needs a ruling rather than a script.**
+| | 2026-09-18 | now |
+|---|---|---|
+| `collaboration-log.md` | 28k, then 33k when VO-3 landed | **14k** — VO-1.1, VO-2, VO-2.1 archived at VO-3's merge |
+| `projectRoadmap.md` | 47k | 47k — **the ruling below is the only thing that moves this** |
+| everything else | 34k | 37k — `GETTING_STARTED.md` gained the model and connector rules |
+| **documents, total** | **~109k** | **~98k** |
+| connector tool definitions | **72 tools, on every request** | **16** — Notion (45) and Drive (11) off |
 
-1. **The deeper cut, at VO-3's sign-off** — INTRO-1, VO-1.1, VO-2 and VO-2.1 come out together, leaving
-   VO-3's own pair. Roughly another 20k tokens.
-2. **The debt register is now the largest remaining item** and `token-budget.md` says explicitly that
-   shrinking it is *"a real decision about what to stop tracking, not a tidy-up."* **Open debt that is
-   not loaded is debt that gets forgotten.** Do not script this one.
+**The connector finding is the one worth remembering.** `token-budget.md`'s Lever 6 has said to run
+`/context` since 2026-08-29 and nobody had. 56 tools for Notion and Google Drive — services this project
+does not touch — were loaded into **every request of every session for a month.** Unlike document load,
+that cost cannot be archived away and does not shrink as a conversation grows; it is simply paid again
+each turn. **Both are now off by default for new sessions.**
 
-**One defect found and fixed in passing:** VO-1.1's and VO-2's completion reports had been appended
-with **no `### Completed:` header**, which made them invisible to a structural scan of the log — they
-did not appear in any listing of its entries. Headers restored, bodies untouched, each marked with an
-HTML comment saying so. **This is the project's own recurring failure in a new place:** a record existed,
-was honest, and was not on a list anyone reads.
+### What remains, and it needs a ruling rather than a script
+
+**The roadmap is now the largest file at 46k, and 38k of it is two tables** — the debt register (24k,
+157 rows) and the decisions log (14k, 45 rows). `token-budget.md` refused to cut the register once and
+gave the reason: *open debt that is not loaded is debt that gets forgotten.* **That reason still stands
+and this proposal does not touch it.**
+
+**The finding is that neither table is one thing.** Classified 2026-09-22:
+
+| Debt register | rows | weight | where it belongs |
+|---|---|---|---|
+| Open, unassigned debt | 76 | 12k | **stays — this is the register** |
+| Assigned to a package | 52 | 6k | the status board's own "Waiting on" column |
+| Founder decisions | 13 | 2k | `launch-blockers.md` Part 3 — **which the roadmap already declares the single live list** |
+| Environment facts, "not debt" | 7 | 1k | the "environment facts" section above, which says *three* and is therefore incomplete |
+| Standing rules | 7 | 1k | `agents/*.md`, where rules are actually loaded |
+
+**So ~10k comes off by not tracking the same row twice — no open item is dropped.** Three of those four
+categories are already duplicated in a list that is already read.
+
+**The decisions log has the same shape and one structural cause worth naming: a dated table has no exit
+path for a rule.** Feature decisions age out; rules never do. So rules accumulate in the only table that
+can be pruned by date, and the table becomes unprunable. **Of its 27 pre-2026-09-16 rows, ~19 are settled
+feature calls (archive, ~6k) and ~8 are standing rules that still govern every package** — among them
+*a handoff cites a commit, not a file location*, *a status row states merge state as observed*, and
+*device gates split by question type*. Those move to `agents/architect.md`. One is a product rule
+(*re-reading a finished Leaf counts for nothing*) and belongs in `PRODUCT.md`.
+
+**Do not run this as a date cut.** Archiving the older band wholesale would bury the merge-state rule,
+which this project has already violated twice, and the observation-criterion rule, which caught an app
+pinned to light mode for six packages.
 
 ## Phase 1 status board
 
@@ -227,6 +255,15 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | Replace all placeholder content | P0, pre-launch blocker | Not started | `isPlaceholder` records must never reach production — see proposal §3.4 |
 
 ## Decisions log
+
+> **Decisions before 2026-08-25 are archived** in `project/archive/decisions-through-2026-08-24.md`.
+> The ones that still constrain design, so nobody re-litigates them from the summary alone:
+> **Track → Leaf, no Branch layer** · **five fixed slides, never six** · **grading, the payoff gate, XP, the cap and
+> streaks are all server-authoritative** · **`packages/shared/src/content.ts` is frozen — changes need a ruling
+> and a migration** · **Payload's publish hooks and the shared schema enforce the same invariants independently,
+> deliberately duplicated** · **the pipeline writes drafts and never publishes** · **email/password only; social
+> sign-in deferred** · **Phase 1 launch content comes from the pipeline, not hand-authoring**.
+
 | Date | Decision | Why | Alternatives rejected |
 |---|---|---|---|
 | 2026-09-18 | **The visual gate runs on Expo Go; the Xcode wall is not fixed by pinning an older Xcode** | A native rebuild fails on this Mac — `expo-modules-jsi` will not compile under Xcode 26.3 / Swift 6, and there is exactly one Xcode installed. **Expo Go clears it today and costs nothing:** every plugin in `app.json` (`expo-font`, `expo-secure-store`, `expo-web-browser`, `expo-asset`, `expo-sharing`) is in the Expo Go runtime, as are `react-native-svg` and `react-native-reanimated`, and **the intro needs no backend** — so neither the API URL nor the port-3000 squatter matters. **It is better than the specified gate**, putting the intro on real hardware. Escalation order after that: `npx expo prebuild --clean` (`ios/` is generated, not committed, verified), then an Expo patch bump or EAS Build | **Pinning an older Xcode** — a machine-level change affecting everything else on the Mac, and it fights the platform: **App Store submission requires a current Xcode regardless**, so it converts a problem due today into a larger one due at Stage 5. **Adding `react-native-web`** — Manager declined to add a dependency to work around a gate gap, correctly |
@@ -247,20 +284,7 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | 2026-09-16 | **A fix or a constant that a handoff *names* is a hypothesis, not a specification — it gets verified before it is shipped against** | **WP33.1's handoff was wrong twice, in two different ways, and both were mine.** *(1)* It named `SecretStr` as the fix for the key leak. **`SecretStr` does not close that hole.** The leak is pydantic's *"field required"* error, whose `input_value` is the raw pre-validation kwargs dict, rendered before any field — present or absent — is coerced to its declared type. `SecretStr` protects a value once pydantic has it; this error fires on the way in. `hide_input_in_errors=True` is what actually stops it. Pipeline Manager reproduced **both error shapes in isolation before touching real code**, then shipped both halves and proved they are independent. *(2)* It named `c2e0c8d6…` as Leaf 4's *known-good* hash for the control. **That was the hash of the old, bloomed image** — lifted from WP33's report, where it correctly recorded the *pre-fix* byte match. The real post-fix hash is `4af91bb7…`. **The control failed on the first run, which is the control working**, and it was root-caused against files on disk rather than guessed at. | **Taking either named fix on trust.** Both would have shipped quietly wrong and both would have passed a sloppier check: `SecretStr` alone passes any test asserting the *field's type*, and a control hash never re-derived passes by never being questioned. **This is the documented-intent-absent-behaviour family pointed at a handoff instead of at code** — the sixth instance, after WP3's ungated payoff, WP6's dropped `missingFields`, the stale reduce-motion register entry, and twice in WP32's comments |
 | 2026-09-16 | **Where two fixes could each be doing the work, mutation-check them as separate reversions, not one** | WP33.1 reverted `hide_input_in_errors` alone, then `SecretStr` alone, then confirmed each turned **exactly one** test red — never both, never neither. **A single combined reversion would have gone red and proved nothing about which mechanism mattered**, leaving either free to regress silently behind the other passing. The two paths genuinely are independent: one is a validation-error render, the other a `repr` | **One mutation covering both.** It is the cheaper check and it is the one that cannot distinguish a fix from its bodyguard |
 | 2026-09-16 | **A bloom on an object with a hot/glowing prior is fixed by resampling, not by changing the prompt** | Leaf 4's cause was **not** Leaf 3's, and conflating them would have cost a prompt change nobody needed. Leaf 3 was a *specific instruction beating a general one* — its scenario prose names a buzzing phone, and `scenario_image_prompt` puts that text above the style contract. **Leaf 4's prose names no light effect at all**; the bloom came from the scene setting's focus, *"a fine soldering iron tip joining wires on a contact board"*, through the model's prior rather than through any instruction. WP30's parse guard is right to allow that focus — it refuses a focus that *names* a light effect, and this one does not. **A fresh sample fixed it, first try**, which is exactly what `MAX_GUARD_ATTEMPTS = 2` is sized for. **Expect the same shape on a stove, a candle, a forge** | **Changing the prompt.** It would have treated a sampling artefact as a systemic prose defect, and every prompt change in this project's history has cost something: three for three, a model-facing prompt that explains a prohibition reintroduces it (WP30's subject menu, WP31's light rule twice) |
-
-> **Decisions before 2026-08-25 are archived** in `project/archive/decisions-through-2026-08-24.md`.
-> The ones that still constrain design, so nobody re-litigates them from the summary alone:
-> **Track → Leaf, no Branch layer** · **five fixed slides, never six** · **grading, the payoff gate, XP, the cap and
-> streaks are all server-authoritative** · **`packages/shared/src/content.ts` is frozen — changes need a ruling
-> and a migration** · **Payload's publish hooks and the shared schema enforce the same invariants independently,
-> deliberately duplicated** · **the pipeline writes drafts and never publishes** · **email/password only; social
-> sign-in deferred** · **Phase 1 launch content comes from the pipeline, not hand-authoring**.
-
-| Date | Decision | Why | Alternatives rejected |
-|---|---|---|---|
 | 2026-09-11 | **A criterion phrased as an observation is met by an observation — or it is signed off as *argued* and counted separately. WP28.1 is 6/7, not 7/7** | WP28.1's seventh criterion read *"observed in the disagreeing state: `NextNodeRing` animates"*, and **Manager reported plainly that the visual observation was not decisive** — static simulator screenshots cannot separate a subtle scale animation from a still one, and this machine has no pixel-diff instrument. **The report's body is exactly right and its headline rounds up**, saying "all seven met" while the body says otherwise; the body is the honest part and the disclosure is the behaviour worth keeping. **Signed off anyway, and the reasoning matters more than the count.** The *negative* half is a decisive device measurement — pre-fix, three screenshots across 3+ seconds were pixel-identical, so the bug was reproduced rather than hypothesised — and the negative half is the harder one to get. The positive half rests on two things that are individually strong: the override is the **identical mechanism in the identical config shape** that WP28 already device-verified defeats Reanimated's suppression on the fade branch, and Reanimated's suppression logic does not distinguish animation kinds; plus the guard mutation-proves the flag is structurally present at every nesting level. **What it is not is an observation, so it is not counted as one.** Recorded as a ~60-second founder check rather than as permanent debt, because **that is the move that worked on 2026-09-10**: WP22.1's sixth criterion and WP8's founder criterion both sat open for four weeks and were shut by one person looking at one transition | Counting it 7/7 on the strength of the argument (the argument is good and it is still not the thing the criterion asked for); withholding sign-off until a pixel-diff tool exists (blocks a correct one-flag-per-site fix on instrumentation nobody has needed twice yet) |
-| ~~**The design system has gained tokens since WP21 measured the diff at zero**~~ | **Resolved 2026-09-09 by reading the exported token files, and it was never a drift.** All three are semantic aliases over tokens the app already has: `--graph-edge: var(--border)`, `--graph-edge-reached: var(--primary)`, `--graph-node-unreached: var(--surface-3)`. **The zero diff still holds.** Recorded because the wrong conclusion was reachable from the evidence I had — a token name absent from `palette.ts` looks identical to a divergence until you read the definition, which is the same "verify at the point of citation" rule that produced this entry in the first place | Architect, WP23.1 handoff; resolved by Architect, 2026-09-09 | ✅ Closed — not a divergence |
-| **Superseded — see the entry above** | `design/leaf_player/Leaf player.html` uses `var(--graph-edge)` and `var(--graph-node-unreached)`; **neither exists in `apps/mobile/src/design/palette.ts`** — checked, not assumed. WP21's zero token diff was true when taken and **is no longer a standing guarantee**: the system is live and picked up at least the Caveat font and these graph tokens since. **Consequence for every remaining package**: "no new colour values" and "the tokens already match" are now two different claims, and a mockup referencing a token the app lacks will look like a missing value rather than a divergence | Architect, WP23.1 handoff, 2026-09-09 | Open — **re-measure the token diff once the redesign packages are done**, and treat any mockup token that has no app counterpart as a question rather than a gap to fill |
 | 2026-09-11 | **The Leaf player's footer hosts whichever action is currently live — the founder's call, and the deeper of the two available fixes** | WP28 found a disabled *Next* sitting in the pinned footer where a primary CTA always lives, while the real action *Check answer* sat below the fold inside the ScrollView. **Two fixes were available and only one addresses the flow.** Restyling `Button`'s disabled state — `opacity: 0.5` on a teal pill against near-black still reads as live — makes the dead control *look* dead, and leaves a dead control in the position the reader's eye goes to while the live one is off-screen. **Ruled for the footer**: it carries the action that is currently actionable, so the reader never scrolls to find the primary control and never sees a prominent thing that does nothing. **The opacity finding is real but secondary** and is logged separately rather than folded in, because a disabled control in a *non-primary* position is a much smaller problem | Restyling the disabled state alone (fixes the symptom the reader sees, not the one that cost four packages); doing both in one package (the second is a design-system change touching every `Button` consumer, and this one should not wait on it) |
 | 2026-09-11 | **There was never a tap bug. Four packages mis-attributed correct behaviour to the tooling, and a plausible external cause is exactly how that happens** | WP28's verdict: two causes, **both the app working as written.** The Leaf player's *Next* is disabled until the scenario is answered, and `Button` dims a disabled control to `opacity: 0.5` — which on a teal pill against a near-black page **still reads as live**, while the real action, *Check answer*, sits below the fold inside the ScrollView and the dead control occupies the pinned footer where a primary CTA always lives. And `TrackCard`'s `Pressable` wraps only the cover and title row, so a finished Track — with no action button — is mostly dead zone, which is exactly WP22.3's Track 42. **The proof is the good kind:** three taps at `(252, 815)` did nothing; after answering, **one tap at the identical coordinate advanced.** Coordinates constant, only the prop changed. 20 taps this session, 20 first-attempt hits. **The lesson is why it survived four packages.** Each one had a *plausible external cause* available — the coordinate-space error (real, and fixed in WP24) and the Reduce Motion banner (real, and fixed in WP26). **Both were genuine findings, and that is what made the wrong conclusion durable: the evidence for "it is the tooling" kept being partially true.** The tell was there the whole time — *"the button does not respond"* was literally correct, and nobody asked whether it should. **This also fully dissolves the premise of the 2026-09-09 instrument split**, already amended once: Manager could always do interaction checks. What survives is the judgement half and WP22.1's sub-frame bracketing limit | Continuing to work around it (four packages of evidence that the workaround is the expensive path); accepting "the tooling is flaky" (it was never flaky — 20 for 20) |
 | 2026-09-11 | **Reanimated's reduce-motion reading is not wrong — it is stale, and our own test procedure is what makes it disagree** | Both RN and Reanimated call the identical `UIAccessibilityIsReduceMotionEnabled()`. **RN subscribes to the change notification and stays live; Reanimated samples once at native init and freezes it.** Measured across five cold launches in both directions, correct every time. **They can only disagree after the setting changes while the app is running** — which is precisely how every reduce-motion device gate in this project has been performed. `simctl terminate` + launch clears it; **a Metro or JS reload does not.** So WP27's observation was real and its interpretation was wrong, and the correction has an operational edge: **"toggle Reduce Motion and look" is an unreliable procedure unless the app is relaunched**, and every future handoff that gates on motion must say so | Treating it as a Reanimated defect and filing upstream (it is documented behaviour, and the disagreement is ours to avoid); leaving the procedure unchanged (it silently produces the one state in which the app misbehaves) |
@@ -287,6 +311,7 @@ ZoomOut turns non-fiction books into gamified, interactive micro-lessons that bu
 | 2026-09-02 | **Where a check covers one of several stated conditions, its name says which one — this is the fourth occurrence and it is now a rule, not an observation** | WP20.1's selector reports `reason: "first candidate passing guardrails"` in the founder's review list, while exactly one of the four stated image conditions is mechanically checked. **Pipeline Manager is not the problem here and that is the point** — `selection.py`'s own docstring says plainly that *"the guardrails cannot catch that particular drift"*, and the completion report measured the gap at 44% rather than letting the phrase stand. **The honesty existed; it just did not reach the surface the founder reads.** The prior three: WP20's criterion *"no amber, no text, no identifiable people — checked"* (ruled 2026-08-29 as overclaiming three checks where one exists), `repository.py`'s comment claiming `purge_raw_text` was wired to a terminal node, and `machinesUpdateDraftsOnly`'s comment (fixed in WP15.5). **Four occurrences across four packages by three different sessions is not a vigilance problem, it is a naming default** — a plural noun for a singular guarantee reads as complete to everyone except the person who wrote it. So: `"first candidate, amber-checked"`, and the same test applied to any future name covering a subset. **The cost of getting this wrong is specific:** a reviewer who believes four conditions are enforced reviews less carefully than one who knows it is one | Fixing the string alone (three prior instances say the shape recurs); a naming-convention document (nobody reads one — the rule belongs beside the reviewing habit that catches it) |
 | 2026-08-30 | **Track 42 is not bulk-revised — confirms Pipeline Manager** | Its text is already slated for regeneration once the reviewer exists, which is what this package built, and its images were generated before the answer-length shuffle. Spending review budget polishing 18 Leaves that are due for replacement pays twice for one result — the same reasoning that declined to regenerate its images for the sixth style anchor. **Verifying the mechanism on a sample was the right call and is the stronger evidence anyway**: a bulk run proves throughput, a traced sample proved the revise prompt was dropping citations it had never been shown. Regenerate the Track once, properly, in WP20 | Bulk-revising now (~$1–2, and every Leaf is replaced afterwards); leaving the mechanism unverified until WP20 (would have shipped the citation bug) |
 | 2026-08-30 | **`revise` is capped at 2, not WP16.1's 5 — and the divergence is correct** | Pipeline Manager reasoned this rather than inheriting either number, which is what the handoff asked for. WP16.1 raised the *breakdown* cap because its cost assumption had changed: generation moved to a free Flash call, so a cap guarding money we no longer spend was costing plans for nothing. **Editorial review may run cross-family, and Claude has no free tier anywhere**, so R7's original cost reasoning is the one that actually applies to this loop. Two caps, two numbers, each matching its own economics — recorded so neither is later "corrected" to match the other | One cap for both loops (tidier, and wrong in one of the two places) |
+
 
 ## Technical debt register
 
