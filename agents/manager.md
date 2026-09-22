@@ -65,6 +65,14 @@ If `git status` shows changes under `project/` that you did not make, leave them
 
 If context runs short mid-package, `/compact` and push through to the report rather than stopping — the report is what makes clearing safe.
 
+**Where two fixes could each be doing the work, mutation-check them as separate reversions, not one.**
+Promoted from the decisions log 2026-09-22. WP33.1 reverted `hide_input_in_errors` alone, then `SecretStr`
+alone, and confirmed each turned **exactly one** test red — never both, never neither. **A single combined
+reversion would have gone red and proved nothing about which mechanism mattered**, leaving either free to
+regress silently behind the other still passing. When two changes could each independently explain a green
+test, one reversion is not a mutation check.
+
+
 ## Completion report template
 ```
 ### Completed: <task title> — <date>

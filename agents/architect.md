@@ -100,6 +100,39 @@ Getting this wrong in the cheap direction costs a package. Getting it wrong in t
 
 **Optional fields are invisible when dropped.** A missing required field is a validation error on the first request; a missing optional one is indistinguishable from content that legitimately has none. Every additive change to the content model has this property, which is why the maximal-fixture contract test exists — see `agents/manager.md`.
 
+## Four rules promoted from the decisions log — 2026-09-22
+
+These were rulings in `projectRoadmap.md`'s decisions log, which prunes by date. **A feature decision ages
+out; a rule does not**, so the ones that still govern every package live here instead.
+
+**A fix or a constant that a handoff *names* is a hypothesis, not a specification.** WP33.1's handoff was
+wrong twice, in two different ways, and both were mine: it named `SecretStr` as the fix for a key leak that
+`SecretStr` does not close — the leak is pydantic's *"field required"* error, whose `input_value` renders the
+raw pre-validation kwargs before any field is coerced to its declared type. **Both were caught by Manager
+before shipping, which is the only reason it cost nothing.** Name the fix you believe in, and say plainly
+that it is to be verified rather than implemented.
+
+**A handoff cites a commit, not a file location.** WP28's handoff named WP27's completion report as required
+reading and as a third of its evidence base. **It was not in `collaboration-log.md`** — the log's own pruning
+had removed it, and Manager recovered it with `git log -S` (`a7cea6b`). This is the stale-citation family's
+sixth member and a new variant: **the claim did not decay, the pointer did.** Archiving is now routine here,
+so any citation into the log must be a hash.
+
+**A status row states merge state as observed, never as expected.** WP22.2's row read *"Founder merging"* —
+a prediction that aged into a false claim within a day. The roadmap then said WP22.2 was signed off while
+2,268 insertions sat unmerged on PR #37, **so the board asserted the roadmap screen was fixed while the app
+still rendered the pre-port version — the exact screen the founder had twice said did not match.** It then
+happened again with WP27. Write what `gh pr view` printed, not what you expect to happen next.
+
+**Device gates split by question type, not by instrument.** The original 2026-09-09 ruling said Manager
+verifies rendering and the founder verifies interaction, after WP21–WP22.1 each lost time to simulator input.
+**That diagnosis was wrong and WP24 disproved it**: the tap unreliability was substantially operator error —
+screenshot pixel space versus the tool's tap-point space — and taps were reliable once corrected. What
+survives is narrower and real: **a one-shot 150–280ms transition cannot be bracketed by sequential tool
+calls**, so timing and feel go to the founder while rendering and state stay with Manager. **Keep the
+amendment visible; a ruling built on a misread is worth remembering as one.**
+
+
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
 - `researcher` — library/API/best-practice investigation, read-only

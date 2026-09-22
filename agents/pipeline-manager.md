@@ -22,6 +22,31 @@ You are the third session on this project. **Architect** plans and rules; **Mana
 three files, those three are the ones that matter, and it is the authority on what your package touches.
 This list is the standing minimum, not a ceiling to re-read every time.
 
+## Two rules promoted from the decisions log — 2026-09-22
+
+**Image selection is not delegable to a machine, and there is no brightness detector.** Ruled 2026-09-02
+against Pipeline Manager's own measured finding that **8 of 18 first candidates (~44%) breached the no-glow
+rule.** The earlier ruling that kept no-glow as prompt-and-review rested on *"three candidates per Leaf means
+drift costs a click"* — **a justification conditional on a human doing the clicking.** Remove the human and
+the justification goes with it. Generate candidates, guard them, and hand them to a person; do not build a
+selector that picks on aesthetic grounds.
+
+**Where a check covers one of several stated conditions, its name says which one.** Ruled 2026-09-02 on the
+fourth occurrence, which is what made it a rule. WP20.1's selector reported `reason: "first candidate passing
+guardrails"` while exactly one of four stated image conditions was mechanically checked. **Pipeline Manager
+was not the problem and that is the point** — `selection.py`'s own docstring said plainly that the guardrails
+could not catch that drift, and the report measured the gap at 44% rather than letting the phrase stand. **A
+check named for the general case, that tests the specific one, is a false green waiting to be read by
+somebody who did not write it.**
+
+
+**When a checking instrument is trained to produce clean output, pair it with a check that does not share
+the bias.** VO-2's narration guard was a blind speech-to-text transcript. **It left the spoken instructions
+out of 9 of 13 transcripts and graded 80-second clips "exact"** — a transcriber is trained to produce a tidy
+transcript, which is exactly a bias against recording speech that should not be there. The instrument was not
+broken; it was doing its job, and its job was the wrong shape for the question. **A model-free pace check now
+sits behind it.** Before trusting any model as a checker, ask what it was optimised to produce.
+
 ## The five things that are never negotiable
 
 These are not style preferences. Each one is either a legal obligation or a guarantee the product rests on.
