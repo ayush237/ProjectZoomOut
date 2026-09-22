@@ -1323,6 +1323,192 @@ def contact_sheet_command(
     typer.secho(f"{len(paths)} images -> {written}", fg=typer.colors.GREEN, bold=True)
 
 
+def _track_snapshot(client: Any, track_id: int) -> tuple[str, str]:
+    """A Track's title and `updatedAt`, as published — the same view a reader's app gets.
+
+    Through `PayloadClient`, not a second HTTP caller: `test_boundaries.py` holds `cms/` as
+    the one door Payload is reached through, on purpose — one place to audit for "does this
+    publish?" and "does this touch the tables?". Reading is all this ever does with it; the
+    client this command builds has no more reach than that, whatever key it holds.
+    """
+    doc = client.get_track(track_id, draft=False)
+    return str(doc["bookTitle"]), str(doc["updatedAt"])
+
+
+@app.command("generate-covers")
+def generate_covers(
+    out_dir: Annotated[
+        str, typer.Option(help="Where every candidate and the contact sheet are written.")
+    ] = "runs/covers",
+) -> None:
+    """Cover art for Track 42 and Ikigai (Track 50) — style-guard-checked, never attached.
+
+    **Ends at a file on disk and a contact sheet.** Both Tracks are published, and
+    `apps/admin/src/collections/Tracks.ts` gives the machine account no path to published
+    content at all — only to drafts. There is nothing this command could attach to even if
+    it tried, so it does not try: it writes candidates and a contact sheet under `out_dir`
+    and stops. The founder uploads the chosen file through the admin UI — a minute of their
+    time, and the only credential that can do it.
+
+    `graph/cover_nodes.py` holds the two briefs this generates and why they are what they
+    are. Not a general command: a cover for one of the 27 placeholder Tracks is out of scope.
+    """
+    from PIL import Image as PILImage
+
+    from zoomout_pipeline.assets.budget import ImageBudget
+    from zoomout_pipeline.assets.contact_sheet import write_contact_sheet
+    from zoomout_pipeline.assets.images import AnchorSet, ImageClient, usd_per_image
+    from zoomout_pipeline.assets.style_guard import GuardResult, check_style
+    from zoomout_pipeline.cms.client import PayloadClient
+    from zoomout_pipeline.graph.cover_nodes import (
+        COVER_ASPECT_RATIO,
+        COVER_BRIEFS,
+        cover_alt_text,
+        generate_cover_candidates,
+    )
+    from zoomout_pipeline.runner import build_dependencies
+
+    settings = get_settings()
+    payload = PayloadClient(
+        base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+    )
+    anchors = AnchorSet.load(settings.anchors_dir)
+    if len(anchors) == 0:
+        typer.secho(
+            f"no anchor set at {settings.anchors_dir} — every image would be unconditioned "
+            "and would not share the library's visual identity",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Transport per book, before a single image is bought. There is no run behind a cover to
+    # carry `open_run_for_models`' check, so it is made directly here — the same guarantee,
+    # established the same way `run` establishes it before ingest.
+    typer.echo("transport:")
+    for brief in COVER_BRIEFS:
+        try:
+            transport = require_paid_tier(brief.acquisition, settings)
+        except FreeTierForbiddenError as refusal:
+            typer.secho(f"\n{refusal}\n", fg=typer.colors.RED, bold=True)
+            raise typer.Exit(2) from None
+        typer.echo(
+            f"  track {brief.track_id} ({brief.title}): {transport.transport.value}"
+            + (f" ({transport.project})" if transport.project else "")
+            + f" — acquisition {brief.acquisition.value}"
+        )
+
+    typer.echo("\nbaseline (before generating anything):")
+    baseline: dict[int, tuple[str, str]] = {}
+    for brief in COVER_BRIEFS:
+        title, updated_at = _track_snapshot(payload, brief.track_id)
+        baseline[brief.track_id] = (title, updated_at)
+        typer.echo(f"  track {brief.track_id}: {title!r}, updatedAt {updated_at}")
+
+    deps = build_dependencies(settings)
+    images = ImageClient(project=settings.vertex_project, location=settings.vertex_location)
+
+    rate = usd_per_image(settings.image_model)
+    ceiling_usd = 0.50
+    max_images = int(ceiling_usd // rate)
+    typer.echo(
+        f"\nbudget: {settings.image_model} at ${rate}/image; a {COVER_ASPECT_RATIO} request "
+        "never sets `image_size`, so it stays in the 1K/2K tier this rate already prices — "
+        "4K is the only tier this rate does not cover, and nothing here asks for it "
+        f"(images.py:31-48). ${ceiling_usd:.2f} ceiling / ${rate} = {max_images} images max.\n"
+    )
+    budget = ImageBudget(max_images=max_images, model=settings.image_model)
+
+    guard_spend = 0.0
+
+    def guard(data: bytes) -> GuardResult:
+        nonlocal guard_spend
+        verdict = check_style(llm=deps.llm, data=data, model=settings.analyze_model)
+        guard_spend += verdict.spend.usd
+        return verdict
+
+    typer.echo("generating:")
+    candidates = generate_cover_candidates(
+        client=images,
+        briefs=COVER_BRIEFS,
+        anchors=anchors,
+        model=settings.image_model,
+        guard=guard,
+        budget=budget,
+    )
+
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    chosen: dict[int, Path] = {}
+    for candidate in candidates:
+        path = out / f"track-{candidate.brief.track_id}-cover-{candidate.index:02d}.png"
+        path.write_bytes(candidate.image.data)
+        path.with_suffix(".txt").write_text(cover_alt_text(candidate.brief), encoding="utf-8")
+        written.append(path)
+        typer.echo(f"  {path.name}: {candidate.verdict.summary()}")
+        if candidate.verdict.passed and candidate.brief.track_id not in chosen:
+            chosen[candidate.brief.track_id] = path
+
+    typer.echo(
+        f"\nimages: {budget.spent} generated across {len(budget.per_leaf)} covers, "
+        f"${budget.usd:.4f}"
+    )
+    typer.echo(f"style guard: {len(candidates)} reads, ${guard_spend:.4f}")
+    typer.secho(
+        f"total: ${budget.usd + guard_spend:.4f} of the ${ceiling_usd:.2f} ceiling",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+    typer.echo("\nchosen:")
+    for brief in COVER_BRIEFS:
+        chosen_path = chosen.get(brief.track_id)
+        if chosen_path is None:
+            typer.secho(
+                f"  track {brief.track_id} ({brief.title}): NO guard-clean candidate — "
+                "see the findings above; this Track still needs a follow-up run",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            continue
+        with PILImage.open(chosen_path) as img:
+            width, height = img.size
+        ratio = width / height
+        on_target = abs(ratio - 2 / 3) < 0.01
+        typer.secho(
+            f"  track {brief.track_id} ({brief.title}): {chosen_path.resolve()}\n"
+            f"    {width}x{height}, ratio {ratio:.4f} (target {2 / 3:.4f}) — "
+            f"{'2:3' if on_target else 'OFF TARGET'}",
+            fg=typer.colors.GREEN if on_target else typer.colors.RED,
+        )
+
+    # Two briefs, so two columns: at the common width the default three columns leaves a
+    # third of the sheet dark and empty. `write_contact_sheet` still copes if a retry ever
+    # pushes past two images — a third candidate wraps to its own row rather than overflowing.
+    sheet_path = write_contact_sheet(written, out / "contact-sheet.png", columns=2)
+    typer.secho(f"\ncontact sheet ({len(written)} images): {sheet_path.resolve()}", bold=True)
+
+    typer.echo("\nfinal (re-fetched, to confirm neither Track was touched):")
+    any_changed = False
+    for brief in COVER_BRIEFS:
+        _, updated_at = _track_snapshot(payload, brief.track_id)
+        _, base_updated_at = baseline[brief.track_id]
+        changed = updated_at != base_updated_at
+        any_changed = any_changed or changed
+        typer.secho(
+            f"  track {brief.track_id}: updatedAt {updated_at} "
+            f"({'CHANGED' if changed else 'unchanged'})",
+            fg=typer.colors.RED if changed else typer.colors.GREEN,
+        )
+    if any_changed:
+        typer.secho(
+            "\nAT LEAST ONE TRACK'S updatedAt CHANGED — this command must never write to "
+            "Payload; treat this as a bug, not a note.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+
+
 # ------------------------------------------------------------------------------ VO-2
 
 
