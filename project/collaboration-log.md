@@ -474,7 +474,7 @@ Rough, in descending order: **mutation-checking**, by a wide margin — finding 
 2. **Track 42's and Ikigai's cover URLs are out of scope here, and already queued** — `COVER-1`, above this entry in the Handoffs section, replaces both hotlinked covers with owned art. No action needed from this package; noting the connection since Part A's own "out of scope" line names the same two URLs.
 3. **This worktree still has no `apps/admin/.env`** — the same gap VO-3's report flagged on 2026-09-18, still true. Cost me one build-verification detour (supplied the two required variables by hand, confirmed the failure was environmental and not a regression) rather than nothing, since `apps/admin` was untouched by this package either way.
 
-**PR not yet opened as of this report** — pushing and opening it next, before the chat summary.
+**PR: [#57](https://github.com/ayush237/ProjectZoomOut/pull/57).**
 
 ---
 
