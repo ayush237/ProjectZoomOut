@@ -1,7 +1,7 @@
-import { Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 import type { AudioRef, NarratorId } from '@zoomout/shared';
 
-import { Icon, Text } from '../components';
+import { Icon, StatusMessage, Text } from '../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../design';
 import { selectNarration } from './selectNarration';
 import { useNarration } from './useNarration';
@@ -74,27 +74,42 @@ function NarrationButton({
   const action = narration.playing ? 'Pause' : 'Play';
 
   return (
-    <Pressable
-      testID="narration-control"
-      onPress={narration.toggle}
-      accessibilityRole="button"
-      accessibilityLabel={`${action} ${label} narration, ${NARRATOR_LABELS[narrator]} voice`}
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        gap: theme.spacing.sm,
-        minHeight: MIN_TOUCH_TARGET,
-        paddingVertical: theme.spacing.sm,
-        paddingHorizontal: theme.spacing.lg,
-        borderRadius: theme.radius.full,
-        backgroundColor: pressed ? theme.surfaceFor('pressed') : theme.surfaceFor('raised'),
-      })}
-    >
-      <Icon name={narration.playing ? 'pause' : 'play'} tone="primary" size={22} />
-      <Text variant="caption" tone="primary">
-        {narration.playing ? 'Playing narration' : 'Play narration'}
-      </Text>
-    </Pressable>
+    <View style={{ alignItems: 'flex-start', gap: theme.spacing.sm }}>
+      <Pressable
+        testID="narration-control"
+        onPress={narration.toggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${action} ${label} narration, ${NARRATOR_LABELS[narrator]} voice`}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          alignSelf: 'flex-start',
+          gap: theme.spacing.sm,
+          minHeight: MIN_TOUCH_TARGET,
+          paddingVertical: theme.spacing.sm,
+          paddingHorizontal: theme.spacing.lg,
+          borderRadius: theme.radius.full,
+          backgroundColor: pressed ? theme.surfaceFor('pressed') : theme.surfaceFor('raised'),
+        })}
+      >
+        <Icon name={narration.playing ? 'pause' : 'play'} tone="primary" size={22} />
+        <Text variant="caption" tone="primary">
+          {narration.playing ? 'Playing narration' : 'Play narration'}
+        </Text>
+      </Pressable>
+
+      {/* Modest and transient by design (Part C) — never a modal, never a persistent
+          banner: it reflects `playbackFailed` directly and disappears the moment a
+          retry succeeds, the same "couldn't do X" idiom `StatusMessage` already carries
+          on twelve other screens. `error`, not `incorrect` — a failed play is not a
+          wrong answer. */}
+      {narration.playbackFailed ? (
+        <StatusMessage
+          tone="error"
+          testID="narration-playback-error"
+          message={`Couldn't play ${label.toLowerCase()} narration.`}
+        />
+      ) : null}
+    </View>
   );
 }

@@ -101,6 +101,26 @@ const environmentSchema = z.object({
     .refine(isHttpUrl, 'Must be an http:// or https:// URL')
     .default('http://127.0.0.1:3001/api'),
 
+  /**
+   * Base URL a **client** builds media URLs from — cover images, slide illustrations,
+   * diagrams and narration audio.
+   *
+   * **Not the same value as `CONTENT_API_URL`, even though they agree by default.**
+   * `CONTENT_API_URL` is the backend's private path to Payload; this is the public path
+   * a reader's device fetches assets from. Those coincide only while the backend and
+   * the client share a host, which stops being true the moment a phone is involved and
+   * will not be true at all once the backend and Payload are on different hosts (PILOT-1).
+   *
+   * Left `.optional()` rather than `.default()`: its default is `CONTENT_API_URL`'s
+   * *resolved* value, which zod cannot express as a static default on this key alone.
+   * Resolved below, once the whole object has been parsed.
+   */
+  MEDIA_BASE_URL: z
+    .string()
+    .min(1)
+    .refine(isHttpUrl, 'Must be an http:// or https:// URL')
+    .optional(),
+
   /** Per-request timeout. Payload being slow must not become the backend hanging. */
   CONTENT_API_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
 
@@ -113,6 +133,26 @@ const environmentSchema = z.object({
    * number that would not.
    */
   CONTENT_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).max(600).default(60),
+
+  /**
+   * Whether placeholder content (`isPlaceholder: true`) is withheld from readers.
+   *
+   * **Defaults to `NODE_ENV === 'production'`** (resolved below, once the whole object
+   * has been parsed), so a deployment that never sets this is byte-identical to today —
+   * this is what lets a pilot on a dev backend hide placeholders without pretending to
+   * be production (PILOT-1). Draft content is unaffected: `contentVisibility.ts` refuses
+   * a draft in every environment regardless of this flag.
+   *
+   * **Deliberately not `z.coerce.boolean()`.** Coercion is `Boolean(string)`, under
+   * which `HIDE_PLACEHOLDER_CONTENT=false` parses as `true` — any non-empty string is
+   * truthy. An explicit `"true"`/`"false"` enum is the only way `"false"` means false,
+   * and anything else (a typo, `"0"`, `"no"`) fails startup instead of silently picking
+   * a side.
+   */
+  HIDE_PLACEHOLDER_CONTENT: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true')),
 
   /* ---------------------------------------------------------------------- */
   /* Progress and XP (the learning loop)                                     */
@@ -208,6 +248,22 @@ const environmentSchema = z.object({
   AUTH_TOKEN_REAP_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
 });
 
+/**
+ * Resolves the two cross-field defaults **after** the object above has parsed.
+ *
+ * Neither default is a static value zod's `.default()` can express on its own key:
+ * `MEDIA_BASE_URL` defaults to whatever `CONTENT_API_URL` *resolved* to, and
+ * `HIDE_PLACEHOLDER_CONTENT` defaults to whether `NODE_ENV` *resolved* to
+ * `'production'`. Both source fields already carry their own defaults by the time this
+ * runs, so an environment that sets neither new variable comes out byte-identical to
+ * one that predates them.
+ */
+const configSchema = environmentSchema.transform((data) => ({
+  ...data,
+  MEDIA_BASE_URL: data.MEDIA_BASE_URL ?? data.CONTENT_API_URL,
+  HIDE_PLACEHOLDER_CONTENT: data.HIDE_PLACEHOLDER_CONTENT ?? data.NODE_ENV === 'production',
+}));
+
 function isHttpUrl(value: string): boolean {
   try {
     const { protocol } = new URL(value);
@@ -228,7 +284,7 @@ function isPostgresConnectionString(value: string): boolean {
   }
 }
 
-export type AppConfig = Readonly<z.infer<typeof environmentSchema>>;
+export type AppConfig = Readonly<z.infer<typeof configSchema>>;
 
 /**
  * Raised when the environment is missing or malformed.
@@ -260,7 +316,7 @@ export class ConfigurationError extends Error {
  * @throws {ConfigurationError} if any variable is missing or invalid.
  */
 export function loadConfig(source: NodeJS.ProcessEnv = getProcessEnv()): AppConfig {
-  const result = environmentSchema.safeParse(source);
+  const result = configSchema.safeParse(source);
 
   if (!result.success) {
     throw new ConfigurationError(

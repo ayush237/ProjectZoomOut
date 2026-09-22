@@ -26,6 +26,9 @@ export interface FakeAudioPlayer {
   /** Set by `releaseFakePlayer` to reproduce `expo-audio`'s own unmount-triggered
    *  release happening before this app's code gets a chance to call `pause()`. */
   released: boolean;
+  /** Set by `failFakePlayer` to reproduce an asynchronous playback failure — real
+   *  `expo-audio`'s `AudioStatus.error`, which `play()` itself does not throw for. */
+  error: string | null;
   readonly play: jest.Mock<void, []>;
   readonly pause: jest.Mock<void, []>;
   readonly remove: jest.Mock<void, []>;
@@ -45,6 +48,22 @@ const ALREADY_RELEASED_MESSAGE = 'Cannot use shared object that was already rele
  */
 export function releaseFakePlayer(player: FakeAudioPlayer): void {
   player.released = true;
+}
+
+/**
+ * Reproduces `expo-audio` surfacing an asynchronous playback failure — an unreachable
+ * or invalid source, the shape PILOT-1's `MEDIA_BASE_URL` defect actually took on a
+ * real device. **Unlike `releaseFakePlayer`, this does not make `play()` throw**: the
+ * real native player does not throw for this either, it reports the failure on
+ * `status.error` instead, which `useNarration` has to be watching for a reader to see
+ * anything. Call after a `play()` attempt to simulate the load failing in the
+ * background. Mirrors real `expo-audio`: `AudioStatus.error`'s own doc comment says it
+ * is "cleared when a new source is loaded or playback resumes successfully", modelled
+ * here by the fake's own `play()` clearing it on a later, unreleased call.
+ */
+export function failFakePlayer(player: FakeAudioPlayer, message = 'Failed to load audio'): void {
+  player.error = message;
+  notify(player);
 }
 
 function newSetAudioModeAsyncMock(): jest.Mock<Promise<void>, [unknown]> {
@@ -82,12 +101,14 @@ export function useAudioPlayer(source: unknown): FakeAudioPlayer {
       source,
       playing: false,
       released: false,
+      error: null,
       _listeners: new Set(),
       play: jest.fn(() => {
         if (created.released) {
           throw new Error(ALREADY_RELEASED_MESSAGE);
         }
         created.playing = true;
+        created.error = null;
         notify(created);
       }),
       pause: jest.fn(() => {
@@ -107,9 +128,13 @@ export function useAudioPlayer(source: unknown): FakeAudioPlayer {
   return player;
 }
 
-/** Mirrors `useAudioPlayerStatus`: subscribes so a `play`/`pause` call re-renders the
- *  component watching it, the same as the real hook's native event subscription. */
-export function useAudioPlayerStatus(player: FakeAudioPlayer): { playing: boolean } {
+/** Mirrors `useAudioPlayerStatus`: subscribes so a `play`/`pause`/`failFakePlayer` call
+ *  re-renders the component watching it, the same as the real hook's native event
+ *  subscription. */
+export function useAudioPlayerStatus(player: FakeAudioPlayer): {
+  playing: boolean;
+  error: string | null;
+} {
   const [, rerender] = useState(0);
 
   useEffect(() => {
@@ -124,7 +149,7 @@ export function useAudioPlayerStatus(player: FakeAudioPlayer): { playing: boolea
     };
   }, [player]);
 
-  return { playing: player.playing };
+  return { playing: player.playing, error: player.error };
 }
 
 export function setAudioModeAsync(mode: unknown): Promise<void> {

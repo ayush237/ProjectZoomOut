@@ -35,9 +35,10 @@ export type { DeliveredLeaf };
  *
  * Three product guarantees are enforced here and nowhere else:
  *
- *  1. **Placeholder content is invisible in production.** `isProductionPublishable`
- *     has existed in `packages/shared` since WP0 with nothing calling it, which made
- *     the guard decorative. This is where it starts doing work.
+ *  1. **Placeholder content is invisible whenever `HIDE_PLACEHOLDER_CONTENT` says so**
+ *     (defaults to `NODE_ENV === 'production'`, PILOT-1). `isProductionPublishable` has
+ *     existed in `packages/shared` since WP0 with nothing calling it, which made the
+ *     guard decorative. This is where it starts doing work.
  *  2. **The answer key never leaves the server.** Every Leaf goes out through
  *     `toPublicLeaf`; there is no path in this class that returns a raw `Leaf`.
  *  3. **The payoff is withheld until it is earned** (WP4). Stripping the answer key is
@@ -60,7 +61,11 @@ export class ContentService {
 
     if (visible.length !== result.tracks.length) {
       this.logger.info(
-        { withheld: result.tracks.length - visible.length, environment: this.config.NODE_ENV },
+        {
+          withheld: result.tracks.length - visible.length,
+          environment: this.config.NODE_ENV,
+          hidePlaceholderContent: this.config.HIDE_PLACEHOLDER_CONTENT,
+        },
         'Withheld placeholder Tracks from a listing',
       );
     }
@@ -110,7 +115,11 @@ export class ContentService {
    * @throws {ContentNotFoundError} if the Leaf or its Track is absent or hidden here.
    */
   public async getLeafSummary(leafId: string): Promise<LeafSummary> {
-    const leaf = await resolveVisibleLeaf(this.repository, this.config.NODE_ENV, leafId);
+    const leaf = await resolveVisibleLeaf(
+      this.repository,
+      this.config.HIDE_PLACEHOLDER_CONTENT,
+      leafId,
+    );
 
     return toLeafSummary(leaf);
   }
@@ -126,7 +135,11 @@ export class ContentService {
   public async getLeaf(leafId: string, userId: string): Promise<DeliveredLeaf> {
     // Resolves the parent Track too: a Leaf whose Track has been taken down is gone,
     // whatever the Leaf's own status says. See `resolveVisibleLeaf`.
-    const leaf = await resolveVisibleLeaf(this.repository, this.config.NODE_ENV, leafId);
+    const leaf = await resolveVisibleLeaf(
+      this.repository,
+      this.config.HIDE_PLACEHOLDER_CONTENT,
+      leafId,
+    );
 
     const unlocked = await this.payoffAccess.isPayoffUnlocked(userId, leafId);
 
@@ -135,7 +148,7 @@ export class ContentService {
 
   /** Delegates to the shared predicate so grading cannot drift from delivery. */
   private isVisible(content: { status: 'draft' | 'published'; isPlaceholder: boolean }): boolean {
-    return isVisibleIn(this.config.NODE_ENV, content);
+    return isVisibleIn(this.config.HIDE_PLACEHOLDER_CONTENT, content);
   }
 }
 
