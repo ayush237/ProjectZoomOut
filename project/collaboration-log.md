@@ -34,54 +34,6 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
-### Handoff: 2026-09-24 — ONBOARD-2: two narrator self-introduction clips
-
-*Pipeline Manager. **Suggested model: Sonnet** — reuses VO-2's existing, proven generation and upload mechanism for exactly two new clips with fixed scripts; no judgement calls beyond execution.*
-
-> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. Check your branch first. `git fetch origin && git checkout -b onboard-2-narrator-greetings origin/main`.
-> **Commit, push and open the PR yourself when done.**
-> **Read:** this handoff · `apps/pipeline/src/zoomout_pipeline/assets/` (VO-2's generation/upload machinery — the same TTS call, the same two voices) · `agents/pipeline-manager.md`.
-> **Do not read:** `project/projectRoadmap.md`, the rest of `collaboration-log.md`, anything under `apps/mobile` or `apps/backend`.
-
-### Task: ONBOARD-2 — two narrator self-introduction clips
-
-**Context:** Onboarding's narrator beat is being redesigned (approved 2026-09-24) so each narrator introduces themselves, rather than reading a line from whichever book was picked — this decouples the beat from needing a book chosen first, and lets both narrators sound distinct on day one regardless of which Tracks have narration.
-
-**Objective:** Two short, warm self-introduction clips exist — one read by each narrator voice — uploaded to Payload's Media collection with stable, documented references the next package (ONBOARD-3, Manager) can build against.
-
-**Scope:** `apps/pipeline` only. Reuses VO-2's TTS generation call (same Gemini/Vertex voices, same upload mechanism) — a new CLI invocation, not wired into the main graph, same precedent as `generate-covers`: a deliberate invocation, not a node, since there is no Leaf or run behind this.
-
-**Requirements:**
-- Generate exactly these two scripts, one per narrator voice:
-  - **Female (Achernar):** "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company."
-  - **Male (Sadaltager):** "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company."
-  Wording is mine, not fixed in stone — if either reads awkwardly once you hear it, say so and propose the fix rather than ship it. Regenerating two clips is cheap, unlike 144.
-- Upload both to Payload's Media collection with clear, stable filenames (e.g. `narrator-greeting-female.mp3`, `narrator-greeting-male.mp3`) and descriptive alt text.
-- Report back, per clip: the exact Payload Media id, the stored relative URL, duration in seconds, and the transcript actually produced — so Manager can verify it against the script rather than assume.
-- Verify each transcript actually matches the intended script by listening — the same transcriber check VO-2's report flagged real issues with (it silently dropped spoken instructions in 9 of 13 transcripts then). Two clips is small enough to check by ear, not just the automated pace check.
-
-**Out of scope:**
-- Any change to `apps/backend` or `apps/mobile` — this package ends at two uploaded clips and their references, reported clearly. Wiring them into the app is ONBOARD-3.
-- Any change to the 144 existing per-Leaf narration clips.
-- Re-running or touching any Leaf's existing narration.
-
-**Constraints:** Same cost model as VO-2 (per-character TTS pricing) — at two short sentences this should be well under $0.05 total; state the actual spend regardless. Same two narrator voice ids already established (`female`/`male` → Achernar/Sadaltager) — do not introduce a third.
-
-**Device gate:** *(the founder's ear, not a device — same shape as COVER-1's "founder's eye")*
-- Both clips playable and audible by the founder before being called done — attach them, or give an absolute path the founder can open directly, the same lesson COVER-1's handoff learned about paths.
-
-**Acceptance criteria:**
-- [ ] Two clips exist, one per narrator voice, each uploaded to Payload's Media collection with a stable filename and descriptive alt text
-- [ ] Each clip's actual transcript is reported and matches the given script, or the deviation is explained
-- [ ] Duration and Payload Media id/URL reported per clip
-- [ ] Spend reported, per clip and in total
-- [ ] Nothing outside `apps/pipeline` changed — confirmed by `git diff --stat`
-- [ ] `ruff check`, `ruff format --check`, `mypy`, and `pytest` all pass — file count and test count stated and compared to the last pipeline package's (COVER-1's 99 files / 441 tests), reconciling any drop
-
-**Testing expectations:** Tier B — a thin, one-off CLI invocation reusing already-tested generation/upload code; no new logic beyond wiring two scripts through it. If the wiring itself has any real branching (retry, partial failure), that gets a test; the generation call itself doesn't need new coverage — it already has VO-2's.
-
----
-
 ### Handoff: 2026-09-24 — ONBOARD-3: pre-intro, intro repositioning, beat reorder, and the closing screen
 
 *Manager. **Suggested model: Sonnet** — every product fork is resolved, and this handoff names the code paths, including the ones that change *because of* the reorder. What is left is implementing a fully-specified design against contracts you verify, not invent.*
@@ -198,6 +150,54 @@ list anyone reads.
 - [ ] `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` all pass — the report states the mobile test count against ONBOARD-1's 735 and reconciles any drop
 
 **Testing expectations:** **Tier A** for the `markSeen()` table and the variant plumbing (new / existing / already-seen / quit-mid-Leaf landing on the right screen with the flag in the right state) and for the closing-moment routing in both directions — these are exactly the shape of bug that ships quietly and shows up as a reader stuck in the wrong state, or an existing account shown the narrator beat on every launch. Tier B for copy, the pre-intro's rendering and the backend path's wiring. Say which evidence is a unit test, which is a query, and which is you looking on the device.
+
+---
+
+### Handoff: 2026-09-24 — ONBOARD-2: two narrator self-introduction clips
+
+*Pipeline Manager. **Suggested model: Sonnet** — reuses VO-2's existing, proven generation and upload mechanism for exactly two new clips with fixed scripts; no judgement calls beyond execution.*
+
+> **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. Check your branch first. `git fetch origin && git checkout -b onboard-2-narrator-greetings origin/main`.
+> **Commit, push and open the PR yourself when done.**
+> **Read:** this handoff · `apps/pipeline/src/zoomout_pipeline/assets/` (VO-2's generation/upload machinery — the same TTS call, the same two voices) · `agents/pipeline-manager.md`.
+> **Do not read:** `project/projectRoadmap.md`, the rest of `collaboration-log.md`, anything under `apps/mobile` or `apps/backend`.
+
+### Task: ONBOARD-2 — two narrator self-introduction clips
+
+**Context:** Onboarding's narrator beat is being redesigned (approved 2026-09-24) so each narrator introduces themselves, rather than reading a line from whichever book was picked — this decouples the beat from needing a book chosen first, and lets both narrators sound distinct on day one regardless of which Tracks have narration.
+
+**Objective:** Two short, warm self-introduction clips exist — one read by each narrator voice — uploaded to Payload's Media collection with stable, documented references the next package (ONBOARD-3, Manager) can build against.
+
+**Scope:** `apps/pipeline` only. Reuses VO-2's TTS generation call (same Gemini/Vertex voices, same upload mechanism) — a new CLI invocation, not wired into the main graph, same precedent as `generate-covers`: a deliberate invocation, not a node, since there is no Leaf or run behind this.
+
+**Requirements:**
+- Generate exactly these two scripts, one per narrator voice:
+  - **Female (Achernar):** "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company."
+  - **Male (Sadaltager):** "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company."
+  Wording is mine, not fixed in stone — if either reads awkwardly once you hear it, say so and propose the fix rather than ship it. Regenerating two clips is cheap, unlike 144.
+- Upload both to Payload's Media collection with clear, stable filenames (e.g. `narrator-greeting-female.mp3`, `narrator-greeting-male.mp3`) and descriptive alt text.
+- Report back, per clip: the exact Payload Media id, the stored relative URL, duration in seconds, and the transcript actually produced — so Manager can verify it against the script rather than assume.
+- Verify each transcript actually matches the intended script by listening — the same transcriber check VO-2's report flagged real issues with (it silently dropped spoken instructions in 9 of 13 transcripts then). Two clips is small enough to check by ear, not just the automated pace check.
+
+**Out of scope:**
+- Any change to `apps/backend` or `apps/mobile` — this package ends at two uploaded clips and their references, reported clearly. Wiring them into the app is ONBOARD-3.
+- Any change to the 144 existing per-Leaf narration clips.
+- Re-running or touching any Leaf's existing narration.
+
+**Constraints:** Same cost model as VO-2 (per-character TTS pricing) — at two short sentences this should be well under $0.05 total; state the actual spend regardless. Same two narrator voice ids already established (`female`/`male` → Achernar/Sadaltager) — do not introduce a third.
+
+**Device gate:** *(the founder's ear, not a device — same shape as COVER-1's "founder's eye")*
+- Both clips playable and audible by the founder before being called done — attach them, or give an absolute path the founder can open directly, the same lesson COVER-1's handoff learned about paths.
+
+**Acceptance criteria:**
+- [ ] Two clips exist, one per narrator voice, each uploaded to Payload's Media collection with a stable filename and descriptive alt text
+- [ ] Each clip's actual transcript is reported and matches the given script, or the deviation is explained
+- [ ] Duration and Payload Media id/URL reported per clip
+- [ ] Spend reported, per clip and in total
+- [ ] Nothing outside `apps/pipeline` changed — confirmed by `git diff --stat`
+- [ ] `ruff check`, `ruff format --check`, `mypy`, and `pytest` all pass — file count and test count stated and compared to the last pipeline package's (COVER-1's 99 files / 441 tests), reconciling any drop
+
+**Testing expectations:** Tier B — a thin, one-off CLI invocation reusing already-tested generation/upload code; no new logic beyond wiring two scripts through it. If the wiring itself has any real branching (retry, partial failure), that gets a test; the generation call itself doesn't need new coverage — it already has VO-2's.
 
 ---
 
