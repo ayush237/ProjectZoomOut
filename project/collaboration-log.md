@@ -49,6 +49,8 @@ list anyone reads.
 - [ ] Wherever a narrator is named to a reader it reads Lara or Druv — never "Female"/"Male" alone, never a provider voice id — observed on the device in Profile and on the onboarding narrator beat, and pinned by a test for `NarrationControl`'s accessibility label, which cannot be observed on a screen
 - [ ] No test or fixture keys on a Payload Media id, or asserts on the audio's bytes or duration
 
+**Update, later 2026-09-24 — the swap is done, and verified by Architect rather than reported.** Payload now holds exactly two greeting documents, **Media 350 (female, Lara) and 351 (male, Druv)**, no `-1` rename, the old pair gone. The served bytes are **sha256-identical** to the files the founder approved by ear (pace right; "Druv" has its *v*, "Droov"): 40,320 and 40,896 bytes, 5.04 s and 5.11 s. **Your narrator-beat device-gate item is no longer waiting** — do not wait for Pipeline Manager's follow-up entry to appear before observing it. Still build on the URLs, never the ids: the ids changed on this swap and could again.
+
 ---
 
 ### Handoff: 2026-09-24 — ONBOARD-2: two narrator self-introduction clips

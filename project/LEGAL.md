@@ -55,6 +55,19 @@ position does not reach.
 told to "narrate the slide" would include the citations without anyone deciding to, and nothing
 mechanical would catch it. Any handoff that touches narration carries this boundary explicitly.
 
+**One thing besides those four fields may be spoken: the narrator greetings (added 2026-09-24).**
+Onboarding has each narrator introduce themselves in one fixed sentence — *"Hi, I'm Lara. I'll be reading
+to you here, whenever you'd like the company."* These are ZoomOut's own words with no source text anywhere
+in them, so they sit outside the fair-use question entirely; they are listed here because this section is
+the boundary, and a fifth thing the voice can say belongs in it. **The list is closed and has its own
+door.** The words live in a constant (`NARRATOR_GREETINGS`, in the pipeline's `assets/greeting.py`,
+asserted exactly by a test) and reach the voice only through `SpeechClient.synthesize_greeting`, which
+accepts a `NarratorGreeting` and nothing else and takes its voice from the greeting. **The Leaf door was
+deliberately not widened to admit them:** the two tests that fence `SpeechClient.synthesize` to a
+`NarrationLine` — which can be built only from a Leaf — are what stop a source quote reaching the voice,
+and loosening them for a greeting would loosen them for everything. Any further line the voice may say
+that is not one of the four Leaf fields needs an entry in this section first.
+
 **The generated audio itself is ours to use commercially.** Google asserts no ownership of Cloud
 TTS output and the Cloud Data Processing Addendum's training restriction applies. This is the
 reason the vendor is Google Cloud rather than a free tier elsewhere: every other expressive
