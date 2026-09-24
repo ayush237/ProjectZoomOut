@@ -63,6 +63,19 @@ export type AppStackParamList = {
     readonly leafId: string;
     readonly trackId: string;
     readonly trackTitle: string;
+    /**
+     * Set by exactly one caller — the first-run flow's pick-book beat (ONBOARD-3) — to say
+     * "this is the reader's first Leaf, and finishing it closes their onboarding".
+     * **Presence is the whole signal:** `true` or absent, never `false`, so there is no
+     * second value to read the wrong way. A serialisable flag rather than content, so the
+     * rule above still holds.
+     *
+     * It carries the closing moment from here to `WrapUp` through the player's completion
+     * exits. It does not come from an achievement: `first-wrap` unlocks when the reader
+     * *taps* wrap, which is after `WrapUp` has already opened, so it cannot tell the
+     * screen what to show.
+     */
+    readonly onboarding?: true;
   };
   /**
    * The end-of-day summary (WP9). No params: the screen fetches the day itself, and
@@ -75,7 +88,15 @@ export type AppStackParamList = {
    * withdrawn book fails the same way everywhere else does.
    */
   TrackDetail: { readonly trackId: string };
-  WrapUp: undefined;
+  /**
+   * `onboarding: true` — and only that — turns on the closing message (ONBOARD-3): the
+   * reader has just finished their first Leaf, and this is where their onboarding ends.
+   * Every other way here (Journey, the cap's "See your day" for an ordinary reader) passes
+   * nothing and sees the screen exactly as before. The flag is a route param and not
+   * something the screen works out for itself, because nothing the screen can read
+   * distinguishes "the first Leaf just ended" from "an ordinary day just ended".
+   */
+  WrapUp: { readonly onboarding?: true } | undefined;
   /**
    * One achievement, framed for sharing.
    *
@@ -100,24 +121,24 @@ export type AppStackParamList = {
   TrackComplete: { readonly trackId: string };
 
   /**
-   * The five-beat activation flow (ONBOARD-1). Three screens, not five — beat 4 is an
-   * action (`navigate('LeafPlayer', ...)`, the same route above) rather than a
-   * destination, and beat 5 is a coach-mark inside `ScenarioSlide`, not a route at all.
+   * The activation flow (ONBOARD-1, reordered in ONBOARD-3). For a new account:
+   * `OnboardingIntro` → `OnboardingPromise` → `OnboardingNarrator` → `OnboardingPickBook`
+   * → the first Leaf (`LeafPlayer`, an action rather than a screen of its own) → `WrapUp`'s
+   * closing. For an existing account: `OnboardingNarrator` alone.
    *
-   * Registered on this stack, not a separate navigator, precisely so beat 3 can reach
-   * `LeafPlayer` by name — a second navigator would need its own copy of that screen or
-   * a cross-navigator jump neither React Navigation nor this codebase's existing shape
-   * supports. `RootNavigator` picks which of these three (or `Tabs`) the stack **opens**
+   * Registered on this stack, not a separate navigator, precisely so the pick-book beat
+   * can reach `LeafPlayer` by name — a second navigator would need its own copy of that
+   * screen or a cross-navigator jump neither React Navigation nor this codebase's existing
+   * shape supports. `RootNavigator` picks which of these (or `Tabs`) the stack **opens**
    * on via `initialRouteName`, the same mechanism `AuthStack` already uses for the
    * social-signup age gate.
+   *
+   * None of them carries params. What each beat needs to know that is not a route is
+   * handed to it as a prop by `AppStack` (`markSeen`, and the narrator beat's variant),
+   * for the same reason `AppStack` gives: those are app state, not navigation state.
    */
+  OnboardingIntro: undefined;
   OnboardingPromise: undefined;
+  OnboardingNarrator: undefined;
   OnboardingPickBook: undefined;
-  /**
-   * Shared by both onboarding paths this package draws (WP18's approved design, five
-   * beats for a new reader / one beat for an existing account reopening the app after
-   * this feature ships) — `pickedTrack` is present only for the first: absent, beat 3
-   * is standing in alone, and "Continue" lands on `Tabs` instead of `LeafPlayer`.
-   */
-  OnboardingNarrator: { readonly pickedTrack?: { readonly id: string; readonly title: string } };
 };

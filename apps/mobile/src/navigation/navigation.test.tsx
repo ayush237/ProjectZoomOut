@@ -7,8 +7,16 @@ import { MemoryTokenStore } from '../api/tokenStore';
 import { AuthProvider } from '../auth/AuthProvider';
 import { ThemeProvider, type ThemeMode } from '../design';
 import { INTRO_HANDOFF_MS } from '../screens/intro/introBeats';
-import { getIntroSeen, setIntroSeen } from '../screens/intro/introSeenStore';
+import { setIntroSeen } from '../screens/intro/introSeenStore';
 import { getOnboardingSeen, setOnboardingSeen } from '../screens/onboarding/onboardingSeenStore';
+import { CLOSING_COPY } from '../screens/share/WrapUpScreen';
+import {
+  COMPLETION,
+  CORRECT_ANSWER,
+  FIRST_LEAF,
+  finishTheLeaf,
+  SESSION_SUMMARY,
+} from '../testing/firstLeaf';
 import { RootNavigator } from './RootNavigator';
 
 /** `jest.setup.js`'s in-memory keychain stand-in — reset so one test's intro-seen state
@@ -33,15 +41,16 @@ const METRICS: Metrics = {
 };
 
 /**
- * Every test in this file except the `Intro` and `Onboarding` blocks below exercises
- * auth branching, not either gate. INTRO-1 made `RootNavigator` check a second,
- * independent flag before it will render `AuthStack`; ONBOARD-1 added a third — a
- * signed-in reader whose Library is empty and whose onboarding flag is unset now lands
- * on `OnboardingPromise`, not `Tabs`. Without both flags set here, every "signed in"
- * test in this file would land on an onboarding beat instead of `explore-screen`,
- * since `signedInBackend` below stubs `/library` as empty. Defaulting to "already seen"
- * on both keeps those tests testing what they have always tested; the `Intro` and
- * `Onboarding` blocks each clear their own flag.
+ * Every test in this file except the `Pre-intro` and `Onboarding` blocks below exercises
+ * auth branching, not either gate. `RootNavigator` checks a per-install flag before it
+ * will render `AuthStack` (INTRO-1's, and the pre-intro's since ONBOARD-3 — the same
+ * SecureStore key), and ONBOARD-1 added a second — a signed-in reader whose Library is
+ * empty and whose onboarding flag is unset lands on the first onboarding route, not
+ * `Tabs`. Without both flags set here, every "signed in" test in this file would land
+ * on an onboarding beat instead of `explore-screen`, since `signedInBackend` below stubs
+ * `/library` as empty. Defaulting to "already seen" on both keeps those tests testing
+ * what they have always tested; the `Pre-intro` and `Onboarding` blocks each clear their
+ * own flag.
  */
 beforeEach(async () => {
   (SecureStore as ResettableSecureStore).__reset();
@@ -197,68 +206,44 @@ describe('TabShell', () => {
   });
 });
 
-describe('Intro', () => {
+describe('Pre-intro', () => {
   // Undoes the file's own default (see the top-level `beforeEach`): these tests are
   // about the flag itself, so they start from "not seen", same as a fresh install.
   beforeEach(() => {
     (SecureStore as ResettableSecureStore).__reset();
   });
 
-  it('shows the intro ahead of the auth stack on an install that has not seen it', async () => {
+  it('shows the pre-intro ahead of the auth stack on an install that has not seen it', async () => {
     const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
 
     await waitFor(() => {
-      expect(view.getByTestId('intro-screen')).toBeOnTheScreen();
+      expect(view.getByTestId('pre-intro-screen')).toBeOnTheScreen();
     });
     expect(view.queryByTestId('sign-in-screen')).toBeNull();
+    // INTRO-1 left the pre-auth branch: a reader with no account sees a still frame, and
+    // the animation waits until there is an account to welcome.
+    expect(view.queryByTestId('intro-screen')).toBeNull();
   });
 
-  it('sets the flag and lands on sign-in when skipped', async () => {
+  it('sets the existing introSeen flag and lands on sign-in when tapped', async () => {
     const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
 
     await waitFor(() => {
-      expect(view.getByTestId('intro-skip')).toBeOnTheScreen();
+      expect(view.getByTestId('pre-intro-screen')).toBeOnTheScreen();
     });
 
-    await fireEvent.press(view.getByTestId('intro-skip'));
+    await fireEvent.press(view.getByTestId('pre-intro-screen'));
 
     await waitFor(() => {
       expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
     });
-    await expect(getIntroSeen()).resolves.toBe(true);
+    // The literal key, read straight from the store: "the same key `useIntroSeen` reads,
+    // not a new one". A pre-intro that gated itself on a fresh key would still pass every
+    // assertion above, and an install that had already seen the old intro would see it.
+    await expect(SecureStore.getItemAsync('zoomout.introSeen')).resolves.toBe('true');
   });
 
-  it('sets the flag and lands on sign-in when driven to completion', async () => {
-    // Fake timers must be live before mount: `IntroScreen`'s hand-off timer is
-    // scheduled the instant its effect first runs, during `renderApp` below.
-    jest.useFakeTimers();
-
-    const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
-
-    expect(view.getByTestId('intro-skip')).toBeOnTheScreen();
-
-    // `jest.advanceTimersByTime` fires the timer's `setState` synchronously, but
-    // React's own commit needs a microtask tick to flush through `act` — see
-    // `IntroScreen.test.tsx`'s `advanceTimersAndFlush` for the same fix.
-    await act(async () => {
-      jest.advanceTimersByTime(INTRO_HANDOFF_MS);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(view.getByTestId('intro-continue')).toBeOnTheScreen();
-
-    await fireEvent.press(view.getByTestId('intro-continue'));
-
-    jest.useRealTimers();
-
-    await waitFor(() => {
-      expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
-    });
-    await expect(getIntroSeen()).resolves.toBe(true);
-  });
-
-  it('never mounts the intro, and goes straight to sign-in, when the flag is already set', async () => {
+  it('never mounts the pre-intro, and goes straight to sign-in, when the flag is already set', async () => {
     await setIntroSeen();
 
     const view = await renderApp({ refreshToken: null, fetchFn: signedOutBackend });
@@ -266,7 +251,20 @@ describe('Intro', () => {
     await waitFor(() => {
       expect(view.getByTestId('sign-in-screen')).toBeOnTheScreen();
     });
-    expect(view.queryByTestId('intro-screen')).toBeNull();
+    expect(view.queryByTestId('pre-intro-screen')).toBeNull();
+  });
+
+  it('never shows it to a signed-in reader, whatever the flag says', async () => {
+    // The gate sits inside the "not signed in" branch, so an existing reader upgrading
+    // onto this build never meets it in front of their library.
+    await setOnboardingSeen();
+
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: signedInBackend });
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    expect(view.queryByTestId('pre-intro-screen')).toBeNull();
   });
 });
 
@@ -290,20 +288,6 @@ describe('Onboarding', () => {
 
   const LEAF_SUMMARY = { id: 'l1', trackId: 't1', orderIndex: 0, title: 'Leaf One', isPlaceholder: false };
 
-  const DELIVERED_LEAF = {
-    id: 'l1',
-    trackId: 't1',
-    orderIndex: 0,
-    title: 'Leaf One',
-    summary: { body: 'Summary.', audio: [] },
-    scenario: { prompt: 'Prompt?', options: [] },
-    payoff: null,
-    payoffUnlocked: false,
-    stickyNotes: { notes: [] },
-    takeaway: { body: 'Takeaway.' },
-    sourceReferences: [],
-  };
-
   const LIBRARY_ENTRY = {
     track: REAL_TRACK,
     addedAt: '2026-09-01T00:00:00.000Z',
@@ -312,16 +296,21 @@ describe('Onboarding', () => {
   };
 
   /**
-   * A signed-in backend with one real Track and everything beats 1–4 touch, so the
-   * full-flow test below can walk end to end without a dozen separate stubs.
+   * A signed-in backend with one real Track and everything the flow touches — the
+   * greetings, pick-book, the first Leaf all the way to completion, and the wrap-up — so
+   * the full-flow tests below can walk end to end without a dozen separate stubs.
    * `initialLibraryEntries` is the one thing that varies per test — empty for a new
    * reader, non-empty for an existing one.
    *
    * **Stateful, not a fixed stub** — `/library/tracks/t1` (`addToLibrary`) appends to
-   * the same `entries` array a later `/library` (`listLibrary`) read returns. Beat 3's
-   * resume lookup depends on seeing what beat 2 just added; a static stub would silently
-   * send it down the same "could not find the entry" fallback path a real failure does,
-   * which is exactly the bug this backend originally shipped with in this test.
+   * the same `entries` array a later `/library` (`listLibrary`) read returns. Pick-book's
+   * resume lookup depends on seeing what it just added; a static stub would silently
+   * send it down the same "could not find the entry" fallback path a real failure does.
+   * That state also outlives a re-render, which is what lets a test "force-quit" and
+   * reopen against the same account.
+   *
+   * `narrator-samples` answers with two URLs and **no Track serves any narration** — the
+   * beat must work without one.
    */
   function onboardingBackend(initialLibraryEntries: unknown[]): typeof fetch {
     const entries = [...initialLibraryEntries];
@@ -335,25 +324,24 @@ describe('Onboarding', () => {
         entries.push(LIBRARY_ENTRY);
         return Promise.resolve(json({ unlocked: [] }));
       }
-      if (url.includes('/content/tracks/t1/leaves')) {
-        return Promise.resolve(json({ leaves: [LEAF_SUMMARY] }));
-      }
-      if (url.includes('/content/leaves/l1')) return Promise.resolve(json(DELIVERED_LEAF));
-      if (url.includes('/progress/leaves/l1/start')) {
+      if (url.includes('/content/narrator-samples')) {
         return Promise.resolve(
           json({
-            progress: {
-              userId: PROFILE.id,
-              leafId: 'l1',
-              attemptCount: 0,
-              firstTryCorrect: false,
-              correctAt: null,
-              completedAt: null,
-              xpAwarded: 0,
-            },
+            female: { url: 'https://cdn.test/api/media/file/narrator-greeting-female.mp3' },
+            male: { url: 'https://cdn.test/api/media/file/narrator-greeting-male.mp3' },
           }),
         );
       }
+      if (url.includes('/content/tracks/t1/leaves')) {
+        return Promise.resolve(json({ leaves: [LEAF_SUMMARY] }));
+      }
+      if (url.includes('/content/leaves/l1')) return Promise.resolve(json(FIRST_LEAF));
+      if (url.includes('/progress/leaves/l1/start')) {
+        return Promise.resolve(json({ progress: COMPLETION.progress }));
+      }
+      if (url.includes('/progress/leaves/l1/answer')) return Promise.resolve(json(CORRECT_ANSWER));
+      if (url.includes('/progress/leaves/l1/complete')) return Promise.resolve(json(COMPLETION));
+      if (url.includes('/progress/summary')) return Promise.resolve(json(SESSION_SUMMARY));
       if (url.includes('/content/tracks')) {
         return Promise.resolve(json({ tracks: [REAL_TRACK], page: 1, totalPages: 1, totalTracks: 1 }));
       }
@@ -365,17 +353,108 @@ describe('Onboarding', () => {
     };
   }
 
-  it('shows the promise beat to a signed-in reader with an empty Library and no flag', async () => {
-    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+  type View = Awaited<ReturnType<typeof renderApp>>;
+
+  /** Taps Skip on INTRO-1 — the way through it that needs no timers. */
+  async function skipIntro(view: View): Promise<void> {
+    await waitFor(() => {
+      expect(view.getByTestId('intro-skip')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('intro-skip'));
+  }
+
+  /** From the promise to the pick-book beat, choosing the default narrator. */
+  async function throughPromiseAndNarrator(view: View): Promise<void> {
+    await waitFor(() => {
+      expect(view.getByTestId('onboarding-promise-continue')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
 
     await waitFor(() => {
-      expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+      expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
+    });
+    await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+    await waitFor(() => {
+      expect(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`)).toBeOnTheScreen();
+    });
+  }
+
+  describe('INTRO-1, now inside the flow', () => {
+    it('plays first for a new account (full), right after sign-in', async () => {
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await waitFor(() => {
+        expect(view.getByTestId('intro-screen')).toBeOnTheScreen();
+      });
+      expect(view.queryByTestId('onboarding-promise-screen')).toBeNull();
+    });
+
+    it('never plays for an existing account (narratorOnly)', async () => {
+      const view = await renderApp({
+        refreshToken: 'stored',
+        fetchFn: onboardingBackend([LIBRARY_ENTRY]),
+      });
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-screen')).toBeOnTheScreen();
+      });
+      expect(view.queryByTestId('intro-screen')).toBeNull();
+      expect(view.queryByTestId('onboarding-promise-screen')).toBeNull();
+    });
+
+    it('never plays for a reader whose onboarding is already seen', async () => {
+      await setOnboardingSeen();
+
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      expect(view.queryByTestId('intro-screen')).toBeNull();
+    });
+
+    it('advances to the promise on Skip, and does not mark onboarding seen', async () => {
+      // Skipping an animation is not skipping onboarding.
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await skipIntro(view);
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+    });
+
+    it('advances to the promise on Get started too, and does not mark onboarding seen', async () => {
+      // Fake timers must be live before mount: the hand-off timer is scheduled the
+      // instant `IntroScreen`'s effect first runs.
+      jest.useFakeTimers();
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await waitFor(() => {
+        expect(view.getByTestId('intro-screen')).toBeOnTheScreen();
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(INTRO_HANDOFF_MS);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await fireEvent.press(view.getByTestId('intro-continue'));
+      jest.useRealTimers();
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(false);
     });
   });
 
   it('shows only the narrator beat to a signed-in reader with a non-empty Library and no flag', async () => {
     // The Library check `useIntroSeen`'s own gate never needed — mutation check:
-    // swap the branch and this is the test (alongside the one above) that reds.
+    // swap the branch and this is the test (alongside the INTRO-1 one above) that reds.
     const view = await renderApp({
       refreshToken: 'stored',
       fetchFn: onboardingBackend([LIBRARY_ENTRY]),
@@ -399,66 +478,214 @@ describe('Onboarding', () => {
     expect(view.queryByTestId('onboarding-promise-screen')).toBeNull();
   });
 
-  it('sets the flag and lands on Explore when the promise beat is skipped', async () => {
-    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+  describe('the full order, for a new account', () => {
+    it('walks INTRO-1 → promise → narrator → pick-book → Leaf 1, and is not yet seen when it gets there', async () => {
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
 
-    await waitFor(() => {
-      expect(view.getByTestId('onboarding-promise-skip')).toBeOnTheScreen();
+      // One test for the whole order, through the real gate — not the screens in isolation.
+      await skipIntro(view);
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-screen')).toBeOnTheScreen();
+      });
+      expect(view.queryByTestId('onboarding-pickbook-screen')).toBeNull();
+      await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+      // Continuing past the narrator does NOT end the onboarding of a new account — that
+      // is the change from ONBOARD-1, where this was the moment it was marked seen.
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-pickbook-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      await fireEvent.press(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
+
+      // The server-computed resume target (`nextLeafId: 'l1'` on the freshly-added
+      // Track), not `listLeaves(trackId)[0]`.
+      await waitFor(() => {
+        expect(view.getByTestId('leaf-player')).toBeOnTheScreen();
+      });
+      expect(view.queryByTestId('explore-screen')).toBeNull();
+
+      // Read from the store after the reset, not inferred from the route: the seen flag
+      // is *still unset* with the reader inside their first Leaf.
+      await expect(getOnboardingSeen()).resolves.toBe(false);
     });
 
-    await fireEvent.press(view.getByTestId('onboarding-promise-skip'));
+    it('ends at the closing: finishing the Leaf and tapping Done shows the welcome and marks seen', async () => {
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
 
-    await waitFor(() => {
-      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      await skipIntro(view);
+      await throughPromiseAndNarrator(view);
+      await fireEvent.press(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
+      await finishTheLeaf();
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      await fireEvent.press(view.getByTestId('leaf-done'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('wrap-up-headline')).toHaveTextContent(CLOSING_COPY.headline);
+      });
+      await waitFor(async () => {
+        await expect(getOnboardingSeen()).resolves.toBe(true);
+      });
+
+      // Its own Done lands on the tabs.
+      await fireEvent.press(view.getByTestId('wrap-up-exit'));
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
     });
-    // Explore's first-run state (ONBOARD-1's skip ruling) — an empty Library, however
-    // it got that way, lands on the same designed state, never a blank catalogue.
-    expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
-    await expect(getOnboardingSeen()).resolves.toBe(true);
+
+    it('shows none of it again after the reader force-quits and reopens', async () => {
+      const fetchFn = onboardingBackend([]);
+      const first = await renderApp({ refreshToken: 'stored', fetchFn });
+
+      await skipIntro(first);
+      await throughPromiseAndNarrator(first);
+      await fireEvent.press(first.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
+      await finishTheLeaf();
+      await fireEvent.press(first.getByTestId('leaf-done'));
+      await waitFor(() => {
+        expect(first.getByTestId('wrap-up-headline')).toBeOnTheScreen();
+      });
+      await waitFor(async () => {
+        await expect(getOnboardingSeen()).resolves.toBe(true);
+      });
+
+      await cleanup();
+      const reopened = await renderApp({ refreshToken: 'stored', fetchFn });
+
+      await waitFor(() => {
+        expect(reopened.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      expect(reopened.queryByTestId('intro-screen')).toBeNull();
+      expect(reopened.queryByTestId('onboarding-promise-screen')).toBeNull();
+      expect(reopened.queryByTestId('onboarding-narrator-screen')).toBeNull();
+    });
   });
 
-  it('walks a new reader through all three beats into Leaf 1, not the catalogue', async () => {
-    const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+  describe('the narrator beat, per variant (Tier A)', () => {
+    it('narratorOnly: Continue marks seen and lands on Explore, not the player', async () => {
+      const view = await renderApp({
+        refreshToken: 'stored',
+        fetchFn: onboardingBackend([LIBRARY_ENTRY]),
+      });
 
-    await waitFor(() => {
-      expect(view.getByTestId('onboarding-promise-screen')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
 
-    await waitFor(() => {
-      expect(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`)).toBeOnTheScreen();
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(true);
     });
-    await fireEvent.press(view.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
 
-    await waitFor(() => {
-      expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+    it('does not show an existing account the narrator beat again once it has continued', async () => {
+      // The bug this package is most likely to ship: an existing account whose seen flag
+      // is never written meets the narrator beat on every launch.
+      const fetchFn = onboardingBackend([LIBRARY_ENTRY]);
+      const first = await renderApp({ refreshToken: 'stored', fetchFn });
 
-    // The server-computed resume target (`nextLeafId: 'l1'` on the freshly-added
-    // Track), not `listLeaves(trackId)[0]` — see `OnboardingNarratorScreen`'s own
-    // comment on `finish`.
-    await waitFor(() => {
-      expect(view.getByTestId('leaf-player')).toBeOnTheScreen();
+      await waitFor(() => {
+        expect(first.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
+      });
+      await fireEvent.press(first.getByTestId('onboarding-narrator-continue'));
+      await waitFor(() => {
+        expect(first.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+
+      await cleanup();
+      const reopened = await renderApp({ refreshToken: 'stored', fetchFn });
+
+      await waitFor(() => {
+        expect(reopened.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      expect(reopened.queryByTestId('onboarding-narrator-screen')).toBeNull();
     });
-    expect(view.queryByTestId('explore-screen')).toBeNull();
-    await expect(getOnboardingSeen()).resolves.toBe(true);
   });
 
-  it('lands an existing reader on Tabs, not the player, after choosing a narrator', async () => {
-    const view = await renderApp({
-      refreshToken: 'stored',
-      fetchFn: onboardingBackend([LIBRARY_ENTRY]),
+  describe('a reader who quits mid-first-Leaf', () => {
+    it('meets the narrator beat once more on the next launch, is marked seen at Continue, and never sees the closing', async () => {
+      // Their book is already in the Library, so the gate resolves `narratorOnly` — an
+      // accepted consequence of having no "onboarding in progress" state (see the table
+      // in `useOnboardingGate`), and this pins it so it stays the behaviour rather than
+      // becoming a surprise.
+      const fetchFn = onboardingBackend([]);
+      const first = await renderApp({ refreshToken: 'stored', fetchFn });
+
+      await skipIntro(first);
+      await throughPromiseAndNarrator(first);
+      await fireEvent.press(first.getByTestId(`onboarding-pickbook-${REAL_TRACK.id}-choose`));
+      await waitFor(() => {
+        expect(first.getByTestId('leaf-player')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      // Force-quit mid-Leaf.
+      await cleanup();
+      const reopened = await renderApp({ refreshToken: 'stored', fetchFn });
+
+      await waitFor(() => {
+        expect(reopened.getByTestId('onboarding-narrator-screen')).toBeOnTheScreen();
+      });
+      expect(reopened.queryByTestId('intro-screen')).toBeNull();
+      expect(reopened.queryByTestId('onboarding-promise-screen')).toBeNull();
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      await fireEvent.press(reopened.getByTestId('onboarding-narrator-continue'));
+
+      await waitFor(() => {
+        expect(reopened.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(true);
+      expect(reopened.queryByTestId('wrap-up-screen')).toBeNull();
+    });
+  });
+
+  describe('skipping', () => {
+    it('on the promise: marks seen immediately and lands on Explore’s first-run state', async () => {
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await skipIntro(view);
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-skip')).toBeOnTheScreen();
+      });
+
+      await fireEvent.press(view.getByTestId('onboarding-promise-skip'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      // Explore's first-run state (ONBOARD-1's skip ruling) — an empty Library, however
+      // it got that way, lands on the same designed state, never a blank catalogue.
+      expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
+      await expect(getOnboardingSeen()).resolves.toBe(true);
     });
 
-    await waitFor(() => {
-      expect(view.getByTestId('onboarding-narrator-continue')).toBeOnTheScreen();
-    });
-    await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+    it('on pick-book: marks seen immediately and lands on Explore’s first-run state', async () => {
+      // ONBOARD-1 never tested this skip — a handler identical to the promise's, which
+      // was. It goes through the real gate here.
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
 
-    await waitFor(() => {
-      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      await skipIntro(view);
+      await throughPromiseAndNarrator(view);
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      await fireEvent.press(view.getByTestId('onboarding-pickbook-skip'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
+      await expect(getOnboardingSeen()).resolves.toBe(true);
     });
-    await expect(getOnboardingSeen()).resolves.toBe(true);
   });
 });

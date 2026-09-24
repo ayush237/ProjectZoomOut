@@ -11,8 +11,9 @@ export type IntroSeenStatus = 'restoring' | 'unseen' | 'seen';
 
 export interface UseIntroSeenResult {
   readonly status: IntroSeenStatus;
-  /** Both exit paths call this — finishing and skipping. Flips local state immediately
-   *  and persists in the background, the same split `SoundProvider.setEnabled` uses. */
+  /** The pre-intro's one exit calls this (INTRO-1 had two — finishing and skipping —
+   *  before it moved behind sign-up). Flips local state immediately and persists in the
+   *  background, the same split `SoundProvider.setEnabled` uses. */
   readonly markSeen: () => void;
 }
 

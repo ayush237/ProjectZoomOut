@@ -6,6 +6,7 @@ import type {
   CompletionOutcome,
   DeliveredLeaf,
   LeafProgress,
+  NarratorSamples,
   ReaderStanding,
   SessionSummary,
   Track,
@@ -260,6 +261,17 @@ export class ApiClient {
     );
 
     return body.leaves;
+  }
+
+  /**
+   * The two narrators' self-introduction clips (ONBOARD-3), for the onboarding narrator
+   * beat: a URL per narrator, already resolved against the media host.
+   *
+   * Not tied to any Track or Leaf, and answered without asking the CMS anything — the
+   * beat has to work whichever books exist or have narration of their own.
+   */
+  public async getNarratorSamples(): Promise<NarratorSamples> {
+    return this.send<NarratorSamples>('GET', '/content/narrator-samples', undefined, true);
   }
 
   /* ------------------------------------------------------------------ */

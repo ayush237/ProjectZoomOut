@@ -59,6 +59,13 @@ function safely(call: () => void): boolean {
  * keys its child on it — sidesteps the question entirely: a new key means a new
  * player, created with the right source from the start.
  *
+ * **`entry` is typed as just the URL it reads (ONBOARD-3).** It was a whole `AudioRef`,
+ * but nothing here has ever touched `narrator`, `durationSeconds` or `textDigest` — only
+ * `entry.url` reaches the player. The onboarding greetings have a URL and nothing else
+ * honest to say about themselves (no slide text to digest, a length that changes on a
+ * re-take), and a wider type would have forced a caller to invent the rest. An
+ * `AudioRef` still satisfies it, so no existing caller changes.
+ *
  * **"Is playing" is read from the player, never tracked separately.** There is no local
  * flag for it that could drift from what `expo-audio` actually did — the control's icon
  * and label are a direct function of `useAudioPlayerStatus`, so an OS interruption (a
@@ -74,7 +81,7 @@ function safely(call: () => void): boolean {
  * covers both. `attemptFailed` below is local state for the first; `status.error` is
  * read live for the second; `playbackFailed` is true if either is.
  */
-export function useNarration(entry: AudioRef): Narration {
+export function useNarration(entry: Pick<AudioRef, 'url'>): Narration {
   const player = useAudioPlayer(entry.url);
   const status = useAudioPlayerStatus(player);
   const [attemptFailed, setAttemptFailed] = useState(false);

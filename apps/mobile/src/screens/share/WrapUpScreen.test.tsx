@@ -9,7 +9,7 @@ import { MemoryTokenStore } from '../../api/tokenStore';
 import { AuthProvider } from '../../auth/AuthProvider';
 import { ThemeProvider } from '../../design';
 import type { AppStackParamList } from '../../navigation/types';
-import { WrapUpScreen, wrapUpStats } from './WrapUpScreen';
+import { CLOSING_COPY, WrapUpScreen, wrapUpStats } from './WrapUpScreen';
 
 /**
  * Tier B: one happy path per state, plus the pure stat selector at Tier A.
@@ -155,6 +155,7 @@ const Stack = createNativeStackNavigator<AppStackParamList>();
 
 async function renderWrapUp(
   backend: FakeBackend,
+  options: { readonly onboarding?: true; readonly markSeen?: jest.Mock } = {},
 ): Promise<ReturnType<typeof render> extends Promise<infer R> ? R : never> {
   backend.on('/auth/refresh', () =>
     json({ userId: PROFILE.id, accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tokenType: 'Bearer' }),
@@ -175,9 +176,19 @@ async function renderWrapUp(
     </SafeAreaProvider>
   );
 
+  const markSeen = options.markSeen ?? jest.fn();
+
   const view = await render(
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="WrapUp" component={WrapUpScreen} />
+      {/* `initialParams` omitted entirely when there is no flag, not passed as `{}`:
+          every ordinary arrival (`navigate('WrapUp')`) leaves `route.params` undefined,
+          and that is the shape the screen has to handle. */}
+      <Stack.Screen
+        name="WrapUp"
+        {...(options.onboarding === true ? { initialParams: { onboarding: true as const } } : {})}
+      >
+        {(props) => <WrapUpScreen {...props} markSeen={markSeen} />}
+      </Stack.Screen>
     </Stack.Navigator>,
     { wrapper },
   );
@@ -239,5 +250,88 @@ describe('WrapUpScreen', () => {
 
     expect(getByText('Nothing yet today')).toBeTruthy();
     expect(queryByTestId('wrap-up-stats')).toBeNull();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The closing — a new reader's first Leaf has just ended (ONBOARD-3)          */
+/* -------------------------------------------------------------------------- */
+
+describe('WrapUpScreen as the closing', () => {
+  it('shows the welcome message in place of the ordinary framing', async () => {
+    const backend = new FakeBackend().on('/progress/summary', () => json(summaryFixture(false)));
+    const { getByTestId, queryByText } = await renderWrapUp(backend, { onboarding: true });
+
+    expect(getByTestId('wrap-up-eyebrow')).toHaveTextContent(CLOSING_COPY.eyebrow);
+    expect(getByTestId('wrap-up-headline')).toHaveTextContent(CLOSING_COPY.headline);
+    expect(getByTestId('wrap-up-message')).toHaveTextContent(CLOSING_COPY.body ?? '');
+    // Not alongside it — *in place of* it.
+    expect(queryByText('Session complete')).toBeNull();
+    expect(queryByText('That is a session')).toBeNull();
+  });
+
+  it('marks onboarding seen on mount, exactly once', async () => {
+    // Tier A. The reader has finished their first Leaf and been shown the close.
+    const markSeen = jest.fn();
+    const backend = new FakeBackend().on('/progress/summary', () => json(summaryFixture(false)));
+
+    await renderWrapUp(backend, { onboarding: true, markSeen });
+
+    expect(markSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks seen even when the summary fails to load, so the narrator beat cannot return', async () => {
+    // Tier A. On mount, not when the message renders: a reader who has finished their
+    // first Leaf must not be left un-marked by a slow or failing summary, or the next
+    // launch resolves them `narratorOnly` and shows them the narrator beat again.
+    const markSeen = jest.fn();
+    const backend = new FakeBackend().on('/progress/summary', () =>
+      json({ error: { code: 'INTERNAL', message: 'boom' } }, 500),
+    );
+
+    const { getByTestId, queryByTestId } = await renderWrapUp(backend, { onboarding: true, markSeen });
+
+    expect(getByTestId('wrap-up-error')).toBeTruthy();
+    expect(queryByTestId('wrap-up-eyebrow')).toBeNull();
+    expect(markSeen).toHaveBeenCalledTimes(1);
+  });
+
+  it('is unchanged, and marks nothing, when reached any other way', async () => {
+    // Tier A, the other direction: Journey, or the cap's "See your day" for an ordinary
+    // reader, carry no param and must see exactly what they always saw.
+    const markSeen = jest.fn();
+    const backend = new FakeBackend().on('/progress/summary', () => json(summaryFixture(false)));
+
+    const { getByTestId, queryByTestId } = await renderWrapUp(backend, { markSeen });
+
+    expect(getByTestId('wrap-up-eyebrow')).toHaveTextContent('Session complete');
+    expect(getByTestId('wrap-up-headline')).toHaveTextContent('That is a session');
+    expect(queryByTestId('wrap-up-message')).toBeNull();
+    expect(getByTestId('wrap-up-exit')).toHaveTextContent('Back to Journey');
+    expect(markSeen).not.toHaveBeenCalled();
+  });
+
+  it('is one layout with the ordinary screen: every other string in the tree is identical', async () => {
+    // WP25's principle for this screen — a copy-only diff — held for the closing too.
+    // Once the closing's own words (and the exit's label) are set aside on both sides,
+    // what is left must match string for string; a second, accidental fork — the stats
+    // row branching on `onboarding`, say — would leave an unmatched string behind.
+    const ordinary = await renderWrapUp(
+      new FakeBackend().on('/progress/summary', () => json(summaryFixture(false))),
+    );
+    const closing = await renderWrapUp(
+      new FakeBackend().on('/progress/summary', () => json(summaryFixture(false))),
+      { onboarding: true },
+    );
+
+    const ordinaryTexts = collectText(ordinary.toJSON());
+    const closingTexts = collectText(closing.toJSON());
+
+    const closingWords = [CLOSING_COPY.eyebrow, CLOSING_COPY.headline, CLOSING_COPY.body ?? '', 'Done'];
+    const ordinaryWords = ['Session complete', 'That is a session', 'Back to Journey'];
+
+    expect(closingWords.reduce(withoutOne, closingTexts)).toEqual(
+      ordinaryWords.reduce(withoutOne, ordinaryTexts),
+    );
   });
 });

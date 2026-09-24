@@ -41,6 +41,8 @@ export function LeafPlayerScreen(): React.JSX.Element {
   const api = useApi();
   const route = useRoute<PlayerRoute>();
   const { leafId, trackTitle } = route.params;
+  // Present only when the first-run flow opened this Leaf (ONBOARD-3) — see `types.ts`.
+  const onboarding = route.params.onboarding === true;
 
   const load = useCallback(async (): Promise<DeliveredLeaf> => {
     /**
@@ -79,17 +81,28 @@ export function LeafPlayerScreen(): React.JSX.Element {
    * fresh session rather than the previous one's slide index and answer state. Without
    * the key, `useLeafSession`'s `useState` initialisers would not re-run.
    */
-  return <LeafSessionView key={leafId} leaf={resource.data} leafId={leafId} title={trackTitle} />;
+  return (
+    <LeafSessionView
+      key={leafId}
+      leaf={resource.data}
+      leafId={leafId}
+      title={trackTitle}
+      onboarding={onboarding}
+    />
+  );
 }
 
 function LeafSessionView({
   leaf,
   leafId,
   title,
+  onboarding,
 }: {
   readonly leaf: DeliveredLeaf;
   readonly leafId: string;
   readonly title: string;
+  /** This is the reader's first Leaf, opened by the first-run flow. */
+  readonly onboarding: boolean;
 }): React.JSX.Element {
   const theme = useTheme();
   const api = useApi();
@@ -101,6 +114,29 @@ function LeafSessionView({
   const leave = useCallback(() => {
     navigation.goBack();
   }, [navigation]);
+
+  /**
+   * Replaces the player with the wrap-up (WP9), carrying the first-run flag when there is
+   * one (ONBOARD-3).
+   *
+   * `pop` then `navigate` so the reader lands on the wrap-up with the tab they came from
+   * underneath — going back from the summary must not drop them into a finished Leaf they
+   * have already left. **The flag is what turns that summary into the closing message**;
+   * an ordinary reader passes no param and sees `WrapUp` exactly as before. It travels as
+   * a route param rather than being worked out by `WrapUp` because nothing `WrapUp` can
+   * read distinguishes "the first Leaf just ended" from "an ordinary day just ended" — and
+   * not from `first-wrap`, which unlocks when the reader *taps* wrap, after the screen has
+   * already opened.
+   */
+  const openWrapUp = useCallback(() => {
+    navigation.pop();
+
+    if (onboarding) {
+      navigation.navigate('WrapUp', { onboarding: true });
+    } else {
+      navigation.navigate('WrapUp');
+    }
+  }, [navigation, onboarding]);
 
   /**
    * The correction channel, available from every slide (WP10).
@@ -160,18 +196,20 @@ function LeafSessionView({
           trackCompleted={session.trackCompleted}
           trackId={leaf.trackId}
           unlocked={session.unlocked}
-          onDone={leave}
-          onWrapUp={() => {
-            /**
-             * Replaces the player rather than stacking on it (WP9).
-             *
-             * `pop` then `navigate` so the reader lands on the wrap-up with the tab they
-             * came from underneath — going back from the summary must not drop them into
-             * a finished Leaf they have already left.
-             */
-            navigation.pop();
-            navigation.navigate('WrapUp');
-          }}
+          /**
+           * **Which exits carry the closing, stated rather than left implicit (ONBOARD-3).**
+           * For a first-Leaf reader, *Done*, *Wrap up today* and the cap's *See your day*
+           * all open `WrapUp` with the flag — every exit that reaches `WrapUp` carries it.
+           * *Share this badge* pushes over this screen and comes back to it, so the reader
+           * still ends on one of those. Two exits do not, by design: *See your finished
+           * book* (`TrackComplete`), reachable only if the first Leaf finished a whole
+           * book — no pilot Track is one Leaf long — and Android's hardware back, which
+           * pops the player like a quit. Neither marks seen; the reader meets the narrator
+           * beat once more next launch and is never shown the closing (the same accepted
+           * outcome as quitting mid-Leaf). An ordinary reader's *Done* is `goBack`, unchanged.
+           */
+          onDone={onboarding ? openWrapUp : leave}
+          onWrapUp={openWrapUp}
           onShareAchievement={(achievement) => {
             navigation.navigate('AchievementShare', achievement);
           }}

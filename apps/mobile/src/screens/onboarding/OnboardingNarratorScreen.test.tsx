@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, userEvent, waitFor } from '@testing-libra
 import type { ReactNode } from 'react';
 import { Text as RNText } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { NavigationContainer, useRoute, type RouteProp } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, type Metrics } from 'react-native-safe-area-context';
 
@@ -13,12 +13,17 @@ import { ThemeProvider } from '../../design';
 import type { AppStackParamList } from '../../navigation/types';
 import { fakeAudioPlayers, resetFakeAudio } from '../../testing/fakeExpoAudio';
 import { OnboardingNarratorScreen } from './OnboardingNarratorScreen';
+import type { OnboardingVariant } from './useOnboardingGate';
 
 /**
- * Beat 3, Tier B: one happy path per navigation outcome, plus the one interaction that
- * is new here and not covered by `useNarration`'s own tests — that a card plays a
- * *specific* narrator's sample regardless of the reader's stored preference, since
- * `NarrationControl` (built on the same hook) cannot do that at all.
+ * The narrator beat, Tier B: the greeting comes from the samples path and not from any
+ * book, the names are Lara and Druv, optionality is in text, and one voice plays at a
+ * time. The two variants' **Continue** semantics are Tier A and are pinned twice: here on
+ * the screen, and through `RootNavigator`'s real gate in `navigation.test.tsx`.
+ *
+ * **No fixture keys on a Payload Media id, and none asserts on the audio's bytes or
+ * duration** — the samples stub carries URLs and nothing else, because that is all the
+ * endpoint returns.
  */
 
 type ResettableSecureStore = typeof SecureStore & { __reset: () => void };
@@ -27,6 +32,9 @@ const METRICS: Metrics = {
   insets: { top: 47, left: 0, right: 0, bottom: 34 },
   frame: { x: 0, y: 0, width: 393, height: 852 },
 };
+
+const FEMALE_URL = 'https://cdn.test/api/media/file/narrator-greeting-female.mp3';
+const MALE_URL = 'https://cdn.test/api/media/file/narrator-greeting-male.mp3';
 
 beforeEach(() => {
   resetFakeAudio();
@@ -57,36 +65,8 @@ const PROFILE = {
   updatedAt: '2026-08-11T12:00:00.000Z',
 };
 
-const SAMPLE_TRACK = {
-  id: 't1',
-  bookTitle: 'Ikigai: The Japanese Secret to a Long and Happy Life',
-  author: 'An Author',
-  coverUrl: 'https://example.test/cover.png',
-  description: 'A description.',
-  isPlaceholder: false,
-};
-
-const SAMPLE_LEAF = {
-  id: 'l1',
-  trackId: 't1',
-  orderIndex: 0,
-  title: 'Leaf One',
-  summary: {
-    body: 'Summary.',
-    audio: [
-      { narrator: 'female', url: 'https://cdn.test/female.mp3', durationSeconds: 10, textDigest: 'a'.repeat(64) },
-      { narrator: 'male', url: 'https://cdn.test/male.mp3', durationSeconds: 10, textDigest: 'b'.repeat(64) },
-    ],
-  },
-  scenario: { prompt: 'Prompt?', options: [] },
-  payoff: null,
-  payoffUnlocked: false,
-  stickyNotes: { notes: [] },
-  takeaway: { body: 'Takeaway.' },
-  sourceReferences: [],
-};
-
 class FakeBackend {
+  public readonly requested: string[] = [];
   private readonly routes = new Map<string, () => Response>();
 
   public on(path: string, handler: () => Response): this {
@@ -96,6 +76,7 @@ class FakeBackend {
 
   public readonly fetch: typeof fetch = (input) => {
     const url = urlOf(input);
+    this.requested.push(url);
 
     for (const [path, handler] of this.routes) {
       if (url.includes(path)) {
@@ -107,36 +88,32 @@ class FakeBackend {
   };
 }
 
-function baseBackend(libraryEntries: unknown[] = []): FakeBackend {
+/**
+ * Answers auth and the samples path, and **nothing else** — no Tracks, no Leaves. Anything
+ * the screen asked of the catalogue would 404 and show; that the beat works on this is the
+ * "requires no Track to have narration" criterion, made structural.
+ */
+function samplesBackend(): FakeBackend {
   return new FakeBackend()
     .on('/auth/refresh', () =>
       json({ userId: PROFILE.id, accessToken: 'access', refreshToken: 'refresh', expiresIn: 900, tokenType: 'Bearer' }),
     )
     .on('/users/me', () => json(PROFILE))
-    .on('/content/tracks/t1/leaves', () =>
-      json({ leaves: [{ id: 'l1', trackId: 't1', orderIndex: 0, title: 'Leaf One', isPlaceholder: false }] }),
-    )
-    .on('/content/leaves/l1', () => json(SAMPLE_LEAF))
-    .on('/content/tracks', () => json({ tracks: [SAMPLE_TRACK], page: 1, totalPages: 1, totalTracks: 1 }))
-    .on('/library', () => json({ entries: libraryEntries }));
+    .on('/content/narrator-samples', () =>
+      json({ female: { url: FEMALE_URL }, male: { url: MALE_URL } }),
+    );
 }
 
-/** Stands in for wherever "Continue" lands — Tabs or LeafPlayer alike — and says which. */
+/** Stands in for wherever "Continue" lands, and says which. */
 function StubDestination({ label }: { readonly label: string }): React.JSX.Element {
   return <RNText testID="stub-destination">{label}</RNText>;
-}
-
-function StubPlayer(): React.JSX.Element {
-  const route = useRoute<RouteProp<AppStackParamList, 'LeafPlayer'>>();
-
-  return <RNText testID="stub-player">{`${route.params.leafId}:${route.params.trackId}`}</RNText>;
 }
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 async function renderNarrator(
   backend: FakeBackend,
-  pickedTrack: { readonly id: string; readonly title: string } | undefined,
+  variant: OnboardingVariant,
   markSeen: () => void = jest.fn(),
 ): Promise<ReturnType<typeof render> extends Promise<infer R> ? R : never> {
   const wrapper = ({ children }: { children: ReactNode }): React.JSX.Element => (
@@ -150,24 +127,12 @@ async function renderNarrator(
   );
 
   const view = await render(
-    <Stack.Navigator
-      screenOptions={{ headerShown: false }}
-      initialRouteName="OnboardingNarrator"
-    >
-      {/* `initialParams` omitted entirely, not passed as `{}`, when there is no picked
-          Track — `route.params` is `undefined` in that shape, not an empty object,
-          which is exactly the distinction `OnboardingNarratorScreen` has to handle
-          (`AppStack`'s real `initialRouteName="OnboardingNarrator"` carries no
-          `initialParams` either). A `{}` here would test a condition the app never
-          actually produces. */}
-      <Stack.Screen
-        name="OnboardingNarrator"
-        {...(pickedTrack === undefined ? {} : { initialParams: { pickedTrack } })}
-      >
-        {(props) => <OnboardingNarratorScreen {...props} markSeen={markSeen} />}
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="OnboardingNarrator">
+      <Stack.Screen name="OnboardingNarrator">
+        {(props) => <OnboardingNarratorScreen {...props} variant={variant} markSeen={markSeen} />}
       </Stack.Screen>
       <Stack.Screen name="Tabs">{() => <StubDestination label="tabs" />}</Stack.Screen>
-      <Stack.Screen name="LeafPlayer" component={StubPlayer} />
+      <Stack.Screen name="OnboardingPickBook">{() => <StubDestination label="pick-book" />}</Stack.Screen>
     </Stack.Navigator>,
     { wrapper },
   );
@@ -179,55 +144,110 @@ async function renderNarrator(
   return view;
 }
 
-describe('OnboardingNarratorScreen', () => {
-  it('plays the female card’s own sample, regardless of the stored preference', async () => {
-    // The reason `useNarration` had to be exported directly (see `audio/index.ts`):
-    // `NarrationControl` would have picked the *stored* narrator's clip, which
-    // defaults to male, not whichever card the reader taps.
-    const user = userEvent.setup();
-    await renderNarrator(baseBackend(), { id: 't1', title: SAMPLE_TRACK.bookTitle });
+async function untilCardsShown(): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByTestId('onboarding-narrator-female')).toBeTruthy();
+  });
+}
 
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-narrator-female')).toBeTruthy();
-    });
+function playerFor(url: string): ReturnType<typeof fakeAudioPlayers>[number] {
+  const player = fakeAudioPlayers().find((entry) => entry.source === url);
+
+  if (player === undefined) {
+    throw new Error(`no player was created for ${url}`);
+  }
+
+  return player;
+}
+
+describe('OnboardingNarratorScreen — the greetings', () => {
+  it('plays the tapped narrator’s own greeting, regardless of the stored preference', async () => {
+    // The reason `useNarration` is exported on its own (see `audio/index.ts`):
+    // `NarrationControl` would have picked the *stored* narrator's clip, which defaults
+    // to male, not whichever card the reader taps.
+    const user = userEvent.setup();
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
     await user.press(screen.getByTestId('onboarding-narrator-female'));
 
     await waitFor(() => {
-      const player = fakeAudioPlayers().find((entry) => entry.source === 'https://cdn.test/female.mp3');
-      expect(player?.play).toHaveBeenCalledTimes(1);
+      expect(playerFor(FEMALE_URL).play).toHaveBeenCalledTimes(1);
     });
+    expect(playerFor(MALE_URL).play).not.toHaveBeenCalled();
   });
 
-  it('sends a picked Track into LeafPlayer at its resume target, not Tabs', async () => {
+  it('plays one voice at a time — tapping the other card stops the first', async () => {
+    // Two five-second hellos talking over each other is not an introduction, and the
+    // natural way to compare two voices is to tap one and then the other.
     const user = userEvent.setup();
-    const libraryEntries = [
-      {
-        track: SAMPLE_TRACK,
-        addedAt: '2026-09-01T00:00:00.000Z',
-        status: 'active',
-        progress: { trackId: 't1', totalLeaves: 1, completedLeaves: 0, nextLeafId: 'l1', isComplete: false },
-      },
-    ];
-    await renderNarrator(baseBackend(libraryEntries), { id: 't1', title: SAMPLE_TRACK.bookTitle });
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
+    await user.press(screen.getByTestId('onboarding-narrator-female'));
+    await waitFor(() => {
+      expect(playerFor(FEMALE_URL).playing).toBe(true);
+    });
+
+    await user.press(screen.getByTestId('onboarding-narrator-male'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('onboarding-narrator-continue')).toBeTruthy();
+      expect(playerFor(MALE_URL).playing).toBe(true);
     });
-    await user.press(screen.getByTestId('onboarding-narrator-continue'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('stub-player')).toHaveTextContent('l1:t1');
-    });
+    expect(playerFor(FEMALE_URL).playing).toBe(false);
   });
 
-  it('sends an existing reader (no picked Track) to Tabs, never the player', async () => {
+  it('sources both greetings from the samples path and asks the catalogue for nothing', async () => {
+    // The stub serves no Tracks and no Leaves at all, so a screen that reached for a
+    // book's narration (as this beat did before ONBOARD-3) would have nothing to play.
+    const backend = samplesBackend();
+    await renderNarrator(backend, 'full');
+    await untilCardsShown();
+
+    expect(backend.requested.some((url) => url.includes('/content/narrator-samples'))).toBe(true);
+    expect(backend.requested.some((url) => /\/content\/(tracks|leaves)/u.test(url))).toBe(false);
+    expect(fakeAudioPlayers().map((player) => player.source).sort()).toEqual([FEMALE_URL, MALE_URL].sort());
+  });
+});
+
+describe('OnboardingNarratorScreen — what the reader is told', () => {
+  it('names the narrators Lara and Druv, never Female or Male, never a provider voice id', async () => {
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
+    expect(screen.getByText('Lara')).toBeTruthy();
+    expect(screen.getByText('Druv')).toBeTruthy();
+    // Visible text: no bare "Female"/"Male" and neither provider voice id anywhere.
+    expect(screen.queryByText(/\b(fe)?male\b/iu)).toBeNull();
+    expect(screen.queryByText(/achernar|sadaltager/iu)).toBeNull();
+
+    // The accessibility labels are what a screen reader says, and follow the same rule.
+    const labels = ['female', 'male'].map(
+      (narrator) => screen.getByTestId(`onboarding-narrator-${narrator}`).props['accessibilityLabel'] as string,
+    );
+    expect(labels[0]).toMatch(/^Lara, /u);
+    expect(labels[1]).toMatch(/^Druv, /u);
+    for (const label of labels) {
+      expect(label).not.toMatch(/achernar|sadaltager/iu);
+    }
+  });
+
+  it('says in text that narration is optional, not only in what a narrator says aloud', async () => {
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
+    expect(screen.getByTestId('onboarding-narrator-optional')).toHaveTextContent(/narration is optional/iu);
+  });
+});
+
+describe('OnboardingNarratorScreen — Continue, per variant (Tier A)', () => {
+  it('narratorOnly: marks seen exactly once and lands on Tabs', async () => {
+    // An existing account: this beat is the whole of its onboarding.
     const user = userEvent.setup();
     const markSeen = jest.fn();
-    await renderNarrator(baseBackend(), undefined, markSeen);
+    await renderNarrator(samplesBackend(), 'narratorOnly', markSeen);
+    await untilCardsShown();
 
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-narrator-continue')).toBeTruthy();
-    });
     await user.press(screen.getByTestId('onboarding-narrator-continue'));
 
     await waitFor(() => {
@@ -236,13 +256,27 @@ describe('OnboardingNarratorScreen', () => {
     expect(markSeen).toHaveBeenCalledTimes(1);
   });
 
-  it('persists the chosen narrator through the same store Profile reads', async () => {
+  it('full: goes on to pick-book and does not mark seen', async () => {
+    // A new account is not done: they still have to choose a book and read a Leaf.
+    // Marking seen here is ONBOARD-1's behaviour, and the exact change this package makes.
     const user = userEvent.setup();
-    await renderNarrator(baseBackend(), undefined);
+    const markSeen = jest.fn();
+    await renderNarrator(samplesBackend(), 'full', markSeen);
+    await untilCardsShown();
+
+    await user.press(screen.getByTestId('onboarding-narrator-continue'));
 
     await waitFor(() => {
-      expect(screen.getByTestId('onboarding-narrator-female')).toBeTruthy();
+      expect(screen.getByTestId('stub-destination')).toHaveTextContent('pick-book');
     });
+    expect(markSeen).not.toHaveBeenCalled();
+  });
+
+  it('persists the chosen narrator through the same store Profile reads', async () => {
+    const user = userEvent.setup();
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
     await user.press(screen.getByTestId('onboarding-narrator-female'));
     await user.press(screen.getByTestId('onboarding-narrator-continue'));
 
