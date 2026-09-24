@@ -34,6 +34,23 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
+### Handoff addendum: 2026-09-24 — ONBOARD-3: what ONBOARD-2 changed
+
+*Manager. Read alongside the ONBOARD-3 handoff below; **where they differ, this wins.** Written after ONBOARD-2's completion entry (Completions section, top) — read its "For ONBOARD-3: the references" section.*
+
+**1. Build against the URLs, never the ids — and you can start now.** The stable relative URLs are `/api/media/file/narrator-greeting-female.mp3` and `/api/media/file/narrator-greeting-male.mp3` (public, no auth, `audio/mpeg`, `Range`/`206` — the same route VO-3 plays from; re-verified 2026-09-24 with a `GET`, since `HEAD` returns 404 on Payload's file route). Media 348/349 behind them today are a **superseded** take whose clips say the wrong names; the founder deletes them and a new pair goes up under the *same filenames*, so **the URLs survive and the ids do not**. Nothing you write depends on the ear checks still outstanding (pace, how "Druv" sounds) — a re-take replaces the file at the same URL. **No test or fixture may key on a Media id or assert anything about the audio's bytes or duration.** The one thing that waits is your **device-gate item for the narrator beat** ("each narrator's self-introduction audible and distinct"): do not observe it until ONBOARD-2's completion entry says the swap has happened (a follow-up entry supersedes its "Not finished" status). Until then, do everything else and report that one item as pending on the swap.
+
+**2. The narrators have names: Lara (female) and Druv (male).** Ruled by the founder 2026-09-24. They are ZoomOut's own vocabulary; **Achernar and Sadaltager are the TTS provider's voice ids and never appear on screen or in an accessibility label.** Today there are **three separate copies** of the reader-facing label map, all saying "Female"/"Male": `ProfileScreen.tsx:268`, `OnboardingNarratorScreen.tsx:23`, `NarrationControl.tsx:13`. **Consolidate to one** — a single exported map in `packages/shared` beside `NARRATOR_IDS`, consumed by all three — rather than editing three literals. That widens this package's scope to `packages/shared` (one constant) and to the label map in `ProfileScreen.tsx` and `NarrationControl.tsx`; the `NarrationControl` change is **labels only**, and the "how it works is out of scope" line above still holds. **Profile has no sample to play**, so a bare "Lara"/"Druv" would be a blind choice there — keep a descriptor ("Female voice"/"Male voice") beside the name wherever a reader chooses without hearing one, and say what you did. If the founder later respells a name, it is now one constant.
+
+**3. Don't fabricate values the clips can outgrow.** `AudioRef` asks for `durationSeconds` and `textDigest`. Before deciding the backend path's shape, check what the client's sample preview actually reads from the entry — `selectNarration`'s digest logic exists to match audio to a *slide's* text, which a greeting does not have. If the preview needs only a URL, a narrower return type is more honest than a fabricated `AudioRef`. If it truly needs the fields: the duration is measured from the served bytes (5.04 s / 5.11 s for the Lara/Druv take, **and it may change if the founder retakes**), so do not hardcode it as though it were a constant; `textDigest` is `sha256(script)` as `assets/narration.py:text_digest` computes it, recomputed for the Lara/Druv sentences and not reused from any earlier version of ONBOARD-2's entry. State which you chose.
+
+**Added acceptance criteria:**
+- [ ] Reader-facing narrator names come from **one** shared map consumed by Profile, the onboarding narrator beat and `NarrationControl` — verified by a grep showing no remaining local `NARRATOR_LABELS` map, not by the screens rendering names
+- [ ] Wherever a narrator is named to a reader it reads Lara or Druv — never "Female"/"Male" alone, never a provider voice id — observed on the device in Profile and on the onboarding narrator beat, and pinned by a test for `NarrationControl`'s accessibility label, which cannot be observed on a screen
+- [ ] No test or fixture keys on a Payload Media id, or asserts on the audio's bytes or duration
+
+---
+
 ### Handoff: 2026-09-24 — ONBOARD-2: two narrator self-introduction clips
 
 *Pipeline Manager. **Suggested model: Sonnet** — reuses VO-2's existing, proven generation and upload mechanism for exactly two new clips with fixed scripts; no judgement calls beyond execution.*
