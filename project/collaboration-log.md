@@ -631,7 +631,7 @@ Verify this list against the repository rather than trusting it.
 
 *Manager. Branch `onboard-3-flow-refinement`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `c4ce891`. PR: [#61](https://github.com/ayush237/ProjectZoomOut/pull/61) — the founder merges.*
 
-**Code complete, automated gate green, every guard mutation-checked, and the backend path verified live against real Payload. The interactive device pass — the manual run in both themes that `agents/manager.md` makes mandatory — is NOT done:** the simulator tool needs the founder's per-device grant ("Let Claude use it") and none came. 16 of the 17 acceptance criteria are fully verified; the one left half-done is "observed on the device in Profile and on the narrator beat" — its test half is done (see "What I could not verify").
+**Code complete, automated gate green, every guard mutation-checked, the backend path verified live against real Payload, and the flow walked on a device in both themes** — an iOS simulator, not the founder's Android, and I cannot hear audio, so what is *not* verified is the sound itself (see "What I could not verify"). **All 17 acceptance criteria are verified, with two stated caveats:** criterion 17's `build` passes only once `apps/admin`'s two environment variables are supplied (see the gate row), and the parts of criteria 7 and 15 that need an ear (are the clips audible, and does each say its own name) or an Android phone are not verified. CI on PR #61: 2 passing, 0 failing, mergeable and clean.
 
 | | |
 |---|---|
@@ -639,7 +639,7 @@ Verify this list against the repository rather than trusting it.
 | Tests | shared **80** (was 77, +3) · backend **533** (was 527 per PILOT-1, +6) · admin **204** (unchanged) · mobile **770**, 52 suites (was **735**, 49; +35, reconciled below) |
 | Mutation-checked | **41 deliberate breakages; each caught by the test that claims the guard, none survived.** Wherever two changes could each explain a green test they were reverted as separate reversions (below) |
 | Live verification | Real Payload, real backend from this branch on port 3100, real Postgres (a disposable container): 401 without a token; the body is exactly a URL per narrator on the media host; both URLs serve **the bytes the founder approved by ear** (sha256 identical, checked from the URL the backend hands out); `audio/mpeg`, `accept-ranges: bytes`, `206` on `Range` |
-| Device | **Not done.** See "What I could not verify" — a dedicated simulator, Metro on `:8090`, the backend on `:3100` and two test readers were set up and are ready |
+| Device | **Walked, both themes, on an iOS simulator** (iPhone 17 Pro, iOS 26.3, Expo Go 57.0.9, a dedicated device so nobody's session was touched), against this branch's backend on a disposable Postgres and the real Payload. Every flow the handoff's device gate lists was exercised except the two that need an ear or a phone. Torn down afterwards. The founder's `:3000`, `:3001` and `:8081` were left running and unmodified, and so were their two simulators (I took a screenshot of each to see whether it was in use, and copied Expo Go's app bundle out of one; nothing was changed on either) |
 
 ---
 
@@ -695,22 +695,40 @@ The table is also a comment on `useOnboardingGate.markSeen`, where the next pers
 
 ## What changes when INTRO-1 renders inside a navigator (the handoff asked me to say what I did)
 
-By reading, not by looking: `IntroScreen` is **byte-for-byte unchanged** (`git diff origin/main` on `IntroScreen.tsx`, `introBeats.ts`, `introCamera.ts`, `introFixture.ts`, `introLayers.ts` is empty). Its insets come from the root `SafeAreaProvider` and its geometry from `useWindowDimensions`, neither of which a native-stack screen changes; the route has no header, so it is still full-bleed; its own controls are plain `Pressable`s. What I set on the route: `gestureEnabled: false` (as every onboarding route has), the Reduce Motion transition, and `replace` on exit. Expected visible change: none. **Not observed on a device.**
+By reading, not by looking: `IntroScreen` is **byte-for-byte unchanged** (`git diff origin/main` on `IntroScreen.tsx`, `introBeats.ts`, `introCamera.ts`, `introFixture.ts`, `introLayers.ts` is empty). Its insets come from the root `SafeAreaProvider` and its geometry from `useWindowDimensions`, neither of which a native-stack screen changes; the route has no header, so it is still full-bleed; its own controls are plain `Pressable`s. What I set on the route: `gestureEnabled: false` (as every onboarding route has), the Reduce Motion transition, and `replace` on exit. Expected visible change: none. **Observed on the device:** it renders full-bleed under the status bar in both themes, the four lines crossfade and the amber pulse travels the spine, Skip is there from the first frame and *Get started* replaces it once the last line lands, and both hand off to the promise. I did not put it beside `main` frame for frame, so "no visual difference" rests on the diff being empty plus what I saw, not on a side-by-side.
 
 ## Evidence, by kind
 
 - **Unit / component tests (Jest, Vitest):** everything in the acceptance list except the greps (queries) and the device observation.
 - **Through `RootNavigator`'s real gate and the real flag stores:** INTRO-1 for `full` / never for `narratorOnly` or `seen`; both INTRO-1 exits; the whole order in **one** test; both variants' Continue; skip on the promise and on pick-book; quit-mid-Leaf and force-quit-and-reopen; the closing and its flag. **Through the real player and `AppStack` with `markSeen` as a spy** (so "marks nothing" is observable — against the real gate the flag is already set): the closing in both directions, all three exits.
 - **A query:** the live checks above (401, exact body, sha256 against the approved files, `206`), and the greps — `NARRATOR_LABELS` has **one** definition and three consumers, no local map remains; provider ids appear only in comments in `packages/shared/src/content.ts`; no test I added or changed asserts on greeting bytes, durations or a Media id (the `durationSeconds`/`textDigest` hits are pre-existing slide-narration fixtures).
-- **Looked at on a device:** nothing. See below.
+- **Looked at on a device (iOS simulator, dark and light):** see "What I saw on the device" below.
+
+## What I saw on the device
+
+A dedicated simulator (`ZO-vo3-verify`, created for this and deleted afterwards), my own Metro on `:8090`, this branch's backend on `:3100` over a disposable Postgres, and the real Payload read-only. Four readers created through the API and a simulator keychain reset between runs stood in for "clear Expo Go's storage".
+
+| Handoff device-gate step | Seen |
+|---|---|
+| Brand-new install shows the pre-intro before sign-up | **Yes, both themes.** The wordmark, the line, "Tap to continue". A tap goes to sign-in; a reload does not show it again |
+| Sign-up shows INTRO-1, then the promise, narrator, pick-book, Leaf 1 | **Yes**, in that order, walked in both themes (INTRO-1 and the promise in light and dark; the narrator beat and pick-book in both) |
+| The promise explains Leaves, sessions and XP and does not imply one sitting finishes a book | **Yes** — read on screen. The founder still reads it |
+| The narrator beat: Lara and Druv, optionality in text | **Yes, both themes.** Two cards, "Step 2 of 3", both optional lines visible. *(Audibility not tested — below)* |
+| Finish the Leaf, tap **Done**: the closing, then Tabs | **Yes, both themes.** Real Ikigai Leaf, answered, completed, Done → the welcome. Exit reads **Done**; the layout is the ordinary WrapUp's with different words |
+| Force-quit and reopen: none of it shows again | **Yes** — reopened straight onto Explore, no onboarding, no intro |
+| A second, fresh account quits mid-first-Leaf, then relaunches: narrator beat only, then Tabs, no closing | **Yes** — "One more thing" (the `narratorOnly` variant), Continue, Explore, no `WrapUp` |
+| An existing account with a book: narrator beat only, then Tabs | Covered by the previous row's mechanism (a non-empty Library and an unset flag); I did not run a separate pre-seeded account through it on the device |
+| Profile shows Lara and Druv with a descriptor | **Yes, both themes.** "Lara / Female voice", "Druv / Male voice", Druv selected by default |
+| Skip on pick-book lands on Explore's first-run state | **Yes** — and after a force-quit it *stayed* there: the skip's flag persisted. The promise's skip is covered by the automated gate and was not tapped on the device |
 
 ## What I could not verify
 
-- **The manual run, in either theme (mandatory per `agents/manager.md`).** Both booted simulators were running someone's app session, so I created a dedicated one (`ZO-vo3-verify`, iPhone 17 Pro, iOS 26.3), copied Expo Go into it locally, and started my own Metro and backend. The simulator tool then asked for the founder's access to that device and none was granted, so I could not tap, and did not work around the gate. **Acceptance criterion 15's "observed on the device in Profile and on the narrator beat" is therefore unmet;** its test half (Profile, the beat, and `NarrationControl`'s label) is done.
-- **That the greetings are audible and distinct, and that the name spoken matches the card** — that is the founder's ear at the device gate, and ONBOARD-2's transcript already flagged that "Druv" transcribed as "Drew".
-- **Android.** Everything here was Jest and an iOS simulator that I could not drive. The hardware back button's behaviour (the reason for `replace`) has no Jest equivalent.
+- **Whether the greetings are audible, distinct, and say the right name.** I cannot hear the simulator. I saw the cards' play/pause state respond to taps and Payload serve the right bytes, and that is all. The founder's ear is still the test; ONBOARD-2's transcript already noted "Druv" transcribed as "Drew".
+- **One-voice-at-a-time is only partly confirmed, and has a real limit.** A clean run — fresh screen, Lara then Druv in quick succession — ended with Lara back on *play* and Druv on *pause*, as designed. One earlier run was ambiguous: two cards on *pause* after a Lara, Lara, Druv sequence, and I could not tell a lagging status event from a real overlap. **The mechanism keys on the player's reported `playing`, which only becomes true once audio is actually flowing, so a tap on the second card *during the first card's buffering window* would not stop the first.** `useNarration` deliberately exposes nothing but `playing` and `toggle`, so the parent cannot know a play was *requested*. At human tap speeds this should not be reachable, but it is untested by ear, and it is why decision 10 is worth the founder's attention.
+- **Android and Expo Go on Android** — what the handoff's device gate actually names. The hardware back button (the reason for `replace` over a push) has no equivalent on the simulator or in Jest.
+- **A side-by-side of INTRO-1 against `main`** (above).
 - **Two guards cannot be mutation-checked:** the frozen variant (decision 3) and `replace`-versus-push. Both guard a future edit and say so.
-- **Tier C, deferred to WP14, for a worklist:** the narrator beat's loading and error states; light-theme rendering of the narrator beat, promise and closing at unit level (only the pre-intro has both themes); the closing on a summary with zero Leaves; the `TrackComplete` exit not carrying the flag (documented, untested).
+- **Tier C, deferred to WP14, for a worklist:** the narrator beat's loading and error states; light-theme rendering of the narrator beat, promise and closing at *unit* level (only the pre-intro has both themes in a test — the others were looked at on the device in both); the closing on a summary with zero Leaves; the `TrackComplete` exit not carrying the flag (documented, untested).
 
 ## What surprised me
 
@@ -758,11 +776,12 @@ Removed: `fetchNarratorSample.test.ts` (**−5**, the Ikigai lookup it tested is
 
 ## Where the time went
 
-Rough — I have no clock on it. Reading the flow and its ONBOARD-1 tests ~25%; implementation ~20%; tests ~25% (the `finishTheLeaf` helper and the harnesses were most of it); mutation checks ~10%; live verification and the device attempt ~10%; the gate and this write-up ~10%. **The cost worth knowing about: the device pass, which is the thing the tiered bar trades everything else for, is what did not happen.**
+Rough — I have no clock on it. Reading the flow and its ONBOARD-1 tests ~25%; implementation ~20%; tests ~25% (the `finishTheLeaf` helper and the harnesses were most of it); mutation checks ~10%; live verification ~5%; the device pass ~15% (most of it *getting* to the device — a dedicated simulator, my own Metro, backend and database, four readers — and then a lot of screenshot round-trips, not the looking itself); the gate and this write-up ~10%. **The cost worth knowing about: the simulator tool asks for a per-device grant, my first requests went unanswered, and access only came through later in the session — by which time I had already written the report as "not done". Ask for the grant *before* building a device around it.**
 
 ## Follow-ups for Architect
 
-1. **The manual run in both themes is still owed.** Either the founder grants the tool access (ask for `ZO-vo3-verify`; Metro `:8090`, the backend `:3100` on a disposable Postgres at `:55432`, and readers `newreader@example.test` and `existing@example.test`, on the same throwaway password the backend integration tests use, were left running and ready when this was written), or the founder's own gate covers it.
+1. **The founder's own device gate is still the test for sound and for Android.** Everything visual and every state transition was walked on an iOS simulator; what a person has to check is that Lara and Druv are *audible and distinct and say their own names*, that the narrator beat's one-voice rule holds at real tap speed (see "What I could not verify"), and that nothing differs on Android.
+1a. **Explore's first-run copy repeats the framing the founder objected to, and is out of this handoff's scope.** `ExploreScreen.tsx:255`, shown to anyone who skips: *"Add one below to get started — about fifteen minutes, one book at a time."* And `ExploreScreen.tsx:178`, the empty-catalogue line: *"Each one turns a non-fiction book into about fifteen minutes of active recall."* Both read as "a book in fifteen minutes" — the same impression beat 1's rewrite was for. I saw the first one on the device after a pick-book skip. **I did not change either**: the handoff was explicit that nothing else changes for anyone else, and they are the founder's words to choose. A reader who skips is exactly the reader who never sees the corrected promise.
 2. **Four pieces of copy for the founder's read** — the pre-intro line, the promise, the narrator beat's two lines, the closing (all above; each is one string in one place).
 3. **A missing or unreachable greeting is a dead button on the narrator beat.** `useNarration` reports `playbackFailed` and the beat's cards do not surface it — PILOT-1's shape, on a screen PILOT-1 did not cover. Payload answers a missing file with a 500. Worth a line of UI if a re-take upload can ever leave a gap.
 4. **A failed samples fetch blocks an existing account behind `ErrorState` with only Retry** — no Continue, so no way to Tabs. The gate fails open, so this needs the gate to succeed and the next request to fail; same exposure as before this package, but on a screen an existing account must pass.
