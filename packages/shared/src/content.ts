@@ -77,6 +77,42 @@ export const NARRATOR_IDS = ['female', 'male'] as const;
 
 export const narratorIdSchema = z.enum(NARRATOR_IDS);
 
+/** What a reader is told about one narrator. See `NARRATOR_LABELS`. */
+export interface NarratorLabel {
+  /** What the narrator calls itself — spelled the way the self-introduction clip says it. */
+  readonly name: string;
+  /** A description of the voice, for a chooser that has no clip to play (Profile). */
+  readonly descriptor: string;
+}
+
+/**
+ * Everything a reader is ever told a narrator is called (ONBOARD-3; names ruled by the
+ * founder 2026-09-24).
+ *
+ * **One map, deliberately.** Profile's picker, the onboarding narrator beat and
+ * `NarrationControl`'s accessibility label each kept their own copy of "Female"/"Male",
+ * and a thing the founder can rename is a thing three copies will eventually disagree
+ * about. A reader-facing surface reads this or says nothing about narrators.
+ *
+ * **Presentation only — not part of the content model above, and not a thaw of it.**
+ * Nothing persists these strings: a reader's saved choice is keyed on the `NARRATOR_IDS`
+ * value, so renaming a narrator changes what people read and never what they picked.
+ *
+ * **`name` is the narrator's own name, and never the provider's voice id.** Achernar and
+ * Sadaltager are what the TTS provider calls the two voices; they are not spoken in the
+ * greetings and must not appear on a screen or in an accessibility label. The pipeline
+ * keeps the same separation on its side (`assets/greeting.py:NARRATOR_NAMES` beside
+ * `assets/narration.py:NARRATOR_VOICES`) and the two must agree by hand — nothing can
+ * import across that boundary.
+ *
+ * **`descriptor` exists for Profile.** It has no clip to play, so a bare "Lara" would be
+ * a blind choice there; wherever a reader picks without hearing anyone, show both.
+ */
+export const NARRATOR_LABELS: Readonly<Record<NarratorId, NarratorLabel>> = {
+  female: { name: 'Lara', descriptor: 'Female voice' },
+  male: { name: 'Druv', descriptor: 'Male voice' },
+};
+
 /**
  * At most one audio entry per narrator in a slide's `audio` array.
  *

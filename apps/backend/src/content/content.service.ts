@@ -2,6 +2,7 @@ import {
   toPublicLeaf,
   type DeliveredLeaf,
   type Leaf,
+  type NarratorSamples,
   type PublicLeaf,
   type Track,
 } from '@zoomout/shared';
@@ -11,6 +12,7 @@ import type { AppLogger } from '../logging/logger.js';
 import { ContentNotFoundError } from './content.errors.js';
 import type { ContentRepository, TrackPage } from './content.repository.js';
 import { isVisibleIn, resolveVisibleLeaf } from './contentVisibility.js';
+import { narratorSamples } from './narratorSamples.js';
 import type { PayoffAccessPolicy } from './payoffAccess.js';
 
 /** Leaf metadata for a Track's contents list — no slide bodies. */
@@ -144,6 +146,20 @@ export class ContentService {
     const unlocked = await this.payoffAccess.isPayoffUnlocked(userId, leafId);
 
     return toDeliveredLeaf(toPublicLeaf(leaf), unlocked);
+  }
+
+  /**
+   * The two narrator self-introduction clips (ONBOARD-3), for the onboarding narrator
+   * beat.
+   *
+   * **Not content, so none of the guarantees above apply — and none is needed.** There is
+   * no Track or Leaf here to hide, no answer key to strip, no payoff to withhold; the
+   * result is two URLs to fixed public files. It deliberately never touches the
+   * repository: the beat must work whichever Tracks exist or have narration, and a
+   * sample that needed the CMS would inherit the CMS being down.
+   */
+  public getNarratorSamples(): NarratorSamples {
+    return narratorSamples(this.config.MEDIA_BASE_URL);
   }
 
   /** Delegates to the shared predicate so grading cannot drift from delivery. */

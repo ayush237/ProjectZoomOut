@@ -54,6 +54,13 @@ export function registerContentRoutes(
     },
   );
 
+  // Authenticated like every route here, though it hands out only two public URLs: the
+  // only caller is the onboarding beat, which exists once a reader is signed in, and a
+  // guest-readable content route would be the first in Phase 1.
+  app.get('/content/narrator-samples', { preHandler: authenticate }, (_request, reply) =>
+    reply.send(service.getNarratorSamples()),
+  );
+
   app.get('/content/leaves/:leafId', { preHandler: authenticate }, async (request, reply) => {
     const { leafId } = leafIdParams.parse(request.params);
 

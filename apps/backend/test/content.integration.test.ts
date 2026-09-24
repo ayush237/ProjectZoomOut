@@ -162,6 +162,7 @@ describe('authentication', () => {
     ['GET', '/content/tracks/1'],
     ['GET', '/content/tracks/1/leaves'],
     ['GET', '/content/leaves/10'],
+    ['GET', '/content/narrator-samples'],
     ['GET', '/library'],
     ['POST', '/library/tracks/1'],
     ['DELETE', '/library/tracks/1'],
@@ -227,6 +228,27 @@ describe('content delivery', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain('isCorrect');
+  });
+
+  it('serves the two narrator self-introduction clips as absolute URLs, and nothing else', async () => {
+    // ONBOARD-3. Seeded with a Track and a Leaf above, but the answer does not come from
+    // them — the unit tests show the service never reads the CMS. This is the wiring:
+    // the route exists, is reachable by a signed-in reader, and the body is exactly two
+    // URLs on the media host, with no duration or digest dressed up around them.
+    const { token } = await createReader();
+
+    const response = await app().inject({
+      method: 'GET',
+      url: '/content/narrator-samples',
+      headers: auth(token),
+    });
+
+    const mediaOrigin = new URL(payload.apiUrl).origin;
+    expect(response.statusCode).toBe(200);
+    expect(bodyOf<unknown>(response)).toEqual({
+      female: { url: `${mediaOrigin}/api/media/file/narrator-greeting-female.mp3` },
+      male: { url: `${mediaOrigin}/api/media/file/narrator-greeting-male.mp3` },
+    });
   });
 
   it('404s a Leaf that does not exist', async () => {

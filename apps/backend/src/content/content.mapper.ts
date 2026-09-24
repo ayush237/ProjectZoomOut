@@ -491,8 +491,13 @@ function mapImageParts(image: CmsImage, baseUrl: string): ImageAsset | null {
  * launder that defect straight past `imageAssetSchema`'s `z.url()` check instead of
  * being caught by it — the opposite of what the two-gate design in this file exists to
  * do. Restricting resolution to `/`-prefixed input keeps that gate intact.
+ *
+ * **Exported for `narratorSamples.ts` (ONBOARD-3), unchanged.** The narrator greetings are
+ * media the backend names itself rather than reads out of a Leaf, and they must resolve
+ * through the same function — and so the same `MEDIA_BASE_URL` — as every other clip, or
+ * PILOT-1's "a phone was handed a URL it cannot reach" defect has a second way to happen.
  */
-function resolveMediaUrl(url: string, baseUrl: string): string {
+export function resolveMediaUrl(url: string, baseUrl: string): string {
   if (isAbsoluteUrl(url)) {
     return url;
   }
