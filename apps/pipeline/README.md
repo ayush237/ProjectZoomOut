@@ -251,7 +251,7 @@ and Track 42's published Leaf 1 breaches two of them right now.
 Four slides per Leaf are read aloud — `summary.body`, `scenario.prompt`, `payoff.body`,
 `takeaway.body` — through **Cloud Text-to-Speech** (`gemini-2.5-flash-tts`), billed to the Vertex
 project. The founder chose **two** narrators after the 2026-09-17 audition, for readers to pick
-between: **Achernar** (female) and **Sadaltager** (male) — `assets/narration.py:NARRATOR_VOICES`
+between: **Achernar** (female, called **Lara**) and **Sadaltager** (male, called **Druv**) — `assets/narration.py:NARRATOR_VOICES`
 is the mapping from `NarratorId` to the provider voice, mirroring `NARRATOR_IDS` in the frozen
 `content.ts`. A slide's `audio` is an array (VO-1.1), one entry per narrator, and `narrate`
 always renders and attaches **both together**: a Leaf attaches only once every narrated slide
@@ -322,6 +322,73 @@ curl -s -G -H "Authorization: Bearer $TOKEN" \
 Swap the service for `generativelanguage.googleapis.com` to confirm the Developer API saw
 nothing. `status --run-id <id>` prints the narration transport the run recorded, with the
 endpoint read off the client that made the calls.
+
+## Narrator greetings: `generate-greetings` (ONBOARD-2)
+
+Each narrator introduces themselves once, so onboarding's narrator beat needs no book to have been
+picked. Two fixed sentences, one per ruled voice, rendered through Cloud TTS and uploaded to
+Payload's **Media** collection under **stable** names the app builds against:
+
+| Narrator | Called | Cloud TTS voice | Filename | Says |
+|---|---|---|---|---|
+| `female` | **Lara** | Achernar | `narrator-greeting-female.mp3` | "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." |
+| `male` | **Druv** | Sadaltager | `narrator-greeting-male.mp3` | "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company." |
+
+**The name a narrator gives is not the name of the voice.** Achernar and Sadaltager are the
+provider's ids for two voices (`assets/narration.py:NARRATOR_VOICES`) and a reader never hears
+them. Lara and Druv are what the narrators call themselves (`assets/greeting.py:NARRATOR_NAMES`),
+ruled by the founder on 2026-09-24 after hearing a first pair of greetings that had said the voice
+ids. Both mappings are asserted exactly, and a test asserts no greeting ever says a voice id.
+
+Not a graph node and not tied to a run: there is no Leaf behind these clips, the same shape as
+`generate-covers`. Everything is on disk under `runs/greetings/audio/` (`final/` for a clip that can
+be uploaded, `held/` for one that cannot, `raw/` for what Cloud TTS returned), and spend is in
+`runs/greetings/spend.json`.
+
+```bash
+# Render, listen, write the two mp3s to disk. Uploads nothing.
+uv run zoomout-pipeline generate-greetings --render-only
+
+# Then upload both, or neither. Free if the clips are already rendered.
+uv run zoomout-pipeline generate-greetings
+```
+
+**A second door, not the Leaf door widened.** The TTS client accepts a `NarrationLine` and
+`NarrationLine` can only be made from a Leaf (`tests/test_narration_selection.py`), because that is
+what keeps the book's words out of the audio. A greeting is one sentence of ZoomOut's own, so it
+has its own door: `assets/greeting.py:NARRATOR_GREETINGS` is the whole list of what can be said,
+asserted exactly by `tests/test_greetings.py`, and `SpeechClient.synthesize_greeting` takes a
+`NarratorGreeting` and takes its voice from it, so a narrator cannot introduce themselves in the
+other's voice. Both doors go through one `_call`, so the timeout, the single retry layer and the
+host check are one implementation.
+
+**The narrator's name is set aside by the word check, and reported.** A transcriber cannot be held
+to a proper name's spelling. The first names were the hard case: across four takes Sadaltager came
+back as "Sedat Auger", "Sebal tager", "Saul DeTagger" and "Saul Talgor". Lara and Druv are easier,
+but "Laura" and "Dhruv" are equally good spellings of them, and Druv has come back as "Drew". Compared
+word for word, any of those fails a clip on a spelling choice. So
+`assets/greeting.py:compare_greeting` sets aside one to three words in the name's own slot, checks
+everything else exactly, fails a greeting that never said the name, and the command prints what
+was heard there. **Whether the name is pronounced right is the one thing here only a person can
+decide.**
+
+**Both clips or neither.** A clip that fails the word check or the pace check is held, and so is
+its sibling, because one narrator's introduction without the other's is a half-built beat. Nobody
+listening (the guard model was unreachable) holds it too: the transcript is part of what is
+reported. Direction is `prompts/narrator_greeting.md`, whose comment records why it is what it is.
+
+**Spend.** The cap (`--ceiling-usd`, default `GREETING_CEILING_USD` = $0.20) is counted across
+every invocation and **halts** before a call rather than warning. A take costs about $0.007 for both
+narrators, but the budget reserves Cloud TTS's longest possible response ($0.164) before each call
+and refuses when spent plus that would cross the cap. **So $0.20 leaves only about $0.036 of real
+spend, roughly five takes across both narrators, and then it halts.** That is the ceiling working, and
+raising it is the founder's decision, not the session's.
+
+**Redoing a clip after it is uploaded.** The machine key creates Media and never deletes it
+(`machinesNeverDelete`), and these filenames carry no hash, so a re-rendered clip cannot be
+uploaded next to the old one: the command finds the existing document, sees different bytes, and
+stops with the document's id. Delete that Media document in the admin UI, then run it again. The
+URL stays the same; **the Media id does not**, so build against the URL.
 
 ## Rewriting one Leaf: `rewrite-leaf`
 

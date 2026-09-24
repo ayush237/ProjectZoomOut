@@ -2037,6 +2037,195 @@ def narrate(
         raise typer.Exit(1)
 
 
+# ------------------------------------------------------------------------------ ONBOARD-2
+
+
+@app.command("generate-greetings")
+def generate_greetings(
+    render_only: Annotated[
+        bool,
+        typer.Option(help="Render, check and write the two mp3s to disk; upload nothing."),
+    ] = False,
+    max_attempts: Annotated[
+        int,
+        typer.Option(
+            min=1,
+            max=3,
+            help="Attempts per greeting when the guard or the pace check fails it. Attempts "
+            "already on disk are reused, so raising this re-buys only what still fails.",
+        ),
+    ] = 2,
+    ceiling_usd: Annotated[
+        float | None,
+        typer.Option(
+            min=0.0,
+            help="The hard cap, counted across every invocation. Defaults to "
+            "`GREETING_CEILING_USD`. The budget refuses any call whose worst case would cross "
+            "it, and Cloud TTS's worst case alone is $0.16, so a cap under that runs nothing.",
+        ),
+    ] = None,
+) -> None:
+    """Each narrator introduces themselves: two clips, uploaded to Payload's Media (ONBOARD-2).
+
+    **Not a graph node and not tied to a run** — there is no Leaf behind these two clips, the
+    same shape as `generate-covers`. The scripts are fixed in `assets/greeting.py`, in the two
+    ruled voices, and the request reaches Cloud TTS through its own door
+    (`SpeechClient.synthesize_greeting`) because a Leaf's door is fenced to Leaf text.
+
+    Renders both, listens to both (a blind transcript, and a pace check that does not depend
+    on the listener), and uploads **both or neither**. Re-running is safe: clips are cached by
+    what was asked, an upload is found by its stable filename first, and an existing document
+    is compared with the clip rather than trusted. The one thing it cannot do is replace a
+    Media document, because the machine key may create Media but never delete it — so a clip
+    that must be redone after upload needs the old document deleted in the admin UI first.
+    """
+    from zoomout_pipeline.assets.budget import BudgetExceededError, NarrationBudget
+    from zoomout_pipeline.assets.greeting import greeting_direction, greeting_script
+    from zoomout_pipeline.assets.speech import SpeechClient, SpeechError
+    from zoomout_pipeline.cms.client import PayloadClient, PayloadError
+    from zoomout_pipeline.graph.greeting_nodes import (
+        GREETING_CEILING_USD,
+        LEDGER_FILENAME,
+        GreetingHeldError,
+        GreetingLedger,
+        GreetingUploadError,
+        RenderedGreeting,
+        run_greetings,
+    )
+    from zoomout_pipeline.graph.narration_nodes import ClipStore, Guard
+    from zoomout_pipeline.runner import build_dependencies
+
+    settings = get_settings()
+    if not settings.use_vertex:
+        typer.secho(
+            "the greetings are listened to through Vertex AI, and synthesized through Cloud "
+            "Text-to-Speech billed to a named project. Set:\n"
+            "  export ZOOMOUT_PIPELINE_USE_VERTEX=true\n"
+            "  export ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(2)
+
+    payload: PayloadClient | None = None
+    if not render_only:
+        payload = PayloadClient(
+            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+        )
+        # **Who, before what.** A wrong auth scheme is served as anonymous with a 200.
+        try:
+            identity = payload.whoami()
+        except PayloadError as error:
+            typer.secho(f"cannot reach Payload: {error}", fg=typer.colors.RED, bold=True)
+            raise typer.Exit(1) from error
+        if not identity.get("email"):
+            typer.secho(
+                "Payload served this key as ANONYMOUS — refusing to continue. Check "
+                "ZOOMOUT_PIPELINE_PAYLOAD_API_KEY.",
+                fg=typer.colors.RED,
+                bold=True,
+            )
+            raise typer.Exit(1)
+        typer.echo(
+            f"cms        : {identity.get('email')} ({identity.get('accountType', '?')}) at "
+            f"{settings.payload_url}"
+        )
+
+    deps = build_dependencies(settings)
+    speech = SpeechClient(
+        project=settings.vertex_project,
+        model=settings.narration_model,
+        language_code=settings.narration_language,
+    )
+    root = Path(settings.runs_dir) / "greetings"
+    ledger = GreetingLedger(root / LEDGER_FILENAME)
+    cap = GREETING_CEILING_USD if ceiling_usd is None else ceiling_usd
+    budget = NarrationBudget(ceiling_usd=cap, spent_usd=ledger.total_usd)
+    store = ClipStore(root / "audio")
+    guard = Guard(llm=deps.llm, model=settings.analyze_model)
+
+    typer.echo(f"narration  : Cloud TTS via {speech.endpoint} ({speech.project}), {speech.model}")
+    typer.echo(f"listening  : {guard.model}")
+    typer.echo(f"budget     : {budget.report()} (already spent, across invocations)")
+    typer.echo(f"audio      : {store.root.resolve()}")
+    typer.echo(f"direction  : {greeting_direction()!r}")
+    for greeting in greeting_script():
+        typer.echo(f"sending    : {greeting.name:<5} (voice {greeting.voice}) {greeting.spoken!r}")
+    typer.echo("")
+
+    def show(clip: RenderedGreeting) -> None:
+        severity = clip.severity.value if clip.severity is not None else "unchecked"
+        retried = f", {clip.attempts_made} attempts" if clip.attempts_made > 1 else ""
+        cached = " (cached)" if clip.from_cache else ""
+        typer.echo(
+            f"  {clip.greeting.narrator.value:<7}{clip.greeting.name:<6}"
+            f"{clip.duration_seconds:>5.2f}s  speech {clip.metrics.speech_seconds:.2f}s = "
+            f"{clip.articulation_wpm:.0f} wpm  {severity}{retried}{cached}"
+        )
+        typer.echo(f"          heard : {clip.transcript!r}")
+        typer.echo(
+            f"          name  : heard as {clip.name_heard!r} — set aside, not machine-checked; "
+            "a person has to hear this one"
+            if clip.name_heard is not None
+            else "          name  : NOT HEARD — the greeting never said the narrator's name"
+        )
+        for finding in clip.check.findings() if clip.check is not None else []:
+            typer.echo(f"          finding: {finding}")
+
+    problem = ""
+    result = None
+    try:
+        result = run_greetings(
+            speech=speech,
+            store=store,
+            budget=budget,
+            record=ledger.record,
+            guard=guard,
+            client=payload,
+            max_attempts=max_attempts,
+            on_rendered=show,
+        )
+    except (BudgetExceededError, SpeechError, GreetingHeldError, GreetingUploadError) as error:
+        problem = str(error)
+    except PayloadError as error:
+        problem = f"Payload: {error}"
+
+    typer.echo("")
+    for greeting in greeting_script():
+        typer.echo(
+            f"spend      : {greeting.narrator.value:<7} ${ledger.usd_for(greeting.narrator):.4f}"
+        )
+    typer.secho(
+        f"spend      : total ${ledger.total_usd:.4f} of the ${cap:.2f} cap, all invocations",
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+    if result is not None:
+        for clip in result.rendered:
+            state = "final" if clip.uploadable else "HELD"
+            typer.echo(f"file       : {state:<5} {result.files[clip.greeting.narrator].resolve()}")
+        for stored in result.uploaded:
+            typer.echo(
+                f"media      : {stored.narrator.value:<7} id {stored.media_id}  {stored.url}  "
+                f"{stored.duration_seconds:.2f}s  "
+                f"{'uploaded' if stored.uploaded else 'already there, bytes verified'}"
+            )
+            for issue in stored.problems:
+                typer.secho(f"             {issue}", fg=typer.colors.RED)
+        if result.uploaded and any(not stored.passed for stored in result.uploaded):
+            problem = "an uploaded document does not match what was sent — see above"
+
+    if problem:
+        typer.secho(f"\nSTOPPED: {problem}", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1)
+    if result is not None and result.uploaded:
+        typer.secho(
+            "\nTwo Media documents. Nothing else was written: no Leaf, no Track.",
+            fg=typer.colors.YELLOW,
+        )
+
+
 @app.command("purge-raw-text")
 def purge_raw_text(
     run_id: Annotated[str, typer.Option(help="The run whose book should be purged.")],
