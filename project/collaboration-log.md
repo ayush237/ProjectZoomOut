@@ -627,6 +627,159 @@ Verify this list against the repository rather than trusting it.
 
 ## Completions (Manager → Architect)
 
+### Completed: ONBOARD-3 — pre-intro, intro repositioning, beat reorder, and the closing screen — 2026-09-24
+
+*Manager. Branch `onboard-3-flow-refinement`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `c4ce891`. PR: [#61](https://github.com/ayush237/ProjectZoomOut/pull/61) — the founder merges.*
+
+**Code complete, automated gate green, every guard mutation-checked, and the backend path verified live against real Payload. The interactive device pass — the manual run in both themes that `agents/manager.md` makes mandatory — is NOT done:** the simulator tool needs the founder's per-device grant ("Let Claude use it") and none came. 16 of the 17 acceptance criteria are fully verified; the one left half-done is "observed on the device in Profile and on the narrator beat" — its test half is done (see "What I could not verify").
+
+| | |
+|---|---|
+| Automated gate | On a tree with `packages/shared/dist`, `apps/backend/dist`, `apps/mobile/dist` and `apps/admin/.next` deleted first: `lint` (21 s), `typecheck` (12 s) and `test` (92 s) **exit 0**. **`build` exits 1 as run** — the backend compiles and the mobile export succeeds, but `apps/admin`'s `next build` needs `PAYLOAD_SECRET` and `PAYLOAD_DATABASE_URL` in the environment and a fresh worktree has neither. I re-ran that one build with throwaway values against a disposable database and it passes (8 s), so the honest state is *build green given those two variables*, not build green as run. I touched nothing in `apps/admin`, but it will bite the next Manager in a fresh worktree. After the live test file was added, lint, typecheck and the backend build were re-run on the final tree (all exit 0). No reinstall: no dependency changed |
+| Tests | shared **80** (was 77, +3) · backend **533** (was 527 per PILOT-1, +6) · admin **204** (unchanged) · mobile **770**, 52 suites (was **735**, 49; +35, reconciled below) |
+| Mutation-checked | **41 deliberate breakages; each caught by the test that claims the guard, none survived.** Wherever two changes could each explain a green test they were reverted as separate reversions (below) |
+| Live verification | Real Payload, real backend from this branch on port 3100, real Postgres (a disposable container): 401 without a token; the body is exactly a URL per narrator on the media host; both URLs serve **the bytes the founder approved by ear** (sha256 identical, checked from the URL the backend hands out); `audio/mpeg`, `accept-ranges: bytes`, `206` on `Range` |
+| Device | **Not done.** See "What I could not verify" — a dedicated simulator, Metro on `:8090`, the backend on `:3100` and two test readers were set up and are ready |
+
+---
+
+## What the founder will see, in the order the device gate walks it
+
+1. **A brand-new install, before sign-up:** a still frame — the word **ZoomOut**, one line, "Tap to continue". Draft line, **the founder's call**: *"The big picture, one small idea at a time."* (Alternative, more literal: *"Non-fiction books, in lessons you'll actually remember."*) It is one constant, `PRE_INTRO_LINE`, and the test follows it.
+2. **Right after account creation: INTRO-1**, the neuron-network animation, unchanged, then **the promise**. Its copy is rewritten and is **the founder's call**:
+   > *Every book here is broken into small lessons called Leaves. Each one ends with a question only you can answer, so you're thinking rather than skimming.*
+   > *A session lasts up to fifteen minutes, and a book takes many of them. Every Leaf you finish earns XP, and it adds up across sessions so you can see how far you've come. Stopping on purpose is part of how this works — spacing it out is what makes it stick.*
+3. **The narrator beat — "Meet your narrators"**: two cards, **Lara** and **Druv**, each plays that narrator saying hello. Two lines of text, **the founder's call**: *"Every Leaf can be read aloud, if you'd like. Tap a card to hear each narrator say hello."* and *"Narration is optional — it only plays when you tap play, and you can change your pick anytime from your profile."* Tapping the second card **stops the first** (unrequested; see decision 10).
+4. **Pick a book → Leaf 1** (with ONBOARD-1's scenario coach-mark, untouched).
+5. **Finish the Leaf, tap Done (or Wrap up today) → the closing**, **the founder's call**: eyebrow *"Welcome to ZoomOut"*, headline *"That was your first Leaf"*, and *"Here's to a great learning journey. Take your time — every Leaf you finish adds to it."* Its exit button reads **Done**. Same layout as the ordinary WrapUp; only the words differ. Then Tabs.
+6. **Profile** shows **Lara / Female voice** and **Druv / Male voice**. An existing account sees the narrator beat alone, then Tabs.
+
+**To run the device gate on the founder's own setup:** their backend on `:3000` is the `ZO` checkout and **does not have the new endpoint** — it must be restarted from this branch (I did not touch it), and its `MEDIA_BASE_URL` must be an address the phone can reach, because the greeting URLs are built from it (PILOT-1's semantics). Clear Expo Go's storage first, as the handoff says.
+
+---
+
+## The `markSeen()` table, as built — every row pinned by a test
+
+| Path | Fires | Pinned by |
+|---|---|---|
+| Skip on the promise | immediately | `navigation.test.tsx` through the real gate (was already tested once; reworked for INTRO-1) |
+| Skip on pick-book | immediately | `navigation.test.tsx` through the real gate — **new, closes ONBOARD-1's untested skip** |
+| `narratorOnly`: narrator → Continue | at Continue | screen test + through the real gate + "not shown again after reopening" |
+| `full`: narrator → Continue, pick-book → Leaf 1 | **at neither** — flag read from the store after the reset into the player | screen tests + full-order test |
+| **`full`: pick-book cannot reach Leaf 1** (the Library lookup failed, or the book has no next Leaf) | **at pick-book** — *a row the handoff's table did not have* | two `it.each` rows in `OnboardingPickBookScreen.test.tsx` (decision 4) |
+| `full`: the closing appears | **on `WrapUp`'s mount**, not when the message renders | closing tests, including "even when the summary fails to load" |
+| Quits mid-first-Leaf | never — next launch resolves `narratorOnly`, marked seen at that Continue, the closing is never shown | through the real gate: quit, reopen, narrator beat, Continue, Tabs, no `wrap-up-screen` |
+
+The table is also a comment on `useOnboardingGate.markSeen`, where the next person will look for it.
+
+## Which completion exits carry the closing (the handoff asked for this to be stated)
+
+**Carry it:** *Done*, *Wrap up today*, and the cap's *See your day* — every exit that reaches `WrapUp` passes the flag when the player has it. *Share this badge* pushes over the player and returns to it, so the reader still ends on one of those. **Do not carry it, by design:** *See your finished book* (`TrackComplete`) — reachable only if the first Leaf finished a whole book, and no pilot Track is one Leaf long; and **Android's hardware back**, which pops the player like a quit. Neither marks seen, so the reader meets the narrator beat once more next launch and never sees the closing — the same accepted outcome as quitting mid-Leaf. Documented at the call site in `LeafPlayerScreen.tsx`. Nothing reads `first-wrap`: the closing tests never tap wrap and assert the app never asked `/events` or `/achievements`.
+
+## Decisions the handoff left to me, and why
+
+1. **The promise stays ahead of the choices.** I agree with the default (the contract before the choices); no reorder.
+2. **INTRO-1 is a new route, `OnboardingIntro`, and its exit is `replace('OnboardingPromise')`,** not a push. A push would let Android's back button on the promise replay the animation. Both its exits (Get started, Skip) call the one `onExit` and land on the promise; neither marks seen. Both pinned through the real gate.
+3. **The variant reaches the narrator beat as a prop from `AppStack`, read once at mount** (`useState(onboardingVariant)`), with `?? 'narratorOnly'` for a state that cannot occur. A route param would put a second copy of the decision into navigation state; a live prop would go `undefined` for one render when `markSeen` flips the gate to `seen` under a still-mounted beat. **That freeze cannot be mutation-checked** — nothing observable goes wrong without it today; it guards a later edit, and says so in a comment.
+4. **The added `markSeen` row** (table above): when pick-book cannot carry the reader into Leaf 1, it marks seen. Nothing later will close their onboarding, and leaving the flag unset would send them back to the narrator beat next launch (their Library is no longer empty). **If the Architect prefers otherwise the cost is one repeat of the narrator beat.**
+5. **`markSeen` on `WrapUp`'s outer mount, not when the message renders.** A slow or failing summary must not leave a reader who has finished their first Leaf un-marked.
+6. **Don't fabricate values — what I chose.** `useNarration` reads **only `entry.url`** (checked: `useAudioPlayer(entry.url)`, nothing else), so the endpoint returns a **narrower type, not an `AudioRef`**: `NarratorSample = Pick<AudioRef, 'url'>` and `NarratorSamples = Readonly<Record<NarratorId, NarratorSample>>` — a total map, so a narrator with no clip is a compile error on the server. No `durationSeconds`, no `textDigest`, so nothing to recompute and nothing a re-take can invalidate; I did not need `text_digest`. To let the preview pass one, **`useNarration`'s parameter narrowed from `AudioRef` to `Pick<AudioRef, 'url'>` — a type-only change**; an `AudioRef` still satisfies it and no caller changed.
+7. **The endpoint:** `GET /content/narrator-samples`, authenticated like every content route, answered by `ContentService.getNarratorSamples()` **without touching the repository** (a unit test spies on all four repository methods). `resolveMediaUrl` is now `export`ed from `content.mapper.ts` — one word, behaviour unchanged. The two stored paths are filenames, not Media ids.
+8. **The names live in one map:** `NARRATOR_LABELS` in `packages/shared/src/content.ts`, beside `NARRATOR_IDS`, as `{ name, descriptor }` — `Lara / Female voice`, `Druv / Male voice`. It is presentation only and **not a thaw of the frozen content model** (its comment says so). Consumers: Profile, the narrator beat, `NarrationControl`. `NarrationControl`'s accessibility label is now `"Play Summary narration, Lara's voice"` — the template gained a possessive (it read `"…, Female voice"`); labels only.
+9. **Where the descriptor shows.** Profile shows name **and** descriptor on the tile, because a reader picks there without hearing anyone. The narrator beat shows the bare name (a reader hears before choosing, and the name must match the one spoken) with the descriptor in the accessibility label.
+10. **One voice at a time on the narrator beat — unrequested.** The two `useNarration` players moved into one component so a tap on one card stops the other; two five-second hellos overlapping is not an introduction. Small, tested, mutation-checked; revert it if it is unwanted.
+11. **`fetchNarratorSample.ts` and its 5 tests are deleted** (the Ikigai lookup is dead), and so is the "static card, no sample" branch: both clips always exist now. A failed samples fetch shows `ErrorState` with Retry, as a failed fetch did before.
+12. **The closing's exit reads "Done"**, not "Back to Journey": it goes to Tabs, which opens on Explore, so the old label would name a place a first-run reader is not going. The ordinary label is untouched.
+13. **Step counters follow the new order:** narrator is "Step 2 of 3", pick-book "Step 3 of 3".
+14. **A small live test was added** (`narratorSamples.live.test.ts`, run with `npm run test:live --workspace=apps/backend`): public reads only, no credentials, asserts 200 / `audio/mpeg` / `accept-ranges` / `206`, and **deliberately nothing about bytes or duration**. The backend↔Payload media seam had no contract test; this is the cheap one. Mutation-checked with a wrong filename: only that narrator's case goes red.
+
+## What changes when INTRO-1 renders inside a navigator (the handoff asked me to say what I did)
+
+By reading, not by looking: `IntroScreen` is **byte-for-byte unchanged** (`git diff origin/main` on `IntroScreen.tsx`, `introBeats.ts`, `introCamera.ts`, `introFixture.ts`, `introLayers.ts` is empty). Its insets come from the root `SafeAreaProvider` and its geometry from `useWindowDimensions`, neither of which a native-stack screen changes; the route has no header, so it is still full-bleed; its own controls are plain `Pressable`s. What I set on the route: `gestureEnabled: false` (as every onboarding route has), the Reduce Motion transition, and `replace` on exit. Expected visible change: none. **Not observed on a device.**
+
+## Evidence, by kind
+
+- **Unit / component tests (Jest, Vitest):** everything in the acceptance list except the greps (queries) and the device observation.
+- **Through `RootNavigator`'s real gate and the real flag stores:** INTRO-1 for `full` / never for `narratorOnly` or `seen`; both INTRO-1 exits; the whole order in **one** test; both variants' Continue; skip on the promise and on pick-book; quit-mid-Leaf and force-quit-and-reopen; the closing and its flag. **Through the real player and `AppStack` with `markSeen` as a spy** (so "marks nothing" is observable — against the real gate the flag is already set): the closing in both directions, all three exits.
+- **A query:** the live checks above (401, exact body, sha256 against the approved files, `206`), and the greps — `NARRATOR_LABELS` has **one** definition and three consumers, no local map remains; provider ids appear only in comments in `packages/shared/src/content.ts`; no test I added or changed asserts on greeting bytes, durations or a Media id (the `durationSeconds`/`textDigest` hits are pre-existing slide-narration fixtures).
+- **Looked at on a device:** nothing. See below.
+
+## What I could not verify
+
+- **The manual run, in either theme (mandatory per `agents/manager.md`).** Both booted simulators were running someone's app session, so I created a dedicated one (`ZO-vo3-verify`, iPhone 17 Pro, iOS 26.3), copied Expo Go into it locally, and started my own Metro and backend. The simulator tool then asked for the founder's access to that device and none was granted, so I could not tap, and did not work around the gate. **Acceptance criterion 15's "observed on the device in Profile and on the narrator beat" is therefore unmet;** its test half (Profile, the beat, and `NarrationControl`'s label) is done.
+- **That the greetings are audible and distinct, and that the name spoken matches the card** — that is the founder's ear at the device gate, and ONBOARD-2's transcript already flagged that "Druv" transcribed as "Drew".
+- **Android.** Everything here was Jest and an iOS simulator that I could not drive. The hardware back button's behaviour (the reason for `replace`) has no Jest equivalent.
+- **Two guards cannot be mutation-checked:** the frozen variant (decision 3) and `replace`-versus-push. Both guard a future edit and say so.
+- **Tier C, deferred to WP14, for a worklist:** the narrator beat's loading and error states; light-theme rendering of the narrator beat, promise and closing at unit level (only the pre-intro has both themes); the closing on a summary with zero Leaves; the `TrackComplete` exit not carrying the flag (documented, untested).
+
+## What surprised me
+
+- **A native-stack `animation` option *is* observable in Jest** — as `stackAnimation` and `transitionDuration` on the `RNSScreen` host element. ONBOARD-1 reasonably concluded it could not be seen, because its guard spies on Reanimated. `appStackReduceMotion.test.tsx` reads what the native layer is told, and **discovers the onboarding routes from the navigator's own route names**, so a route added later is walked automatically and fails if it forgets the transition. Reusable for any other stack.
+- **A correct answer moves the player to the payoff by itself** (`useLeafSession.answer` sets the slide). My first `finishTheLeaf` helper pressed Next once too often. A helper bug, not an app bug; it is in `src/testing/firstLeaf.ts` now, shared by two test files.
+- **Payload's file route is GET-only** (`HEAD` returns 404 for the greetings *and* for an existing cover), and **a file that does not exist answers 500, not 404.** Anyone writing a health check with `HEAD` will be surprised, and a missing greeting will reach the app as a failed play.
+- **`Stack.Screen`'s render-prop form types `navigation` as `any`**, which the repo's `no-unsafe-*` lint rejects; the INTRO route annotates it.
+- **Everything in the new `navigation.test.tsx` blocks passed first time.** That is why I mutation-checked as hard as I did: none was vacuous, and the one test that is the *sole* guard for something is worth naming — the literal-key test for `zoomout.introSeen` is the only thing that notices a renamed key, because every other test writes the flag through the store's own functions.
+
+## Mutation checks (41; each row: the breakage → the tests that went red)
+
+| Breakage | Went red |
+|---|---|
+| **`narratorOnly` Continue stops marking seen** | 4 — the `narratorOnly` screen test and three through the gate. **The `full` tests stayed green** |
+| **`full` Continue starts marking seen** (ONBOARD-1's behaviour) | 5 — the `full` screen test, the full-order tests, quit-mid-Leaf, pick-book skip. **The `narratorOnly` tests stayed green** |
+| AppStack passes `full` always / `narratorOnly` always | 3 / 5, each only its own direction |
+| Pick-book marks seen on the way into Leaf 1 | 4 |
+| Pick-book resumes from `listLeaves()[0]` | 3 |
+| Pick-book drops `onboarding: true` | 3 |
+| Pick-book's no-first-Leaf fallback stops marking seen | 2 |
+| Skip on pick-book / on the promise stops marking seen | 1 each |
+| **Player: *Done* ignores the flag** | 4 — the *Done* tests only |
+| **Player: *Wrap up today* / *See your day* drop the flag** | 2 — those two only. *Done* stayed green |
+| **WrapUp never marks seen / marks seen for every arrival** | 7 / 2, separately |
+| WrapUp marks seen only after the summary renders | 1 — the "even when the summary fails to load" test, exactly |
+| WrapUp closing forks the layout (hides the stats) | 1 — the one-layout test, exactly |
+| A new account opens on the promise, not INTRO-1 | 9 |
+| INTRO-1's exits mark onboarding seen | 6 |
+| Pre-intro gated on a new SecureStore key | 1 — the literal-key test, exactly |
+| Pre-intro shown to a signed-in reader | 1 |
+| A route forgets the Reduce Motion transition / the swap to fade is removed | 2 / 1 |
+| `NarrationControl` says the descriptor / Profile hardcodes `Female` / the beat card shows the descriptor | 4 / 1 / 1 |
+| Tapping the other card no longer stops the first / the beat also asks the catalogue / the optional line is reworded | 1 / 1 / 1 |
+| Promise copy implies a book fits in a sitting / brings back "One book." | 1 / 1 |
+| Client asks the wrong samples path | 15 |
+| Promise Continue skips the narrator / WrapUp ignores the flag | 6 / 3 |
+| **Backend: service builds URLs on `CONTENT_API_URL` / service reads the CMS** | 1 / 1, **separate reversions** |
+| Backend: route left unauthenticated / a fabricated `durationSeconds` / a wrong filename | 1 / 2 / 4 |
+| Shared: `Druv` respelled / a provider id leaks into a string | 1 / 2 |
+| Live test: wrong filename for one narrator | 1 — that narrator only |
+
+## Test count against ONBOARD-1's 735 — **770, +35**
+
+Removed: `fetchNarratorSample.test.ts` (**−5**, the Ikigai lookup it tested is deleted). Added or grown: `PreIntroScreen.test.tsx` +4 · `OnboardingPromiseScreen.test.tsx` +3 · `appStackReduceMotion.test.tsx` +3 · `onboardingClosing.test.tsx` +6 · `OnboardingNarratorScreen.test.tsx` 4→8 (+4) · `OnboardingPickBookScreen.test.tsx` 3→6 (+3) · `WrapUpScreen.test.tsx` 5→10 (+5) · `NarrationControl.test.tsx` +2 · `surfaces.test.tsx` +1 · `navigation.test.tsx` 20→29 (+9). **−5 +4 +3 +3 +6 +4 +3 +5 +2 +1 +9 = +35.** No test was weakened to reach the number. The existing tests that changed did so because the handoff changed the behaviour they asserted — `navigation.test.tsx`'s Intro and Onboarding blocks, the narrator and pick-book screen tests, and two label assertions in `NarrationControl.test.tsx` — and each now asserts the new behaviour at least as tightly.
+
+## Where the time went
+
+Rough — I have no clock on it. Reading the flow and its ONBOARD-1 tests ~25%; implementation ~20%; tests ~25% (the `finishTheLeaf` helper and the harnesses were most of it); mutation checks ~10%; live verification and the device attempt ~10%; the gate and this write-up ~10%. **The cost worth knowing about: the device pass, which is the thing the tiered bar trades everything else for, is what did not happen.**
+
+## Follow-ups for Architect
+
+1. **The manual run in both themes is still owed.** Either the founder grants the tool access (ask for `ZO-vo3-verify`; Metro `:8090`, the backend `:3100` on a disposable Postgres at `:55432`, and readers `newreader@example.test` and `existing@example.test`, on the same throwaway password the backend integration tests use, were left running and ready when this was written), or the founder's own gate covers it.
+2. **Four pieces of copy for the founder's read** — the pre-intro line, the promise, the narrator beat's two lines, the closing (all above; each is one string in one place).
+3. **A missing or unreachable greeting is a dead button on the narrator beat.** `useNarration` reports `playbackFailed` and the beat's cards do not surface it — PILOT-1's shape, on a screen PILOT-1 did not cover. Payload answers a missing file with a 500. Worth a line of UI if a re-take upload can ever leave a gap.
+4. **A failed samples fetch blocks an existing account behind `ErrorState` with only Retry** — no Continue, so no way to Tabs. The gate fails open, so this needs the gate to succeed and the next request to fail; same exposure as before this package, but on a screen an existing account must pass.
+5. **`apps/admin`'s build needs `PAYLOAD_SECRET` and `PAYLOAD_DATABASE_URL`**, so a fresh worktree's root `npm run build` fails at admin. Someone should decide whether the gate documents the two variables or the build stops needing them.
+6. **Scope, flagged:** the handoff said `packages/shared` gets "one constant"; it also gained two delivery *types* (`NarratorSample`, `NarratorSamples`), because CLAUDE.md forbids the same shape being defined in both apps. `content.ts` is the frozen model: `NARRATOR_LABELS` is a presentation constant beside `NARRATOR_IDS`, as instructed, and is not a thaw.
+7. **Pre-existing, not touched:** `AppStack`'s non-onboarding routes still ignore Reduce Motion; `WrapUp`'s ordinary exit says "Back to Journey" even when the reader came from Library; the onboarding flag is per install, not per account, so a second account on the same install skips onboarding; and the promise's "fifteen minutes" is hand-synced to `SESSION_CAP_SECONDS`.
+8. **`LEGAL.md`** — ONBOARD-2 asked that it be told about the greeting as a fifth thing the voice can say. Not mine to edit; still open.
+
+## Files touched
+
+**`packages/shared`:** `content.ts` (`NARRATOR_LABELS`, `NarratorLabel`), `delivery.ts` (`NarratorSample`, `NarratorSamples`), `content.test.ts`.
+**`apps/backend`:** `content/content.mapper.ts` (`export`), `content/narratorSamples.ts` **(new)**, `content/content.service.ts`, `content/content.routes.ts`, tests `narratorSamples.test.ts` **(new)**, `narratorSamples.live.test.ts` **(new)**, `content.service.test.ts`, `test/content.integration.test.ts`.
+**`apps/mobile`:** `api/client.ts`; `navigation/` — `types.ts`, `RootNavigator.tsx`, `AppStack.tsx`, and tests `navigation.test.tsx`, `appStackReduceMotion.test.tsx` **(new)**, `onboardingClosing.test.tsx` **(new)**; `screens/intro/` — `PreIntroScreen.tsx` + test **(new)**, comment-only edits to `introSeenStore.ts` and `useIntroSeen.ts`; `screens/onboarding/` — `OnboardingPromiseScreen.tsx` + test **(new)**, `OnboardingNarratorScreen.tsx` (rewritten) + test, `OnboardingPickBookScreen.tsx` + test, `useOnboardingGate.ts`, **`fetchNarratorSample.ts` and its test deleted**; `screens/leaf/LeafPlayerScreen.tsx`; `screens/share/WrapUpScreen.tsx` + test; `screens/ProfileScreen.tsx`, `screens/surfaces.test.tsx`; `audio/NarrationControl.tsx` + test, `audio/useNarration.ts` (type-only); `testing/firstLeaf.ts` **(new, shared fixtures and the `finishTheLeaf` helper)**.
+**Deliberately untouched:** `IntroScreen.tsx` and its four siblings, the 144 per-Leaf clips, how `NarrationControl` and `useNarration` behave, `apps/admin`, `apps/pipeline`, `projectplan.md`, `projectRoadmap.md`.
+
+---
+
 ### Completed: ONBOARD-2 — two narrator self-introduction clips — 2026-09-24
 
 *Pipeline Manager. Branch `onboard-2-narrator-greetings`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Revised the same day, after the founder heard the first pair.***
