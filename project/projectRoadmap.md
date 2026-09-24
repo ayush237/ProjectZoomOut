@@ -2,129 +2,100 @@
 
 Owned by Architect.
 
-## Where things stand — 2026-09-18
+## Where things stand — 2026-09-24
 
-**Read this first if you are a fresh session.** Rewritten 2026-09-18 at an Architect clear. **The
-previous version was dated 2026-09-17 and was wrong in its headline claim** — it said Ikigai's
-eighteen Leaves were still drafts and the critical path was publishing them. They have been published
-and verified since.
+**Read this first if you are a fresh session.** Rewritten 2026-09-24 at an Architect clear. The previous
+version was dated 2026-09-18 and had been patched in place since — by the end it still said two merged PRs
+were open and that a ruling was pending which had been executed two days earlier.
 
 > **⚠️ Check your branch before trusting anything below.** Checkouts in this project have repeatedly
 > sat on stale feature branches. `git log --oneline -1 origin/main` — never `HEAD`.
 
 **Four worktrees, and `main` lives in `ZO` alone.** `ZO` (Architect, `main`) · `ZO-admin` (Manager) ·
-`ZO-pipeline` (Pipeline Manager) · `ZO-vo3` (Manager, VO-3). **Never `git checkout main` in a linked
-worktree** — branch from `origin/main` instead.
+`ZO-pipeline` (Pipeline Manager) · `ZO-vo3` (Manager — reused for ONBOARD-3). **Never `git checkout main`
+in a linked worktree** — branch from `origin/main` instead.
 
 ### What is true today
 
-- **A reader can hear Ikigai, on a real phone. Voiceover is finished end to end.** VO-3 merged
-  2026-09-22 (`060a286`); the eighteen Leaves are published and carry **144 audio clips** — both
-  narrators, four slides each — verified by direct query against the CMS. Spend closed at **$1.8230 of
-  the $3.00 ceiling.** **The default narrator is male (Druv — Google's Sadaltager voice)**, ruled by the founder after
-  listening to both 29:11 tracks in full.
-- ~~Nothing is in flight.~~ **Corrected 2026-09-22** — both packages handed off this session came back the
-  same day. **PR #56 (COVER-1)** and **PR #57 (PILOT-1)** are both open, CI-green, and code-reviewed 9/9 and
-  12/12 respectively. Neither is merged. Both are now waiting on the founder, not on a session: COVER-1 on a
-  cover pick + admin-UI upload, PILOT-1 on the mobile-UI device gate (Android, Expo Go) — see the status
-  board for the full detail. One August-6th planning commit on `wp0-monorepo-scaffolding` still must never
-  be merged.
-- **Onboarding has been walked on a real phone, and is being reworked.** ONBOARD-1 (735 tests) and
-  PILOT-1 were device-gated 2026-09-23/24 on Android/Expo Go, after a long infrastructure detour that
-  was none of it app code (stale `node_modules`, a duplicated env line, `MEDIA_BASE_URL` and
-  `HIDE_PLACEHOLDER_CONTENT` unset for the session). **Four real product gaps came back:** the intro plays
-  at the wrong moment, the narrator beat demos a book instead of introducing itself, narration's
-  optionality is never stated, and nothing marks onboarding complete once the first Leaf is read.
-  **ONBOARD-2 (the two narrator clips, Lara and Druv) is signed off; ONBOARD-3 (everything else) is with
-  Manager.** **The covers are uploaded — our own art on both Tracks — but pinned to an absolute LAN
-  address (`192.168.1.5`)**, so any network change breaks both until the two `coverUrl`s are edited again
-  (debt row on `checkCoverUrlIsImage`).
-- **INTRO-1 is done** — the first-run cold open, merged as PR #54, 8/8 criteria, **device gate observed
-  by the founder on a real phone.** `INTRO_SEED` and `INTRO_FOCUS_SCALE` are settled values.
-- **The library is 28 Tracks of which two are real** — Track 42 (*The Science of Getting Rich*) and
-  Track 50 (*Ikigai*). Everything else is placeholder. **That is still the honest gap, and it is now
-  the largest one** — the app works, and there is almost nothing in it to read.
-- **Nothing is deployed.** It all runs on the founder's Mac. Reviews come from friends, in person —
-  the 2026-09-15 ruling to stay on the free setup still stands. **`MEDIA_BASE_URL` is a prerequisite**
-  (debt register), because deployment is where `CONTENT_API_URL`'s double duty stops being survivable.
+- **The app works end to end on a real phone, and onboarding has been walked once.** Voiceover is finished
+  (144 clips, both narrators, verified against the CMS; VO-3 `060a286`), and ONBOARD-1 and PILOT-1 were
+  device-gated 2026-09-23/24 on Android/Expo Go. **The narrators are Lara (female) and Druv (male)** — the
+  provider's voice ids, Achernar and Sadaltager, are never spoken or shown. **The default is Druv**, ruled by
+  the founder after listening to both 29:11 tracks in full.
+- **In flight: ONBOARD-3** (Manager, `ZO-vo3`) — pre-intro, INTRO-1 repositioned to after sign-up, the
+  narrator beat ahead of book-picking, the closing screen, one Lara/Druv name map. Its handoff is the
+  **first entry under Handoffs** in `collaboration-log.md` (`c4ce891`). **The founder is opening a fresh
+  Manager session for it, so it may not have started.** **Do not archive anything in `project/` while it
+  runs.**
+- **Done, waiting only on record-keeping:** ONBOARD-2 (the two narrator clips) is signed off, Media 350/351
+  verified. Pipeline Manager's follow-up entry (new ids, the founder's ear result) may not be pushed yet.
+- **Waiting on the founder:** a go/no-go on **ONBOARD-2.1** — Pipeline Manager, no model calls: pin the
+  legal fence, an upload pre-flight, three unpinned money lines, and the `narrate --max-attempts 3` ruling
+  that ONBOARD-2 should have carried (debt rows). *Proposed, not yet approved:* a small Manager bundle after
+  ONBOARD-3 — accept a relative `coverUrl` in the admin publish rule (ends the LAN-IP pinning below) and a
+  Python CI job (also below).
+- **When ONBOARD-3 reports:** review the diff *before* the founder touches the phone (`code-reviewer`; the
+  risk is the `markSeen` table and the route-param closing), then merge, then the device gate — the
+  pre-flight is in `GETTING_STARTED.md`. **Archive the closed packages at its sign-off, not before.**
+- **The library is 28 Tracks of which two are real** — Track 42 (*The Science of Getting Rich*) and Track 50
+  (*Ikigai*). **Still the largest gap: the app works, and there is almost nothing in it to read.** Book #3
+  is the next real lever.
+- **Nothing is deployed.** It all runs on the founder's Mac; reviews come from friends, in person — the
+  2026-09-15 ruling to stay on the free setup stands. `MEDIA_BASE_URL` (PILOT-1, merged) is the prerequisite
+  for deployment.
+- **The covers are our own art, uploaded 2026-09-23 — pinned to an absolute LAN address**, because the
+  admin's publish rule rejects a relative path. Any network change breaks both until the two `coverUrl`s
+  are edited (debt row on `checkCoverUrlIsImage`).
+- **No CI job runs the Python pipeline.** "CI green" on a pipeline PR has only ever meant the JS
+  workspaces; pipeline sign-offs rest on the report's counts plus a reviewer running the gate by hand
+  (debt row, verified 2026-09-24).
 
 ### The environment facts that cost time if rediscovered
 
-- **Media URLs are absolute, and built from `CONTENT_API_URL`.** Payload stores media relatively
-  (`/api/media/file/…`); the backend resolves it against `CONTENT_API_URL`, whose default is
-  `http://127.0.0.1:3001/api`. **On a real phone that is the phone**, so every image and every audio
-  clip silently fails while text loads fine. **Set `CONTENT_API_URL` to the Mac's LAN address for any
-  device session** — `http://192.168.1.102:3001/api` on 2026-09-22. Cost a whole session on 2026-09-22,
-  presenting as two unrelated-looking bugs: narration doing nothing, and a diagram "showing its prompt"
-  (which was `SlideImage`'s alt-text fallback, working correctly).
-- **The device gate runs on an Android phone over Expo Go.** Worth stating because the rest of this
-  section reads iOS — the VO-3 crash was `expo.modules.audio.AudioPlayer` receiving a
-  `java.lang.Integer`, which is an Android stack.
-- **A native iOS build fails on this Mac** — `expo-modules-jsi` will not compile under Xcode 26.3 /
-  Swift 6, and only one Xcode is installed. **Device gates run on Expo Go instead**, confirmed working
-  on the founder's phone 2026-09-18. Do not pin an older Xcode; see the decisions log.
-- **~~Port 3000 is held by an unrelated Next.js app, so the backend cannot bind.~~** **Corrected
-  2026-09-22 — the backend was measured running healthy on port 3000** (`/health` returns
-  `{"status":"ok"}`). The Next.js app simply is not always running. Payload is on 3001. **VO-3's row
-  once carried "moves the backend off port 3000" as scope; that never reached its handoff** and is now
-  a conditional, not a blocker — it returns only if that other app is started first.
-- **SecureStore survives uninstall and reinstall on the iOS Simulator**, so any first-run flag persists
-  across a reinstall.
-- **The `ZO` worktree cannot run the mobile test suite** — its `node_modules` is stale against the
-  lockfile and 42 suites fail at module resolution in `jest.setup.js` before a single test executes.
-  Run mobile tests from the worktree that owns the package, or `npm install` in `ZO` first.
+- **A device session needs four things pointing at the Mac's current LAN address, and it changes.**
+  (1) `apps/mobile/.env`: `EXPO_PUBLIC_API_URL=http://<IP>:3000` — **one line, key once**; a pasted
+  `EXPO_PUBLIC_API_URL=EXPO_PUBLIC_API_URL=http://…` is not a URL, and the app reports it as "Could not
+  reach ZoomOut". (2) The backend started with `MEDIA_BASE_URL=http://<IP>:3001/api` and
+  `HIDE_PLACEHOLDER_CONTENT=true` — without them images and audio silently fail on a phone while text
+  loads, and Explore shows all 28 Tracks. (3) Both Tracks' `coverUrl`. (4) Expo restarted with `--clear`.
+  **Run the pre-flight in `GETTING_STARTED.md` ("Before a device gate") instead of finding these one at a
+  time** — it cost most of a day on 2026-09-23, none of it app code.
+- **Per-install flags persist across accounts.** `introSeen`, `onboardingSeen` and the coach-mark flag are
+  SecureStore, keyed to the install, not the reader — a used phone shows none of onboarding. **Clear Expo
+  Go's storage before a gate** (Android: Settings → Apps → Expo Go → Storage). SecureStore also survives
+  uninstall and reinstall on the iOS Simulator.
+- **`Ctrl+C` does not always kill Metro.** A 13-day-old process held port 8081 while a new one took 8082,
+  and the phone kept reconnecting to the old one. The pre-flight counts listening ports in 8081–8089 (want
+  exactly one once Expo is running).
+- **The device gate runs on an Android phone over Expo Go.** Worth stating because the rest of this file may
+  read iOS — the VO-3 crash was `expo.modules.audio.AudioPlayer` receiving a `java.lang.Integer`, an Android
+  stack. **A native iOS build fails on this Mac** (`expo-modules-jsi` under Xcode 26.3 / Swift 6, one Xcode
+  installed); device gates run on Expo Go. Do not pin an older Xcode.
+- **Payload's file route answers `GET`, not `HEAD`** — a `HEAD` returns 404 for a file that is there. Check
+  with `curl -s -o /dev/null -w '%{http_code}'`, not `curl -I`.
+- **The backend runs healthy on 3000 and Payload/admin on 3001.** An unrelated Next.js app holds 3000 only
+  if it is started first.
+- **A `git pull` does not run `npm install`.** `ZO`'s `node_modules` was stale against the lockfile until
+  2026-09-23 (Expo failed with "Failed to resolve plugin for module expo-audio"); run `npm install` after
+  any pull that touched dependencies. **`ZO`'s `apps/pipeline/.venv` is stale too** (mypy shows 20 spurious
+  errors) — run the pipeline gate from `ZO-pipeline`.
+- **An Architect session cannot read `.env` files** (permission denied) — ask the founder to paste the line.
+  Services an Architect session starts in the background may not outlive it; re-run the pre-flight after a
+  clear.
 
-### The token budget — where it stands 2026-09-22
+### The token budget — measured 2026-09-24
 
-**Document load is ~109k → ~98k, and the ruling below is what takes it to ~70k.** Against
-`token-budget.md`'s 40k target. Done on 2026-09-22 after the founder's external analysis; the applicable
-fixes from it are below, and the two that were already done are recorded so nobody does them twice.
-
-| | 2026-09-18 | now |
-|---|---|---|
-| `collaboration-log.md` | 28k, then 33k when VO-3 landed | **14k** — VO-1.1, VO-2, VO-2.1 archived at VO-3's merge |
-| `projectRoadmap.md` | 47k | 47k — **the ruling below is the only thing that moves this** |
-| everything else | 34k | 37k — `GETTING_STARTED.md` gained the model and connector rules |
-| **documents, total** | **~109k** | **~98k** |
-| connector tool definitions | **72 tools, on every request** | **16** — Notion (45) and Drive (11) off |
-
-**The connector finding is the one worth remembering.** `token-budget.md`'s Lever 6 has said to run
-`/context` since 2026-08-29 and nobody had. 56 tools for Notion and Google Drive — services this project
-does not touch — were loaded into **every request of every session for a month.** Unlike document load,
-that cost cannot be archived away and does not shrink as a conversation grows; it is simply paid again
-each turn. **Both are now off by default for new sessions.**
-
-### What remains, and it needs a ruling rather than a script
-
-**The roadmap is now the largest file at 46k, and 38k of it is two tables** — the debt register (24k,
-157 rows) and the decisions log (14k, 45 rows). `token-budget.md` refused to cut the register once and
-gave the reason: *open debt that is not loaded is debt that gets forgotten.* **That reason still stands
-and this proposal does not touch it.**
-
-**The finding is that neither table is one thing.** Classified 2026-09-22:
-
-| Debt register | rows | weight | where it belongs |
-|---|---|---|---|
-| Open, unassigned debt | 76 | 12k | **stays — this is the register** |
-| Assigned to a package | 52 | 6k | the status board's own "Waiting on" column |
-| Founder decisions | 13 | 2k | `launch-blockers.md` Part 3 — **which the roadmap already declares the single live list** |
-| Environment facts, "not debt" | 7 | 1k | the "environment facts" section above, which says *three* and is therefore incomplete |
-| Standing rules | 7 | 1k | `agents/*.md`, where rules are actually loaded |
-
-**So ~10k comes off by not tracking the same row twice — no open item is dropped.** Three of those four
-categories are already duplicated in a list that is already read.
-
-**The decisions log has the same shape and one structural cause worth naming: a dated table has no exit
-path for a rule.** Feature decisions age out; rules never do. So rules accumulate in the only table that
-can be pruned by date, and the table becomes unprunable. **Of its 27 pre-2026-09-16 rows, ~19 are settled
-feature calls (archive, ~6k) and ~8 are standing rules that still govern every package** — among them
-*a handoff cites a commit, not a file location*, *a status row states merge state as observed*, and
-*device gates split by question type*. Those move to `agents/architect.md`. One is a product rule
-(*re-reading a finished Leaf counts for nothing*) and belongs in `PRODUCT.md`.
-
-**Do not run this as a date cut.** Archiving the older band wholesale would bury the merge-state rule,
-which this project has already violated twice, and the observation-criterion rule, which caught an app
-pinned to light mode for six packages.
+**The collaboration log is 186KB (~46k tokens), up from ~14k on 09-22** — ONBOARD-1, -2, -3, COVER-1 and
+PILOT-1 landed and none is archived yet, correctly (never mid-package). **Archive them at ONBOARD-3's
+sign-off.** The roadmap is 162KB (~40k tokens). The 09-22 work is done: the decisions log was split (13
+rules promoted into the persona files, 31 rows archived), the register swept (16 of 157 rows were not
+true; ~138 now) and six founder decisions moved to `launch-blockers.md` Part 3. **The rest of what was
+proposed then — assigned rows out of the register, environment facts out, the remaining founder decisions —
+was only partly executed**, and this session added eight long register rows and several long board rows.
+**Manager and Pipeline Manager are protected by their reading rule (their handoff only). An Architect
+orients from this section, the status board and the log's headers — do not read the decisions log or the
+register end to end.** The connector finding stands: Notion and Drive off by default removed ~56 tool
+definitions from every request of every session.
 
 ## Phase 1 status board
 

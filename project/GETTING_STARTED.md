@@ -149,6 +149,42 @@ were turned off on 2026-09-22, which also made them off by default for new sessi
 since 2026-08-29 and nobody had, which is why 56 unused tools rode along for a month.
 
 
+## Before a device gate — added 2026-09-24
+
+The device gate is where the founder's time goes, and 2026-09-23 lost most of a day to five environment problems, **none of them app bugs**: the Mac's LAN address changed (it appears in three places), a duplicated key in `apps/mobile/.env`, backend flags never set, a zombie Metro holding port 8081, and a stale `node_modules`. **Run this first — it prints what is wrong.** Every line was tested 2026-09-24 except the `.env` one, which needs the founder's own shell (an Architect session cannot read `.env`). The backend's two flag lines should carry the same IP as the first line; want 0 Metro ports before Expo starts and 1 after.
+
+```bash
+cd /Users/ayushgupta/Documents/ZoomOut/ZO
+IP=$(ipconfig getifaddr en0); echo "Mac IP: ${IP:-NONE (not on Wi-Fi?)}"
+[ "$(grep '^EXPO_PUBLIC_API_URL=' apps/mobile/.env)" = "EXPO_PUBLIC_API_URL=http://$IP:3000" ] && echo "mobile .env OK" || echo "mobile .env WRONG: $(grep EXPO_PUBLIC_API_URL apps/mobile/.env)"
+for p in 3000 3001 8081; do lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 && echo "port $p: up" || echo "port $p: DOWN"; done
+echo "Metro ports in 8081-8089 (want 1 once Expo is running): $(lsof -nP -iTCP:8081-8089 -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | sort -u | wc -l | tr -d ' ')"
+B=$(lsof -nP -tiTCP:3000 -sTCP:LISTEN | head -1); [ -n "$B" ] && ps eww -p "$B" | tr ' ' '\n' | grep -E '^(MEDIA_BASE_URL|HIDE_PLACEHOLDER_CONTENT)=' || echo "backend flags: missing or backend down"
+docker exec zoomout-postgres psql -U postgres -d zoomout_cms -tA -c "select id||' '||cover_url from tracks where id in ('42','50') order by id" | while read u; do case "$u" in *"$IP"*) echo "cover OK:    $u";; *) echo "cover STALE: $u";; esac; done
+for n in female male; do curl -s -o /dev/null -w "greeting $n: HTTP %{http_code}\n" --max-time 5 "http://$IP:3001/api/media/file/narrator-greeting-$n.mp3"; done
+```
+
+**If a line is wrong:**
+
+- **The IP changed** → fix `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` (one line, key once), both Tracks' `coverUrl` in admin (`http://localhost:3001/admin`, in the **Mac's** browser — not the phone's), and restart the backend with the flags below.
+- **A port is DOWN** → start it, each in its own terminal (they run until stopped):
+
+```bash
+cd /Users/ayushgupta/Documents/ZoomOut/ZO && npm run dev --workspace=apps/admin
+```
+
+```bash
+cd /Users/ayushgupta/Documents/ZoomOut/ZO && MEDIA_BASE_URL=http://$(ipconfig getifaddr en0):3001/api HIDE_PLACEHOLDER_CONTENT=true npm run dev --workspace=apps/backend
+```
+
+```bash
+cd /Users/ayushgupta/Documents/ZoomOut/ZO/apps/mobile && npx expo start --clear
+```
+
+- **More than one Metro port** → `kill` the older PID. `Ctrl+C` does not always stop it.
+- **On the phone:** clear Expo Go's storage (Android: Settings → Apps → Expo Go → Storage) — the intro and onboarding flags are per-install, so a used phone shows none of it — then rescan.
+- **After a `git pull` that touched dependencies** → `npm install` in `ZO` first; a pull does not run it.
+
 ## Context hygiene
 
 **Architect clears too — added 2026-09-02.** This rule existed for Manager since Phase 1 and Architect was never held to it, so one Architect session ran continuously from WP15 to WP20. **Every turn re-sends the whole conversation**, so a session that deep pays for every earlier package on every message. That was the single largest consumer of the weekly limit, and the fix costs nothing: the roadmap and the log are the memory, and Architect wrote them.
