@@ -595,6 +595,160 @@ Verify this list against the repository rather than trusting it.
 
 ## Completions (Manager → Architect)
 
+### Completed: ONBOARD-2 — two narrator self-introduction clips — 2026-09-24
+
+*Pipeline Manager. Branch `onboard-2-narrator-greetings`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`.*
+
+**Both clips are rendered, checked, uploaded to Payload's Media collection and verified by reading Payload back — but the device gate, the founder's ear, has not happened and I cannot do it: I have no way to listen.** Everything I can measure passes. The two things I cannot judge are named below: whether the narrators' *names* are pronounced acceptably, and whether the pace reads as rushed. **All 6 acceptance criteria are verified as written. What is not done is the device gate and the handoff's "verify by listening", which are the founder's.**
+
+| | |
+|---|---|
+| Uploaded | **Female (Achernar): Media id 348**, `/api/media/file/narrator-greeting-female.mp3`, **7.49 s** · **Male (Sadaltager): Media id 349**, `/api/media/file/narrator-greeting-male.mp3`, **6.62 s** |
+| Gate | `ruff format --check` **120 files** (was 116) · `ruff check` clean · `mypy` (strict, configured target) **102 files** (was 99) · `pytest` **493 passed** (was 441), 6 `live` deselected as before |
+| Spend | **$0.0274 in total** — female $0.0112, male $0.0162 — over three takes and 14 paid calls (7 speech, 7 listening). The takes that shipped cost $0.0080 of it. Under the handoff's $0.05; the hard cap the founder approved in-session was $0.20 |
+| Device gate | **Pending: the founder's ear.** Both clips were sent to the founder in chat; absolute paths below |
+| Mutation-checked | 10 of 10 deliberate breakages of the invariants below were caught by the intended test |
+
+---
+
+## For ONBOARD-3: the two references
+
+| | Female | Male |
+|---|---|---|
+| Narrator id (`NarratorId`) | `female` | `male` |
+| Voice | Achernar | Sadaltager |
+| Payload Media id | **348** | **349** |
+| Stored relative URL | `/api/media/file/narrator-greeting-female.mp3` | `/api/media/file/narrator-greeting-male.mp3` |
+| Filename | `narrator-greeting-female.mp3` | `narrator-greeting-male.mp3` |
+| `mimeType` / `filesize` | `audio/mpeg` / 59,904 bytes | `audio/mpeg` / 52,992 bytes |
+| Duration, seconds | **7.49** | **6.62** |
+| sha256 of the served file | `ee52979b892c9bad69d5d0551219463834d41d083a4f84c972ec0625602c1a42` | `d815601f36b09bc22936597b1daac12e68f442f8c706b1dcc4c1d3fc09e2d5fe` |
+| `alt` | "Narrator self-introduction, read by Achernar (the female narrator): Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company." | "Narrator self-introduction, read by Sadaltager (the male narrator): Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company." |
+
+**Build against the URL, not the id.** If the founder rejects a clip at the ear gate it has to be redone, and the machine key cannot delete Media (`machinesNeverDelete`), so the old document is deleted by hand in the admin UI and the clip uploaded again. **The URL is the filename, so it survives that; the Media id does not.** If you can wait for the ear gate before baking anything in, wait.
+
+Facts about the served files, checked rather than assumed: **public read, no auth** (the backend's anonymous fetch works); `content-type: audio/mpeg`; `accept-ranges: bytes` and a `Range: bytes=0-99` request answers `206` with the right `content-range`. That is the same route VO-3's narration is played from. Media has no draft/publish state, so these are live the moment they are uploaded.
+
+**`AudioRef` fields, since `AudioRef` is the shape you will be asked for:** `durationSeconds` is real and measured (from the decoded bytes Payload serves, not estimated). If you want a `textDigest` that honestly describes the words, it is `sha256(script)` exactly as `assets/narration.py:text_digest` computes it: female `bf27450ad0908b31f781755846e67ede128bb488ed4e40c3c0bbd7051ae75510`, male `e0c45388d497f94f8c2cbe533e75522fcf9a0ce282e4c1cef62489be4fcf25a9`. Nothing pipeline-side reads it for these two clips; it is offered so the value you pick is not invented.
+
+---
+
+## What the founder needs to do, and decide
+
+1. **Listen.** Files, in the `ZO-pipeline` checkout (not `ZO`): `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/greetings/audio/final/narrator-greeting-female.mp3` and `…/narrator-greeting-male.mp3`. Listen for, in order of how likely each is to be the problem: **the names** (below), **pace** (187 and 182 words a minute of speech; the same voices' lesson clips run 130–185 and 135–191 at p10–p90, so this is the fast edge, not beyond it), and **whether each sounds like the narrator who reads the lessons** (the female greeting is measurably brighter and more animated than the lesson clips even after two revisions; see "Three takes").
+2. **The names are the risk, and no machine here can rule on them.** The transcriber wrote Sadaltager four different ways across four renders: "Sedat Auger", "Sebal tager", "Saul DeTagger", "Saul Talgor". Achernar came back as "Aknar", "Akinar" and, in the shipped take, correctly as "Achernar". That variation says the name is not landing as one clear word every time; it does not say it is wrong, because a transcriber cannot spell a name that is in no dictionary. **If the male name sounds wrong**, the options are: (a) accept it; (b) respell the name for the voice only, e.g. in `speakable()`, which today changes spacing and nothing else, so this is a new kind of transformation and wants an Architect ruling before I touch it; (c) change the persona names, which is a product decision; (d) drop the name from the sentence.
+3. **To redo a clip:** delete Media 348 and/or 349 in the admin UI, then from `apps/pipeline`: `export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline" ZOOMOUT_PIPELINE_USE_VERTEX=true ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex` and `/Users/ayushgupta/Library/Python/3.9/bin/uv run zoomout-pipeline generate-greetings`. Change the words in `assets/greeting.py:NARRATOR_GREETINGS` or the delivery in `prompts/narrator_greeting.md` first if that is the reason; either is a new clip (new spend, about $0.008 a take). **Without deleting first the command refuses**, naming the document's id: it finds the existing one, sees different bytes, and uploads nothing.
+
+---
+
+## Transcripts, as the handoff asked
+
+Produced by a *blind* transcript (Gemini 3.6 Flash on Vertex, never shown the script), compared word by word by the pipeline's own `compare_words`, on the clips that shipped:
+
+| | Script | What the transcriber wrote | Difference |
+|---|---|---|---|
+| Female | "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company." | "Hi, I'm Achernar. I'll be reading to you here whenever you'd like the company." | **None spoken.** Punctuation only: no comma after "here" |
+| Male | "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company." | "Hey, I'm **Saul Talgor**. I'll be reading to you here whenever you'd like the company." | **The name**, transcribed as two words. Every other word matches. Explained above: this is the one word the pipeline sets aside and reports, and only an ear can rule on |
+
+**No spoken instruction, tag or direction is in either transcript, and the pace confirms it independently of the transcriber**: 14 words in 4.48 s and 4.62 s of speech (187 and 182 wpm). A leaked style prompt fills speech time; VO-2's leak measured 30–42 wpm. The transcriber is the instrument VO-2 found silently dropping spoken instructions in 9 of 13 transcripts, so this is exactly why the pace is read separately.
+
+---
+
+## The handoff's premise was wrong in one place, and what I did instead
+
+The handoff says to reuse VO-2's TTS call with "no new logic beyond wiring two scripts through it". **That call cannot take a greeting, on purpose.** `SpeechClient.synthesize` accepts a `NarrationLine` and nothing else (`test_the_tts_client_only_accepts_a_narration_line`), and a `NarrationLine` is constructed in exactly one function, `narration_script`, which reads a Leaf (`test_a_narration_line_is_built_in_one_place`). Both exist so the book's verbatim words cannot reach the voice (`LEGAL.md`, "Narration"). A greeting has no Leaf.
+
+I did not widen either test. **A greeting has its own door, built the same way:** `assets/greeting.py:NARRATOR_GREETINGS` is the whole list of what can be said (asserted exactly, so a changed word is a failing test), `NarratorGreeting` is built in one place (asserted), and `SpeechClient.synthesize_greeting` takes a `NarratorGreeting` and nothing else and **takes its voice from the greeting**, so "I'm Achernar" cannot be spoken by Sadaltager (asserted, both by signature and by the request that reaches Cloud TTS). Behind both doors is one private `_call`, so the timeout, the single retry layer and the host check are a single implementation. **No existing test was modified**; the 441 that existed pass unchanged, and the 123 in the five narration test files were run after the `speech.py` refactor and before anything was built on it.
+
+**`LEGAL.md` should be told.** Its "Narration" section says voiceover narrates ZoomOut's own prose "and nothing else", names four Leaf fields, and says *any handoff that touches narration carries this boundary explicitly*. This one did not. A fixed sentence of ZoomOut's own meets the intent, and I believe it meets the letter, but it is a fifth thing the voice can say and the document does not know it. I did not edit `LEGAL.md`.
+
+---
+
+## Decisions the handoff left to me, and why
+
+1. **The render is `narration_nodes._render_attempt`'s twin, not a shared function.** `render_line` is typed to `NarrationLine` all the way through `RenderedClip` and `attach_leaf_narration`, so sharing it meant retyping VO-2's money path in a package about two clips. The cost is about 250 lines that mirror it: the same order, and the same money handling (worst case reserved before the call; a timeout counted as billed; unreadable audio charged by its size). **A fix to that handling belongs in both places.** I held the twin to the same cases as the original in `tests/test_greetings.py` (budget refuses before the call, never bought twice, bounded regeneration, pace beats an exact transcript, timeout billed, unreadable audio kept and charged), which is what the persona's sibling rule asks for when a pair exists.
+2. **The ceiling is $0.20, not $0.05, and that is the smallest number that works.** `NarrationBudget` reserves the most a call *could* cost, which for Cloud TTS is its 655-second maximum: **$0.164 for these requests**, before any listening. A cap under that refuses the first call. What a run actually costs is about $0.002 to speak a clip and $0.002 to listen to it. The founder approved a $0.20 hard cap in-session (asked and answered, 2026-09-24) after being told all of this. A test pins that the ceiling admits one call with at least $0.02 to spare, because a ceiling that refuses everything is a silent failure. The cap is counted **across invocations**, in `runs/greetings/spend.json`, written after every call, and an unreadable ledger is an error rather than a fresh start.
+3. **The name is set aside by the word check, and reported.** Compared word for word, "Sadaltager" heard as two words fails every take: it did on take 1, where the strict comparison held the male clip twice and nothing was uploaded (the both-or-neither rule working live). `assets/greeting.py:compare_greeting` sets aside **one to three words in the name's own slot** and reports what was heard there; everything else is compared exactly; **a name that is dropped, run into its neighbours or stretched over a longer run is not set aside and fails the clip**; and a greeting that never says the name is MAJOR on its own. Each of those is a test, and the run-length limit and the never-said rule are mutation-checked. **What this gives up, stated plainly: the machine no longer has any opinion on the name.** The command prints `name: heard as 'saul talgor' — set aside, not machine-checked; a person has to hear this one` on every run, so the gap is on the screen, not in a docstring.
+4. **Both greetings or neither, and a transcript is required.** A Leaf's clip with no listener is attached with a note; a greeting is held, because what it said is a deliverable here. Passed clips go to `final/`, held ones to `held/`, and a clip that later changes verdict has its old copy removed, so a failed clip never sits under the name of a good one.
+5. **Stable filenames carry no hash**, unlike a Leaf's clips, because the app references them. That gives up "same name means same bytes", so an existing document is fetched, hashed and *compared*, never trusted, and the redo procedure above follows from it.
+6. **Upload timing.** I offered the founder "upload after you've heard them" (recommended) or "upload straight away"; they chose straight away. The cost of that choice is the manual delete above if a clip is rejected.
+7. **The direction is `prompts/narrator_greeting.md`** and went through two revisions, each on a measurement, recorded in the file's own comment so the reason survives. Its first paragraph is the shared narrator block of `narration_direction.md` word for word, and a test asserts they stay identical. Shipped text of the second paragraph: *"Warm and welcoming, a little slowly and clearly, never gushing."*
+
+---
+
+## Three takes, and what each measured
+
+Bands are the same voices' 144 lesson clips (72 each, all joined to their check files), p10–p90. Pitch and movement are the audio module's own `measure`, crude but model-free. Speech pace is words over speech time.
+
+| Take | Second paragraph of the direction | Female | Male |
+|---|---|---|---|
+| 1 | "Warm, easy and welcoming, with a quiet smile in the voice, never gushing." | 219 wpm · 242 Hz · 7.1 st · heard "Aknar" | 219 wpm · 186 Hz · 10.4 st · heard "Sedat Auger" / "Sebal tager" (held under the strict check, two attempts) |
+| 2 | "Warm and welcoming, a little slowly and clearly, with a quiet smile in the voice, never gushing." | 198 wpm · **250 Hz · 10.3 st** · "Akinar" | 190 wpm · 162 Hz · 8.8 st · "Saul DeTagger" |
+| **3 (uploaded)** | "Warm and welcoming, a little slowly and clearly, never gushing." | **187 wpm · 245 Hz · 8.3 st** · "Achernar" | **182 wpm · 171 Hz · 8.7 st** · "Saul Talgor" |
+| Lesson band | | 130–185 wpm · 219–240 Hz · 4.2–5.8 st | 135–191 wpm · 133–167 Hz · 6.3–9.8 st |
+
+Take 1 ran faster than any of the 144 lesson clips (Achernar's fastest is 215 wpm, Sadaltager's 206). Take 2 fixed the pace and **made Achernar's pitch movement almost double the lesson clips'**, which is what "a quiet smile in the voice" does to a voice, so the phrase went. Take 3 is closer to the lessons on every measure for both narrators and is not identical to them on any: the female is still ~5 Hz over the lesson p90 in pitch and 2.4 st over in movement, and marginally fast (187 against 185); the male is in band on pace and movement and about 5 Hz high in pitch. **A greeting is naturally a brighter register than lesson prose, so I stopped there**: further takes would tune proxies against an ear I do not have. The founder's ear is the arbiter, and the first, faster take is kept for comparison at `…/audio/take-1-easy/`.
+
+---
+
+## What surprised me
+
+- **The transcriber cannot be the referee for a name, and it is inconsistent even with itself**: four renders of one name, four spellings. The strict word check I had inherited would have held every take of the male clip forever, and I only found that by running it.
+- **The budget's arithmetic rules out the handoff's own number.** A $0.05 cap is unreachable not because the run costs more, but because the budget reserves a 10-minute worst case ($0.164) before each call. The handoff's estimate of the cost was right; its implied ceiling was not something the mechanism can honour.
+- **One adjective moved the pitch.** "A quiet smile in the voice" was my own flourish, and it took Achernar from inside the lesson band on movement to double it. I would not have guessed a phrase that mild did that.
+- **A check of mine cried wolf once**: `Content-Type` came back `None` from my verification script, which read as "the file is served without a type". It was header-name case in my script; `curl` shows `content-type: audio/mpeg`. I checked before believing either.
+
+---
+
+## What I could not verify
+
+- **By ear, anything.** The handoff asks for the transcripts to be verified by listening. I have no audio input. What I did instead is the transcript above, the model-free pace, and measurements against the lesson clips: none of which is listening.
+- **How the names sound.** The one thing above the machine's competence, named and reported rather than papered over.
+- **Google's invoice.** The $0.0274 is the pipeline's ledger: speech from the seconds Cloud TTS returned (25 audio tokens a second), input tokens *estimated* from bytes (three bytes a token, an over-count by design), listening from the SDK's reported token counts. The 14 calls are counted from the logs. I did not reconcile it against Cloud Billing, which lags.
+- **Whether ONBOARD-3's player renders these correctly on a device.** That package's gate, not this one's.
+
+---
+
+## Verification performed, and what it proves
+
+**Payload's stored state, read back independently of the code that wrote it** (a separate script over REST, not `PayloadClient`): both documents read anonymously with `HTTP 200`, filenames, `alt`, `mimeType: audio/mpeg` and `filesize` as above; both files fetched anonymously, **sha256 of the served bytes equals the local file's for both**; **duration re-measured by decoding the bytes Payload serves: 7.49 s and 6.62 s**, equal to what the command reported; **exactly two Media documents contain `narrator-greeting`, no `-1` renames**, and they are the two newest ids (349, 348, then COVER-1's 347 and 346). The command itself also refuses to report a document whose served bytes differ from the clip it checked, and it called `whoami` first: the key is `pipeline-bot@zoomout.local`, `accountType: machine`, not the anonymous 200 that a wrong `Authorization` scheme yields.
+
+**Nothing else was written.** A test asserts the CMS is only ever asked to find, upload and serve Media (no Leaf, no Track, no draft); the command's last line says so. I did not diff the live Leaves and Tracks.
+
+**Mutation checks**, each a one-line break of the code followed by the test file, then restored byte-for-byte: the budget not reserved before the call · an upload that ignores a held clip · a name set aside however long the run · a name never said not counting as major · different bytes in an existing document accepted · a greeting always spoken in one fixed voice · a stale copy left in the other folder · an unreadable ledger treated as empty · pace no longer overriding an exact transcript · a guard outage no longer holding the clip. **10 of 10 caught, each by the test written for it.**
+
+---
+
+## Test count against the last pipeline package
+
+COVER-1: **99 files / 441 tests**. Now: **102 files / 493 tests**. **+3 mypy files** (`assets/greeting.py`, `graph/greeting_nodes.py`, `tests/test_greetings.py`) and **+52 tests**, all in the new file; nothing dropped and nothing existing changed. `ruff format --check` counts the markdown prompt files too, which is why it moved 116 → 120 (three Python files and `prompts/narrator_greeting.md`).
+
+---
+
+## What changed
+
+All under `apps/pipeline`. **The one path outside it is this entry**, which the persona requires; `git diff --stat` on the code is `README.md`, `assets/speech.py`, `cli.py`.
+
+- **New** `assets/greeting.py` (the closed script, its direction loader, stable filename and alt, `compare_greeting`), `graph/greeting_nodes.py` (render, ledger, upload, `run_greetings`), `prompts/narrator_greeting.md`, `tests/test_greetings.py`.
+- **`assets/speech.py`**: one private `_call` extracted from `synthesize`, behaviour and log fields unchanged; `synthesize_greeting`, `SynthesizedGreeting`, `greeting_request_bytes` added.
+- **`cli.py`**: `generate-greetings` (`--render-only`, `--max-attempts`, `--ceiling-usd`). README: a section documenting it and the redo procedure.
+
+---
+
+## What I got wrong along the way
+
+I ran `git stash --include-untracked` once in the `ZO-pipeline` worktree to compare a lint file count. It was popped at once; the stash list is empty, every change was present after, and `runs/`, which is gitignored and holds the paid-for Ikigai audio, was not touched (144 final mp3s and all raw wavs counted after). It was an unnecessary risk in a shared repository and I should have counted another way.
+
+## Follow-ups for Architect
+
+- **`LEGAL.md`** "Narration" should name the greetings (see above).
+- **Ruling wanted only if the male name sounds wrong:** respell for the voice (a new kind of transformation in `speakable()`), or rename the persona. I have not started either.
+- **The twin render.** If a third caller ever needs the money handling, extract it once rather than growing a third copy; the lines that must stay in step are the reservation, the timeout counting, and the unreadable-audio charge.
+- **Tier C, deferred:** the command has no end-to-end test with fakes beyond its refusal and `--help` (the live run was its smoke test); the per-voice lesson bands I measured by hand (pace, pitch, movement, pauses) are not in the repo and would make a good automated *pointer* for the ear, not a gate; `NarrationBudget.report()` says "voiceover ceiling" for a greeting run; and `PayloadClient` cannot replace or delete Media, so every redo costs the founder a manual delete.
+- **`runs/greetings/`** is on disk only (gitignored) and holds the raw takes and the ledger. Do not clean it.
+
+---
+
 ### Completed: ONBOARD-1 — the five-beat activation flow, promise to first Leaf — 2026-09-23
 
 **Code complete, fully tested, mutation-checked, and live-verified against the real backend** for every data-shape claim the flow depends on — the mobile-UI rendering itself is the one thing left for a device. Branch `onboard-1-activation-flow` in the `ZO-vo3` worktree, off `origin/main` (no commits landed there while this ran, so no merge was needed), pushed. PR: [#58](https://github.com/ayush237/ProjectZoomOut/pull/58).
