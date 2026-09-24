@@ -26,9 +26,11 @@ must not quietly stack a second one underneath it (WP20: 109 minutes of a two-ho
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from zoomout_pipeline.assets.greeting import NarratorGreeting
 from zoomout_pipeline.assets.narration import MAX_FIELD_BYTES, NarrationLine
 from zoomout_pipeline.cost import TokenSpend, rates_for
 from zoomout_pipeline.llm.ratelimit import (
@@ -156,6 +158,20 @@ class SynthesizedSpeech:
     possibly_billed_attempts: int = 0
 
 
+@dataclass(frozen=True)
+class SynthesizedGreeting:
+    """What the model returned for one narrator's greeting. `synthesize_greeting`'s answer, as
+    `SynthesizedSpeech` is `synthesize`'s: a different type because there is no Leaf line."""
+
+    wav: bytes
+    greeting: NarratorGreeting
+    voice: str
+    model: str
+    prompt: str
+    request_bytes: int
+    possibly_billed_attempts: int = 0
+
+
 class SpeechClient:
     """Gemini-TTS over Cloud Text-to-Speech."""
 
@@ -198,6 +214,9 @@ class SpeechClient:
     def request_bytes(self, line: NarrationLine, *, prompt: str) -> int:
         return len(line.spoken.encode("utf-8")) + len(prompt.encode("utf-8"))
 
+    def greeting_request_bytes(self, greeting: NarratorGreeting, *, prompt: str) -> int:
+        return len(greeting.spoken.encode("utf-8")) + len(prompt.encode("utf-8"))
+
     def synthesize(self, line: NarrationLine, *, voice: str, prompt: str) -> SynthesizedSpeech:
         """One line, spoken. LINEAR16, so the audio arrives lossless and with its own header.
 
@@ -205,17 +224,70 @@ class SpeechClient:
         once for the app. Asking for mp3 here would mean decoding a lossy file to do that
         and encoding it a second time.
         """
+        audio, timeouts = self._call(
+            text=line.spoken,
+            prompt=prompt,
+            voice=voice,
+            label=line.label,
+            context={"leaf": line.order, "slide": line.slide.value},
+        )
+        return SynthesizedSpeech(
+            wav=audio,
+            line=line,
+            voice=voice,
+            model=self.model,
+            prompt=prompt,
+            request_bytes=self.request_bytes(line, prompt=prompt),
+            possibly_billed_attempts=timeouts,
+        )
+
+    def synthesize_greeting(
+        self, greeting: NarratorGreeting, *, prompt: str
+    ) -> SynthesizedGreeting:
+        """A narrator's self-introduction, **in that narrator's own voice.**
+
+        The sibling of `synthesize`, through the same `_call`: a second door for a second kind
+        of line (`assets/greeting.py` says why it is not the first door widened), not a second
+        implementation of the request. There is no `voice` parameter to get wrong — the voice
+        is the greeting's own, so "I'm Achernar" cannot be spoken by Sadaltager.
+        """
+        audio, timeouts = self._call(
+            text=greeting.spoken,
+            prompt=prompt,
+            voice=greeting.voice,
+            label=greeting.label,
+            context={"greeting": greeting.narrator.value},
+        )
+        return SynthesizedGreeting(
+            wav=audio,
+            greeting=greeting,
+            voice=greeting.voice,
+            model=self.model,
+            prompt=prompt,
+            request_bytes=self.greeting_request_bytes(greeting, prompt=prompt),
+            possibly_billed_attempts=timeouts,
+        )
+
+    def _call(
+        self, *, text: str, prompt: str, voice: str, label: str, context: Mapping[str, object]
+    ) -> tuple[bytes, int]:
+        """The one place a synthesis request is built, sent and retried: the audio it returned,
+        and how many attempts timed out on the way (a timeout may still have been billed).
+
+        Both public methods come through here, so the guarantees this module states at the top
+        — one timeout, one retry layer, a refused host — hold for a greeting exactly as they do
+        for a Leaf's line, and a fix made to one cannot be missing from the other.
+        `context` is what the log lines are tagged with, and `label` is what an error names.
+        """
         from google.cloud import texttospeech
 
         if not voice:
             raise SpeechError("no voice given — the narrator is a decision, not a default")
-        text = line.spoken
         for name, value in (("text", text), ("prompt", prompt)):
             size = len(value.encode("utf-8"))
             if size > MAX_FIELD_BYTES:
                 raise SpeechError(
-                    f"{line.label}: {name} is {size} bytes; Cloud TTS refuses over "
-                    f"{MAX_FIELD_BYTES}"
+                    f"{label}: {name} is {size} bytes; Cloud TTS refuses over {MAX_FIELD_BYTES}"
                 )
 
         request = texttospeech.SynthesizeSpeechRequest(
@@ -241,15 +313,14 @@ class SpeechClient:
                 timeouts += possibly_billed(error)
                 if not is_retryable(error) or attempt == MAX_RETRIES - 1:
                     raise SpeechError(
-                        f"{line.label}: synthesis with {self.model}/{voice} failed after "
+                        f"{label}: synthesis with {self.model}/{voice} failed after "
                         f"{attempt + 1} attempt(s): {error}",
                         possibly_billed=timeouts,
                     ) from error
                 delay = retry_delay_seconds(error, attempt=attempt)
                 _log.warning(
                     "speech.retrying",
-                    leaf=line.order,
-                    slide=line.slide.value,
+                    **context,
                     attempt=attempt + 1,
                     retry_in=round(delay, 1),
                     error=str(error)[:160],
@@ -260,27 +331,18 @@ class SpeechClient:
         audio = bytes(getattr(response, "audio_content", b"") or b"")
         if not audio:
             raise SpeechError(
-                f"{line.label}: {self.model}/{voice} returned no audio", possibly_billed=timeouts
+                f"{label}: {self.model}/{voice} returned no audio", possibly_billed=timeouts
             )
 
         _log.info(
             "speech.synthesized",
-            leaf=line.order,
-            slide=line.slide.value,
+            **context,
             voice=voice,
             model=self.model,
             bytes=len(audio),
             endpoint=self.endpoint,
         )
-        return SynthesizedSpeech(
-            wav=audio,
-            line=line,
-            voice=voice,
-            model=self.model,
-            prompt=prompt,
-            request_bytes=self.request_bytes(line, prompt=prompt),
-            possibly_billed_attempts=timeouts,
-        )
+        return audio, timeouts
 
 
 __all__ = [
@@ -291,6 +353,7 @@ __all__ = [
     "SpeechClient",
     "SpeechError",
     "SpeechTransportError",
+    "SynthesizedGreeting",
     "SynthesizedSpeech",
     "is_cloud_tts_host",
     "possibly_billed",

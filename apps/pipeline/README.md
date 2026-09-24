@@ -323,6 +323,63 @@ Swap the service for `generativelanguage.googleapis.com` to confirm the Develope
 nothing. `status --run-id <id>` prints the narration transport the run recorded, with the
 endpoint read off the client that made the calls.
 
+## Narrator greetings: `generate-greetings` (ONBOARD-2)
+
+Each narrator introduces themselves once, so onboarding's narrator beat needs no book to have been
+picked. Two fixed sentences, one per ruled voice, rendered through Cloud TTS and uploaded to
+Payload's **Media** collection under **stable** names the app builds against:
+
+| Narrator | Voice | Filename | Says |
+|---|---|---|---|
+| `female` | Achernar | `narrator-greeting-female.mp3` | "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company." |
+| `male` | Sadaltager | `narrator-greeting-male.mp3` | "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company." |
+
+Not a graph node and not tied to a run: there is no Leaf behind these clips, the same shape as
+`generate-covers`. Everything is on disk under `runs/greetings/audio/` (`final/` for a clip that can
+be uploaded, `held/` for one that cannot, `raw/` for what Cloud TTS returned), and spend is in
+`runs/greetings/spend.json`.
+
+```bash
+# Render, listen, write the two mp3s to disk. Uploads nothing.
+uv run zoomout-pipeline generate-greetings --render-only
+
+# Then upload both, or neither. Free if the clips are already rendered.
+uv run zoomout-pipeline generate-greetings
+```
+
+**A second door, not the Leaf door widened.** The TTS client accepts a `NarrationLine` and
+`NarrationLine` can only be made from a Leaf (`tests/test_narration_selection.py`), because that is
+what keeps the book's words out of the audio. A greeting is one sentence of ZoomOut's own, so it
+has its own door: `assets/greeting.py:NARRATOR_GREETINGS` is the whole list of what can be said,
+asserted exactly by `tests/test_greetings.py`, and `SpeechClient.synthesize_greeting` takes a
+`NarratorGreeting` and takes its voice from it, so a narrator cannot introduce themselves in the
+other's voice. Both doors go through one `_call`, so the timeout, the single retry layer and the
+host check are one implementation.
+
+**The narrator's name is set aside by the word check, and reported.** A transcriber cannot spell a
+name that is in no dictionary: across four takes Sadaltager came back as "Sedat Auger", "Sebal
+tager", "Saul DeTagger" and "Saul Talgor". Compared word for word, that fails every clip. So
+`assets/greeting.py:compare_greeting` sets aside one to three words in the name's own slot, checks
+everything else exactly, fails a greeting that never said the name, and the command prints what
+was heard there. **Whether the name is pronounced right is the one thing here only a person can
+decide.**
+
+**Both clips or neither.** A clip that fails the word check or the pace check is held, and so is
+its sibling, because one narrator's introduction without the other's is a half-built beat. Nobody
+listening (the guard model was unreachable) holds it too: the transcript is part of what is
+reported. Direction is `prompts/narrator_greeting.md`, whose comment records why it is what it is.
+
+**Spend.** The cap (`--ceiling-usd`, default `GREETING_CEILING_USD` = $0.20) is counted across
+every invocation and **halts** before a call rather than warning. It is not what a run costs, which
+is about $0.01 a take. The budget reserves Cloud TTS's longest possible response ($0.16) before
+each call, so any cap under that refuses the first one.
+
+**Redoing a clip after it is uploaded.** The machine key creates Media and never deletes it
+(`machinesNeverDelete`), and these filenames carry no hash, so a re-rendered clip cannot be
+uploaded next to the old one: the command finds the existing document, sees different bytes, and
+stops with the document's id. Delete that Media document in the admin UI, then run it again. The
+URL stays the same; **the Media id does not**, so build against the URL.
+
 ## Rewriting one Leaf: `rewrite-leaf`
 
 For the defect no gate here can produce. Ikigai's Leaf 17 listed five of the book's *ten rules
