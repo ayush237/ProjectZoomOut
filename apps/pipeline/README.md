@@ -251,7 +251,7 @@ and Track 42's published Leaf 1 breaches two of them right now.
 Four slides per Leaf are read aloud — `summary.body`, `scenario.prompt`, `payoff.body`,
 `takeaway.body` — through **Cloud Text-to-Speech** (`gemini-2.5-flash-tts`), billed to the Vertex
 project. The founder chose **two** narrators after the 2026-09-17 audition, for readers to pick
-between: **Achernar** (female) and **Sadaltager** (male) — `assets/narration.py:NARRATOR_VOICES`
+between: **Achernar** (female, called **Lara**) and **Sadaltager** (male, called **Druv**) — `assets/narration.py:NARRATOR_VOICES`
 is the mapping from `NarratorId` to the provider voice, mirroring `NARRATOR_IDS` in the frozen
 `content.ts`. A slide's `audio` is an array (VO-1.1), one entry per narrator, and `narrate`
 always renders and attaches **both together**: a Leaf attaches only once every narrated slide
@@ -329,10 +329,16 @@ Each narrator introduces themselves once, so onboarding's narrator beat needs no
 picked. Two fixed sentences, one per ruled voice, rendered through Cloud TTS and uploaded to
 Payload's **Media** collection under **stable** names the app builds against:
 
-| Narrator | Voice | Filename | Says |
-|---|---|---|---|
-| `female` | Achernar | `narrator-greeting-female.mp3` | "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company." |
-| `male` | Sadaltager | `narrator-greeting-male.mp3` | "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company." |
+| Narrator | Called | Cloud TTS voice | Filename | Says |
+|---|---|---|---|---|
+| `female` | **Lara** | Achernar | `narrator-greeting-female.mp3` | "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." |
+| `male` | **Druv** | Sadaltager | `narrator-greeting-male.mp3` | "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company." |
+
+**The name a narrator gives is not the name of the voice.** Achernar and Sadaltager are the
+provider's ids for two voices (`assets/narration.py:NARRATOR_VOICES`) and a reader never hears
+them. Lara and Druv are what the narrators call themselves (`assets/greeting.py:NARRATOR_NAMES`),
+ruled by the founder on 2026-09-24 after hearing a first pair of greetings that had said the voice
+ids. Both mappings are asserted exactly, and a test asserts no greeting ever says a voice id.
 
 Not a graph node and not tied to a run: there is no Leaf behind these clips, the same shape as
 `generate-covers`. Everything is on disk under `runs/greetings/audio/` (`final/` for a clip that can
@@ -356,9 +362,11 @@ asserted exactly by `tests/test_greetings.py`, and `SpeechClient.synthesize_gree
 other's voice. Both doors go through one `_call`, so the timeout, the single retry layer and the
 host check are one implementation.
 
-**The narrator's name is set aside by the word check, and reported.** A transcriber cannot spell a
-name that is in no dictionary: across four takes Sadaltager came back as "Sedat Auger", "Sebal
-tager", "Saul DeTagger" and "Saul Talgor". Compared word for word, that fails every clip. So
+**The narrator's name is set aside by the word check, and reported.** A transcriber cannot be held
+to a proper name's spelling. The first names were the hard case: across four takes Sadaltager came
+back as "Sedat Auger", "Sebal tager", "Saul DeTagger" and "Saul Talgor". Lara and Druv are easier,
+but "Laura" and "Dhruv" are equally good spellings of them, and Druv has come back as "Drew". Compared
+word for word, any of those fails a clip on a spelling choice. So
 `assets/greeting.py:compare_greeting` sets aside one to three words in the name's own slot, checks
 everything else exactly, fails a greeting that never said the name, and the command prints what
 was heard there. **Whether the name is pronounced right is the one thing here only a person can
@@ -370,9 +378,11 @@ listening (the guard model was unreachable) holds it too: the transcript is part
 reported. Direction is `prompts/narrator_greeting.md`, whose comment records why it is what it is.
 
 **Spend.** The cap (`--ceiling-usd`, default `GREETING_CEILING_USD` = $0.20) is counted across
-every invocation and **halts** before a call rather than warning. It is not what a run costs, which
-is about $0.01 a take. The budget reserves Cloud TTS's longest possible response ($0.16) before
-each call, so any cap under that refuses the first one.
+every invocation and **halts** before a call rather than warning. A take costs about $0.007 for both
+narrators, but the budget reserves Cloud TTS's longest possible response ($0.164) before each call
+and refuses when spent plus that would cross the cap. **So $0.20 leaves only about $0.036 of real
+spend, roughly five takes across both narrators, and then it halts.** That is the ceiling working, and
+raising it is the founder's decision, not the session's.
 
 **Redoing a clip after it is uploaded.** The machine key creates Media and never deletes it
 (`machinesNeverDelete`), and these filenames carry no hash, so a re-rendered clip cannot be

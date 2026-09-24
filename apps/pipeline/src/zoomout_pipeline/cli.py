@@ -2150,7 +2150,7 @@ def generate_greetings(
     typer.echo(f"audio      : {store.root.resolve()}")
     typer.echo(f"direction  : {greeting_direction()!r}")
     for greeting in greeting_script():
-        typer.echo(f"sending    : {greeting.voice:<11} {greeting.spoken!r}")
+        typer.echo(f"sending    : {greeting.name:<5} (voice {greeting.voice}) {greeting.spoken!r}")
     typer.echo("")
 
     def show(clip: RenderedGreeting) -> None:
@@ -2158,7 +2158,7 @@ def generate_greetings(
         retried = f", {clip.attempts_made} attempts" if clip.attempts_made > 1 else ""
         cached = " (cached)" if clip.from_cache else ""
         typer.echo(
-            f"  {clip.greeting.narrator.value:<7}{clip.greeting.voice:<12}"
+            f"  {clip.greeting.narrator.value:<7}{clip.greeting.name:<6}"
             f"{clip.duration_seconds:>5.2f}s  speech {clip.metrics.speech_seconds:.2f}s = "
             f"{clip.articulation_wpm:.0f} wpm  {severity}{retried}{cached}"
         )

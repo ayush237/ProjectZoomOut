@@ -637,7 +637,8 @@ def upload_greetings(
         raise GreetingHeldError(
             "greetings held, nothing uploaded: "
             + "; ".join(
-                f"{clip.greeting.narrator.value} ({clip.greeting.voice}) at "
+                f"{clip.greeting.narrator.value} {clip.greeting.name} "
+                f"(voice {clip.greeting.voice}) at "
                 f"{clip.articulation_wpm:.0f} words a minute of speech "
                 + (
                     f"({', '.join(clip.check.findings())})"

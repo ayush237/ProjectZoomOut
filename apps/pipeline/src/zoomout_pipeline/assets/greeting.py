@@ -21,6 +21,15 @@ of its own, built the same way:
 
 Nothing here reads a Leaf, a Track or a book, and nothing the voice says is derived from one.
 
+## The name a narrator gives is not the name of the voice
+
+`NARRATOR_VOICES` maps a narrator to a **Cloud TTS voice id**: Achernar and Sadaltager, the
+provider's own names for two voices, chosen after the audition. **A reader never hears those.**
+`NARRATOR_NAMES` maps a narrator to **the name they introduce themselves by**: Lara and Druv,
+ruled by the founder on 2026-09-24 after hearing the first greetings, which had said the voice
+ids. The two are kept apart on purpose. The greeting says the name; the voice is what says it;
+and a test asserts that no greeting ever says a voice id.
+
 ## Direction
 
 `prompts/narrator_greeting.md`, one prompt for both narrators. Its first paragraph is the shared
@@ -42,17 +51,27 @@ from zoomout_pipeline.assets.narration_guard import WordDiff, compare_words, spo
 from zoomout_pipeline.models import NarratorId
 from zoomout_pipeline.prompts import load_prompt
 
+# The founder's ruling, 2026-09-24, on hearing the first greetings: the narrators are called Lara
+# and Druv. Not the provider's voice ids (`NARRATOR_VOICES`), which are what the first greetings
+# said. Spelled as ruled: "Druv", not "Dhruv".
+NARRATOR_NAMES: Mapping[NarratorId, str] = MappingProxyType(
+    {
+        NarratorId.FEMALE: "Lara",
+        NarratorId.MALE: "Druv",
+    }
+)
+
 # Ruled 2026-09-24 (ONBOARD-2): each narrator introduces themselves, so the onboarding beat no
-# longer needs a book to have been picked. **Each names the voice that speaks it**, and a test
-# asserts that against `NARRATOR_VOICES`: "I'm Achernar" in Sadaltager's voice is the one error
-# a reader could not miss and nothing else here would catch.
+# longer needs a book to have been picked. **Each says its own narrator's name**, and a test
+# asserts that against `NARRATOR_NAMES`: "I'm Lara", in Druv's voice, is the one error a reader
+# could not miss and nothing else here would catch. None says a voice id.
 NARRATOR_GREETINGS: Mapping[NarratorId, str] = MappingProxyType(
     {
         NarratorId.FEMALE: (
-            "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company."
+            "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company."
         ),
         NarratorId.MALE: (
-            "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company."
+            "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company."
         ),
     }
 )
@@ -76,7 +95,13 @@ class NarratorGreeting:
     text: str
 
     @property
+    def name(self) -> str:
+        """What the narrator calls themselves: Lara, Druv."""
+        return NARRATOR_NAMES[self.narrator]
+
+    @property
     def voice(self) -> str:
+        """The Cloud TTS voice that says it: Achernar, Sadaltager. Never spoken."""
         return NARRATOR_VOICES[self.narrator]
 
     @property
@@ -127,10 +152,12 @@ NAME_SLOT_MAX_WORDS = 3
 def compare_greeting(greeting: NarratorGreeting, heard: str) -> tuple[WordDiff, str | None]:
     """`compare_words`, with the narrator's own name **set aside and reported, not ignored.**
 
-    The one word a transcriber cannot be held to. It is asked what it heard, and a name that is
-    in no dictionary comes back as whatever it sounds like: Sadaltager as "Sedat Auger" and, on
-    a second take, "Sebal tager" — two words for one. Compared like the rest, that fails every
-    clip on a spelling guess, which is a false alarm and not a finding. **Whether the name is
+    The one word a transcriber cannot be held to. It is asked what it heard, and a proper name
+    comes back however it happens to be spelled. The greetings' first names, Sadaltager, came
+    back as "Sedat Auger", "Sebal tager", "Saul DeTagger" and "Saul Talgor" (2026-09-24): two
+    words for one, on a name in no dictionary. Lara and Druv are far easier, and "Laura" and
+    "Dhruv" are equally good transcriptions of them. Compared like the rest, either fails a
+    clip on a spelling choice, which is a false alarm and not a finding. **Whether the name is
     pronounced right is the one thing here only a person can decide**, and the caller reports
     what was heard in its place so the person knows to listen for it.
 
@@ -144,12 +171,12 @@ def compare_greeting(greeting: NarratorGreeting, heard: str) -> tuple[WordDiff, 
     """
     want = spoken_words(greeting.text)
     got = spoken_words(heard)
-    name = spoken_words(greeting.voice)
+    name = spoken_words(greeting.name)
     slot = next(
         (i for i in range(len(want) - len(name) + 1) if want[i : i + len(name)] == name), None
     )
     if slot is None:
-        raise ValueError(f"{greeting.voice!r} is not in {greeting.text!r}")
+        raise ValueError(f"{greeting.name!r} is not in {greeting.text!r}")
     end = slot + len(name)
 
     matcher = difflib.SequenceMatcher(None, want, got, autojunk=False)
@@ -178,21 +205,23 @@ def greeting_filename(narrator: NarratorId) -> str:
 
 
 def greeting_alt(greeting: NarratorGreeting) -> str:
-    """ "Narrator self-introduction, read by Achernar (the female narrator): Hi, I'm Achernar…".
+    """ "Narrator self-introduction by Lara (the female narrator, voice Achernar): Hi, I'm Lara…".
 
     `Media.alt` is required and the founder ruled it stays required (VO-1). For audio it is a
     label rather than a text alternative, and its job is to make the row legible in the admin
-    list. It carries the words spoken, so the row says what the clip says.
+    list. It carries the words spoken, so the row says what the clip says, and the voice, which
+    is the one thing in the row a reader never hears named.
     """
     return (
-        f"Narrator self-introduction, read by {greeting.voice} "
-        f"(the {greeting.narrator.value} narrator): {greeting.text}"
+        f"Narrator self-introduction by {greeting.name} "
+        f"(the {greeting.narrator.value} narrator, voice {greeting.voice}): {greeting.text}"
     )
 
 
 __all__ = [
     "NAME_SLOT_MAX_WORDS",
     "NARRATOR_GREETINGS",
+    "NARRATOR_NAMES",
     "GreetingDirectionError",
     "NarratorGreeting",
     "compare_greeting",

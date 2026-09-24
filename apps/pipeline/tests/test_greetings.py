@@ -31,6 +31,7 @@ from zoomout_pipeline.assets.budget import BudgetExceededError, NarrationBudget
 from zoomout_pipeline.assets.greeting import (
     NAME_SLOT_MAX_WORDS,
     NARRATOR_GREETINGS,
+    NARRATOR_NAMES,
     GreetingDirectionError,
     NarratorGreeting,
     compare_greeting,
@@ -81,8 +82,8 @@ SOURCE_ROOT = Path(__file__).resolve().parent.parent / "src"
 MODEL = "gemini-3.6-flash"
 T = TypeVar("T", bound=BaseModel)
 
-FEMALE_TEXT = "Hi, I'm Achernar. I'll be reading to you here, whenever you'd like the company."
-MALE_TEXT = "Hey, I'm Sadaltager. I'll be reading to you here, whenever you'd like the company."
+FEMALE_TEXT = "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company."
+MALE_TEXT = "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company."
 
 
 # ------------------------------------------------------------------------------ helpers
@@ -182,15 +183,32 @@ def test_the_greetings_are_exactly_these_two_sentences() -> None:
     assert [greeting.narrator for greeting in greeting_script()] == list(NarratorId)
 
 
-def test_each_narrator_introduces_themselves_as_the_voice_that_speaks() -> None:
-    """ "I'm Achernar", in Sadaltager's voice, is the one error a reader could not miss and
-    nothing else would catch."""
+def test_the_narrators_are_named_lara_and_druv() -> None:
+    """Asserted exactly: the founder's ruling of 2026-09-24, spelled as ruled ("Druv", not
+    "Dhruv"). If this fails because a name changed, the on-screen narrator labels in the app
+    and every greeting have to change with it."""
+    assert dict(NARRATOR_NAMES) == {NarratorId.FEMALE: "Lara", NarratorId.MALE: "Druv"}
+    assert list(NARRATOR_NAMES) == list(NarratorId)
+
+
+def test_each_narrator_introduces_themselves_by_their_own_name() -> None:
+    """ "I'm Lara", in Druv's voice, is the one error a reader could not miss and nothing else
+    would catch."""
     for narrator, text in NARRATOR_GREETINGS.items():
-        own = NARRATOR_VOICES[narrator]
-        assert own in text
-        for other_narrator, other_voice in NARRATOR_VOICES.items():
+        assert NARRATOR_NAMES[narrator] in text
+        for other_narrator, other_name in NARRATOR_NAMES.items():
             if other_narrator is not narrator:
-                assert other_voice not in text
+                assert other_name not in text
+
+
+def test_no_greeting_says_the_name_of_a_voice() -> None:
+    """The first greetings said Achernar and Sadaltager, which are the provider's names for the
+    two voices, not names a reader was ever meant to hear. The name a narrator gives and the
+    name of the voice are different things, and this keeps them so."""
+    for narrator, text in NARRATOR_GREETINGS.items():
+        for voice in NARRATOR_VOICES.values():
+            assert voice not in text
+        assert greeting_for(narrator).name != greeting_for(narrator).voice
 
 
 def test_a_greeting_is_built_in_one_place() -> None:
@@ -321,52 +339,52 @@ def test_the_stable_references_the_app_builds_on() -> None:
     assert greeting_filename(NarratorId.MALE) == "narrator-greeting-male.mp3"
 
 
-def test_the_alt_text_names_the_voice_and_says_what_is_said() -> None:
+def test_the_alt_text_names_the_narrator_and_the_voice_and_says_what_is_said() -> None:
+    """The admin row is the one place the voice is named, since no reader ever hears it."""
     for narrator in NarratorId:
         greeting = greeting_for(narrator)
         alt = greeting_alt(greeting)
 
-        assert greeting.voice in alt and greeting.text in alt
+        assert greeting.name in alt and greeting.voice in alt and greeting.text in alt
         assert narrator.value in alt
         assert "\n" not in alt and "\r" not in alt, "it goes into a form header"
 
 
 # ================================================================== the name (Tier A)
 
-FEMALE_AS_HEARD = "Hi, I'm Aknar. I'll be reading to you here, whenever you'd like the company."
-MALE_AS_HEARD = (
-    "Hey, I'm Sedat Auger. I'll be reading to you here, whenever you'd like the company."
-)
+FEMALE_AS_HEARD = "Hi, I'm Laura. I'll be reading to you here, whenever you'd like the company."
+MALE_AS_HEARD = "Hey, I'm Dhruv. I'll be reading to you here, whenever you'd like the company."
 
 
 def test_each_greeting_says_its_narrators_name_exactly_once() -> None:
     """`compare_greeting` sets one slot aside; a name that appeared twice would be ambiguous."""
     for narrator in NarratorId:
         greeting = greeting_for(narrator)
-        assert spoken_words(greeting.text).count(spoken_words(greeting.voice)[0]) == 1
+        assert spoken_words(greeting.text).count(spoken_words(greeting.name)[0]) == 1
 
 
 def test_a_name_the_transcriber_spelled_differently_is_set_aside_and_reported() -> None:
-    """**What the first real render found.** The transcriber wrote Achernar as "Aknar" and
-    Sadaltager as "Sedat Auger" and, on a second take, "Sebal tager": two words for one, on a
-    name that is in no dictionary. Compared like the rest, that fails every clip on a spelling
-    guess. Whether the name is *pronounced* right is for a person, and is reported."""
+    """**What the first real render found**, on the first names. The transcriber wrote Achernar
+    as "Aknar" and Sadaltager as "Sedat Auger" and, on a second take, "Sebal tager": two words
+    for one. Lara and Druv are far easier, but "Laura" and "Dhruv" are equally good spellings of
+    them, and compared like the rest each would fail a clip on a spelling choice. Whether the
+    name is *pronounced* right is for a person, and is reported."""
     diff, name = compare_greeting(greeting_for(NarratorId.FEMALE), FEMALE_AS_HEARD)
-    assert diff.errors == 0 and name == "aknar"
+    assert diff.errors == 0 and name == "laura"
 
     diff, name = compare_greeting(greeting_for(NarratorId.MALE), MALE_AS_HEARD)
-    assert diff.errors == 0 and name == "sedat auger"
+    assert diff.errors == 0 and name == "dhruv"
 
     diff, name = compare_greeting(
-        greeting_for(NarratorId.MALE), MALE_AS_HEARD.replace("Sedat Auger", "Sebal tager")
+        greeting_for(NarratorId.MALE), MALE_AS_HEARD.replace("Dhruv", "Dru Ve")
     )
-    assert diff.errors == 0 and name == "sebal tager"
+    assert diff.errors == 0 and name == "dru ve", "two words for one is still one name"
 
 
 def test_a_name_heard_as_itself_is_returned_and_nothing_is_set_aside() -> None:
     diff, name = compare_greeting(greeting_for(NarratorId.FEMALE), FEMALE_TEXT)
 
-    assert diff.errors == 0 and name == "achernar"
+    assert diff.errors == 0 and name == "lara"
 
 
 def test_a_dropped_name_is_not_set_aside() -> None:
@@ -378,7 +396,7 @@ def test_a_dropped_name_is_not_set_aside() -> None:
     )
 
     assert name is None
-    assert diff.errors == 1 and diff.missing == ("achernar",)
+    assert diff.errors == 1 and diff.missing == ("lara",)
 
 
 def test_a_run_longer_than_a_name_is_not_set_aside() -> None:
@@ -386,7 +404,7 @@ def test_a_run_longer_than_a_name_is_not_set_aside() -> None:
     voice saying something else."""
     assert NAME_SLOT_MAX_WORDS == 3
     stretched = (
-        "Hi, I'm a cher nar star. I'll be reading to you here, whenever you'd like the company."
+        "Hi, I'm a lot of stars. I'll be reading to you here, whenever you'd like the company."
     )
 
     diff, name = compare_greeting(greeting_for(NarratorId.FEMALE), stretched)
@@ -397,11 +415,11 @@ def test_a_run_longer_than_a_name_is_not_set_aside() -> None:
 
 def test_only_the_name_is_set_aside() -> None:
     """A misspelt name does not excuse a difference anywhere else in the sentence."""
-    heard = "Hello there, I'm Aknar. I'll be reading to you here, whenever you'd like the company."
+    heard = "Hello there, I'm Laura. I'll be reading to you here, whenever you'd like the company."
 
     diff, name = compare_greeting(greeting_for(NarratorId.FEMALE), heard)
 
-    assert name == "aknar"
+    assert name == "laura"
     assert diff.errors == 2, "'hi' heard as 'hello there' still counts"
     check = NarrationCheck(
         reading=NarrationReading(transcript=heard, ending=NarrationEnding.CLEAN),
@@ -415,7 +433,7 @@ def test_a_name_that_is_not_in_the_sentence_is_an_error() -> None:
     """Not a shrug: the constants and the voices have drifted apart."""
     orphan = NarratorGreeting(narrator=NarratorId.FEMALE, text="Hello there, nice to meet you.")
 
-    with pytest.raises(ValueError, match="Achernar"):
+    with pytest.raises(ValueError, match="Lara"):
         compare_greeting(orphan, "Hello there, nice to meet you.")
 
 
@@ -430,7 +448,7 @@ def test_a_misheard_name_does_not_hold_a_greeting_and_the_clip_says_so(tmp_path:
     for clip in (first, second):
         assert clip.check is not None
         assert clip.severity is GuardSeverity.EXACT and clip.uploadable
-        assert clip.name_heard == "aknar"
+        assert clip.name_heard == "laura"
     assert second.from_cache and len(llm.calls) == 1
 
 
