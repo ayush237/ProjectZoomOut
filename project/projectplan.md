@@ -23,9 +23,9 @@ other four are real product gaps, not bugs, and are the subject of this plan.
 4. **Beat 1's "15 minutes, one book" misleads.** Approved: rewrite toward what the mechanic actually is —
    a capped session, a book read in Leaves over many sessions, XP tracking progress across them.
 5. **Nothing marks onboarding as actually complete until after the reader has read something.** Approved:
-   a closing moment folded into the existing `WrapUpScreen`, triggered automatically the first time a
-   reader inside the onboarding flow finishes their first Leaf. `onboarding.markSeen()` moves to fire at
-   this point instead of at the book-pick beat's continue, today's behaviour.
+   a closing moment folded into the existing `WrapUpScreen`, reached from the Leaf player's completion panel
+   (Done, or Wrap up today) the first time a reader inside the onboarding flow finishes their first Leaf. `onboarding.markSeen()` moves to fire at
+   this point instead of when the reader is sent into Leaf 1, today's behaviour.
 
 ### Five decisions made explicitly, not left to guesswork
 
@@ -34,15 +34,15 @@ other four are real product gaps, not bugs, and are the subject of this plan.
 | How literal is "greet with their name"? | **Generic self-intro, no spoken name** | A live per-user TTS call is a new capability this app doesn't have anywhere else — every clip that exists was generated offline, once. Two new pre-recorded clips reuse VO-2's existing mechanism entirely |
 | What is the pre-intro's content? | **INTRO-1 stays the "main" intro, unchanged; a new, lighter pre-intro gets designed** | Reuses the expensive, already-tuned, already-device-verified piece rather than redesigning it. The new pre-intro is a single static branded screen — wordmark, one line, tap to continue — not a second procedural animation |
 | Does the pre-intro repeat? | **Once per install**, same as today's intro | Matches the existing pattern everywhere else in this app; avoids repeat-fatigue for a reader who signs out often |
-| Where does the closing screen live? | **First-timer copy inside the existing `WrapUpScreen`**, not a new screen | `WrapUpScreen` is already the app's one "a reading moment just ended" screen. Detected off the `first-wrap` achievement-unlock signal, the same way `ExploreScreen` already detects `first-book` — no new flag |
+| Where does the closing screen live? | **First-timer copy inside the existing `WrapUpScreen`**, not a new screen | `WrapUpScreen` is already the app's one "a reading moment just ended" screen. **Selected by a route param the Leaf player sets for a first Leaf reached through onboarding** — not by the `first-wrap` achievement, which unlocks when the reader *taps* wrap, after the screen has opened, and would also fire for any reader who simply hasn't wrapped yet. *Corrected 2026-09-24, before handoff, after reading `WrapUpScreen`; the first version of this plan said `first-wrap`.* No new persisted state |
 | What are the narrators called? *(added 2026-09-24, during ONBOARD-2)* | **Lara (female) and Druv (male)**; the provider's voice ids — Achernar, Sadaltager — are never spoken or shown | The founder heard the first greetings say the provider's ids aloud, which the handoff had scripted, and ruled the names. The code already kept `narrator` (ZoomOut's word) apart from `voice` (the provider's); the handoff hadn't read that. **The founder's ear confirmed the final take:** pace right, "Druv" has its *v* |
 
 ### The new flow
 
 ```
 Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → account
-  → [new accounts]      INTRO-1 (unchanged, repositioned) → narrator beat → pick-book beat → Leaf 1
-                         → finish first Leaf → WrapUp (first-timer copy) → onboarding marked seen
+  → [new accounts]      INTRO-1 (unchanged, repositioned) → promise → narrator beat → pick-book beat → Leaf 1
+                         → finish first Leaf → Done / Wrap up today → WrapUp, onboarding variant → onboarding marked seen
   → [existing accounts]  narrator beat only → tab shell
 ```
 
@@ -51,11 +51,11 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 | | Package | Owner | Model | Delivers | Status |
 |---|---|---|---|---|---|
 | 1 | **ONBOARD-2** | Pipeline Manager | Sonnet | Two narrator self-introduction clips — **Lara and Druv** | ✅ Signed off 2026-09-24 (6/6); Media 350/351, verified |
-| 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | 📤 Handed off 2026-09-24, with an addendum the same day |
+| 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | 📤 Handed off 2026-09-24; **revised before pickup** (one consolidated text, after reading `WrapUpScreen`) |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
-handoffs for both, and the addendum, are in `collaboration-log.md`.
+handoffs for both are in `collaboration-log.md`.
 
 ### Scope note for ONBOARD-3
 

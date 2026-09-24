@@ -34,25 +34,6 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
-### Handoff addendum: 2026-09-24 — ONBOARD-3: what ONBOARD-2 changed
-
-*Manager. Read alongside the ONBOARD-3 handoff below; **where they differ, this wins.** Written after ONBOARD-2's completion entry (Completions section, top) — read its "For ONBOARD-3: the references" section.*
-
-**1. Build against the URLs, never the ids — and you can start now.** The stable relative URLs are `/api/media/file/narrator-greeting-female.mp3` and `/api/media/file/narrator-greeting-male.mp3` (public, no auth, `audio/mpeg`, `Range`/`206` — the same route VO-3 plays from; re-verified 2026-09-24 with a `GET`, since `HEAD` returns 404 on Payload's file route). Media 348/349 behind them today are a **superseded** take whose clips say the wrong names; the founder deletes them and a new pair goes up under the *same filenames*, so **the URLs survive and the ids do not**. Nothing you write depends on the ear checks still outstanding (pace, how "Druv" sounds) — a re-take replaces the file at the same URL. **No test or fixture may key on a Media id or assert anything about the audio's bytes or duration.** The one thing that waits is your **device-gate item for the narrator beat** ("each narrator's self-introduction audible and distinct"): do not observe it until ONBOARD-2's completion entry says the swap has happened (a follow-up entry supersedes its "Not finished" status). Until then, do everything else and report that one item as pending on the swap.
-
-**2. The narrators have names: Lara (female) and Druv (male).** Ruled by the founder 2026-09-24. They are ZoomOut's own vocabulary; **Achernar and Sadaltager are the TTS provider's voice ids and never appear on screen or in an accessibility label.** Today there are **three separate copies** of the reader-facing label map, all saying "Female"/"Male": `ProfileScreen.tsx:268`, `OnboardingNarratorScreen.tsx:23`, `NarrationControl.tsx:13`. **Consolidate to one** — a single exported map in `packages/shared` beside `NARRATOR_IDS`, consumed by all three — rather than editing three literals. That widens this package's scope to `packages/shared` (one constant) and to the label map in `ProfileScreen.tsx` and `NarrationControl.tsx`; the `NarrationControl` change is **labels only**, and the "how it works is out of scope" line above still holds. **Profile has no sample to play**, so a bare "Lara"/"Druv" would be a blind choice there — keep a descriptor ("Female voice"/"Male voice") beside the name wherever a reader chooses without hearing one, and say what you did. If the founder later respells a name, it is now one constant.
-
-**3. Don't fabricate values the clips can outgrow.** `AudioRef` asks for `durationSeconds` and `textDigest`. Before deciding the backend path's shape, check what the client's sample preview actually reads from the entry — `selectNarration`'s digest logic exists to match audio to a *slide's* text, which a greeting does not have. If the preview needs only a URL, a narrower return type is more honest than a fabricated `AudioRef`. If it truly needs the fields: the duration is measured from the served bytes (5.04 s / 5.11 s for the Lara/Druv take, **and it may change if the founder retakes**), so do not hardcode it as though it were a constant; `textDigest` is `sha256(script)` as `assets/narration.py:text_digest` computes it, recomputed for the Lara/Druv sentences and not reused from any earlier version of ONBOARD-2's entry. State which you chose.
-
-**Added acceptance criteria:**
-- [ ] Reader-facing narrator names come from **one** shared map consumed by Profile, the onboarding narrator beat and `NarrationControl` — verified by a grep showing no remaining local `NARRATOR_LABELS` map, not by the screens rendering names
-- [ ] Wherever a narrator is named to a reader it reads Lara or Druv — never "Female"/"Male" alone, never a provider voice id — observed on the device in Profile and on the onboarding narrator beat, and pinned by a test for `NarrationControl`'s accessibility label, which cannot be observed on a screen
-- [ ] No test or fixture keys on a Payload Media id, or asserts on the audio's bytes or duration
-
-**Update, later 2026-09-24 — the swap is done, and verified by Architect rather than reported.** Payload now holds exactly two greeting documents, **Media 350 (female, Lara) and 351 (male, Druv)**, no `-1` rename, the old pair gone. The served bytes are **sha256-identical** to the files the founder approved by ear (pace right; "Druv" has its *v*, "Droov"): 40,320 and 40,896 bytes, 5.04 s and 5.11 s. **Your narrator-beat device-gate item is no longer waiting** — do not wait for Pipeline Manager's follow-up entry to appear before observing it. Still build on the URLs, never the ids: the ids changed on this swap and could again.
-
----
-
 ### Handoff: 2026-09-24 — ONBOARD-2: two narrator self-introduction clips
 
 *Pipeline Manager. **Suggested model: Sonnet** — reuses VO-2's existing, proven generation and upload mechanism for exactly two new clips with fixed scripts; no judgement calls beyond execution.*
@@ -103,88 +84,120 @@ list anyone reads.
 
 ### Handoff: 2026-09-24 — ONBOARD-3: pre-intro, intro repositioning, beat reorder, and the closing screen
 
-*Manager. **Suggested model: Sonnet** — every fork was resolved in planning (pre-intro reuses `useIntroSeen` as-is, INTRO-1 is unchanged content just repositioned, the narrator/book reorder falls out once the sample stops needing a book, WrapUp reuses the `first-wrap` achievement signal). What's left is implementing a fully-specified design against contracts you verify, not invent.*
+*Manager. **Suggested model: Sonnet** — every product fork is resolved, and this handoff names the code paths, including the ones that change *because of* the reorder. What is left is implementing a fully-specified design against contracts you verify, not invent.*
 
-> **Where you work:** reuse `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`. Check your branch first. `git fetch origin && git checkout -b onboard-3-flow-refinement origin/main`.
-> **Depends on ONBOARD-2's two clips existing** (Payload Media ids/URLs, reported in that package's completion entry above) — read that entry before starting the narrator-beat or backend work.
-> **Commit, push and open the PR yourself when done.**
-> **Read:** this handoff · ONBOARD-2's completion entry above (once it exists) · `apps/mobile/src/navigation/RootNavigator.tsx` · `apps/mobile/src/screens/intro/` (`IntroScreen.tsx`, `useIntroSeen.ts`, `introSeenStore.ts`) · `apps/mobile/src/screens/onboarding/` in full, as it actually shipped — not as ONBOARD-1's own handoff assumed · `apps/mobile/src/screens/share/WrapUpScreen.tsx` and how `ExploreScreen.tsx` detects `first-book` · `apps/mobile/src/audio/` (`useNarrator.ts`, `narratorPreference.ts`) · `packages/shared`'s `audioRefSchema` · `content.mapper.ts`'s `resolveMediaUrl` · `agents/manager.md`.
+> **Revised 2026-09-24, before pickup — this is the only ONBOARD-3 text; there is no addendum to reconcile it with.** The first version had two errors, found by reading `WrapUpScreen` and the player's completion panel: it detected the first-timer off the `first-wrap` achievement (which unlocks when the reader **taps** wrap, *after* the screen has opened), and it said a reader who quits mid-Leaf would replay the beats (their book is already in the Library, so the gate gives them `narratorOnly`). Both are corrected below, and what ONBOARD-2 changed is folded in.
+>
+> **Where you work:** reuse `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`. Check your branch first. `git fetch origin && git checkout -b onboard-3-flow-refinement origin/main`. **Commit, push and open the PR yourself when done.**
+> **Read:** this handoff · ONBOARD-2's completion entry, section "For ONBOARD-3: the references" (its "Not finished" banner is superseded — **the clip swap is done**, see Part 3) · `apps/mobile/src/navigation/` (`RootNavigator.tsx`, `AppStack.tsx`, `types.ts`) · `apps/mobile/src/screens/intro/` · `apps/mobile/src/screens/onboarding/` in full, **as ONBOARD-1 shipped it, not as its handoff assumed** · `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` (the completion panel, roughly lines 300–450, and how the route param reaches it) · `apps/mobile/src/screens/share/WrapUpScreen.tsx` · `apps/mobile/src/audio/` · `packages/shared`'s `audioRefSchema` and `NARRATOR_IDS` · `content.mapper.ts`'s `resolveMediaUrl` · `agents/manager.md`.
 
 ### Task: ONBOARD-3 — pre-intro, intro repositioning, beat reorder, and the closing screen
 
-**Context:** The founder walked the real device gate for the first time (2026-09-23/24) and found the intro plays at the wrong moment, the narrator beat demos a book instead of introducing itself, narration's optionality is never stated, beat 1's copy misleads, and nothing marks onboarding complete until after the reader has actually read something. Full reasoning and the four decisions already made are in `projectplan.md`.
+**Context:** The founder walked the real device gate for the first time (2026-09-23/24) and found the intro plays at the wrong moment, the narrator beat demos a book instead of introducing itself, narration's optionality is never stated, beat 1's copy misleads, and nothing marks onboarding complete until the reader has actually read something. The reasoning and the decisions already made are in `projectplan.md`.
 
-**Objective:** New accounts see a pre-intro before signing up, the existing INTRO-1 animation right after account creation, then a narrator beat with a real self-introduction before picking a book, into Leaf 1, and a closing moment folded into `WrapUpScreen` once that first Leaf is actually finished — which is also the moment onboarding is marked seen. Existing accounts (the narrator-only variant) are unaffected beyond the reordered/rewritten content.
+**Objective:** the two flows below, and nothing else changed for anyone else.
+
+- **New account (`full`):** pre-intro (before sign-up, once per install) → sign-in/sign-up → age gate → account → **INTRO-1** → **promise** → **narrator** → **pick a book** → Leaf 1 (with the existing scenario-slide coach-mark) → finish the Leaf → **Done** or **Wrap up today** → **WrapUp, onboarding variant** (the closing message) → Tabs.
+- **Existing account (`narratorOnly`):** narrator beat → Continue → Tabs. Unchanged in shape.
+
+**What ONBOARD-1 shipped, which this package changes** (read from the code, PR #58 — verify, do not trust):
+- *Promise:* Continue → `navigate('OnboardingPickBook')`; Skip → `markSeen()` then `reset → Tabs`.
+- *PickBook:* choose → `addToLibrary` → `navigate('OnboardingNarrator', { pickedTrack })`; Skip → `markSeen()` then `reset → Tabs`.
+- *Narrator:* `finish()` calls `setNarrator`, then **`markSeen()` first**, then either `reset → Tabs` (when `pickedTrack` is undefined — **this is how it knows it is the `narratorOnly` variant**) or `listLibrary()` → `nextLeafId` → `reset({ index: 1, routes: [Tabs, LeafPlayer] })`.
+- *Leaf player completion panel:* "Wrap up today" (`onWrapUp`, when under the cap), "See your day" (at the cap), "Done" (`onDone` → `goBack()`).
+- *WrapUp:* `session_wrap` is recorded when the reader **taps** wrap, and that is what unlocks `first-wrap`; opening the screen records nothing. Its own Done is `goBack()`.
+
+**What the reorder forces — none of this is optional, and none of it was in the first version:**
+1. **Beat 4 moves.** The `listLibrary → nextLeafId → reset into [Tabs, LeafPlayer]` in the narrator's `finish()` moves to the **pick-book** beat, and `pickedTrack` stops flowing to the narrator screen.
+2. **The narrator screen can no longer infer its variant from `pickedTrack`** — both variants now arrive without it. Pass the variant explicitly, from the gate's status via `AppStack`. Getting this wrong is the most likely way to ship a bug here: an existing account that is never marked seen would meet the narrator beat on every launch.
+3. **`markSeen()` semantics, stated as a table** — pin every row with a test:
+
+| Path | `markSeen()` fires |
+|---|---|
+| Skip on the promise, or on pick-book | **Immediately** — an explicit skip is a decision, unchanged |
+| `narratorOnly`: narrator → Continue | **At Continue** — there is no first Leaf to wait for |
+| `full`: narrator → Continue, then pick-book → into Leaf 1 | **Not at either** — this is the change |
+| `full`: the WrapUp onboarding variant appears | **On mount** — the reader has finished their first Leaf and been shown the close |
+| Quits mid-first-Leaf | **Never.** Their book is already in the Library, so next launch the gate resolves `narratorOnly`: they meet the narrator beat once more, are marked seen at its Continue, and **the closing is never shown to them.** Acceptable and simple — no new persisted state — but state it in your report |
 
 **Scope:**
-- `apps/mobile/src/navigation/RootNavigator.tsx` — pre-intro's new render target; INTRO-1's removal from its current slot
-- `apps/mobile/src/screens/intro/` — INTRO-1 stays here or moves into `screens/onboarding/` as the new first beat of the `'full'` variant; your call which, but it must be reachable from the onboarding gate now, not the pre-auth branch
-- New: a lightweight pre-intro screen, gated by the **existing** `useIntroSeen`/`introSeenStore` mechanism unchanged — a component swap, not a new gate
-- `apps/mobile/src/screens/onboarding/useOnboardingGate.ts`, `OnboardingNarratorScreen.tsx`, `OnboardingPickBookScreen.tsx`, `fetchNarratorSample.ts` — the reorder, the new greeting-based sample source, the "narration is optional" copy
-- `apps/mobile/src/screens/onboarding/OnboardingPromiseScreen.tsx` — beat 1's rewritten copy
-- `apps/mobile/src/screens/share/WrapUpScreen.tsx` — first-timer copy
-- Wherever Leaf completion currently decides its return target — needs a first-time-reader special case
-- `apps/backend` — a small addition to serve ONBOARD-2's two fixed samples, resolved through the existing `resolveMediaUrl`/`MEDIA_BASE_URL` mechanism, not a new one
-- Verify this list against the actual current code — ONBOARD-1 shipped some of this differently than its own handoff assumed (three screens on `AppStack` via `initialRouteName`, not a separate navigator; beat 4 as an action, not a screen; a four-state gate) and this package builds on what actually shipped
+- `apps/mobile/src/navigation/` — `RootNavigator.tsx` (pre-intro's render target; INTRO-1 leaves the pre-auth branch), `AppStack.tsx` (INTRO-1 becomes the `full` variant's first route; the narrator variant is passed explicitly; `onboardingMarkSeen` also reaches `WrapUp`), `types.ts` (route params)
+- `apps/mobile/src/screens/intro/` — INTRO-1 stays here or moves under `screens/onboarding/`; your call, but it must be reachable from the onboarding gate, not the pre-auth branch. **Content unchanged.**
+- New: a lightweight pre-intro screen, gated by the **existing** `useIntroSeen` / `introSeenStore` — a component swap in the pre-auth branch, not a new gate
+- `apps/mobile/src/screens/onboarding/` — `useOnboardingGate.ts`, `OnboardingPromiseScreen.tsx` (copy), `OnboardingNarratorScreen.tsx`, `OnboardingPickBookScreen.tsx`, `fetchNarratorSample.ts`
+- `apps/mobile/src/screens/leaf/LeafPlayerScreen.tsx` — an optional `onboarding` route param, and the completion panel's exits carrying it
+- `apps/mobile/src/screens/share/WrapUpScreen.tsx` — the onboarding variant (copy only)
+- **Names, widened scope:** `packages/shared` (one constant) and the label map in `ProfileScreen.tsx` and `NarrationControl.tsx` — **labels only**; how `NarrationControl` works stays out of scope
+- `apps/backend` — a small path serving ONBOARD-2's two fixed clips, resolved through the existing `resolveMediaUrl` / `MEDIA_BASE_URL`
 
 **Requirements:**
 
-*Pre-intro:*
-- A new, lightweight screen — a static branded moment (wordmark, one line, tap to continue), not a redesign of INTRO-1's procedural animation. If you think something more is warranted, say so and why, but don't build a second INTRO-1-scale piece without flagging it first.
-- Gated by the existing `useIntroSeen`/`introSeenStore` — same SecureStore key, same once-per-install semantics, same restoring/unseen/seen shape. A component swap in `RootNavigator`'s pre-auth branch, not new gating logic.
+*Part 1 — pre-intro and INTRO-1*
+- **Pre-intro:** a static branded moment (wordmark, one line, tap to continue), not a second INTRO-1-scale piece. Draft the line; the founder reads it at the device gate. Gated by `useIntroSeen`/`introSeenStore` — same SecureStore key, same once-per-install semantics. *Known consequence, not a bug:* an install that already saw the old intro will not see the pre-intro, because the key is the same; clearing app storage resets it.
+- **INTRO-1:** unchanged content, now the first thing a **new** account sees, folded into the `full` variant. **Both its exits (finish and skip) advance to the promise; neither marks onboarding seen** — skipping an animation is not skipping onboarding. Check what changes when it renders inside a navigator rather than standalone (its own gestures, full-bleed layout) and say what you did.
+- No new persistence flag for "has this reader seen INTRO-1 post-auth".
 
-*INTRO-1, repositioned:*
-- Unchanged content. Moves from gating `AuthStack` to being the first thing a **new** account sees — folded into `useOnboardingGate`'s `'full'` variant, ahead of the narrator beat. An existing account (`'narratorOnly'`) never sees it.
-- No new persistence flag for "has this reader seen INTRO-1 post-auth" — it's the first screen of the `'full'` flow; the onboarding-seen write at the flow's actual end (below) covers it, the same way skipping beat 1 already does today.
+*Part 2 — the flow, the narrator beat, and the copy*
+- **Order for `full`:** INTRO-1 → promise → narrator → pick book → Leaf 1. *The promise stays ahead of the choices as "the contract"; that placement is my default — say so if you disagree, don't silently reorder.* **Skip** stays on the promise and on pick-book, and each still lands on Explore's first-run state; the narrator beat has none (Continue keeps the default).
+- **Narrator beat:** plays ONBOARD-2's two clips, one per narrator, fetched through the new backend path — always available, whichever Tracks exist or have narration. Each card is **Lara** or **Druv**. State in on-screen **text** that narration is optional — not only implied by the narrator's spoken line, so a reader who can't hear it still gets the message.
+- **Beat 1 copy:** rewrite away from "15 minutes, one book" toward what the mechanic is: a session is capped at 15 minutes, a book is read in bite-sized Leaves over many sessions, XP tracks progress across them. Draft it and flag it for the founder's own read — copy is a taste call.
+- **Pick-book:** adds to the Library as today, resolves `nextLeafId` **the way the narrator's `finish()` does today** (`listLibrary()` → `progress.nextLeafId`, never `listLeaves()[0]`), and resets into `[Tabs, LeafPlayer]` carrying a new optional route param `onboarding: true` (a serialisable flag, not content — the existing rule that route params carry references only still holds). The flag is **still unset** at this point.
 
-*Narrator beat reorder + new content:*
-- Order becomes: [new accounts: INTRO-1] → narrator → pick book → Leaf 1.
-- `fetchNarratorSample.ts` changes from "find a Track titled 'Ikigai' and use its Leaf 1 Summary slide audio" to fetching the two fixed clips ONBOARD-2 produced, via the new small backend addition below — one per narrator, always available regardless of which Tracks exist or have narration.
-- Add copy stating narration is optional — **on screen, in text**, not only implied by the narrator's own spoken line. A reader with narration off, or who can't hear it, must still get this message.
+*Part 3 — ONBOARD-2's clips, and the names*
+- **The clips:** build against the **stable URLs** `/api/media/file/narrator-greeting-female.mp3` and `…-male.mp3` — public, no auth, `audio/mpeg`, `Range`/`206`, the route VO-3 plays from. **Never key on Media ids** (they changed on the swap and may again), and **no test or fixture may assert on the audio's bytes or duration.** **The swap is done and verified 2026-09-24:** Media 350 (female) and 351 (male), served bytes sha256-identical to the files the founder approved by ear. **Do not wait for Pipeline Manager's follow-up entry** before observing the narrator beat on the device.
+- **The names: Lara (female) and Druv (male)**, ruled by the founder 2026-09-24. **Achernar and Sadaltager are the TTS provider's voice ids and never appear on screen or in an accessibility label.** Three separate reader-facing maps exist today, all "Female"/"Male": `ProfileScreen.tsx:268`, `OnboardingNarratorScreen.tsx:23`, `NarrationControl.tsx:13`. **Consolidate to one** exported map in `packages/shared` beside `NARRATOR_IDS`. **Profile has no sample to play**, so a bare "Lara"/"Druv" would be a blind choice there — keep a descriptor ("Female voice"/"Male voice") wherever a reader chooses without hearing one, and say what you did.
+- **Don't fabricate values the clips can outgrow.** `AudioRef` asks for `durationSeconds` and `textDigest`. Before deciding the backend path's shape, check what the sample preview actually reads — `selectNarration`'s digest logic exists to match audio to a *slide's* text, which a greeting doesn't have. If the preview needs only a URL, a narrower return type is more honest than a fabricated `AudioRef`. If it truly needs the fields: the measured durations (5.04 s / 5.11 s) may change on a re-take, so don't hardcode them as constants, and `textDigest` is `sha256(script)` as `assets/narration.py:text_digest` computes it, recomputed for the Lara/Druv sentences. State which you chose.
 
-*Beat 1 copy:*
-- Rewrite away from "15 minutes, one book" toward what the mechanic actually is: a session is capped at 15 minutes, a book is read in bite-sized Leaves over many sessions, XP tracks progress across them. Draft it, and flag it clearly in the device gate for the founder's own read — copy is a taste call, not yours to finalise unilaterally, same as every other onboarding copy decision so far.
+*Part 4 — the closing moment*
+- **The mechanism is a route param, not an achievement.** The player carries `onboarding: true` (Part 2). Its completion panel's **"Done" and "Wrap up today" both route to `WrapUp` carrying it**, using the existing pop-then-navigate shape; a `WrapUp` reached any other way — Journey, the cap's "See your day" for an ordinary reader — is **unchanged**. `first-wrap` plays no part in detection. State which completion exits do and don't carry the closing (an achievement-share or track-complete exit, say) rather than leave it implicit.
+- **`WrapUp`'s onboarding variant is a copy-only diff on one layout** — the principle WP25 already set for this screen (its header comment says so). A warm closing message — this was your first Leaf, welcome, here's to a great learning journey — in place of the ordinary "Session complete" framing; ShareCard, stats, the wrap ceremony and its own Done (`goBack()` → Tabs) behave as today. **`markSeen()` fires on mount.** Draft the copy; the founder reads it at the device gate.
+- **The coach-mark (beat 5) is unchanged** and keeps its own per-reader flag.
 
-*The closing moment:*
-- `WrapUpScreen` gets onboarding-aware copy for a reader's first-ever wrap. Detect this the same way `ExploreScreen` already detects "just earned `first-book`" — off the achievement-unlock signal (`first-wrap`), not a new flag. Read `ExploreScreen.tsx`'s existing pattern before inventing a second one.
-- A reader who finishes their first Leaf while still inside the onboarding flow (reached it via narrator → book → Leaf 1) should land on `WrapUpScreen` automatically once that Leaf's payoff completes, rather than wherever Leaf completion normally returns to. Find where that return-target decision is actually made today before assuming how to special-case it.
-- `onboarding.markSeen()` moves from firing at the book-pick beat's continue (today) to firing at this closing moment instead. Confirm what this does to a reader who reaches Leaf 1 but quits before finishing — per the existing "no seen, but…" philosophy already stated in `introSeenStore.ts`, they should see the beats again next launch, not get stuck half-onboarded. State this explicitly in the report rather than let it be an implicit side effect.
-
-*The small backend addition:*
-- Serve ONBOARD-2's two fixed clips through a small, new path — reusing `resolveMediaUrl`, not reinventing URL resolution. Read `AudioRef`'s actual schema in `packages/shared` before deciding what shape to return; if it needs fields (`textDigest`, `durationSeconds`) that don't naturally apply to a fixed, never-changing clip, say so and pick a defensible value rather than fake one silently.
-- These two clips are not tied to any Track or Leaf — don't force them through machinery built for per-Leaf narration if it doesn't fit cleanly.
+*Part 5 — two ONBOARD-1 test gaps, closed here because you are reopening the same files*
+- **Beat-2 skip was never tested** (a handler identical to beat 1's tested one). After the reorder, the promise's skip and pick-book's skip each get a test through `RootNavigator`'s real gate.
+- **`AppStack`'s onboarding-route transitions never joined the Reduce Motion guard.** `reduceMotionCallSites.test.tsx` cannot see a native-stack `animation` string — it spies on Reanimated factory calls — so an equivalent test must assert the transition swaps to a fade under reduced motion, for the onboarding routes including any you add.
 
 **Out of scope:**
-- Any change to the 144 existing per-Leaf narration clips, or to how `NarrationControl`/`useNarration` work inside the Leaf player itself — the founder's own device gate confirmed that path already works.
-- Any change to existing accounts' experience beyond the narrator-only variant picking up the reordered beat (there's only one beat left for them, order is moot) and the new sample content.
-- A real-time or per-user text-to-speech capability — explicitly ruled out this round; the greeting is generic, not personalised.
-- Redesigning `WrapUpScreen`'s core purpose or its opt-in, end-of-day framing — this only adds first-timer copy to what already exists.
+- The 144 existing per-Leaf narration clips, and how `NarrationControl` / `useNarration` work inside the Leaf player — the founder's own device gate confirmed that path works. **Only `NarrationControl`'s label map changes.**
+- Any change to existing accounts' experience beyond the narrator-only variant and its new sample content and names.
+- A real-time or per-user text-to-speech capability — ruled out; the greeting is generic.
+- Redesigning `WrapUpScreen`'s purpose or its opt-in, end-of-day framing.
+- New persisted state of any kind for "onboarding in progress" — the quit-mid-Leaf behaviour above is the accepted, simple one.
 
-**Constraints:** SecureStore for anything gated per-install, matching every existing preference in this app. No new persistence mechanism anywhere in this package — every gate here should be either the existing `useIntroSeen` pattern reused, or an achievement-unlock signal already returned by an existing endpoint.
+**Constraints:** SecureStore for anything gated per-install, matching every existing preference. **No new persistence mechanism anywhere in this package:** every gate is either the existing `useIntroSeen` pattern reused, the existing onboarding-seen flag, or a serialisable route param.
 
-**Device gate:** *(Android, Expo Go, backend reachable on the LAN — clear Expo Go's storage first for a truly clean install, the same step that was needed to see either flow at all this round)*
-- A brand-new install sees the pre-intro before sign-up — a single branded moment, not a redesign.
-- Signing up for the first time shows INTRO-1 right after account creation, then the narrator beat (each narrator's self-introduction audible and distinct), then the book-pick beat, then lands inside Leaf 1.
-- The narrator beat visibly states narration is optional, in text.
-- Beat 1's copy reads clearly to the founder as explaining Leaves/sessions/XP, not implying one sitting finishes a book.
-- Finishing that first Leaf lands automatically on `WrapUpScreen`, with copy that reads as onboarding's actual close — not the ordinary end-of-day framing.
-- An account that already has a book in its Library still sees only the narrator beat, then lands on the tab shell, unchanged from before.
-- Closing and reopening the app after finishing the first Leaf never shows any of this again on that install.
+**Device gate:** *(Android, Expo Go, backend reachable on the LAN. **Clear Expo Go's storage first** — the pre-intro, INTRO-1's replacement gate and the onboarding flag are all per-install, so a used phone shows none of it. Manager verifies rendering and state; timing and feel go to the founder.)*
+- A brand-new install shows the pre-intro before sign-up — a single branded moment. **The founder reads its line.**
+- Signing up shows INTRO-1 right after account creation, then the promise, then the narrator beat, then pick-book, then Leaf 1.
+- **The founder reads the promise's copy:** it explains Leaves, sessions and XP and does not imply one sitting finishes a book.
+- On the narrator beat, **Lara and Druv each introduce themselves** — audible, distinct, and the name spoken matches the label on the card — and the text says narration is optional.
+- Finishing that first Leaf and tapping **Done** lands on `WrapUp` with the closing message, not the ordinary framing; its Done lands on Tabs. **The founder reads the closing copy.**
+- Force-quit and reopen after that: none of it shows again.
+- A **second, fresh account** that quits mid-first-Leaf, then relaunches: the narrator beat only, then Tabs, and no closing (the behaviour in the table). Do this if practical.
+- An existing account with a book already in its Library: the narrator beat only, then Tabs, unchanged.
+- **Profile** shows Lara and Druv with a descriptor. (`NarrationControl`'s accessibility label is pinned by a test, since it cannot be observed on a screen.)
+- Skipping on the promise, and on pick-book, each land on Explore's first-run state.
 
 **Acceptance criteria:**
-- [ ] Pre-intro renders before `AuthStack`, gated by the existing `introSeenStore` SecureStore key — verified by reading the same key `useIntroSeen` already reads, not a new one
-- [ ] INTRO-1's own content is unchanged (no visual/behavioural diff beyond its position), verified by comparing against what's on `main` today
-- [ ] INTRO-1 renders for a new account (`'full'` variant) and never for an existing one (`'narratorOnly'`) or an already-onboarded one (`'seen'`) — all three paths pinned by a test exercising `RootNavigator`'s actual gate
-- [ ] The narrator beat plays ONBOARD-2's two fixed clips, one per narrator, sourced from the new backend path — not from any Track's Leaf audio — and does not require any Track to have narration
+- [ ] The pre-intro renders before `AuthStack`, gated by the existing `introSeenStore` SecureStore key — verified by reading the same key `useIntroSeen` reads, not a new one
+- [ ] INTRO-1's content is unchanged (no visual or behavioural diff beyond position), compared against `main`; **both its exits advance to the promise and neither marks onboarding seen**
+- [ ] INTRO-1 renders for a new account (`full`) and never for `narratorOnly` or `seen` — all three pinned by a test through `RootNavigator`'s real gate
+- [ ] The whole `full` order — INTRO-1 → promise → narrator → pick-book → Leaf 1 — is pinned by one test through `RootNavigator`, not by screens in isolation
+- [ ] **The narrator screen receives its variant explicitly, not from `pickedTrack`**; `narratorOnly` Continue marks seen and lands on Tabs; `full` Continue does **not** mark seen and goes to pick-book — both pinned, and mutation-checked as separate reversions
+- [ ] Pick-book (`full`) adds to the Library, resolves `nextLeafId` via `listLibrary()`, resets into `[Tabs, LeafPlayer]` with `onboarding: true`, and **the seen flag is still unset at that point** — verified by reading the store after the reset, not by inference
+- [ ] The narrator beat plays ONBOARD-2's two clips, sourced from the new backend path and **not** from any Track's Leaf audio, and requires no Track to have narration
 - [ ] "Narration is optional" is stated in on-screen text on the narrator beat, not only implied by the audio
-- [ ] Beat 1's copy no longer states or implies "one book" is finished in one session — reviewed against the actual rewritten text, not the intent
-- [ ] Finishing the first Leaf while inside the onboarding flow routes to `WrapUpScreen` automatically, with first-timer copy — sourced off the `first-wrap` achievement-unlock signal the same way `ExploreScreen` already sources `first-book`, not a new flag
-- [ ] `onboarding.markSeen()` fires at that closing moment, not at the book-pick beat — verified by checking the flag is still unset immediately after picking a book and before finishing the Leaf
-- [ ] A reader who reaches Leaf 1 but quits before finishing sees the onboarding beats again on next launch — mutation-checked as a separate case from the normal completion path
-- [ ] An existing account's narrator-only path is unaffected beyond the new sample content — still lands on `Tabs`, still shows only one beat
-- [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` all pass — report states the test count against ONBOARD-1's 735, reconciling any drop
+- [ ] Beat 1's copy no longer states or implies that one book is finished in one session — reviewed against the actual text, not the intent
+- [ ] **The closing moment, via the route param:** with `onboarding: true`, the player's "Done" and "Wrap up today" reach `WrapUp` showing the closing copy and firing `markSeen()` on mount; **without it, `WrapUp` is unchanged and marks nothing** — both directions pinned through the real player and navigator, and neither reads `first-wrap`
+- [ ] **A reader who quits mid-first-Leaf** is resolved `narratorOnly` on the next launch (flag unset, Library non-empty), is marked seen at its Continue, and never sees the closing — pinned by a test through the gate
+- [ ] Skip on the promise and on pick-book each mark seen immediately and land on Explore's first-run state — **both pinned by a test** (closes ONBOARD-1's untested beat-2 skip)
+- [ ] `AppStack`'s onboarding-route transitions swap to a fade under Reduce Motion, pinned by a test that can actually see the native-stack option (closes ONBOARD-1's Reduce Motion debt row)
+- [ ] Reader-facing narrator names come from **one** shared map consumed by Profile, the onboarding narrator beat and `NarrationControl` — verified by a grep showing no remaining local `NARRATOR_LABELS` map, not by the screens rendering names
+- [ ] Wherever a narrator is named to a reader it reads Lara or Druv — never "Female"/"Male" alone, never a provider voice id — observed on the device in Profile and on the narrator beat, and pinned by a test for `NarrationControl`'s accessibility label
+- [ ] No test or fixture keys on a Payload Media id, or asserts on the audio's bytes or duration
+- [ ] `npm run lint`, `npm run typecheck`, `npm test` and `npm run build` all pass — the report states the mobile test count against ONBOARD-1's 735 and reconciles any drop
 
-**Testing expectations:** Tier A for the three-way gate branch (new/existing/already-seen account landing on the right variant) and for `markSeen()`'s new firing point — both are exactly the shape of bug that ships quietly and only shows up as a reader stuck in the wrong state. Tier B for copy, the pre-intro's rendering, and the backend addition's wiring. Say which evidence is a unit test, which is a query, and which is you looking on the device.
+**Testing expectations:** **Tier A** for the `markSeen()` table and the variant plumbing (new / existing / already-seen / quit-mid-Leaf landing on the right screen with the flag in the right state) and for the closing-moment routing in both directions — these are exactly the shape of bug that ships quietly and shows up as a reader stuck in the wrong state, or an existing account shown the narrator beat on every launch. Tier B for copy, the pre-intro's rendering and the backend path's wiring. Say which evidence is a unit test, which is a query, and which is you looking on the device.
 
 ---
 
