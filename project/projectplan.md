@@ -113,6 +113,17 @@ specification.**
    `apps/` and `packages/`, and no test pins either. The share card's footer, "15 minutes a day", is a habit
    claim consistent with the session cap, not this framing.
 
+7. **Profile plays the narrator's hello** — the founder's gate feedback, 2026-09-25: *"the narrator sounds are
+   not being played in the profile section."* **Not a defect:** ONBOARD-3's handoff said Profile has no sample to
+   play and gave it a descriptor instead; the founder now wants the sound. Design I would propose: **tap a tile
+   = choose it and hear its hello**, exactly as on the beat, so the reader hears who they just picked; one voice
+   at a time; leaving Profile stops it. **Reuse:** extract the beat's preview logic (`getNarratorSamples`, two
+   `useNarration` players, the one-voice rule) into one hook both screens use, so items 1 and 3 (fail open, stop
+   audio) are fixed once for both. **Profile must not break if the samples fetch fails:** the tiles behave as they
+   do today (select only), no error screen. Alternative for the founder: a separate play button per tile, so
+   choosing stays deliberate; the default is consistency with the beat. Tests through the real screen: a tile
+   press selects *and* plays, the other stops, and with no samples it still selects.
+
 **Out of it:** the cost-ledger lock, and anything in `apps/pipeline`; and the pre-existing gaps in the register
 row "Three pre-existing gaps ONBOARD-3 found and deliberately left" ("Back to Journey", the per-install
 onboarding flag, `AppStack`'s five other routes ignoring Reduce Motion).
@@ -121,3 +132,52 @@ onboarding flag, `AppStack`'s five other routes ignoring Reduce Motion).
 `collaboration-log.md` or `git show b32191a:project/collaboration-log.md`), not by location. The persona rules
 that apply: a state table draws its failure rows and says what a repeat pass starts from (the omission behind
 items 1 and 2), and the device gate names observations, not commands.
+
+### VO-4 — re-pace the book narration — proposed 2026-09-25, awaiting the founder's go
+
+**Not approved, and nothing is spent until the founder gives a ceiling.** Pipeline Manager, Sonnet (procedural;
+the founder's ear is the judge). *Google Cloud spend, not Anthropic.*
+
+**The finding, measured 2026-09-25 from the Ikigai review cue sheets** (`runs/ikigai/audio/review/`, 72 clips
+per narrator): the book clips speak at a median of **121 words a minute of speech (Lara) and 119 (Druv)**,
+pauses excluded. By slide: takeaway ~97, summary ~116, payoff ~122, scenario ~132. **The accepted intro speaks at
+~226–232** (take 3, the one the founder called too slow, was 182–187; the accepted take is +24% on it). **So "like
+the intro" is nearly twice as fast as the lessons.** That is probably faster than teaching should go; "slightly
+faster" is a target to pick **by ear**, and my expectation is ~150–170. ONBOARD-2's lesson stands: the numbers
+were a poor guide to what "slightly" meant, and the founder's ear settled it.
+
+**Why the lessons are slow:** `narration_direction.md` says *"natural and unhurried"* (shared), *"a little
+slowly"* (scenario) and *"a little more slowly"* (takeaway). ONBOARD-2 measured that removing "a little slowly"
+moved articulation **+24%** and removed the long pauses ("a little slowly buys pauses, not just a slower voice"),
+and that the direction is *nearer a switch than a dial*.
+
+**Stage 1 — audition (about $0.10).** Render one representative Leaf's four fields, both narrators, under three
+directions: the current one (control), A = the slow wording removed everywhere, B = A plus an explicit
+brisk-but-warm phrase. B must obey the direction file's rules (describe delivery, no colons, no lists, no quoted
+words, no conversational framing). `audition-voices` has no way to take another direction today (`--undirected`
+only), so this adds a small `--direction-file` option. Output: a review page with measured wpm, overall speed and
+longest pause per clip. **Ceiling: $2.25 cumulative.** The Ikigai narration ledger closed at **$1.8230** of $3.00
+(VO-2.1), and `NarrationBudget` reserves a call's worst case ($0.164) before every call, so **$2.25 buys about
+$0.26 of real spend, 30-odd clips**, of which the audition needs ~16. The founder listens and picks, or asks for
+another round.
+
+**Stage 2 — only after the founder picks by ear.** Apply the chosen direction to `narration_direction.md`
+(**coupling:** a test asserts the greeting file's first paragraph equals the `## shared` block, so if `shared`
+changes the greeting file follows; the uploaded greetings are NOT re-rendered), then re-render all 144 clips with
+`narrate --render-only --max-attempts 3`. **Estimate ~$1.5, at most ~$2** (VO-2 spent $1.79 on 183 renders; this is
+144 plus retries; no Leaf clip has been rendered since, so it is an estimate). **Ceiling ~$4.25 cumulative**, about
+$2.1 of real headroom after the audition. The founder spot-checks the review track, then the clips are attached as
+drafts (VO-2.1's flow) and **the founder publishes 18 Leaves in admin**. The old Media stays orphaned (the machine
+key cannot delete it; harmless). Book #3 and every later book inherit the pace, so this belongs **before** book #3's
+narration.
+
+**Alternatives.** (i) *Time-stretch the cached raw audio* — no synthesis, a true dial (x1.25 turns 121 into ~151
+wpm), but less natural (pauses shrink with the speech) and it still needs a guard re-listen (~$0.3) and the same
+attach and publish. (ii) *An in-app speed control* (1x / 1.25x / 1.5x in the Leaf player) — free, reader-controlled,
+works on every book at once, and pairs well with a direction change because the direction is a switch and a speed
+control is the dial. It is a separate small Manager change; the founder's call whether to want it.
+
+**Decisions for the founder:** go on stage 1 with a **$2.25** ceiling; whether to also want the speed control;
+the target pace, by ear, at stage 1. **Not in it:** the cost-ledger lock (one `narrate` process at a time until it
+exists), the greetings, and any mobile change.
+
