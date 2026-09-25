@@ -1848,7 +1848,10 @@ def narrate(
             help="Attempts per clip when the guard or the pace check fails it. Attempts "
             "already on disk are reused, so raising this re-buys only clips that still fail.",
         ),
-    ] = 2,
+        # A literal, because this module imports the narration stack lazily so `--help` stays
+        # light. Equal to `MAX_NARRATION_ATTEMPTS`, and `tests/test_attempt_defaults.py` fails
+        # if the two drift apart.
+    ] = 3,
 ) -> None:
     """Read a run's Leaves aloud, in **both** ruled narrators, and attach them as drafts.
 
@@ -2054,6 +2057,7 @@ def generate_greetings(
             help="Attempts per greeting when the guard or the pace check fails it. Attempts "
             "already on disk are reused, so raising this re-buys only what still fails.",
         ),
+        # A literal, as on `narrate`; equal to `MAX_GREETING_ATTEMPTS`, and pinned to it.
     ] = 2,
     ceiling_usd: Annotated[
         float | None,
@@ -2073,11 +2077,15 @@ def generate_greetings(
     (`SpeechClient.synthesize_greeting`) because a Leaf's door is fenced to Leaf text.
 
     Renders both, listens to both (a blind transcript, and a pace check that does not depend
-    on the listener), and uploads **both or neither**. Re-running is safe: clips are cached by
-    what was asked, an upload is found by its stable filename first, and an existing document
-    is compared with the clip rather than trusted. The one thing it cannot do is replace a
-    Media document, because the machine key may create Media but never delete it — so a clip
-    that must be redone after upload needs the old document deleted in the admin UI first.
+    on the listener), and checks **both narrators' documents before uploading either**: if a
+    clip fails, or a document already holds different bytes, nothing is uploaded and it says
+    which. Two uploads are still two requests, so a network failure between them can leave one
+    behind — the re-run finds it, accepts it, and uploads the other. Re-running is safe: clips
+    are cached by what was asked, an upload is found by its stable filename first, and an
+    existing document is compared with the clip rather than trusted. The one thing it cannot do
+    is replace a Media document, because the machine key may create Media but never delete it —
+    so a clip that must be redone after upload needs the old document deleted in the admin UI
+    first.
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError, NarrationBudget
     from zoomout_pipeline.assets.greeting import greeting_direction, greeting_script

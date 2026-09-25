@@ -710,6 +710,192 @@ Verify this list against the repository rather than trusting it.
 
 ## Completions (Manager → Architect)
 
+### Completed: ONBOARD-2.1 — the fence pinned, the ceiling pinned, "both or neither" made true where it can be, and `narrate` at three attempts — 2026-09-25
+
+*Pipeline Manager. Branch `onboard-2-1-fence-and-cap`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `2f52e47`. PR: see the branch — the founder merges.*
+
+**13 of 14 acceptance criteria verified; one is open: the device gate's live leg, because Payload on `:3001` was down** (`curl` to it got `connection refused`). Starting it is the founder's pre-flight, and I did not start another package's server against their database. What *was* done is the whole rehearsal harness, run against a **stand-in** that serves the real cached clips as Media 350/351. **That is not the device gate and this entry does not claim it.** To close it: start Payload (`cd /Users/ayushgupta/Documents/ZoomOut/ZO && npm run dev --workspace=apps/admin`), then from `apps/pipeline` run `.venv/bin/python tests/_greeting_preflight_rehearsal.py` (no flag). It reads only, cannot spend and cannot write, and fails loudly if Payload is unreachable (checked). A follow-up entry supersedes this line once it has run.
+
+| | |
+|---|---|
+| Gate | `ruff format --check` **125** files (baseline 120) · `ruff check` clean · `mypy` strict **107** files (baseline 102) · `pytest` **573 passed** (baseline 495; **+78**, 6 deselected as `live`). Every count rose; none dropped. The five new files: four test files and one rehearsal script (`tests/_greeting_preflight_rehearsal.py`, not collected) |
+| Spend | **$0. No model call, no write to Payload.** `runs/greetings/spend.json` sha256 `b932c6da35f0bbf3ec3cfc511e1cd7c9e699f8203bd9f46ecc97057eaaf1a384` **before and after, identical**; the whole `runs/greetings/` tree (spend.json included) hashes the same before and after the rehearsal too |
+| Existing tests | **Two modified, additions only, both named below** (`git diff origin/main --stat -- apps/pipeline/tests`: +2 and +3 lines). 493 other existing tests untouched |
+| Mutation-checked | **12 money lines × their tests (below), the A3 refusal's two halves, 7 scratch bypasses on the real tree, 7 Part C and 8 Part D breakages: every one caught, none survived, every file restored byte for byte** (verified by hash) |
+
+**The one thing worth knowing before the rest: the register said three unpinned money lines. It is five, in each copy — ten in all.** Only the speech reserve was pinned. See Part B.
+
+---
+
+## What the founder would notice
+
+- **`narrate` now tries a failing clip three times, not two.** A line that never passes costs one more speech call and one more listen: about **$0.005 + $0.002** for a 20-second clip at the ledger's own rates (a real listen on ONBOARD-2's cached checks averaged **$0.0022**; the speech figure is `speech_spend` at 20 s and is an estimate for a Leaf clip, since no Leaf clip was rendered here). Each attempt *reserves* up to **$0.164 + $0.032** against the ceiling, which is unchanged and still stops the spend. **A re-run over a run that already has held clips will buy those clips' third attempt**: that is what the ruling is for. `generate-greetings` stays at **two** on its own constant.
+- **`generate-greetings` refuses a stale document before uploading either clip**, and its help text and error messages now say what it delivers. Nothing about any clip changed, so no cache key moved.
+- Nothing else. No app, backend, admin or shared-package change.
+
+## Needs a ruling
+
+Nothing blocks. Two scope calls I made, so they can be overruled:
+
+1. **`assets/narration_guard.py` got a one-word docstring edit** ("MAJOR is worth one regeneration" → "another attempt"). It is outside the file list, but it is a comment that contradicted the ruling I was implementing. No prompt, threshold or behaviour changed, and the guard's cache key hashes the prompt *file*, not this source.
+2. **I kept the rehearsal script in the repo** (`tests/_greeting_preflight_rehearsal.py`) rather than only in scratch, so the next session can re-run the gate. It is type-checked by `mypy` and never collected.
+
+---
+
+## Part A — the fence
+
+**The boundary, restated for whoever reads this next.** `LEGAL.md`, "Narration": the voice narrates ZoomOut's own prose and nothing else. Two things reach it: the four Leaf fields (`summary.body`, `scenario.prompt`, `payoff.body`, `takeaway.body`) as a `NarrationLine` built by `narration_script`, and the two fixed greetings as a `NarratorGreeting` built by `greeting_for`. **`sourceReferences[].quote` is never narrated.** The tests that fence these doors may be strengthened and never loosened; a further line the voice may say needs a `LEGAL.md` entry first.
+
+**What was added** (`tests/test_narration_fence.py`, 36 cases; none of the existing fence tests touched):
+
+- **A1.** An AST scan over all of `src/` for *any reference* to `_call` (any receiver, any nesting, aliasing included), which must equal exactly `synthesize` and `synthesize_greeting`. It flags a *reference*, not only a call, so `f = client._call; f(...)` is seen too. `_call_with_retry` is a different name and is not matched (a test says so).
+- **A2.** Construction of `NarrationLine` and of `NarratorGreeting` in **any shape** — bare, module-qualified, module-level, class-level — must equal the one builder each; and no `replace(x, text=...)` / `dataclasses.replace(x, text=...)` exists anywhere. **The `text` keyword is flagged, not `replace`** (`cli.py`'s `replace(clip, voice=label)` and `str.replace` are negative controls). **No allowlist**: nothing in `src/` sets `text` through `replace`, so none is kept.
+- **A3.** `SpeechClient.synthesize_greeting` refuses, before it builds any request, a greeting whose words are not `NARRATOR_GREETINGS[greeting.narrator]`. **At the door, not in `NarratorGreeting`'s constructor**, as the handoff hypothesised, and I checked why: `test_a_name_that_is_not_in_the_sentence_is_an_error` builds an off-list greeting on purpose (`test_greetings.py:434`) and hands it only to `compare_greeting`, never to the door, so a constructor refusal would have broken it and the door refusal does not. **Beyond the handoff:** the check is on both `text` (stored) *and* `spoken` (what is sent), so a subclass that overrides `spoken` is refused too, and the error is a new `SpeechFenceError(SpeechError)` that **names the narrator and never repeats the words** (a source quote in an error message is a source quote in a log). Being a `SpeechError` with no billed attempts, every caller already stops on it and the ledger is not charged. `test_the_request_is_the_greeting_in_its_own_voice_with_the_direction` passes **unmodified**.
+
+**Each pin's red, observed (A4).** For every bypass I committed it in a scratch module `src/zoomout_pipeline/_scratch_bypass.py`, ran the new pin **and the two old single-construction tests**, then deleted the scratch (and its `.pyc`) and re-ran. Nothing left behind (`ls`/`git status` clean; 36 passed after).
+
+| Scratch bypass | New pin | Named the site | Old pins on the same bypass |
+|---|---|---|---|
+| A1 `client._call(text=quote, ...)` from a third function | **red** (`…reached_only_from_the_two_doors`) | `_scratch_bypass.py:read_the_quote_aloud` | green |
+| A2 `narration.NarrationLine(...)`, module-qualified | **red** (`…constructed_in_one_place_in_whatever_shape[NarrationLine]`) | `:build` | green |
+| A2 `NarrationLine(...)` at module level | **red** | `:<module>` | green |
+| A2 `replace(line, text=quote)` | **red** (`…has_its_text_replaced_anywhere`) | `:relabel` | green |
+| A2 `greeting.NarratorGreeting(...)`, module-qualified | **red** (`[NarratorGreeting]`) | `:build` | green |
+| A2 `NarratorGreeting(...)` at module level | **red** | `:<module>` | green |
+| A2 `dataclasses.replace(greeting, text=quote)` | **red** | `:relabel` | green |
+
+**The right-hand column is the point:** the old tests stay green on every one of these, which is the blind spot the register described, now shown rather than asserted. All six A2 observations were expressible. **The same shapes also live permanently** as `test_the_scanner_sees_…` cases over synthetic source, so the evidence is not only a one-off run.
+
+**A3, red before and after the fix.** Against the unfixed door: 7 red, 28 green — and the log line proved it, because the unfixed door *spoke the quote* (`speech.synthesized … greeting=female`). The tests booby-trap `texttospeech.SynthesizeSpeechRequest`, so they fail if a request is **built**, not only if one is sent; the fake backend also records zero. After the fix: green. Mutation: refusal deleted → **8 red**; only the `text` half dropped → red on exactly the whitespace-only case (`text + "  "` speaks identically, so only the stored text can tell it from the constant); only the `spoken` half dropped → red on exactly the subclass case. Each half has a test that only it can satisfy.
+
+**A5 — what a static test cannot see, and this does not claim to** (not fixed, as instructed):
+
+- **Dynamic access to `_call`** — `getattr(client, "_call")(...)`, or any string-built attribute. **Still open**; nothing here sees it and A3 does not cover it (`_call` speaks anything).
+- **`object.__setattr__` on a frozen greeting** — invisible to every static pin, **but the A3 door refusal catches it at runtime** (tested: `set-on-a-frozen-instance`). So for greetings this residual is closed at the door; it is *not* closed for a `NarrationLine`.
+- **A `replace` on a `NarrationLine`, at runtime.** The static pin sees the literal `text=` keyword. But a `NarrationLine` has **no closed list to compare against** (a greeting has `NARRATOR_GREETINGS`; a Leaf's line is whatever the Leaf says), so at the Leaf door there is no runtime refusal to add. `replace(line, **fields)`, an alias (`NL = NarrationLine`, `import … as`) called afterwards, and `copy` plus `setattr` are all unseen. I judged aliasing and `**fields` adversarial rather than the "reasonable instruction" the boundary exists to stop, and left them named rather than adding shapes that would each need their own red.
+
+## Part B — the ceiling
+
+`NarrationBudget.reserve` is stateless and `settle` is the only thing that adds to `spent_usd`: without a settle the ceiling never trips within an invocation; without a reserve nothing refuses a call before it is made. **Derived by mutation, as instructed** — each `budget.reserve` / `budget.settle` statement in `_render_attempt` and `_listen`, in each copy, replaced with `pass`, the whole suite run:
+
+| Line | `narration_nodes` before | after | `greeting_nodes` before | after |
+|---|---|---|---|---|
+| speech reserve | **red** (`test_the_ceiling_is_checked_before_the_call_not_after`) | red | **red** (`…refused_before_it_is_made`, `…for_the_package_not_the_invocation`) | red |
+| timeout settle (`settle(estimate.usd)`) | **survived** | red | **survived** | red |
+| unreadable-audio settle (`settle(unreadable.usd)`) | **survived** | red | **survived** | red |
+| speech settle (`settle(spend.usd)`) | **survived** | red | **survived** | red |
+| guard reserve (`_listen`) | **survived** | red | **survived** | red |
+| guard settle (`_listen`) | **survived** | red | **survived** | red |
+
+**Five survive per copy, not the register's three.** The register listed the guard's reserve, the guard's settle and the speech settle; the **timeout settle and the unreadable-audio settle** were the two it missed. **The `record(...)` twin of every one of those is pinned by an existing test** (I deleted all 8 `record` lines too: all 8 red), so the gap is precisely that **the ledger was tested and the ceiling was not** — two separate books, one pinned. "After" is on the final code, each mutant killed by the test for **its own copy** (`[leaf]` for `narration_nodes`, `[greeting]` for `greeting_nodes`).
+
+`tests/test_money_lines.py` — 7 tests × both copies, one adapter per copy so a fix to one cannot be missing from the other (the twin is **not** extracted; the money lines are **pinned, not changed**):
+
+- **(i) the effect.** After an uncached clip `budget.spent_usd` grew by exactly what the ledger was told: speech alone (listener down), guard alone (speech already on disk).
+- **(ii) reserve and settle together.** The ceiling is `worst_case_usd` + half of what the first call actually cost, so the first fits and the second fits **only if the first cost nothing**: it is refused if and only if the first was settled *and* a reserve exists to refuse it. Sized from `worst_case_usd` / `guard_worst_case_usd`, never hardcoded, and **the arithmetic each test relies on is asserted first** (`worst_first <= ceiling`, `settled + worst_second > ceiling`), so a test cannot go green because its numbers stopped meaning what it thinks. Same shape for the speech call and for the listen.
+- **(iii) the guard's reservation.** Ceiling = half the listening's worst case: `BudgetExceededError` before the model is called, `llm.calls == []`, nothing spent.
+- **The two failure charges the register missed**: unreadable audio and a timed-out call both charged **to the budget**, not only the ledger.
+
+**Every test runs the uncached branch and says so**: each asserts `len(backend.requests) >= 1` (speech) or `len(llm.calls) >= 1` (guard), and the cached-speech tests assert `clip.from_cache and backend.requests == []`. A cache hit would fail the test rather than pass it silently.
+
+## Part C — "both or neither"
+
+**Before** (`upload_greetings` docstring): *"Both greetings, or neither. Checked as a full set before anything is sent: both narrators present exactly once, and every clip passed **and** heard. A partial *transport* failure afterwards is resumable — `upload_greeting` finds what already landed — but a *quality* failure in one holds both."* **Before** (the refusal in `upload_greeting`): *"…delete that Media document in the admin UI, then run this again. Nothing was uploaded."* — false when the female had just been.
+
+**After** (docstring): *"Both greetings — **checked as a pair before anything is sent, not atomic across the two requests.** Verified first, as a full set: both narrators present exactly once, every clip passed **and** heard, and every document Payload already holds under a greeting's stable filename carrying exactly that clip's bytes. If any check fails, **nothing is uploaded** and the error says which document. Identical bytes are accepted, so a re-run is free. **What this cannot promise is atomicity.** Two uploads are two requests, and a *transport* failure between them still leaves the first one stored (a document that changes in that window is refused by `upload_greeting`, and says only what is true of its own clip). That case is resumable — the re-run finds what landed and accepts the identical clip — but it is not "neither"."* **After** (the pre-flight refusal): *"…delete those Media documents in the admin UI, then run this again. Checked before anything was sent: nothing was uploaded."* — true, and tested against the fake. **After** (`upload_greeting`'s own refusal, reachable only if the document changes after the pre-flight, or when called alone): *"This clip was not uploaded; the other narrator's greeting may already have been (a re-run finds it and accepts it, if it holds that clip's bytes)."*
+
+**The fix.** `_refuse_a_stale_document` runs after the set and quality checks and before the loop: `find_media` both narrators, fetch and hash any existing document, refuse if any differs from its clip — **naming every stale document, so one visit to the admin fixes both**. Absent passes; identical passes. `upload_greeting`'s own compare stays as defence in depth, and the two share one clause. A document with no `url` is refused up front too (it used to fail when that narrator's turn came).
+
+**Sibling found and fixed:** `generate-greetings`'s own `--help` text (`cli.py`) said it "uploads **both or neither**" — the same overclaim, and the one the founder actually reads. Corrected to say what is delivered.
+
+**Tests** (`tests/test_greeting_upload_preflight.py`, 11): male stale + female absent → **zero** `upload_media`, names Media 7 (this is the order `test_a_document_that_holds_different_bytes_is_refused_and_named` never reached: I confirmed by reading that it only occupies the female filename, which fails before any upload whatever the loop does); female stale + male absent; both stale (both named); both absent (both uploaded, female first); both present and identical (nothing uploaded, the existing idempotency test untouched); one identical + one absent (the resumed run); a document with no url; the exact call sequence (`find, find, fetch`, no write); the message's claim checked against the fake; and a `_RacingPayload` where the male document *appears* between the pre-flight and its upload — the female **was** uploaded there, so the test asserts the message does **not** say nothing was. **Red before:** 7 red, 4 green (the 4 are characterisation: they hold before and after). The clearest red: `AssertionError: the female was not uploaded either: neither` — the old code uploaded the female. **No existing test pinned the CMS call sequence**, so none needed adjusting.
+
+**Mutation** (7): pre-flight removed · compares nothing · looks at the first narrator only · names only the first stale document · drops "nothing was uploaded" · `upload_greeting` claims it again · pre-flight moved before the held check (which the **existing** `test_both_greetings_are_held_when_either_fails_and_the_cms_is_never_called` catches, so the ordering was already pinned). All red.
+
+**The residual, stated and not fixed:** a *transport* failure between the two uploads still leaves one behind. Resumable, not atomic.
+
+## Part D — three attempts
+
+- **Where each number now lives.** `MAX_NARRATION_ATTEMPTS = 3` in `narration_nodes.py`; **its comment rewritten** (it argued *against* a third attempt — "the same bet again" — and now gives the ruling's reasoning: one difficult line holds a whole Leaf, which costs founder attention and a re-run; still bounded, R7, and the ceiling stops the spend regardless). `MAX_GREETING_ATTEMPTS = 2` in `greeting_nodes.py`, beside `GREETING_CEILING_USD`; `render_greeting`, `run_greetings` and the `generate-greetings` option all use it; **`greeting_nodes.py` no longer imports `MAX_NARRATION_ATTEMPTS`** (grep: the only mentions left are two comments). The comment says why: an ear-driven job on a small cap; a third paid attempt is the founder's decision, not a default.
+- **`cli.py`: literals, pinned equal by tests.** Import weight, measured: `zoomout_pipeline.cli` alone loads in ~0.79 s; `graph.narration_nodes` on top adds `numpy` and `wave` for ~0.05 s. So the cost of a module-level import is small, and I did not lean on that; I kept the lazy imports because they are the file's stated invariant, and the literals need no new module and no edit to `assets/narration.py` (the Leaf door's file). **They cannot diverge unnoticed:** the tests read the *real* option object from `typer.main.get_command(cli.app)` and compare its `default` to the constant (3 and 2), check `min=1, max=3` still admits it, and check `--help` shows it. Typer 0.27 vendors its own click (`typer._click`), so the test does not import click.
+- **README:** "default 2" → "default 3". A test parses the README for every stated default and finds exactly `3`; the example that passes `3` explicitly is untouched.
+- **Tests** (`tests/test_attempt_defaults.py`, 17): the ruled numbers asserted exactly; option defaults; library defaults for `render_line`, `render_greeting`, `run_greetings`; **behaviour by default** — a clip that never passes is attempted **3** times (3 speech calls, 3 listens), a greeting **2**, and `run_greetings` 2 per narrator; the command actually **passes the option through** to the render (AST); and the legal-fence sentinel run through **every** default attempt of every line (12 requests, none carrying the sentinel), so the extra attempt is not an extra way to reach a wrong field. **Mutation** (8): constant back to 2 · greeting constant to 3 · each CLI literal · `render_line`'s default hard-coded · `run_greetings`'s default · README · the option no longer passed through. All red.
+- **Two existing tests encoded 2 implicitly** and went red at 3 (`3 == 2`, `12 == 8`): **`test_narration_budget.py::test_the_pace_check_holds_without_the_guard`** and **`test_narration_selection.py::test_no_quote_or_extra_ever_reaches_cloud_tts`**. Each counts attempts. I added `max_attempts=2` to each (with a comment) and nothing else; the assertions are unchanged. **These are the only edits to any existing test.**
+
+## Decisions the handoff left to me, and why
+
+1. **New test files, not edits.** Four new files (`test_narration_fence`, `test_money_lines`, `test_greeting_upload_preflight`, `test_attempt_defaults`) rather than growing the existing ones, so "no existing test modified" is checkable by diff.
+2. **`SpeechFenceError` as a subclass of `SpeechError`** (as `SpeechTransportError` already is), so every existing handler stops on it and the test can be exact.
+3. **The door checks `text` and `spoken`, and never echoes the words.** Above.
+4. **The scanner is tested on synthetic source as well as the real tree**, because a pin that is green on the real tree proves nothing until it has been seen red, and a one-off scratch run leaves no permanent evidence.
+5. **The pre-flight collects every stale document instead of raising on the first.** Costs nothing and saves the founder a second trip.
+6. **`max_attempts=1` in every money test**, so they are independent of Part D.
+
+## What surprised me
+
+- **Five, not three, in both copies** — and the pattern behind it: `record` (the ledger) was pinned, `settle` (the ceiling) was not. The register's list came from reading; the table came from deleting.
+- **The unfixed greeting door spoke the quote.** The A3 tests' first red run printed `speech.synthesized … greeting=female` for a source quote. It is one thing to be told a raw-text door exists and another to watch it use it.
+- **`replace(greeting, text=quote)` is exactly the "reasonable" shape**, which is why the static pin flags the *keyword* — and why the runtime check at the door matters more than any of the static ones for greetings.
+- Typer 0.27 vendors click, so a test that imports `click` fails to collect on this environment while `pyproject` still allows `typer>=0.15`.
+
+## What I got wrong
+
+- **I thought a mutant had been left in the tree.** A background mutation run reported "completed" when only its wrapper shell had exited; `git status` then showed `narration_nodes.py` modified, and for a moment I read it as damage. It was the harness's in-flight mutation on the sixth candidate, which it restored itself (all 20 restores verified by hash). I left it alone, which was right, but I should have checked the process list before drawing a conclusion.
+- **I wrote a test comment claiming "the mutation run … found these two unpinned" before the table existed.** It happened to be true. It should not have been written first.
+
+## What I could not verify
+
+- **The live leg of the device gate** (above): both Media documents found, the sha256 of each served file equal to the local clip's, zero uploads, and the negative control refused — **all against a stand-in, none against Payload.** What the stand-in does not prove is that the live Payload serves the bytes ONBOARD-2 recorded; ONBOARD-2 checked that independently on 2026-09-24, and nothing here re-checked it.
+- **The cost of a Leaf clip's extra attempt** is an estimate from the ledger's rates, not a measured one; no Leaf clip was rendered.
+- **`narrate` end to end with the new default.** Tier C: there is still no test that runs the command with fakes beyond its help and option defaults; the render it calls is tested.
+
+## The device gate, as run
+
+`.venv/bin/python tests/_greeting_preflight_rehearsal.py --stand-in` (from `apps/pipeline`; **no live CMS**) — output, abridged:
+
+```
+mode: STAND-IN (not the device gate)
+local  final/narrator-greeting-female.mp3  sha256 c79a872587806a367a6f0513fc6cfd84d53a9fc999c7aaa9dd6f9642bacd3eb7  (= ONBOARD-2 table)
+local  final/narrator-greeting-male.mp3    sha256 e598939f6854e8667bdf44c97750db51f73216c2ff8fb8401ec9141ecb16e6a7  (= ONBOARD-2 table)
+cache  female  re-derived sha256 c79a8725…  paid calls: 0        cache  male  re-derived sha256 e598939f…  paid calls: 0
+[1] the pre-flight over the real clips     female Media 350 · male Media 351 · upload attempts: 0  -> accepted, nothing written
+[2] negative control: male clip, one byte changed
+    REFUSED: Media 351 (narrator-greeting-male.mp3) already exists and holds different bytes (e598939f6854…) from the clip just rendered (7a838f4c44bf…). … Checked before anything was sent: nothing was uploaded.     upload attempts: 0
+[3] the reviewer's case: male stale, female absent (absence simulated, nothing deleted)
+    REFUSED (same message)     calls: find(female), find(male), fetch(male)     upload attempts: 0  -> neither uploaded
+REHEARSAL OK: 0 paid calls, 0 writes
+```
+
+Without `--stand-in`, against the down Payload: `PayloadError: GET /api/admins/me could not reach Payload at http://localhost:3001: [Errno 61] Connection refused`, exit 1. It cannot pass when there is nothing to check.
+
+**Pipeline CLI commands run: none.** Not `narrate`, not `audition-voices`, not `generate-greetings` — they were exercised only as `--help` through `CliRunner` inside the test suite, which renders, listens and writes nothing. The rehearsal is a Python script, not a CLI command.
+
+## Residuals — named, and not fixed
+
+1. **Dynamic access to `_call`** and any string-built attribute — open; no static test sees it.
+2. **The Leaf door's `replace`, aliasing and `**fields`** — a `NarrationLine` has no closed list, so nothing at runtime can refuse it. The static pin sees the literal `text=` keyword only.
+3. **`object.__setattr__` on a frozen greeting** — invisible statically; **closed at runtime by the A3 refusal** for greetings (tested), not for a `NarrationLine`.
+4. **A transport failure between the two uploads** leaves one behind. Resumable, not atomic.
+5. **Two `narrate` processes on one run race on the cost ledger — out of scope, and still open.** It is a precondition of the next book's narration package: a lock, before anyone runs narration for a second book. Its write path was not touched. With the default at three, a second process could now over-spend by more per clip than before, which makes it slightly more urgent, not less.
+
+## Follow-ups for Architect
+
+- **Register rows to update.** *"The narration fence gained a raw-text entry point and has two blind spots"* → closed by A1–A3, with residuals 1–3 above. *"`upload_greetings` says 'both or neither'…"* → closed as far as it can be, with residual 4. *"The greeting render is a ~250-line twin… three money lines are unpinned"* → **five** were, now pinned in both copies; the extraction stays deferred until a third caller needs it. *"`narrate --max-attempts` still defaults to 2"* → done, and the row's trigger should be cleared.
+- **`LEGAL.md`'s "Narration" section** could record that the greeting door now refuses off-list text at runtime, not only by test — it currently describes the door as "closed" and "asserted exactly by a test".
+- **The budget's reservation shape** still makes a small cap allow little iteration (ONBOARD-2's note); still no ruling, and not touched here.
+- **Tier C, deferred:** a `narrate` end-to-end test with fakes; extracting the twin render.
+- **`runs/greetings/`** is on disk only and was neither cleaned nor written to (tree hash identical before and after the rehearsal).
+
+## Files touched
+
+All under `apps/pipeline`; **the one path outside it is this entry.**
+
+- **Source:** `assets/speech.py` (`SpeechFenceError`, the door refusal) · `graph/greeting_nodes.py` (`MAX_GREETING_ATTEMPTS`, the pre-flight, honest messages and docstring) · `graph/narration_nodes.py` (the constant, its comment, the module docstring) · `cli.py` (two option defaults, two comments, `generate-greetings`'s help text) · `assets/narration_guard.py` (one docstring word) · `README.md` (one sentence).
+- **New tests:** `tests/test_narration_fence.py` · `tests/test_money_lines.py` · `tests/test_greeting_upload_preflight.py` · `tests/test_attempt_defaults.py` · `tests/_greeting_preflight_rehearsal.py` (a script, not collected).
+- **Existing tests modified (two, additions only):** `tests/test_narration_budget.py` · `tests/test_narration_selection.py`.
+
+---
+
 ### Completed: ONBOARD-3 — pre-intro, intro repositioning, beat reorder, and the closing screen — 2026-09-24
 
 *Manager. Branch `onboard-3-flow-refinement`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `c4ce891`. PR: [#61](https://github.com/ayush237/ProjectZoomOut/pull/61) — the founder merges.*

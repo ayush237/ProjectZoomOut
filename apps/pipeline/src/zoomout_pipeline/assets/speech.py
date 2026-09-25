@@ -30,8 +30,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from zoomout_pipeline.assets.greeting import NarratorGreeting
-from zoomout_pipeline.assets.narration import MAX_FIELD_BYTES, NarrationLine
+from zoomout_pipeline.assets.greeting import NARRATOR_GREETINGS, NarratorGreeting
+from zoomout_pipeline.assets.narration import MAX_FIELD_BYTES, NarrationLine, speakable
 from zoomout_pipeline.cost import TokenSpend, rates_for
 from zoomout_pipeline.llm.ratelimit import (
     MAX_RETRIES,
@@ -86,6 +86,12 @@ class SpeechError(RuntimeError):
 
 class SpeechTransportError(SpeechError):
     """The client is not connected to Cloud Text-to-Speech. Refused before any call."""
+
+
+class SpeechFenceError(SpeechError):
+    """A greeting whose words are not the fixed sentence for its narrator. Refused before any
+    request is built (`LEGAL.md`, "Narration": the voice says the four Leaf fields and the two
+    fixed greetings, and nothing else)."""
 
 
 # What a timeout looks like. A refused connection or a 429 never reached generation and is not
@@ -250,7 +256,23 @@ class SpeechClient:
         of line (`assets/greeting.py` says why it is not the first door widened), not a second
         implementation of the request. There is no `voice` parameter to get wrong — the voice
         is the greeting's own, so "I'm Achernar" cannot be spoken by Sadaltager.
+
+        **Refused unless its words are the closed list's.** A `NarratorGreeting` is built in one
+        place, but `dataclasses.replace(greeting, text=...)` and `object.__setattr__` make one
+        without calling that place, and `_call` will speak anything. So the door compares what it
+        was handed with `NARRATOR_GREETINGS` — the one list a greeting can be held to, which a
+        Leaf's line has no equivalent of — on **both what is stored (`text`) and what is sent
+        (`spoken`)**, before any request is built. The error names the narrator and never repeats
+        the words: a source quote in an error message is a source quote in a log.
         """
+        sentence = NARRATOR_GREETINGS[greeting.narrator]
+        if greeting.text != sentence or greeting.spoken != speakable(sentence):
+            raise SpeechFenceError(
+                f"refusing to speak the {greeting.narrator.value} greeting: its words are not the "
+                "fixed greeting for that narrator (`NARRATOR_GREETINGS`). The voice says the four "
+                "Leaf fields and the two fixed greetings, and nothing else (`LEGAL.md`, "
+                '"Narration").'
+            )
         audio, timeouts = self._call(
             text=greeting.spoken,
             prompt=prompt,
@@ -352,6 +374,7 @@ __all__ = [
     "SpeechBackend",
     "SpeechClient",
     "SpeechError",
+    "SpeechFenceError",
     "SpeechTransportError",
     "SynthesizedGreeting",
     "SynthesizedSpeech",

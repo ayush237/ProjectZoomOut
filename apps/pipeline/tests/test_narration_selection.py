@@ -136,6 +136,9 @@ def test_no_quote_or_extra_ever_reaches_cloud_tts(tmp_path: Path) -> None:
             budget=NarrationBudget(ceiling_usd=100.0),
             record=lambda _spend: None,
             guard=Guard(llm=guard_llm, model="gemini-3.6-flash"),
+            # Explicit since ONBOARD-2.1 moved the default to 3: this test counts attempts.
+            # `test_attempt_defaults.py` runs the same sentinel through all three.
+            max_attempts=2,
         )
 
     assert len(backend.requests) == 8, "four lines, each regenerated once"

@@ -290,7 +290,7 @@ uv run zoomout-pipeline narrate --run-id ikigai --listen-for moai
 | Review | One mp3 per narrator, in reading order, with a cue sheet of where to listen | Nothing else hears the 72 (per voice) as a set |
 
 A clip that still fails the guard or the pace check after its attempts (`--max-attempts`, 1–3,
-default 2; attempts already on disk are reused) holds its **whole Leaf**: not attached, named,
+default 3; attempts already on disk are reused) holds its **whole Leaf**: not attached, named,
 and left in the review track for a person — and now that holds across both narrators, not just
 across a Leaf's four slides. Spend is written back to the run after every call, and a timed-out
 call is charged even when no clip came back.

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
@@ -80,7 +80,6 @@ from zoomout_pipeline.graph.narration_nodes import (
     _BYTES_PER_SECOND,
     _WAV_HEADER_BYTES,
     ESTIMATED_CHARS_PER_SECOND,
-    MAX_NARRATION_ATTEMPTS,
     MP3_MIME,
     ClipStore,
     Guard,
@@ -100,6 +99,14 @@ GREETING_NODE = "greeting"
 # A ceiling under that refuses the first call, so this is the smallest round number that lets
 # one clip through with room for a regeneration. What actually gets spent is far below it.
 GREETING_CEILING_USD = 0.20
+
+# Two attempts per greeting, on its own constant, **deliberately not `MAX_NARRATION_ATTEMPTS`**.
+# `narrate` moved to three (ruled 2026-09-18 and 2026-09-22: one difficult line holds a whole
+# Leaf), and this used to import that constant, so the move would have carried the greeting
+# library to three with it while `generate-greetings --max-attempts` stayed a literal 2. This is
+# an ear-driven job on a small cap: a third paid attempt is the founder's decision, not a
+# default. `tests/test_attempt_defaults.py` pins the command's option to it.
+MAX_GREETING_ATTEMPTS = 2
 
 LEDGER_FILENAME = "spend.json"
 
@@ -270,12 +277,12 @@ def render_greeting(
     budget: NarrationBudget,
     record: SpendSink,
     guard: Guard,
-    max_attempts: int = MAX_NARRATION_ATTEMPTS,
+    max_attempts: int = MAX_GREETING_ATTEMPTS,
 ) -> RenderedGreeting:
     """One greeting, spoken, checked, and ready to upload — the best of at most `max_attempts`.
 
-    Bounded like every cycle here: a second sample from the same model is a fresh bet at the
-    same price, and a third is the same bet again.
+    Bounded like every cycle here, and at `MAX_GREETING_ATTEMPTS` rather than a Leaf clip's
+    `MAX_NARRATION_ATTEMPTS`: see the note on that constant for why the two are apart.
     """
     tried: list[RenderedGreeting] = []
     for attempt in range(1, max_attempts + 1):
@@ -543,6 +550,22 @@ class UploadedGreeting:
         return not self.problems
 
 
+def _holds_different_bytes(
+    *, doc: Mapping[str, Any], filename: str, served: str, clip: RenderedGreeting
+) -> str:
+    """The clause both refusals share: which document, and how it differs from the clip."""
+    return (
+        f"Media {doc.get('id')} ({filename}) already exists and holds different bytes "
+        f"({served[:12]}…) from the clip just rendered ({clip.sha256[:12]}…)"
+    )
+
+
+_NEEDS_A_PERSON = (
+    "The pipeline's key can create Media but never delete or replace it, so this needs a "
+    "person: delete {which} in the admin UI, then run this again."
+)
+
+
 def upload_greeting(*, client: MediaCms, clip: RenderedGreeting) -> UploadedGreeting:
     """Find-then-upload one greeting, and prove Payload serves the bytes that were checked.
 
@@ -571,12 +594,15 @@ def upload_greeting(*, client: MediaCms, clip: RenderedGreeting) -> UploadedGree
                 f"{filename}: Payload serves bytes {served[:12]}… but the clip uploaded was "
                 f"{clip.sha256[:12]}… — refusing to report a file that is not the one checked"
             )
+        # Reached only if the document changed after `upload_greetings` looked (its pre-flight
+        # refuses a stale one first), or when this is called on its own. It knows about one
+        # clip, and so **cannot say what became of the other**: it says only what is true.
         raise GreetingUploadError(
-            f"Media {doc.get('id')} ({filename}) already exists and holds different bytes "
-            f"({served[:12]}…) from the clip just rendered ({clip.sha256[:12]}…). The pipeline's "
-            "key can create Media but never delete or replace it, so this needs a person: "
-            "delete that Media document in the admin UI, then run this again. Nothing was "
-            "uploaded."
+            _holds_different_bytes(doc=doc, filename=filename, served=served, clip=clip)
+            + ". "
+            + _NEEDS_A_PERSON.format(which="that Media document")
+            + " This clip was not uploaded; the other narrator's greeting may already have been "
+            "(a re-run finds it and accepts it, if it holds that clip's bytes)."
         )
 
     problems: list[str] = []
@@ -614,14 +640,59 @@ def upload_greeting(*, client: MediaCms, clip: RenderedGreeting) -> UploadedGree
     )
 
 
+def _refuse_a_stale_document(*, client: MediaCms, clips: Sequence[RenderedGreeting]) -> None:
+    """Look at **both** narrators' documents before anything is sent, and refuse if any holds
+    bytes that are not its clip — naming every one, so a single visit to the admin fixes both.
+
+    Each is found by its stable filename, fetched and hashed, exactly as `upload_greeting` does
+    for the one it is on; what is new is that this happens for the second narrator *before the
+    first is uploaded*. Identical bytes pass (that is what makes a re-run idempotent), and an
+    absent document passes (it is about to be uploaded). Reads only: nothing is written here.
+    """
+    stale: list[str] = []
+    for clip in clips:
+        filename = greeting_filename(clip.greeting.narrator)
+        doc = client.find_media(filename=filename)
+        if doc is None:
+            continue
+        url = doc.get("url")
+        if not isinstance(url, str) or not url:
+            raise GreetingUploadError(
+                f"Media {doc.get('id')} ({filename}) exists but Payload returned no url for it. "
+                "Checked before anything was sent: nothing was uploaded."
+            )
+        served = hashlib.sha256(client.fetch_media(url)).hexdigest()
+        if served != clip.sha256:
+            stale.append(
+                _holds_different_bytes(doc=doc, filename=filename, served=served, clip=clip)
+            )
+    if stale:
+        which = "that Media document" if len(stale) == 1 else "those Media documents"
+        raise GreetingUploadError(
+            "; ".join(stale)
+            + ". "
+            + _NEEDS_A_PERSON.format(which=which)
+            + " Checked before anything was sent: nothing was uploaded."
+        )
+
+
 def upload_greetings(
     *, client: MediaCms, clips: Sequence[RenderedGreeting]
 ) -> list[UploadedGreeting]:
-    """Both greetings, or neither.
+    """Both greetings — **checked as a pair before anything is sent, not atomic across the two
+    requests.**
 
-    Checked as a full set before anything is sent: both narrators present exactly once, and
-    every clip passed **and** heard. A partial *transport* failure afterwards is resumable —
-    `upload_greeting` finds what already landed — but a *quality* failure in one holds both.
+    Verified first, as a full set: both narrators present exactly once, every clip passed **and**
+    heard, and every document Payload already holds under a greeting's stable filename carrying
+    exactly that clip's bytes (`_refuse_a_stale_document`). If any check fails, **nothing is
+    uploaded** and the error says which document. Identical bytes are accepted, so a re-run is
+    free.
+
+    **What this cannot promise is atomicity.** Two uploads are two requests, and a *transport*
+    failure between them still leaves the first one stored (a document that changes in that
+    window is refused by `upload_greeting`, and says only what is true of its own clip). That
+    case is resumable — the re-run finds what landed and accepts the identical clip — but it is
+    not "neither".
     """
     order = {narrator: index for index, narrator in enumerate(NarratorId)}
     ordered = sorted(clips, key=lambda clip: order[clip.greeting.narrator])
@@ -648,6 +719,7 @@ def upload_greetings(
                 for clip in held
             )
         )
+    _refuse_a_stale_document(client=client, clips=ordered)
     return [upload_greeting(client=client, clip=clip) for clip in ordered]
 
 
@@ -693,7 +765,7 @@ def run_greetings(
     record: Callable[[NarratorId, TokenSpend], None],
     guard: Guard,
     client: MediaCms | None,
-    max_attempts: int = MAX_NARRATION_ATTEMPTS,
+    max_attempts: int = MAX_GREETING_ATTEMPTS,
     on_rendered: Callable[[RenderedGreeting], None] | None = None,
 ) -> GreetingRun:
     """Render both greetings, then — with a `client` — upload them.
@@ -728,6 +800,7 @@ __all__ = [
     "GREETING_CEILING_USD",
     "GREETING_NODE",
     "LEDGER_FILENAME",
+    "MAX_GREETING_ATTEMPTS",
     "GreetingHeldError",
     "GreetingLedger",
     "GreetingLedgerError",

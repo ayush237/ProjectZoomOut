@@ -14,8 +14,9 @@ Cache → budget → Cloud TTS → **disk** → level and edge → mp3 → measu
 - **On disk before anything can fail.** The raw audio is the thing that cost money, and WP30
   lost its most important evidence to a temporary directory.
 - **Bounded regeneration.** A clip the guard calls major — a spoken tag, a dropped phrase —
-  gets one more attempt. Then the better of the two is kept and named in the review, because
-  a Leaf with a flagged clip is a listening task, and a Leaf with no clip is a player bug.
+  is attempted again, up to `MAX_NARRATION_ATTEMPTS` in all. Then the best attempt is kept and
+  named in the review, because a Leaf with a flagged clip is a listening task, and a Leaf with
+  no clip is a player bug.
 
 ## Attach — per Leaf
 
@@ -108,10 +109,15 @@ _log = get_logger(__name__)
 NARRATION_NODE = "narration"
 NARRATION_NODES = frozenset({NARRATION_NODE, GUARD_NODE})
 
-# One regeneration for a clip the guard calls major. Bounded, like every cycle here (R7): a
-# second sample from the same model is a fresh bet at the same price, and a third is the same
-# bet again.
-MAX_NARRATION_ATTEMPTS = 2
+# Three attempts for a clip the guard or the pace check calls major. **Ruled 2026-09-18 and again
+# 2026-09-22**, against this constant's own earlier comment, which called a third attempt "the
+# same bet again". The trade is not the odds of one sample but what a failure costs: one
+# difficult line holds its **whole Leaf**, which costs the founder's attention and a re-run, and
+# that is dearer than one more render and listen. Still bounded, like every cycle here (R7):
+# after the third the best attempt is kept and named, and the voiceover ceiling stops the spend
+# whatever this says. `narrate --max-attempts` defaults to it, pinned by
+# `tests/test_attempt_defaults.py`; the greeting library keeps its own (`MAX_GREETING_ATTEMPTS`).
+MAX_NARRATION_ATTEMPTS = 3
 
 MP3_MIME = "audio/mpeg"
 
