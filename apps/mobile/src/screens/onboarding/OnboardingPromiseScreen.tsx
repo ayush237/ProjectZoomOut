@@ -24,6 +24,11 @@ type Props = NativeStackScreenProps<AppStackParamList, 'OnboardingPromise'> & {
  * accumulates across them. **A first draft, and the founder's call** — copy is a taste
  * decision, read at the device gate.
  *
+ * **One line changed again in ONBOARD-3.1:** "Each one ends with a question" became "Each one
+ * asks you a question". A Leaf does not end on the question — it is slide 2 of 5, and the Leaf
+ * ends on the sticky notes and the takeaway (`PRODUCT.md`) — so the first wording was a
+ * factual slip, not a taste call.
+ *
  * The one number in it, fifteen minutes, is `env.ts`'s `SESSION_CAP_SECONDS` (900)
  * spelled out rather than read: the client has no route to the backend's config, and the
  * handoff is explicit that it is not read dynamically. If the default ever changes, this
@@ -43,7 +48,7 @@ export function OnboardingPromiseScreen({ navigation, markSeen }: Props): React.
           <Text variant="display">Here&rsquo;s the deal</Text>
 
           <Text variant="body" tone="textMuted" testID="onboarding-promise-leaves">
-            Every book here is broken into small lessons called Leaves. Each one ends with a
+            Every book here is broken into small lessons called Leaves. Each one asks you a
             question only you can answer, so you&rsquo;re thinking rather than skimming.
           </Text>
 

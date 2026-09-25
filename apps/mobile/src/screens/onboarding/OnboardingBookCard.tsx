@@ -18,7 +18,14 @@ import { useTheme } from '../../design';
  */
 export interface OnboardingBookCardProps {
   readonly track: Track;
+  /** This card's own choose is in flight: it shows a spinner in place of its label. */
   readonly busy: boolean;
+  /**
+   * Another card's choose is in flight, so this one is inert. Required, not optional:
+   * whoever renders the cards has to say, and a card that forgot would be exactly the
+   * "other card stays live mid-add" this exists to prevent.
+   */
+  readonly disabled: boolean;
   readonly onChoose: () => void;
   readonly testID: string;
 }
@@ -28,6 +35,7 @@ const COVER_ASPECT = 2 / 3;
 export function OnboardingBookCard({
   track,
   busy,
+  disabled,
   onChoose,
   testID,
 }: OnboardingBookCardProps): React.JSX.Element {
@@ -83,6 +91,7 @@ export function OnboardingBookCard({
         testID={`${testID}-choose`}
         label="Choose this book"
         busy={busy}
+        disabled={disabled}
         onPress={onChoose}
       />
     </View>

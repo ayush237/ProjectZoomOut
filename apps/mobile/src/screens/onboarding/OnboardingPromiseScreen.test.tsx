@@ -71,6 +71,17 @@ describe('OnboardingPromiseScreen copy', () => {
     expect(sessions).toHaveTextContent(/XP/u);
   });
 
+  it('does not say a Leaf ends with its question', async () => {
+    // ONBOARD-3.1. The question is slide 2 of 5: a Leaf ends on the sticky notes and the
+    // takeaway (PRODUCT.md), so "each one ends with a question" was a factual slip. The line
+    // still has to explain the mechanic — that a Leaf asks the reader something.
+    await renderPromise();
+
+    const leaves = screen.getByTestId('onboarding-promise-leaves');
+    expect(leaves).toHaveTextContent(/question/iu);
+    expect(leaves).not.toHaveTextContent(/\bends?\b[^.]*\bquestion\b/iu);
+  });
+
   it('does not say or imply that one book is finished in one sitting', async () => {
     await renderPromise();
 

@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
 import type { ApiClient } from '../../api/client';
@@ -29,6 +29,17 @@ type Props = NativeStackScreenProps<AppStackParamList, 'OnboardingPickBook'> & {
  * is a decision — and so does the one failure path below, where there is no first Leaf to
  * carry them into. See the table in `useOnboardingGate` for every row.
  *
+ * **One choose at a time, across the whole screen (ONBOARD-3.1).** While a choose is in
+ * flight every card and Skip is inert — the pressed card shows its spinner, the rest and Skip
+ * are disabled — because the two round trips it makes (`addToLibrary`, then the Library
+ * lookup) are a window, and before this a tap on Skip or the other card landed inside it:
+ * Choose then Skip put the reader on Explore with the flag set and a late `reset` then
+ * pulled them into the Leaf anyway, and two Choose taps added both books. A failed add
+ * releases everything (the reader is not left locked out of a screen nothing will unmount).
+ * **And a completion that arrives after the screen has been left does nothing** — no
+ * `reset`, no `markSeen`, and no further round trip: hardware back mid-add leaves the book
+ * added, which cannot be recalled, and that is all.
+ *
  * **The achievement banner is suppressed here, deliberately** (ONBOARD-1 finding 3).
  * `addToLibrary` earns `first-book` on this exact tap, and `ExploreScreen` is `first-
  * book`'s only other surface — but a reader who taps "Choose this book" a few seconds
@@ -46,8 +57,27 @@ export function OnboardingPickBookScreen({ navigation, markSeen }: Props): React
   const load = useCallback(() => fetchRealTracks(api), [api]);
   const tracks = useAsyncResource(load);
 
+  /**
+   * The one guard: which book is being added, if any. Every control below derives its
+   * inertness from it, so there is nothing else to keep in step. It is state and not a ref
+   * on purpose — a touch is one event and React commits between events, so `disabled` is in
+   * place before the next tap can arrive.
+   */
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Whether the reader is still on this screen. Set false by unmount — hardware back is the
+  // way out, since every beat has its swipe-back gesture turned off — and read after each
+  // round trip below, because a `choose` outlives the screen that started it.
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const choose = useCallback(
     async (trackId: string, title: string): Promise<void> => {
@@ -59,12 +89,26 @@ export function OnboardingPickBookScreen({ navigation, markSeen }: Props): React
         // the component's own docstring above.
         await api.addToLibrary(trackId);
       } catch {
+        if (!mounted.current) {
+          return;
+        }
+
         setActionError('Could not add that book. Please try again.');
         setPendingId(null);
         return;
       }
 
+      // Left during the add: the book is in the Library and that is all that happens —
+      // not even the lookup, which would only be a request nobody is waiting for.
+      if (!mounted.current) {
+        return;
+      }
+
       const leafId = await resumeLeafId(api, trackId);
+
+      if (!mounted.current) {
+        return;
+      }
 
       if (leafId === undefined) {
         // The book is in the Library either way, so nothing is lost but the hand-off
@@ -141,6 +185,7 @@ export function OnboardingPickBookScreen({ navigation, markSeen }: Props): React
               track={track}
               testID={`onboarding-pickbook-${track.id}`}
               busy={pendingId === track.id}
+              disabled={pendingId !== null && pendingId !== track.id}
               onChoose={() => {
                 void choose(track.id, track.bookTitle);
               }}
@@ -152,6 +197,7 @@ export function OnboardingPickBookScreen({ navigation, markSeen }: Props): React
           testID="onboarding-pickbook-skip"
           label="Skip for now"
           variant="quiet"
+          disabled={pendingId !== null}
           onPress={skip}
         />
       </View>

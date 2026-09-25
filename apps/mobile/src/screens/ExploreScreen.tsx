@@ -175,7 +175,7 @@ export function ExploreScreen(): React.JSX.Element {
           testID="explore-empty"
           icon="explore"
           title="Nothing to explore yet"
-          body="Tracks arrive here once there are books to read. Each one turns a non-fiction book into about fifteen minutes of active recall."
+          body="Tracks arrive here once there are books to read. Each one turns a non-fiction book into short lessons built around active recall."
         />
       </Screen>
     );
@@ -252,7 +252,8 @@ export function ExploreScreen(): React.JSX.Element {
                */}
               {emptyLibrary ? (
                 <Text variant="body" tone="textMuted" testID="explore-first-run">
-                  Add one below to get started — about fifteen minutes, one book at a time.
+                  Add a book below to get started — you&rsquo;ll read it in short lessons, over many
+                  sessions.
                 </Text>
               ) : null}
             </View>

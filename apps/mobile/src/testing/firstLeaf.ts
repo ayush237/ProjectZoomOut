@@ -26,12 +26,23 @@ export const FIRST_TRACK_ID = 't1';
 /** The option the fixture's server treats as correct. The client never learns this. */
 export const CORRECT_OPTION_ID = 'o1';
 
-/** A Leaf as the server delivers it to a reader who has not answered yet: payoff null. */
+/**
+ * A Leaf as the server delivers it to a reader who has not answered yet: payoff null.
+ *
+ * **Typed, not cast (ONBOARD-3.1).** This used to be `{ … } as unknown as DeliveredLeaf`, which
+ * is how it came to carry two scenario options where the type is a three-tuple and to lack
+ * `status` and both timestamps — and a change to the Leaf's shape could not surface here,
+ * because a cast through `unknown` is the one assignment the compiler never checks. Every
+ * field the type requires is now present, so a required field added to `PublicLeaf` fails
+ * `typecheck` in this file instead of passing a suite that renders a Leaf that no longer
+ * exists.
+ */
 export const FIRST_LEAF: DeliveredLeaf = {
   id: FIRST_LEAF_ID,
   trackId: FIRST_TRACK_ID,
   orderIndex: 0,
   title: 'Leaf One',
+  status: 'published',
   isPlaceholder: false,
   summary: { body: 'Summary.' },
   scenario: {
@@ -39,6 +50,7 @@ export const FIRST_LEAF: DeliveredLeaf = {
     options: [
       { id: CORRECT_OPTION_ID, text: 'The right one' },
       { id: 'o2', text: 'The wrong one' },
+      { id: 'o3', text: 'Another wrong one' },
     ],
   },
   payoff: null,
@@ -46,7 +58,9 @@ export const FIRST_LEAF: DeliveredLeaf = {
   stickyNotes: { notes: ['One', 'Two'] },
   takeaway: { body: 'Takeaway.' },
   sourceReferences: [],
-} as unknown as DeliveredLeaf;
+  createdAt: '2026-09-24T09:00:00.000Z',
+  updatedAt: '2026-09-24T09:00:00.000Z',
+};
 
 const PROGRESS: LeafProgress = {
   userId: '55a918e0-b185-4fb7-9b08-7459aae3b8fa',
@@ -58,14 +72,18 @@ const PROGRESS: LeafProgress = {
   xpAwarded: 0,
 };
 
+/**
+ * Typed, not cast, for the same reason as `FIRST_LEAF`. The `trackCompleted: false` it used to
+ * carry was never part of `AnswerOutcome` — it is read off the *completion* outcome, below —
+ * and the cast is what let it sit here unnoticed.
+ */
 export const CORRECT_ANSWER: AnswerOutcome = {
   correct: true,
   progress: PROGRESS,
   payoffUnlocked: true,
   payoff: { body: 'The payoff, earned.' },
   unlocked: [],
-  trackCompleted: false,
-} as unknown as AnswerOutcome;
+};
 
 export const COMPLETION: CompletionOutcome = {
   progress: { ...PROGRESS, completedAt: '2026-09-24T10:05:00.000Z', xpAwarded: 100 },

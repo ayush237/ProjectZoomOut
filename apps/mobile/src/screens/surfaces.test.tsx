@@ -11,6 +11,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider } from '../auth/AuthProvider';
 import type { AppStackParamList } from '../navigation/types';
 import { ThemeProvider, type ThemeMode } from '../design';
+import {
+  failFakePlayer,
+  fakeAudioPlayers,
+  releaseFakePlayer,
+  resetFakeAudio,
+  type FakeAudioPlayer,
+} from '../testing/fakeExpoAudio';
 import { ExploreScreen } from './ExploreScreen';
 import { JourneyScreen } from './JourneyScreen';
 import { LibraryScreen } from './LibraryScreen';
@@ -116,6 +123,31 @@ class FakeBackend {
 
     return Promise.resolve(json({ error: { code: 'NOT_FOUND', message: 'no stub' } }, 404));
   };
+}
+
+const FEMALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-female.mp3';
+const MALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-male.mp3';
+
+/**
+ * A backend that serves the narrator hellos — what every Profile test wants unless it is
+ * about the hellos being unavailable. Profile's narrator card fetches them on mount
+ * (ONBOARD-3.1), and an unrouted 404 there is a *failed fetch*: correct behaviour, but it
+ * logs, so a test that is not about that should not trigger it by accident.
+ */
+function profileBackend(): FakeBackend {
+  return new FakeBackend().on('/content/narrator-samples', () =>
+    json({ female: { url: FEMALE_HELLO }, male: { url: MALE_HELLO } }),
+  );
+}
+
+function helloPlayer(url: string): FakeAudioPlayer {
+  const player = fakeAudioPlayers().find((entry) => entry.source === url);
+
+  if (player === undefined) {
+    throw new Error(`no player was created for ${url}`);
+  }
+
+  return player;
 }
 
 /**
@@ -269,7 +301,7 @@ describe.each(['dark', 'light'] as const)('in the %s theme', (mode) => {
   it('renders Profile', async () => {
     // WP6 shipped this screen with no render test. A token that resolves to `undefined`
     // in one theme fails silently in the other, which is the whole reason for the pair.
-    const view = await renderSignedIn(<ProfileScreen />, new FakeBackend(), mode);
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend(), mode);
 
     await waitFor(() => {
       expect(view.getByTestId('profile-screen')).toBeOnTheScreen();
@@ -328,6 +360,9 @@ describe('when there is nothing to show', () => {
     await waitFor(() => {
       expect(view.getByTestId('explore-empty')).toBeOnTheScreen();
     });
+    // ONBOARD-3.1: a book is read over many sessions, in short lessons — never "about fifteen
+    // minutes", the framing the founder objected to. The claim is pinned, not the wording.
+    expect(view.getByTestId('explore-empty')).not.toHaveTextContent(/fifteen minutes/iu);
   });
 
   it('Library offers an empty state', async () => {
@@ -578,7 +613,7 @@ describe('Profile achievements', () => {
     // The smoke test above renders Profile against an empty backend, so the grid never
     // mounts with real data — this is the one happy path for WP27's badge restyle: real
     // achievements reach the screen, and locked/unlocked both render without crashing.
-    const backend = new FakeBackend().on('/achievements', () =>
+    const backend = profileBackend().on('/achievements', () =>
       json({
         achievements: [
           {
@@ -618,7 +653,7 @@ describe('Profile narrator (VO-3)', () => {
   });
 
   it('shows the default selected, and changing it writes the preference back', async () => {
-    const view = await renderSignedIn(<ProfileScreen />, new FakeBackend());
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
 
     await waitFor(() => {
       expect(view.getByTestId('profile-narrator')).toBeOnTheScreen();
@@ -640,11 +675,13 @@ describe('Profile narrator (VO-3)', () => {
     await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
   });
 
-  it('names the narrators Lara and Druv, each with a descriptor — Profile has no clip to play', async () => {
-    // ONBOARD-3. A reader chooses here without hearing anyone, so a bare name would be a
-    // blind choice; the descriptor is what says which is which. Neither a bare
-    // "Female"/"Male" nor a provider voice id may appear.
-    const view = await renderSignedIn(<ProfileScreen />, new FakeBackend());
+  it('names the narrators Lara and Druv, each with a descriptor, and keeps the labels a screen reader already knows', async () => {
+    // ONBOARD-3. A reader may choose here before a hello has loaded — or without one ever
+    // loading — so a bare name would still be a blind choice; the descriptor is what says
+    // which is which. Neither a bare "Female"/"Male" nor a provider voice id may appear.
+    // ONBOARD-3.1 made the tiles playable and left the label alone: it is asserted here
+    // *with* the hellos available, which is when a change to it would be tempting.
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
 
     await waitFor(() => {
       expect(view.getByTestId('profile-narrator')).toBeOnTheScreen();
@@ -664,6 +701,188 @@ describe('Profile narrator (VO-3)', () => {
       'Druv, male voice',
     );
   });
+});
+
+describe('Profile narrator — the hellos (ONBOARD-3.1)', () => {
+  // Tap a tile = choose that narrator and hear its hello, exactly as on the onboarding beat
+  // (the founder's request). The behaviour is `NarratorPreview`'s and is shared with the
+  // beat, so the beat's own tests pin the rules themselves; these pin that *Profile* has
+  // them, and that it does not break when there is nothing to play.
+
+  beforeEach(() => {
+    resetFakeAudio();
+  });
+
+  afterEach(async () => {
+    await SecureStore.deleteItemAsync('zoomout.narrator');
+  });
+
+  /** The tile's play control: hidden from accessibility on purpose, so queried through it. */
+  const glyph = (view: Awaited<ReturnType<typeof renderSignedIn>>, narrator: 'female' | 'male') =>
+    view.queryByTestId(`narrator-option-${narrator}-glyph`, { includeHiddenElements: true });
+
+  async function untilPlayable(view: Awaited<ReturnType<typeof renderSignedIn>>): Promise<void> {
+    await waitFor(() => {
+      expect(glyph(view, 'female')).not.toBeNull();
+    });
+  }
+
+  it('plays the pressed narrator’s hello and chooses them', async () => {
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
+    await untilPlayable(view);
+
+    await fireEvent.press(view.getByTestId('narrator-option-female'));
+
+    await waitFor(() => {
+      expect(helloPlayer(FEMALE_HELLO).playing).toBe(true);
+    });
+    // The other voice was never started, and the choice is applied *and* stored.
+    expect(helloPlayer(MALE_HELLO).play).not.toHaveBeenCalled();
+    expect(view.getByTestId('narrator-option-female').props['accessibilityState']).toEqual(
+      expect.objectContaining({ checked: true }),
+    );
+    await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
+  });
+
+  it('plays one voice at a time — pressing the other tile stops the first', async () => {
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
+    await untilPlayable(view);
+
+    await fireEvent.press(view.getByTestId('narrator-option-female'));
+    await waitFor(() => {
+      expect(helloPlayer(FEMALE_HELLO).playing).toBe(true);
+    });
+
+    await fireEvent.press(view.getByTestId('narrator-option-male'));
+
+    await waitFor(() => {
+      expect(helloPlayer(MALE_HELLO).playing).toBe(true);
+    });
+    expect(helloPlayer(FEMALE_HELLO).playing).toBe(false);
+  });
+
+  it('stops the clip when Profile is unmounted', async () => {
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
+    await untilPlayable(view);
+
+    await fireEvent.press(view.getByTestId('narrator-option-male'));
+    await waitFor(() => {
+      expect(helloPlayer(MALE_HELLO).playing).toBe(true);
+    });
+
+    await view.unmount();
+
+    expect(helloPlayer(MALE_HELLO).playing).toBe(false);
+  });
+
+  it('offers the play control and a hint only once the hellos have loaded', async () => {
+    const view = await renderSignedIn(<ProfileScreen />, profileBackend());
+    await untilPlayable(view);
+
+    expect(glyph(view, 'male')).not.toBeNull();
+    for (const narrator of ['female', 'male'] as const) {
+      expect(view.getByTestId(`narrator-option-${narrator}`).props['accessibilityHint']).toBe(
+        'Plays a short hello.',
+      );
+    }
+  });
+
+  it.each([
+    ['a 404 (an old backend that has never heard of the route)', () => json({ error: { code: 'NOT_FOUND', message: 'no' } }, 404)],
+    ['a 500', () => json({ error: { code: 'INTERNAL', message: 'boom' } }, 500)],
+    ['a 200 that is not two clips (a captive portal’s page)', () => new Response('<html>sign in to wifi</html>', { status: 200 })],
+    ['a 200 with only one narrator', () => json({ female: { url: FEMALE_HELLO } })],
+  ])(
+    'still chooses, and breaks nothing, when the hellos come back as %s',
+    async (_name, answer) => {
+      // The tiles are what they were before ONBOARD-3.1: a press only chooses, there is no
+      // play control, no notice and no error screen — Profile's job is the account.
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const view = await renderSignedIn(
+        <ProfileScreen />,
+        new FakeBackend().on('/content/narrator-samples', answer),
+      );
+
+      await waitFor(() => {
+        expect(warn).toHaveBeenCalledTimes(1);
+      });
+      expect(view.getByTestId('profile-narrator')).toBeOnTheScreen();
+      expect(glyph(view, 'female')).toBeNull();
+      expect(glyph(view, 'male')).toBeNull();
+      expect(view.getByTestId('narrator-option-female').props['accessibilityHint']).toBeUndefined();
+
+      await fireEvent.press(view.getByTestId('narrator-option-female'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('narrator-option-female').props['accessibilityState']).toEqual(
+          expect.objectContaining({ checked: true }),
+        );
+      });
+      await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
+      expect(fakeAudioPlayers()).toHaveLength(0);
+      // Nothing about it reached the reader, and the rest of the screen is intact.
+      expect(view.queryByTestId('profile-error')).toBeNull();
+      expect(view.queryByText(/did not load/iu)).toBeNull();
+      expect(view.getByTestId('profile-sign-out')).toBeOnTheScreen();
+
+      warn.mockRestore();
+    },
+  );
+
+  /**
+   * The two ways a hello fails to play. A decode or missing-file failure is reported by the
+   * player *after* an attempt (`status.error`, which `play()` itself does not throw for); a
+   * player already released throws from `play()` itself. `useNarration` surfaces both as
+   * `playbackFailed`, and each has to reach the tile.
+   */
+  const WILL_NOT_PLAY = [
+    {
+      name: 'a decode error the player reports after the attempt',
+      breakBeforePress: false,
+      breakIt: (player: FakeAudioPlayer): void => {
+        failFakePlayer(player);
+      },
+    },
+    {
+      name: 'a player that throws on play',
+      breakBeforePress: true,
+      breakIt: (player: FakeAudioPlayer): void => {
+        releaseFakePlayer(player);
+      },
+    },
+  ];
+
+  it.each(WILL_NOT_PLAY)(
+    'shows a hello that will not play ($name) on its own tile, and the choice still applies',
+    async ({ breakBeforePress, breakIt }) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const view = await renderSignedIn(<ProfileScreen />, profileBackend());
+      await untilPlayable(view);
+      expect(view.queryByTestId('narrator-option-female-failed')).toBeNull();
+
+      if (breakBeforePress) {
+        breakIt(helloPlayer(FEMALE_HELLO));
+      }
+      await fireEvent.press(view.getByTestId('narrator-option-female'));
+      if (!breakBeforePress) {
+        await act(async () => {
+          breakIt(helloPlayer(FEMALE_HELLO));
+          await Promise.resolve();
+        });
+      }
+
+      await waitFor(() => {
+        expect(view.getByTestId('narrator-option-female-failed')).toBeOnTheScreen();
+      });
+      // The other tile is untouched, and the reader's choice was still made.
+      expect(view.queryByTestId('narrator-option-male-failed')).toBeNull();
+      await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
+
+      // Unmounted while the spy is still in place: a released player warns again on cleanup.
+      await view.unmount();
+      warn.mockRestore();
+    },
+  );
 });
 
 describe('Journey resume', () => {
