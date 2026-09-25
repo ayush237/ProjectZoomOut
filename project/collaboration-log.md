@@ -712,9 +712,9 @@ Verify this list against the repository rather than trusting it.
 
 ### Completed: ONBOARD-2.1 — the fence pinned, the ceiling pinned, "both or neither" made true where it can be, and `narrate` at three attempts — 2026-09-25
 
-*Pipeline Manager. Branch `onboard-2-1-fence-and-cap`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `2f52e47`. PR: see the branch — the founder merges.*
+*Pipeline Manager. Branch `onboard-2-1-fence-and-cap`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `2f52e47`. PR: [#62](https://github.com/ayush237/ProjectZoomOut/pull/62) — the founder merges.*
 
-**13 of 14 acceptance criteria verified; one is open: the device gate's live leg, because Payload on `:3001` was down** (`curl` to it got `connection refused`). Starting it is the founder's pre-flight, and I did not start another package's server against their database. What *was* done is the whole rehearsal harness, run against a **stand-in** that serves the real cached clips as Media 350/351. **That is not the device gate and this entry does not claim it.** To close it: start Payload (`cd /Users/ayushgupta/Documents/ZoomOut/ZO && npm run dev --workspace=apps/admin`), then from `apps/pipeline` run `.venv/bin/python tests/_greeting_preflight_rehearsal.py` (no flag). It reads only, cannot spend and cannot write, and fails loudly if Payload is unreachable (checked). A follow-up entry supersedes this line once it has run.
+**All 14 acceptance criteria verified, including the device gate.** The live leg ran **after** the founder started Payload (it was down when the package was first finished, and an earlier commit of this entry recorded it as open; a dry run against a stand-in preceded it and is *not* what is claimed here). **Result, live, against `http://localhost:3001` as `pipeline-bot@zoomout.local` (machine — not the anonymous trap):** Media **350** (female) and **351** (male) found; the sha256 of each *served* file, hashed independently of the code under test, equals the local clip **and** ONBOARD-2's table (`c79a8725…`, `e598939f…`); **0 upload attempts**; the negative control (one byte changed in the male clip) **refused before any upload**; the reviewer's case (male stale, female absent — absence simulated, nothing deleted) **refused with neither uploaded**; `runs/greetings/` (spend.json included) hashes identically before and after. Command, from `apps/pipeline`: `.venv/bin/python tests/_greeting_preflight_rehearsal.py` (read-only; it cannot spend or write).
 
 | | |
 |---|---|
@@ -845,28 +845,35 @@ Nothing blocks. Two scope calls I made, so they can be overruled:
 
 ## What I could not verify
 
-- **The live leg of the device gate** (above): both Media documents found, the sha256 of each served file equal to the local clip's, zero uploads, and the negative control refused — **all against a stand-in, none against Payload.** What the stand-in does not prove is that the live Payload serves the bytes ONBOARD-2 recorded; ONBOARD-2 checked that independently on 2026-09-24, and nothing here re-checked it.
+- **Nothing in the device gate is left unverified.** The one caveat that travelled with the stand-in run — that nothing re-checked that the live Payload serves the bytes ONBOARD-2 recorded — is closed: it does (same sha256, Media 350/351).
 - **The cost of a Leaf clip's extra attempt** is an estimate from the ledger's rates, not a measured one; no Leaf clip was rendered.
 - **`narrate` end to end with the new default.** Tier C: there is still no test that runs the command with fakes beyond its help and option defaults; the render it calls is tested.
 
 ## The device gate, as run
 
-`.venv/bin/python tests/_greeting_preflight_rehearsal.py --stand-in` (from `apps/pipeline`; **no live CMS**) — output, abridged:
+`.venv/bin/python tests/_greeting_preflight_rehearsal.py` from `apps/pipeline`, **live**, 2026-09-25, after the founder started Payload (`npm run dev --workspace=apps/admin`). Before it, `curl` to both files answered `HTTP 200` with 40,320 and 40,896 bytes, the sizes ONBOARD-2 recorded. Output, abridged:
 
 ```
-mode: STAND-IN (not the device gate)
+mode: LIVE Payload
 local  final/narrator-greeting-female.mp3  sha256 c79a872587806a367a6f0513fc6cfd84d53a9fc999c7aaa9dd6f9642bacd3eb7  (= ONBOARD-2 table)
 local  final/narrator-greeting-male.mp3    sha256 e598939f6854e8667bdf44c97750db51f73216c2ff8fb8401ec9141ecb16e6a7  (= ONBOARD-2 table)
+cms identity: pipeline-bot@zoomout.local (machine)
 cache  female  re-derived sha256 c79a8725…  paid calls: 0        cache  male  re-derived sha256 e598939f…  paid calls: 0
-[1] the pre-flight over the real clips     female Media 350 · male Media 351 · upload attempts: 0  -> accepted, nothing written
-[2] negative control: male clip, one byte changed
-    REFUSED: Media 351 (narrator-greeting-male.mp3) already exists and holds different bytes (e598939f6854…) from the clip just rendered (7a838f4c44bf…). … Checked before anything was sent: nothing was uploaded.     upload attempts: 0
+[1] the pre-flight over the real clips
+    female  Media 350  /api/media/file/narrator-greeting-female.mp3   served sha256 c79a872587806a367a6f0513fc6cfd84d53a9fc999c7aaa9dd6f9642bacd3eb7
+    male    Media 351  /api/media/file/narrator-greeting-male.mp3     served sha256 e598939f6854e8667bdf44c97750db51f73216c2ff8fb8401ec9141ecb16e6a7
+    calls: find, fetch (female); find, fetch (male); then the same again inside upload_greeting     upload attempts: 0  -> accepted, nothing written
+[2] negative control: the male clip with one byte changed
+    REFUSED: Media 351 (narrator-greeting-male.mp3) already exists and holds different bytes (e598939f6854…) from the clip just rendered (7a838f4c44bf…). … Checked before anything was sent: nothing was uploaded.
+    calls: find, fetch (female); find, fetch (male)     upload attempts: 0  -> refused before any upload
 [3] the reviewer's case: male stale, female absent (absence simulated, nothing deleted)
     REFUSED (same message)     calls: find(female), find(male), fetch(male)     upload attempts: 0  -> neither uploaded
-REHEARSAL OK: 0 paid calls, 0 writes
+REHEARSAL OK: 0 paid calls, 0 writes                                            exit 0
 ```
 
-Without `--stand-in`, against the down Payload: `PayloadError: GET /api/admins/me could not reach Payload at http://localhost:3001: [Errno 61] Connection refused`, exit 1. It cannot pass when there is nothing to check.
+`runs/greetings/spend.json` sha256 `b932c6da…1a384` and the whole `runs/greetings/` tree hash (`5b1df99a863e5a2e`) are identical before and after. **Case [3] is the bug's own shape**, and the calls line is the proof of the fix: the pre-flight looked at both narrators and fetched only the document that exists, where the old loop's first act would have been `upload_media` for the female. The wrapper's `upload_media` raises, so an upload could not have gone unnoticed. **The file hashed in [1] is the one Payload serves**, computed by the script itself rather than by the code under test.
+
+Two earlier runs, for the record: the same script with `--stand-in` (a CMS that serves the local clips as 350/351) passed identically and proved the harness; and without `--stand-in` against the then-down Payload it failed loudly (`PayloadError … Connection refused`, exit 1), so it cannot pass when there is nothing to check.
 
 **Pipeline CLI commands run: none.** Not `narrate`, not `audition-voices`, not `generate-greetings` — they were exercised only as `--help` through `CliRunner` inside the test suite, which renders, listens and writes nothing. The rehearsal is a Python script, not a CLI command.
 
