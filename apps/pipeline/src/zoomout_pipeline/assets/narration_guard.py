@@ -237,7 +237,7 @@ class NarrationCheck:
 
     @property
     def severity(self) -> GuardSeverity:
-        """MAJOR is worth one regeneration; MINOR is worth a person listening; EXACT is neither.
+        """MAJOR is worth another attempt; MINOR is worth a person listening; EXACT is neither.
 
         A spoken tag or instruction is major on its own — it is the documented failure, and
         a listener cannot miss it. So is **any word added where the text has none**, and any

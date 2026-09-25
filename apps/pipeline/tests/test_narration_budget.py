@@ -322,6 +322,8 @@ def test_the_pace_check_holds_without_the_guard(tmp_path: Path) -> None:
         budget=NarrationBudget(ceiling_usd=3.00),
         record=lambda _spend: None,
         guard=None,
+        # Explicit since ONBOARD-2.1 moved the default to 3: this test counts attempts.
+        max_attempts=2,
     )
 
     assert clip.check is None
