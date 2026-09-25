@@ -884,38 +884,40 @@ Rough — I have no clock on it. Reading the flow and its ONBOARD-1 tests ~25%; 
 
 ### Completed: ONBOARD-2 — two narrator self-introduction clips — 2026-09-24
 
-*Pipeline Manager. Branch `onboard-2-narrator-greetings`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Revised the same day, after the founder heard the first pair.***
+*Pipeline Manager. Branches `onboard-2-narrator-greetings` (PR #59) and `onboard-2-close-out`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Closed out the same day, after the founder's ear check.***
 
-**Not finished, and this entry is written so that a fresh session can finish it.** The first pair of clips (voices Achernar and Sadaltager, saying those names) was uploaded as Media **348** and **349**, and the founder heard it and ruled two changes: **the narrators are called Lara and Druv, and the pace should be slightly faster.** Code, tests and README are updated and green. The new pair is rendered and was sent to the founder to hear. **It is not uploaded**, because 348 and 349 occupy the stable filenames and the pipeline's key can neither delete nor replace Media.
+**Done.** The first pair of clips (voices Achernar and Sadaltager, saying those names) was uploaded as Media 348 and 349, and the founder heard it and ruled two changes: **the narrators are called Lara and Druv, and the pace should be slightly faster.** The new pair was rendered and the founder heard it: **both ear checks passed. The pace is right, and Druv has the "v" (it sounds like "Droov").** No re-take was needed and the spend cap was not touched. The founder then deleted Media 348 and 349 in the admin UI, the new pair was uploaded as **Media 350 (Lara) and 351 (Druv)**, and Payload was read back independently (below).
 
-**ONBOARD-3: do not build against Media 348 or 349.** They say the wrong names. The references below are pending; **the URLs will not change, the ids will.**
+**The Architect's ONBOARD-3 addendum (Handoffs, top of the log) says Media 348/349 are behind the stable URLs "today". That is no longer true:** the swap it says the narrator beat's device-gate item waits on **has happened.** The URLs serve the Lara and Druv clips, 348 and 349 no longer exist, and the ids are **350 and 351**. Build against the URLs, as the addendum says; the ids are recorded here for the record and nothing should key on them.
 
 | | |
 |---|---|
-| New clips (rendered, checked, on disk, **not uploaded**) | **Lara** (`female`, voice Achernar) **5.04 s** · **Druv** (`male`, voice Sadaltager) **5.11 s** |
-| Live in Payload right now | Media **348** and **349**: the **superseded** first pair. The founder has to delete both in the admin UI before the new pair can go up |
+| Uploaded | **Lara** (`female`, voice Achernar): **Media id 350**, `/api/media/file/narrator-greeting-female.mp3`, **5.04 s** · **Druv** (`male`, voice Sadaltager): **Media id 351**, `/api/media/file/narrator-greeting-male.mp3`, **5.11 s** |
+| Payload state | Exactly two `narrator-greeting` documents (350, 351), no `-1` rename; 348 and 349 deleted by the founder; no stale file left in the media directory |
+| Device gate | **Passed**, the founder's ear, 2026-09-24: pace right; Druv has the "v" ("Droov") |
 | Gate | `ruff format --check` **120 files** (was 116) · `ruff check` clean · `mypy` strict **102 files** (was 99) · `pytest` **495 passed** (was 441; +54, all in `tests/test_greetings.py`) |
-| Spend | **$0.0378 of the $0.20 cap**, 20 paid calls (10 speech, 10 listening). **The cap now refuses the next synthesis call** (see "The cap") |
-| Device gate | The founder heard the first pair and asked for the two changes. **The new pair was sent for a second listen; no answer yet** |
+| Spend | **$0.0378 of the $0.20 cap**, 20 paid calls (10 speech, 10 listening). The upload and the readback cost nothing (ledger unchanged at 20 entries) |
 | Mutation-checked | 10 of 10 deliberate breakages caught by the intended test, re-run on the renamed code |
 
 ---
 
-## To finish this
+## How it was finished, and how to redo a clip
 
-1. **The founder listens** to `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/greetings/audio/final/narrator-greeting-female.mp3` and `…-male.mp3` (the `ZO-pipeline` checkout, not `ZO`). Two questions: **is the pace right** and **does "Druv" sound like Druv** (below).
-2. **If they are right:** the founder deletes Media 348 and 349 in the admin UI. Then, from `apps/pipeline`:
-   `export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline" ZOOMOUT_PIPELINE_USE_VERTEX=true ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex`
-   then `.venv/bin/zoomout-pipeline generate-greetings`. **This costs nothing, even with the cap blocking new synthesis**: both clips and both listening readings are cached, and I ran it render-only in exactly this state to prove it (ledger 20 entries before and after). It uploads both or neither and refuses if 348/349 still exist, naming the id. Then replace the references table below with the new ids and read Payload back the way the first pair was (anonymous GET of each document and file, sha256 against the local file, duration decoded from the served bytes, exactly two documents).
-3. **If the pace is wrong or Druv is wrong:** another take needs spend the cap will not allow, and **raising the cap is the founder's decision**. Pass `--ceiling-usd 0.30` (or edit `GREETING_CEILING_USD`); further takes cost about $0.0035 per narrator. For pace, change the second paragraph of `prompts/narrator_greeting.md` (the next thing to try is adding "unhurried") and run `generate-greetings --render-only`; a new direction is a new take.
-4. **Whatever the outcome, this entry's references table, transcripts and status block should be brought up to date, and the PR description too.**
+1. **The founder listened** to the Lara and Druv pair and both checks passed (above). No re-take, and the cap stayed where it was.
+2. **The founder deleted Media 348 and 349** in the admin UI. Checked before uploading: zero documents matched `narrator-greeting`, and no `narrator-greeting*` file remained on disk in the media directory the running Payload uses, so nothing could make the upload come back renamed `-1`.
+3. **`generate-greetings`** ran from the cache and uploaded both: female **id 350**, male **id 351**, `problems=[]` for both. The ledger has 20 entries before and after: it bought nothing.
+4. **Payload was read back independently** of the code that wrote it (below), and this entry and the PR description were brought up to date.
+
+**To redo a clip later:** delete its Media document in the admin UI (the machine key cannot delete or replace Media), then from `apps/pipeline`: `export ZOOMOUT_PIPELINE_DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/zoomout_pipeline" ZOOMOUT_PIPELINE_USE_VERTEX=true ZOOMOUT_PIPELINE_VERTEX_PROJECT=zoomout-vertex` and `.venv/bin/zoomout-pipeline generate-greetings`. **Without deleting first the command refuses**, naming the document's id: it finds the existing one, sees different bytes, and uploads nothing. A new wording or direction is a new take, which is new spend, and **the cap blocks it**: the ledger stands at $0.0378 against $0.20 and the next synthesis call is refused, so more takes need `--ceiling-usd 0.30` (or a higher `GREETING_CEILING_USD`), which is the founder's decision. Re-uploading a clip with nothing changed is free.
+
+**A missing media file is served as HTTP 500 on this Payload route, not 404** (checked against a name that never existed; an existing file is 200). Anything that fetches these clips by URL and treats a non-200 as "not there" should expect a 500 for "not there". **`HEAD` returns 404 on the route and `GET` returns 200**, for both clips, as the Architect's addendum says (confirmed here).
 
 ---
 
 ## What the founder asked, and what changed
 
 - **Names: Lara (female) and Druv (male).** Achernar and Sadaltager were never meant to be heard: they are the provider's ids for the two voices, and the first greetings had simply said them. **The name a narrator gives and the name of the voice are now separate**: `assets/greeting.py:NARRATOR_NAMES` (Lara, Druv; spelled as ruled, "Druv" and not "Dhruv") beside `assets/narration.py:NARRATOR_VOICES` (unchanged). Both asserted exactly; a test asserts no greeting ever says a voice id; the word check now sets aside the narrator's *name*, not the voice; the admin `alt` names the narrator and the voice ("Narrator self-introduction by Lara (the female narrator, voice Achernar): Hi, I'm Lara…").
-- **Slightly faster.** The direction's second paragraph is now "Warm and welcoming, never gushing." (revision 3 in the prompt file's own comment). **That overshot**: see the table.
+- **Slightly faster.** The direction's second paragraph is now "Warm and welcoming, never gushing." (revision 3 in the prompt file's own comment). **The numbers said this overshot** (see the table); **the founder's ear said the pace is right**, so it did not.
 - Everything else in the two sentences is unchanged: "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." and "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company."
 
 ## Where the takes stand
@@ -927,40 +929,46 @@ Syllables per second are used instead of words a minute because the new names ar
 | 1 | "Warm, easy and welcoming, with a quiet smile in the voice, never gushing." | 5.64 s · 3.72 · 5.47 · 0.38 s · 242 Hz · 7.1 st | 6.05 s · 3.64 · 5.73 · 0.67 s · 186 Hz · 10.4 st |
 | 2 | "Warm and welcoming, a little slowly and clearly, with a quiet smile in the voice, never gushing." | 7.18 s · 2.92 · 4.94 · 0.79 s · 250 Hz · 10.3 st | 6.53 s · 3.37 · 4.99 · 0.56 s · 162 Hz · 8.8 st |
 | **3** (uploaded as **348/349**; **the founder's "too slow", wrong names**) | "Warm and welcoming, a little slowly and clearly, never gushing." | 7.49 s · **2.80** · 4.69 · **0.95 s** · 245 Hz · 8.3 st | 6.62 s · **3.32** · 4.76 · 0.59 s · 171 Hz · 8.7 st |
-| **4** (Lara / Druv; **rendered, not uploaded**) | "Warm and welcoming, never gushing." | **5.04 s · 3.97 · 5.80** · 0.39 s · **231 Hz** · 6.0 st | **5.11 s · 3.72 · 5.88** · 0.39 s · **164 Hz** · 9.5 st |
+| **4** (Lara / Druv; **uploaded as 350/351; the founder: pace right**) | "Warm and welcoming, never gushing." | **5.04 s · 3.97 · 5.80** · 0.39 s · **231 Hz** · 6.0 st | **5.11 s · 3.72 · 5.88** · 0.39 s · **164 Hz** · 9.5 st |
 | Lesson band | | pitch 219–240 Hz · movement 4.2–5.8 st · longest pause 0.51–0.84 s | pitch 133–167 Hz · movement 6.3–9.8 st · longest pause 0.71–1.08 s |
 
-**Take 4 is a large step, not "slightly".** Against take 3, articulation is **+24% for both narrators**, the long pauses are gone, and the female is **+42% overall** (5.0 s against 7.5 s) while the male is **+12%** overall. Both are now inside the lesson clips' pitch range, where take 3 sat above it. A second female sample under the same direction came out at 5.06 s, so the speed is the direction's doing and not luck. **The direction is nearer a switch than a dial**: dropping "a little slowly and clearly" moved the delivery by a quarter. An in-between direction has not been tried, because of the cap.
+**Take 4 is a large step on the numbers, and it is what the founder wanted.** Against take 3, articulation is **+24% for both narrators**, the long pauses are gone, and the female is **+42% overall** (5.0 s against 7.5 s) while the male is **+12%** overall. Both are inside the lesson clips' pitch range, where take 3 sat above it. **I read that as an overshoot of "slightly faster"; the founder heard it and judged the pace right**, so the numbers were a poor guide to what "slightly" meant to the ear. What they did explain is why take 3 sounded slow (next paragraph). A second female sample under the same direction came out at 5.06 s, so the speed is the direction's doing and not luck, and **the direction is nearer a switch than a dial**: dropping "a little slowly and clearly" moved the delivery by a quarter. An in-between direction was never needed.
 
 **Why take 3 read as slow when its words a minute said otherwise (187 and 182):** that figure counts speech time only. The female clip had a 0.95 s pause against a lesson p90 of 0.84 s and ran 7.5 s in all. "A little slowly" buys pauses, not only a slower voice.
 
 ## The cap: what it actually allows
 
-`NarrationBudget` reserves the most a call could cost, Cloud TTS's 655-second maximum, **$0.1638 for these requests**, and refuses when spent plus that would cross the cap. So **a $0.20 cap leaves about $0.036 of real spend, roughly five takes across both narrators, and then it halts.** It halted at $0.0378 (headroom −$0.0016) while I was sampling a third take. That is the ceiling working as designed ("the ceiling is the signal to report, not a figure to raise"), and I did not raise it.
+`NarrationBudget` reserves the most a call could cost, Cloud TTS's 655-second maximum, **$0.1638 for these requests**, and refuses when spent plus that would cross the cap. So **a $0.20 cap leaves about $0.036 of real spend, roughly five takes across both narrators, and then it halts.** It halted at $0.0378 (headroom −$0.0016) while I was sampling a third take. That is the ceiling working as designed ("the ceiling is the signal to report, not a figure to raise"), and I did not raise it. **The founder was not asked to raise it and no re-take was needed, so it stayed where it was; the finishing upload cost nothing.**
 
 **I under-explained this.** I told the founder a full re-render was about $0.02 (true) and that the cap was $0.20 (true), and that it was "the smallest number that works". I did not say it would stop iteration at about five takes. A test asserts the cap leaves at least $0.02 of headroom; it does, and that was the wrong thing to be proud of.
 
 ---
 
-## For ONBOARD-3: the references (pending)
+## For ONBOARD-3: the references
 
 | | Female | Male |
 |---|---|---|
 | Narrator id (`NarratorId`) | `female` | `male` |
 | Called | **Lara** | **Druv** |
-| Cloud TTS voice (never spoken) | Achernar | Sadaltager |
+| Cloud TTS voice (never spoken, never shown) | Achernar | Sadaltager |
 | **Stored relative URL (stable)** | `/api/media/file/narrator-greeting-female.mp3` | `/api/media/file/narrator-greeting-male.mp3` |
 | Filename | `narrator-greeting-female.mp3` | `narrator-greeting-male.mp3` |
-| Payload Media id | **pending: not uploaded** (348 is the superseded pair) | **pending** (349 is the superseded pair) |
-| Duration, seconds | 5.04 (rendered, may change if retaken) | 5.11 (same) |
+| Payload Media id (for the record; **do not key on it**) | **350** | **351** |
+| `mimeType` / `filesize` | `audio/mpeg` / 40,320 bytes | `audio/mpeg` / 40,896 bytes |
+| Duration, seconds (decoded from the served bytes) | **5.04** | **5.11** |
+| sha256 of the served file | `c79a872587806a367a6f0513fc6cfd84d53a9fc999c7aaa9dd6f9642bacd3eb7` | `e598939f6854e8667bdf44c97750db51f73216c2ff8fb8401ec9141ecb16e6a7` |
+| `alt` (admin list label) | "Narrator self-introduction by Lara (the female narrator, voice Achernar): Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." | "Narrator self-introduction by Druv (the male narrator, voice Sadaltager): Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company." |
+| Uploaded | 2026-09-24T12:27:32Z | 2026-09-24T12:27:32Z |
 
-**Build against the URL, not the id.** A redo means the founder deletes the old document by hand, because the machine key cannot delete Media (`machinesNeverDelete`), and uploads again. The URL is the filename, so it survives; the id does not. If you can wait for the founder's ear, wait.
+**Build against the URL, not the id, as the Architect's ONBOARD-3 addendum says.** A redo means the founder deletes the old document by hand (the machine key cannot delete Media) and the clip is uploaded again: **the URL is the filename, so it survives; the id does not.** Nothing should key on 350 or 351, assert on these durations or bytes, or hardcode them: a redo changes all of them.
 
-Facts about the served files, checked on the first pair and unchanged by anything since: public read with no auth; `content-type: audio/mpeg`; `accept-ranges: bytes` with `206` on a `Range` request; same route VO-3 plays from. Media has no draft/publish state, so a file is live the moment it is uploaded.
+Facts about the served files, **re-verified on this pair** with anonymous requests: `HTTP 200`; `content-type: audio/mpeg`; `accept-ranges: bytes`, and a `Range: bytes=0-99` request answers `206` with the right `content-range`; public read, no auth; the same route VO-3's narration is played from. Media has no draft/publish state, so a file is live the moment it is uploaded.
 
-**The app will need to say Lara and Druv.** Whatever labels the narrator picker and ONBOARD-3's narrator beat show for the two narrators should match. The pipeline cannot see the app; I have not read it.
+**The `alt` names the voice, deliberately, because it is the admin list's label** and the one place the voice is recorded. Nothing in the app reads an audio Media's `alt` (`audioRefSchema` carries no `alt`, per `apps/admin/src/collections/Media.ts`), so the rule that a provider voice id never reaches a reader is met today. If a future change ever surfaces it, it must not surface the voice id. The machine key may update Media, so the alt can be changed in place without touching the file; `PayloadClient` has no method for it yet.
 
-**`AudioRef`:** `durationSeconds` is real and measured from the decoded bytes Payload serves. A `textDigest` that honestly describes the words is `sha256(script)` as `assets/narration.py:text_digest` computes it; recompute it for the Lara and Druv sentences with `text_digest(NARRATOR_GREETINGS[narrator])` rather than reusing any value from an earlier version of this entry.
+**The app needs to say Lara and Druv**, and the Architect's addendum covers that for ONBOARD-3 (one shared label map, never "Female"/"Male" alone, never a provider voice id). The pipeline cannot see the app; I have not read it.
+
+**`AudioRef`:** these are facts about these two files, not constants to build on, and the addendum is right to say so. `durationSeconds` is measured from the decoded bytes Payload serves (5.04 and 5.11). A `textDigest` that honestly describes the words is `sha256(script)` as `assets/narration.py:text_digest` computes it: Lara `55efea550970350b604a4354ea3a179eabdeb6ca08369ce16b0afc83fec53fc0`, Druv `6f502ea72eaeb8d1db3cf50ee92baf4e8921407319d11d51d02b86f180a4b7eb`. Nothing pipeline-side reads either for these two clips. If the client's sample preview needs only a URL, do not carry them at all.
 
 ---
 
@@ -971,11 +979,11 @@ A *blind* transcript (Gemini 3.6 Flash on Vertex, never shown the script), compa
 | | Script | What the transcriber wrote | Difference |
 |---|---|---|---|
 | Female | "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." | "Hi, I'm Lara. I'll be reading to you here, whenever you'd like the company." | **None.** The name came back correct |
-| Male | "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company." | "Hey, I'm **Drew**. I'll be reading to you here whenever you'd like the company." | **The name**, as "Drew". Every other word matches (no comma after "here" is punctuation). **This may mean the final "v" is soft or missing**, or only that a transcriber prefers a common name to a rare one. Only an ear can say, and it is the first thing to check |
+| Male | "Hey, I'm Druv. I'll be reading to you here, whenever you'd like the company." | "Hey, I'm **Drew**. I'll be reading to you here whenever you'd like the company." | **The name**, as "Drew". Every other word matches (no comma after "here" is punctuation). **The founder's ear: the "v" is there, and it sounds like "Droov".** So "Drew" was not a missing sound (most likely the transcriber preferring a common name). This is the case the word check sets the name aside for, and why a person has the last word on a name |
 
 **No spoken instruction, tag or direction is in either transcript, and the pace confirms it independently of the transcriber**: 14 words in 3.45 s and 3.23 s of speech. A leaked style prompt fills speech time; VO-2's leak measured 30–42 wpm. The transcriber is the instrument VO-2 found silently dropping spoken instructions in 9 of 13 transcripts, which is why the pace is read separately.
 
-**If Druv does not sound right**, the options: respell the name *for the voice only* (e.g. "Dhruv", the conventional spelling, which a model is likelier to know), which is a new kind of transformation because `speakable()` changes spacing and nothing else, and now that the founder rules the names it is theirs to approve; or accept it; or change the name. I have not tried the respelling: it needs a take, and the cap.
+**No respelling was needed.** `speakable()` is unchanged and still changes spacing and nothing else.
 
 ---
 
@@ -996,7 +1004,7 @@ I did not widen either test. **A greeting has its own door, built the same way:*
 3. **The narrator's name is set aside by the word check, and reported.** `assets/greeting.py:compare_greeting` sets aside **one to three words in the name's own slot** and reports what was heard there; everything else is compared exactly; **a name that is dropped, run into its neighbours or stretched over a longer run is not set aside and fails the clip**; a greeting that never says the name is MAJOR on its own. It was written because Sadaltager came back as "Sedat Auger", "Sebal tager", "Saul DeTagger" and "Saul Talgor" and the strict check held the male clip twice. **What this gives up: the machine has no opinion on the name.** The command prints `name: heard as 'drew' — set aside, not machine-checked; a person has to hear this one` on every run.
 4. **Both greetings or neither, and a transcript is required.** A greeting nobody could listen to is held. Passed clips go to `final/`, held ones to `held/`, and a clip whose verdict changes has its old copy removed.
 5. **Stable filenames carry no hash**, unlike a Leaf's clips, because the app references them. So an existing document is fetched, hashed and *compared*, never trusted, and the redo procedure above follows.
-6. **Upload timing.** I offered the founder "after you've heard them" (recommended) or "straight away"; they chose straight away, and it cost a manual delete, exactly as offered.
+6. **Upload timing.** I offered the founder "after you've heard them" (recommended) or "straight away"; they chose straight away, and it cost one manual delete (Media 348/349), exactly as offered.
 7. **The direction is `prompts/narrator_greeting.md`** (three revisions, each reason recorded in the file's own comment). Its first paragraph is the shared narrator block of `narration_direction.md` word for word, asserted.
 
 ---
@@ -1007,12 +1015,13 @@ I did not widen either test. **A greeting has its own door, built the same way:*
 - **The transcriber cannot referee a name and is inconsistent with itself**: Sadaltager four ways in four renders, Achernar three. And now "Druv" as "Drew".
 - **The budget's arithmetic ruled out the handoff's own number, and then my own headroom.** The handoff's cost estimate was right; its implied ceiling was not something the mechanism can honour; and my $0.20 was almost all reservation.
 - **Words a minute is a poor pace measure for a very short clip:** it hid a 0.95 s pause and a 7.5 s clip that the founder heard immediately.
+- **The founder's ear overruled my numbers on pace.** I read take 4 as a large overshoot (+24% articulation, +42% overall on the female) and the founder judged it right. The measures explained why take 3 sounded slow but could not say what "slightly faster" meant. I would give them less weight the next time a person is available to listen.
+- **"Drew" was not evidence about the sound.** A transcriber's spelling of a rare name says little about how it was pronounced, which is what the word check already assumes when it sets the name aside. The ear settled it: the "v" is there.
+- **Payload answers a missing media file with 500, not 404.** I found it because the founder's deletion made both clip URLs "missing" and they returned 500; a name that never existed does the same.
 
 ## What I could not verify
 
-- **By ear, anything.** No audio input. The transcript, the model-free pace, and measurements against the 144 lesson clips are not listening.
-- **How Lara and Druv sound**, and especially **whether the "v" in Druv is there.**
-- **Whether take 4's pace is what "slightly faster" meant.** The numbers say it is a large step, and the founder's ear is the only judge.
+- **By ear, anything.** I have no audio input. The founder's ear is the check, and it passed. What I did instead is the transcript, the model-free pace, and measurements against the 144 lesson clips, none of which is listening.
 - **Google's invoice.** The $0.0378 is the pipeline's ledger: speech from the seconds Cloud TTS returned (25 audio tokens a second), input tokens *estimated* from bytes (an over-count by design), listening from the SDK's reported tokens. Not reconciled against Cloud Billing, which lags.
 - **How ONBOARD-3's player renders these on a device.** That package's gate.
 
@@ -1020,9 +1029,17 @@ I did not widen either test. **A greeting has its own door, built the same way:*
 
 ## Verification performed
 
-**The first pair (Media 348/349), read back independently of the code that wrote it:** anonymous `HTTP 200` for both documents and both files, sha256 of the served bytes equal to the local files, duration re-measured from the served bytes equal to what the command reported, `audio/mpeg`, `206` on a `Range` request, exactly two documents and no `-1` rename. That proved the upload path; **it says nothing about the new pair, which has not been uploaded.**
+**The uploaded pair (Media 350/351), read back independently of the code that wrote it**: a separate script over anonymous REST (no `PayloadClient`, no `Authorization` header, which is what the backend and the app see). **Every check passed:**
+- Both documents read with `HTTP 200`: filenames are the stable names with no `-1` rename; `alt` equals what `greeting_alt` builds; `mimeType` is `audio/mpeg`; `url` is the stable relative URL; `filesize` equals the bytes served.
+- Both files fetched anonymously with `HTTP 200`, and **the sha256 of the served bytes equals the local `final/` file's, for both** (hashes in the references table).
+- **Duration re-measured by decoding the bytes Payload serves: 5.04 s and 5.11 s**, equal to what the command reported.
+- **The served bytes equal a fresh re-derivation from the cached raw Cloud TTS audio**, levelled, edged and encoded again independently of `run_greetings`. So the audio live in Payload is deterministic from the paid-for take, and it is the take the founder heard.
+- **Exactly two documents contain `narrator-greeting`, with no `-1` rename**, and they are the two newest Media ids (351, 350), above COVER-1's 347 and 346.
+- Headers: `content-type: audio/mpeg`, `accept-ranges: bytes`, and `Range: bytes=0-99` answers `206` with the right `content-range`.
 
-**The new pair, locally:** rendered, listened to by the guard model, pace-checked, measured against the lesson clips, and the finishing command run render-only against the cache to prove it is free (ledger unchanged). **Nothing was written to Payload by the revision.**
+**Before the upload:** zero documents matched `narrator-greeting`; no `narrator-greeting*` file remained on disk in the media directory the running Payload uses (which is what would have forced a rename); and the command's own identity check ran first: the key is `pipeline-bot@zoomout.local`, `accountType: machine`, not the anonymous 200 that a wrong `Authorization` scheme yields.
+
+**Nothing else was written.** A test asserts the CMS is only ever asked to find, upload and serve Media, and the command's last line says so. The first pair's readback (348/349) proved the upload path the same way and is superseded with those documents.
 
 **Mutation checks**, each a one-line break of the code followed by the test file, restored byte-for-byte: the budget not reserved before the call · an upload that ignores a held clip · a name set aside however long the run · a name never said not counting as major · different bytes in an existing document accepted · a greeting always spoken in one fixed voice · a stale copy left in the other folder · an unreadable ledger treated as empty · pace no longer overriding an exact transcript · a guard outage no longer holding the clip. **10 of 10 caught, each by the test written for it, re-run after the rename.**
 
@@ -1036,22 +1053,24 @@ All under `apps/pipeline`. **The one path outside it is this entry**, which the 
 
 - **New** `assets/greeting.py` (the closed scripts, the names, the direction loader, stable filename and alt, `compare_greeting`), `graph/greeting_nodes.py` (render, ledger, upload, `run_greetings`), `prompts/narrator_greeting.md`, `tests/test_greetings.py`.
 - **`assets/speech.py`**: one private `_call` extracted from `synthesize`, behaviour and log fields unchanged; `synthesize_greeting`, `SynthesizedGreeting`, `greeting_request_bytes` added.
-- **`cli.py`**: `generate-greetings` (`--render-only`, `--max-attempts`, `--ceiling-usd`). **README**: a section on it, the redo procedure, and the real cap headroom.
+- **`cli.py`**: `generate-greetings` (`--render-only`, `--max-attempts`, `--ceiling-usd`). **README**: a section on it, the redo procedure, and the real cap headroom. **This close-out changes only `project/collaboration-log.md`** (this entry): no code, test or README changed after PR #59.
 
 ## What I got wrong along the way
 
 - **I ran `git stash --include-untracked`** once in the `ZO-pipeline` worktree to compare a lint file count. It was popped at once, the stash list is empty and `runs/` (gitignored, holding the paid-for Ikigai audio) was untouched. An unnecessary risk in a shared repository.
 - **I under-explained the cap** (above), and hit it mid-iteration.
-- **I removed "a little slowly and clearly" outright** instead of first testing an in-between phrase, and the female overshot; the cap is why I could not try one afterwards, but the order was mine.
 
 ## Follow-ups for Architect
 
-- **`LEGAL.md`** "Narration" should name the greetings (see above).
-- **Narrator names in the rest of the product.** Lara and Druv are now the narrators' names; the 144 Leaf clips' Media `alt` still say "read by Achernar / Sadaltager" (voice ids; cosmetic, and out of scope here), the voiceover README section now says "called Lara / Druv", and the app's narrator labels are ONBOARD-3's and the Manager's to align. `NARRATOR_NAMES` lives in `assets/greeting.py` because greetings are the only thing in the pipeline that says it; if a second consumer appears it belongs next to `NARRATOR_VOICES`.
-- **The budget's reservation rule** makes a small cap allow very little iteration (about five takes at $0.20). For an ear-driven job that is the wrong shape. Options for a ruling: a higher default here, or a per-call worst case sized to a two-sentence clip. I did not change either.
+- **`LEGAL.md`** "Narration" should name the greetings. `agents/architect.md`'s new "reuse X" rule cites the boundary, but `LEGAL.md` itself is unchanged as of this close-out.
+- **Narrator names** are recorded by the Architect (`PRODUCT.md`, the decisions log, the ONBOARD-3 addendum); nothing is left for the pipeline. `NARRATOR_NAMES` lives in `assets/greeting.py` because greetings are the only thing in the pipeline that says it; if a second consumer appears it belongs next to `NARRATOR_VOICES`.
+- **The audio `alt` names the voice** (see the references). The rule is met today because nothing reads it; if you would rather it were not there at all, I can change it in place.
+- **The 144 Leaf clips' Media `alt`** still say "read by Achernar / Sadaltager" (voice ids; admin-only and cosmetic; out of scope here).
+- **The budget's reservation rule** makes a small cap allow very little iteration (about five takes at $0.20). For an ear-driven job that is the wrong shape. Options for a ruling: a higher default, or a per-call worst case sized to a two-sentence clip. I did not change either, and **there is no ruling yet.**
+- **A missing media file returns 500, not 404,** on Payload's file route, and `HEAD` returns 404 where `GET` returns 200. Not this package's to change; worth knowing wherever a client treats the status as meaningful.
 - **The twin render.** If a third caller ever needs the money handling, extract it once; the lines that must stay in step are the reservation, the timeout counting and the unreadable-audio charge.
-- **Tier C, deferred:** the command has no end-to-end test with fakes beyond its refusal and `--help` (the live runs were its smoke test); the per-voice lesson bands I measured by hand (pace, pitch, movement, pauses) are not in the repo and would make a good automated *pointer* for the ear, not a gate; `NarrationBudget.report()` says "voiceover ceiling" for a greeting run; `PayloadClient` cannot replace or delete Media, so every redo costs the founder a manual delete; and a `--take N` option would let a re-sample be shipped without editing the direction, which I did not build because nothing needed it yet.
-- **`runs/greetings/`** is on disk only (gitignored) and holds every raw take, the candidates and the ledger. Do not clean it.
+- **Tier C, deferred:** the command has no end-to-end test with fakes beyond its refusal and `--help` (the live runs were its smoke test); the per-voice lesson bands I measured by hand (pace, pitch, movement, pauses) are not in the repo and would make a good automated *pointer* for the ear, not a gate; `NarrationBudget.report()` says "voiceover ceiling" for a greeting run; `PayloadClient` cannot replace or delete Media, so every redo costs the founder a manual delete; and a `--take N` option would let a re-sample be shipped without editing the direction, which I did not build because nothing needed it.
+- **`runs/greetings/`** is on disk only (gitignored) and holds every raw take, the candidates, the first pair's mp3s and the ledger. Do not clean it.
 
 ---
 
