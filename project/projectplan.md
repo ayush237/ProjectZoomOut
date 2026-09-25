@@ -51,7 +51,8 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 | | Package | Owner | Model | Delivers | Status |
 |---|---|---|---|---|---|
 | 1 | **ONBOARD-2** | Pipeline Manager | Sonnet | Two narrator self-introduction clips — **Lara and Druv** | ✅ Signed off 2026-09-24 (6/6); Media 350/351, verified |
-| 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | 📤 Handed off 2026-09-24; **revised before pickup** (one consolidated text, after reading `WrapUpScreen`) |
+| 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | ✅ **Signed off 2026-09-25 (17/17)** — PR #61 open; the device gate is the founder's |
+| 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, and the copy pass | ⬜ **Proposed 2026-09-25 — needs the founder's go, after the device gate** |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full

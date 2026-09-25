@@ -151,7 +151,7 @@ since 2026-08-29 and nobody had, which is why 56 unused tools rode along for a m
 
 ## Before a device gate — added 2026-09-24
 
-The device gate is where the founder's time goes, and 2026-09-23 lost most of a day to five environment problems, **none of them app bugs**: the Mac's LAN address changed (it appears in three places), a duplicated key in `apps/mobile/.env`, backend flags never set, a zombie Metro holding port 8081, and a stale `node_modules`. **Run this first — it prints what is wrong.** Every line was tested 2026-09-24 except the `.env` one, which needs the founder's own shell (an Architect session cannot read `.env`). The backend's two flag lines should carry the same IP as the first line; want 0 Metro ports before Expo starts and 1 after.
+The device gate is where the founder's time goes, and 2026-09-23 lost most of a day to five environment problems, **none of them app bugs**: the Mac's LAN address changed (it appears in three places), a duplicated key in `apps/mobile/.env`, backend flags never set, a zombie Metro holding port 8081, and a stale `node_modules`. **Run this first — it prints what is wrong.** Every line was tested 2026-09-24 except the `.env` one, which needs the founder's own shell (an Architect session cannot read `.env`). **The `narrator-samples` line was added 2026-09-25 and has not been run against a live backend** (the founder's was down); the route's answer — 401 without a token — is what ONBOARD-3's live verification and integration test pin. The backend's two flag lines should carry the same IP as the first line; want 0 Metro ports before Expo starts and 1 after.
 
 ```bash
 cd /Users/ayushgupta/Documents/ZoomOut/ZO
@@ -162,11 +162,13 @@ echo "Metro ports in 8081-8089 (want 1 once Expo is running): $(lsof -nP -iTCP:8
 B=$(lsof -nP -tiTCP:3000 -sTCP:LISTEN | head -1); [ -n "$B" ] && ps eww -p "$B" | tr ' ' '\n' | grep -E '^(MEDIA_BASE_URL|HIDE_PLACEHOLDER_CONTENT)=' || echo "backend flags: missing or backend down"
 docker exec zoomout-postgres psql -U postgres -d zoomout_cms -tA -c "select id||' '||cover_url from tracks where id in ('42','50') order by id" | while read u; do case "$u" in *"$IP"*) echo "cover OK:    $u";; *) echo "cover STALE: $u";; esac; done
 for n in female male; do curl -s -o /dev/null -w "greeting $n: HTTP %{http_code}\n" --max-time 5 "http://$IP:3001/api/media/file/narrator-greeting-$n.mp3"; done
+curl -s -o /dev/null -w "narrator-samples route: HTTP %{http_code} (401 = new backend, 404 = old: restart it)\n" --max-time 5 "http://$IP:3000/content/narrator-samples"
 ```
 
 **If a line is wrong:**
 
 - **The IP changed** → fix `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` (one line, key once), both Tracks' `coverUrl` in admin (`http://localhost:3001/admin`, in the **Mac's** browser — not the phone's), and restart the backend with the flags below.
+- **`narrator-samples route: HTTP 404`** → the backend on `:3000` predates ONBOARD-3. `git pull` in `ZO`, then restart it with the flags below. Until it is restarted the narrator beat shows an error screen with only *Try again* — no way past it (register row).
 - **A port is DOWN** → start it, each in its own terminal (they run until stopped):
 
 ```bash
