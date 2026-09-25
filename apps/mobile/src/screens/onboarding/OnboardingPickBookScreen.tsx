@@ -89,10 +89,6 @@ export function OnboardingPickBookScreen({ navigation, markSeen }: Props): React
         // the component's own docstring above.
         await api.addToLibrary(trackId);
       } catch {
-        if (!mounted.current) {
-          return;
-        }
-
         setActionError('Could not add that book. Please try again.');
         setPendingId(null);
         return;

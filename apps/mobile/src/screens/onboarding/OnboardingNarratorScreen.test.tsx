@@ -203,11 +203,18 @@ describe('OnboardingNarratorScreen — the greetings', () => {
     const user = userEvent.setup();
     await renderNarrator(samplesBackend(), 'full');
     await untilCardsShown();
+    // Both cards start offering "play"; the glyph changes with the state of *its* card.
+    const play = glyphCode('female');
+    expect(glyphCode('male')).toBe(play);
 
     await user.press(screen.getByTestId('onboarding-narrator-female'));
     await waitFor(() => {
       expect(playerFor(FEMALE_URL).playing).toBe(true);
     });
+    await waitFor(() => {
+      expect(glyphCode('female')).not.toBe(play);
+    });
+    expect(glyphCode('male')).toBe(play);
 
     await user.press(screen.getByTestId('onboarding-narrator-male'));
 
@@ -215,6 +222,11 @@ describe('OnboardingNarratorScreen — the greetings', () => {
       expect(playerFor(MALE_URL).playing).toBe(true);
     });
     expect(playerFor(FEMALE_URL).playing).toBe(false);
+    // …and the glyphs swap with the voices: the first is back to "play", the second shows "pause".
+    await waitFor(() => {
+      expect(glyphCode('male')).not.toBe(play);
+    });
+    expect(glyphCode('female')).toBe(play);
   });
 
   it('sources both greetings from the samples path and asks the catalogue for nothing', async () => {
@@ -431,6 +443,41 @@ describe('OnboardingNarratorScreen — audio stops when the beat is left (Tier A
     expect(playerFor(FEMALE_URL).playing).toBe(false);
   });
 
+  it('leaving the beat without having played anything starts nothing', async () => {
+    // The stop is `toggle` on a clip that reports `playing` — and `toggle` on one that does
+    // not *starts* it. So the guard is that a blur only ever pauses what is playing.
+    const user = userEvent.setup();
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
+    await user.press(screen.getByTestId('onboarding-narrator-continue'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stub-destination')).toHaveTextContent('pick-book');
+    });
+    expect(playerFor(FEMALE_URL).play).not.toHaveBeenCalled();
+    expect(playerFor(MALE_URL).play).not.toHaveBeenCalled();
+  });
+
+  it('pauses only the clip that is playing, and leaves the other alone', async () => {
+    const user = userEvent.setup();
+    await renderNarrator(samplesBackend(), 'full');
+    await untilCardsShown();
+
+    await user.press(screen.getByTestId('onboarding-narrator-male'));
+    await waitFor(() => {
+      expect(playerFor(MALE_URL).playing).toBe(true);
+    });
+    await user.press(screen.getByTestId('onboarding-narrator-continue'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stub-destination')).toHaveTextContent('pick-book');
+    });
+    expect(playerFor(MALE_URL).pause).toHaveBeenCalled();
+    expect(playerFor(FEMALE_URL).play).not.toHaveBeenCalled();
+    expect(playerFor(FEMALE_URL).pause).not.toHaveBeenCalled();
+  });
+
   it('narratorOnly: Continue while a clip plays stops it (the reset unmounts the beat)', async () => {
     const user = userEvent.setup();
     await renderNarrator(samplesBackend(), 'narratorOnly');
@@ -487,6 +534,17 @@ function backendAnswering(answer: () => Response | Promise<Response>): FakeBacke
 /** The play/pause control on a card — hidden from accessibility on purpose, so queried through it. */
 function glyph(narrator: 'female' | 'male'): ReturnType<typeof screen.queryByTestId> {
   return screen.queryByTestId(`onboarding-narrator-${narrator}-glyph`, { includeHiddenElements: true });
+}
+
+/**
+ * Which glyph a card is showing, as its character code. The icon font's codepoints differ per
+ * icon (play, pause and the failure glyph are three different ones), so comparing them says
+ * which control a card is offering without hard-coding a private-use codepoint.
+ */
+function glyphCode(narrator: 'female' | 'male'): number | undefined {
+  const child = glyph(narrator)?.children[0];
+
+  return typeof child === 'string' ? child.codePointAt(0) : undefined;
 }
 
 async function untilNoticeShown(): Promise<void> {
@@ -705,6 +763,9 @@ describe('OnboardingNarratorScreen — the beat fails open (Tier A)', () => {
         expect(screen.getByTestId('onboarding-narrator-female-failed')).toBeTruthy();
       });
       expect(screen.queryByTestId('onboarding-narrator-male-failed')).toBeNull();
+      // The control swaps for the failure glyph — text and glyph, never colour alone — and
+      // only on the card that failed.
+      expect(glyphCode('female')).not.toBe(glyphCode('male'));
       expect(screen.getByTestId('onboarding-narrator-female').props['accessibilityLabel']).toMatch(
         /Couldn.t play the hello\. Tap to try again\.$/u,
       );

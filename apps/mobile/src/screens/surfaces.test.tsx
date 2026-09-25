@@ -721,6 +721,16 @@ describe('Profile narrator — the hellos (ONBOARD-3.1)', () => {
   const glyph = (view: Awaited<ReturnType<typeof renderSignedIn>>, narrator: 'female' | 'male') =>
     view.queryByTestId(`narrator-option-${narrator}-glyph`, { includeHiddenElements: true });
 
+  /** Which glyph a tile is showing, as its character code — play, pause and failure differ. */
+  const glyphCode = (
+    view: Awaited<ReturnType<typeof renderSignedIn>>,
+    narrator: 'female' | 'male',
+  ): number | undefined => {
+    const child = glyph(view, narrator)?.children[0];
+
+    return typeof child === 'string' ? child.codePointAt(0) : undefined;
+  };
+
   async function untilPlayable(view: Awaited<ReturnType<typeof renderSignedIn>>): Promise<void> {
     await waitFor(() => {
       expect(glyph(view, 'female')).not.toBeNull();
@@ -747,11 +757,18 @@ describe('Profile narrator — the hellos (ONBOARD-3.1)', () => {
   it('plays one voice at a time — pressing the other tile stops the first', async () => {
     const view = await renderSignedIn(<ProfileScreen />, profileBackend());
     await untilPlayable(view);
+    const play = glyphCode(view, 'female');
+    expect(glyphCode(view, 'male')).toBe(play);
 
     await fireEvent.press(view.getByTestId('narrator-option-female'));
     await waitFor(() => {
       expect(helloPlayer(FEMALE_HELLO).playing).toBe(true);
     });
+    // The pressed tile shows "pause"; the other still offers "play".
+    await waitFor(() => {
+      expect(glyphCode(view, 'female')).not.toBe(play);
+    });
+    expect(glyphCode(view, 'male')).toBe(play);
 
     await fireEvent.press(view.getByTestId('narrator-option-male'));
 
@@ -759,6 +776,10 @@ describe('Profile narrator — the hellos (ONBOARD-3.1)', () => {
       expect(helloPlayer(MALE_HELLO).playing).toBe(true);
     });
     expect(helloPlayer(FEMALE_HELLO).playing).toBe(false);
+    await waitFor(() => {
+      expect(glyphCode(view, 'male')).not.toBe(play);
+    });
+    expect(glyphCode(view, 'female')).toBe(play);
   });
 
   it('stops the clip when Profile is unmounted', async () => {
@@ -874,8 +895,10 @@ describe('Profile narrator — the hellos (ONBOARD-3.1)', () => {
       await waitFor(() => {
         expect(view.getByTestId('narrator-option-female-failed')).toBeOnTheScreen();
       });
-      // The other tile is untouched, and the reader's choice was still made.
+      // The other tile is untouched, and the reader's choice was still made. The play control
+      // swapped for the failure glyph on the tile that failed, and only there.
       expect(view.queryByTestId('narrator-option-male-failed')).toBeNull();
+      expect(glyphCode(view, 'female')).not.toBe(glyphCode(view, 'male'));
       await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
 
       // Unmounted while the spy is still in place: a released player warns again on cleanup.

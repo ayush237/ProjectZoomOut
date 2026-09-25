@@ -855,6 +855,8 @@ describe('Profile’s narrator hellos, through the real tabs (ONBOARD-3.1)', () 
       expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
     });
     expect(clip?.playing).toBe(false);
+    // …and switching away started nothing: the other voice was never touched.
+    expect(fakeAudioPlayers().find((player) => player.source === MALE_HELLO)?.play).not.toHaveBeenCalled();
 
     // Back to Profile: the tab was kept mounted and refocused, and nothing refetched.
     await pressTab(view, 'Profile');
