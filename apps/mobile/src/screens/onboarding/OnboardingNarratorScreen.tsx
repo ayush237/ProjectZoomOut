@@ -39,8 +39,9 @@ type Props = NativeStackScreenProps<AppStackParamList, 'OnboardingNarrator'> & {
  * *Try again*, and Continue. Before this, a failed fetch showed an error screen with a retry
  * and no way onward, so an existing account could not reach the app at all. A greeting that
  * loads but will not play shows a "couldn't play" state on its own card and changes nothing
- * else. Only *loading* is still a spinner with nothing to press — see the report on what a
- * request that never answers does.
+ * else. Only *loading* is still a spinner with nothing to press, so a request that never
+ * answers holds the reader there: no request in this app carries a deadline, and adding one is
+ * not this beat's to decide.
  *
  * **Narration's optionality is stated in text** (`onboarding-narrator-optional`), not only
  * by what a narrator says aloud — a reader who cannot hear the clip still has to be told

@@ -727,6 +727,9 @@ describe('OnboardingNarratorScreen — the beat fails open (Tier A)', () => {
       name: 'a load failure the player reports after the attempt',
       breakBeforePress: false,
       breakIt: (player) => {
+        // A player that failed to load is not playing; `failFakePlayer` alone leaves `playing`
+        // as it was, which would let a glyph that ignored the failure still differ from "play".
+        player.playing = false;
         failFakePlayer(player);
       },
     },

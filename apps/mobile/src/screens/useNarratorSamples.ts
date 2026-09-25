@@ -4,13 +4,22 @@ import { NARRATOR_IDS, type NarratorSamples } from '@zoomout/shared';
 import { useApi } from '../auth/AuthProvider';
 import { useAsyncResource } from './useAsyncResource';
 
-export interface NarratorSamplesResult {
-  readonly status: 'loading' | 'ready' | 'failed';
-  /** Both hellos, and non-null exactly when `status` is `ready`. */
-  readonly samples: NarratorSamples | null;
-  /** Fetches again from scratch — `status` goes back to `loading`, then settles. */
-  readonly retry: () => void;
-}
+/**
+ * `samples` is non-null exactly when `status` is `ready` — the type says so, so a caller
+ * narrows on the status and never checks the clips for `undefined`.
+ */
+export type NarratorSamplesResult =
+  | {
+      readonly status: 'loading' | 'failed';
+      readonly samples: null;
+      /** Fetches again from scratch — `status` goes back to `loading`, then settles. */
+      readonly retry: () => void;
+    }
+  | {
+      readonly status: 'ready';
+      readonly samples: NarratorSamples;
+      readonly retry: () => void;
+    };
 
 /**
  * The two narrator hellos, fetched once per mount (ONBOARD-3.1).
@@ -54,17 +63,21 @@ export function useNarratorSamples(): NarratorSamplesResult {
 
   const resource = useAsyncResource<NarratorSamples>(load);
 
+  const retry = resource.reload;
+
   if (resource.status === 'loading') {
-    return { status: 'loading', samples: null, retry: resource.reload };
+    return { status: 'loading', samples: null, retry };
   }
 
   // `useAsyncResource` keeps the last good `data` across a later failure, so the status —
-  // not the presence of data — is what says whether there are hellos to play.
+  // not the presence of data — is what says whether there are hellos to play. (`load` above
+  // has already refused anything that is not two clips, so `data` is never null here; the
+  // check is what lets the compiler agree.)
   if (resource.status === 'ready' && resource.data !== null) {
-    return { status: 'ready', samples: resource.data, retry: resource.reload };
+    return { status: 'ready', samples: resource.data, retry };
   }
 
-  return { status: 'failed', samples: null, retry: resource.reload };
+  return { status: 'failed', samples: null, retry };
 }
 
 /** Narrowed from `unknown` because this is the wire: the type says what the server means to send. */
