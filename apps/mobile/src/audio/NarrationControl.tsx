@@ -1,19 +1,11 @@
 import { Pressable, View } from 'react-native';
-import type { AudioRef, NarratorId } from '@zoomout/shared';
+import { NARRATOR_LABELS, type AudioRef, type NarratorId } from '@zoomout/shared';
 
 import { Icon, StatusMessage, Text } from '../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../design';
 import { selectNarration } from './selectNarration';
 import { useNarration } from './useNarration';
 import { useNarrator } from './useNarrator';
-
-/** Reader-facing names. Never the pipeline's provider voice names (Achernar,
- *  Sadaltager) — `packages/shared/src/content.ts` is explicit that `narrator` is
- *  ZoomOut's own vocabulary, kept apart from "voice" on purpose. */
-const NARRATOR_LABELS: Record<NarratorId, string> = {
-  female: 'Female',
-  male: 'Male',
-};
 
 export interface NarrationControlProps {
   readonly audio: readonly AudioRef[] | undefined;
@@ -79,7 +71,11 @@ function NarrationButton({
         testID="narration-control"
         onPress={narration.toggle}
         accessibilityRole="button"
-        accessibilityLabel={`${action} ${label} narration, ${NARRATOR_LABELS[narrator]} voice`}
+        // The narrator's name, from the one shared map (ONBOARD-3) — a screen-reader
+        // reader hears "Lara's voice", never "Female voice" and never a provider voice id.
+        // This label is the only place the name is spoken here, and it cannot be observed
+        // on screen, so `NarrationControl.test.tsx` pins it.
+        accessibilityLabel={`${action} ${label} narration, ${NARRATOR_LABELS[narrator].name}'s voice`}
         style={({ pressed }) => ({
           flexDirection: 'row',
           alignItems: 'center',

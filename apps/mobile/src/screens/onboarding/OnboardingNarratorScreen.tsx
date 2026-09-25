@@ -1,99 +1,80 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
-import type { AudioRef, NarratorId } from '@zoomout/shared';
-import { NARRATOR_IDS } from '@zoomout/shared';
+import type { NarratorId, NarratorSamples } from '@zoomout/shared';
+import { NARRATOR_IDS, NARRATOR_LABELS } from '@zoomout/shared';
 
-import { DEFAULT_NARRATOR, useNarrator, useNarration } from '../../audio';
+import { DEFAULT_NARRATOR, useNarrator, useNarration, type Narration } from '../../audio';
 import { useApi } from '../../auth/AuthProvider';
 import { Button, ErrorState, Icon, Screen, Text } from '../../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../../design';
 import type { AppStackParamList } from '../../navigation/types';
 import { useAsyncResource } from '../useAsyncResource';
-import { fetchNarratorSample, type NarratorSample } from './fetchNarratorSample';
+import type { OnboardingVariant } from './useOnboardingGate';
 
 type Props = NativeStackScreenProps<AppStackParamList, 'OnboardingNarrator'> & {
+  /**
+   * Which onboarding this is, **passed in by `AppStack` from the gate's status** — never
+   * inferred from anything on this screen. It used to be inferred from whether a picked
+   * Track had arrived; since ONBOARD-3 neither variant brings one, so nothing local can
+   * tell them apart. This is the bug this package is most likely to ship if it is
+   * wrong: an existing account that is never marked seen meets this beat on every launch.
+   */
+  readonly variant: OnboardingVariant;
   readonly markSeen: () => void;
 };
 
-/** Reader-facing names — never the pipeline's provider voice names. Duplicated rather
- *  than imported: `NarrationControl.tsx` and `ProfileScreen.tsx` each keep their own
- *  copy of this same table already, an established convention in this codebase rather
- *  than an oversight to fix here. */
-const NARRATOR_LABELS: Record<NarratorId, string> = {
-  female: 'Female',
-  male: 'Male',
-};
-
 /**
- * Beat 3 of 5 for a new reader — the only beat an existing account sees.
+ * Meet the narrators: the beat where two voices introduce themselves.
  *
- * **Always samples Ikigai, never the just-picked book** (ONBOARD-1 finding, ruled
- * 2026-09-18): only Ikigai has narration today, so the sample is fixed regardless of
- * `route.params.pickedTrack`. That param decides only where "Continue" goes next.
+ * **What it is now (ONBOARD-3):** each card plays that narrator saying hello — ONBOARD-2's
+ * two fixed clips, fetched through the backend's own path. It used to sample a book's
+ * narration, which demoed the *book* and needed a Track with narration to exist; these
+ * work whichever Tracks exist, so the card is always playable.
+ *
+ * **Narration's optionality is stated in text** (`onboarding-narrator-optional`), not only
+ * by what a narrator says aloud — a reader who cannot hear the clip still has to be told
+ * they never have to press play. It is also true: `useNarration` never starts on its own.
+ *
+ * **Two variants meet here and end differently.**
+ *  - `narratorOnly` (an existing account): Continue is the whole of their onboarding, so
+ *    it marks them seen and lands on Tabs. There is no first Leaf to wait for.
+ *  - `full` (a new account): Continue goes on to pick-book and **does not mark seen** —
+ *    that waits for the first Leaf's close. This is the change from ONBOARD-1, where
+ *    finishing here ended the flow.
+ *
+ * Neither variant sends the reader into a Leaf from here any more; that hand-off moved to
+ * pick-book, where the book is actually chosen.
  */
 export function OnboardingNarratorScreen({
   navigation,
-  route,
+  variant,
   markSeen,
 }: Props): React.JSX.Element {
   const theme = useTheme();
   const api = useApi();
   const { setNarrator } = useNarrator();
 
-  const loadSample = useCallback(() => fetchNarratorSample(api), [api]);
-  const sample = useAsyncResource<NarratorSample>(loadSample);
+  const loadSamples = useCallback(() => api.getNarratorSamples(), [api]);
+  const samples = useAsyncResource<NarratorSamples>(loadSamples);
 
+  // The default is a real choice, not a placeholder: Continue keeps it (there is no Skip
+  // on this beat, because continuing without choosing already means "the default").
   const [selected, setSelected] = useState<NarratorId>(DEFAULT_NARRATOR);
-  const [continuing, setContinuing] = useState(false);
 
-  // `route.params` is `undefined`, not `{}`, when this screen is the stack's own
-  // `initialRouteName` and nobody passed params — exactly the narrator-only variant's
-  // real shape (`AppStack` opens here directly, with no `initialParams`).
-  const pickedTrack = route.params?.pickedTrack;
-
-  const finish = useCallback(async (): Promise<void> => {
-    setContinuing(true);
+  const finish = useCallback((): void => {
     setNarrator(selected);
-    markSeen();
 
-    if (pickedTrack === undefined) {
+    if (variant === 'narratorOnly') {
+      markSeen();
       navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
       return;
     }
 
-    // The server-computed resume target (ONBOARD-1 finding 4) — never
-    // `listLeaves(trackId)[0]`, which knows nothing about visibility or completion.
-    try {
-      const entries = await api.listLibrary();
-      const entry = entries.find((candidate) => candidate.track.id === pickedTrack.id);
-      const leafId = entry?.progress.nextLeafId;
+    navigation.navigate('OnboardingPickBook');
+  }, [markSeen, navigation, selected, setNarrator, variant]);
 
-      if (leafId === undefined || leafId === null) {
-        navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
-        return;
-      }
-
-      navigation.reset({
-        index: 1,
-        routes: [
-          { name: 'Tabs' },
-          {
-            name: 'LeafPlayer',
-            params: { leafId, trackId: pickedTrack.id, trackTitle: pickedTrack.title },
-          },
-        ],
-      });
-    } catch {
-      // The book is already in the Library either way (beat 2's own addToLibrary
-      // succeeded before this screen could even open) — a failed resume lookup loses
-      // the "straight into Leaf 1" hand-off, not the reader's progress. Landing on
-      // Tabs leaves Library's own "Start reading" button to try the same lookup again.
-      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
-    }
-  }, [api, markSeen, navigation, pickedTrack, selected, setNarrator]);
-
-  if (sample.status === 'loading') {
+  if (samples.status === 'loading') {
     return (
       <Screen testID="onboarding-narrator-screen" scrollable={false} centred>
         <ActivityIndicator testID="onboarding-narrator-loading" color={theme.palette.primary} />
@@ -101,13 +82,13 @@ export function OnboardingNarratorScreen({
     );
   }
 
-  if (sample.status === 'error') {
+  if (samples.status === 'error' || samples.data === null) {
     return (
       <Screen testID="onboarding-narrator-screen">
         <ErrorState
           testID="onboarding-narrator-error"
-          message={sample.error ?? 'Something went wrong.'}
-          onRetry={sample.reload}
+          message={samples.error ?? 'Something went wrong.'}
+          onRetry={samples.reload}
         />
       </Screen>
     );
@@ -116,119 +97,119 @@ export function OnboardingNarratorScreen({
   return (
     <Screen testID="onboarding-narrator-screen">
       <View style={{ gap: theme.spacing.xl }}>
-        <View style={{ gap: theme.spacing.xs }}>
+        <View style={{ gap: theme.spacing.sm }}>
           <Text variant="caption" tone="textMuted">
-            {pickedTrack === undefined ? 'One more thing' : 'Step 3 of 3'}
+            {variant === 'full' ? 'Step 2 of 3' : 'One more thing'}
           </Text>
-          <Text variant="display">Choose your narrator</Text>
+          <Text variant="display">Meet your narrators</Text>
           <Text variant="body" tone="textMuted">
-            Tap a voice to hear it. You can change this anytime from your profile.
+            Every Leaf can be read aloud, if you&rsquo;d like. Tap a card to hear each narrator say
+            hello.
+          </Text>
+          <Text variant="body" tone="textMuted" testID="onboarding-narrator-optional">
+            Narration is optional &mdash; it only plays when you tap play, and you can change your
+            pick anytime from your profile.
           </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
-          {NARRATOR_IDS.map((narrator) => (
-            <NarratorSampleCard
-              key={narrator}
-              narrator={narrator}
-              audio={sample.data?.[narrator]}
-              selected={selected === narrator}
-              onSelect={() => {
-                setSelected(narrator);
-              }}
-            />
-          ))}
-        </View>
+        <NarratorPicker samples={samples.data} selected={selected} onSelect={setSelected} />
 
-        <Button
-          testID="onboarding-narrator-continue"
-          label={pickedTrack === undefined ? 'Continue' : 'Start reading'}
-          busy={continuing}
-          onPress={() => {
-            void finish();
-          }}
-        />
+        <Button testID="onboarding-narrator-continue" label="Continue" onPress={finish} />
       </View>
     </Screen>
   );
 }
 
-interface NarratorCardProps {
-  readonly narrator: NarratorId;
-  readonly audio: AudioRef | undefined;
-  readonly selected: boolean;
-  readonly onSelect: () => void;
+/**
+ * Both cards, and the one player each of them drives.
+ *
+ * **The two `useNarration` calls live here, side by side, and not one per card** — so a
+ * card can stop the other. Two five-second hellos talking over each other is not an
+ * introduction, and the natural way to compare two voices is to tap one and then the
+ * other. Each is called unconditionally, in a fixed order, on a closed pair of narrators
+ * (`Record<NarratorId, …>` below turns a third into a compile error), so the rules of
+ * hooks hold by construction and not by a runtime check.
+ *
+ * **Plays that narrator's clip regardless of the reader's stored preference** — the
+ * reason `useNarration` is exported on its own: `NarrationControl` (built on it) picks
+ * the *stored* narrator's clip, which cannot be pointed at "whichever card was tapped"
+ * before any preference exists.
+ */
+function NarratorPicker({
+  samples,
+  selected,
+  onSelect,
+}: {
+  readonly samples: NarratorSamples;
+  readonly selected: NarratorId;
+  readonly onSelect: (narrator: NarratorId) => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+
+  const female = useNarration(samples.female);
+  const male = useNarration(samples.male);
+  const players: Record<NarratorId, Narration> = { female, male };
+
+  const press = (narrator: NarratorId): void => {
+    onSelect(narrator);
+
+    for (const other of NARRATOR_IDS) {
+      if (other !== narrator && players[other].playing) {
+        // `toggle` on a playing clip pauses it — the hook has no separate `pause`.
+        players[other].toggle();
+      }
+    }
+
+    players[narrator].toggle();
+  };
+
+  return (
+    <View style={{ flexDirection: 'row', gap: theme.spacing.lg }}>
+      {NARRATOR_IDS.map((narrator) => (
+        <NarratorCard
+          key={narrator}
+          narrator={narrator}
+          selected={selected === narrator}
+          playing={players[narrator].playing}
+          onPress={() => {
+            press(narrator);
+          }}
+        />
+      ))}
+    </View>
+  );
 }
 
 /**
- * Picks which card renders, so the play-capable one is the only place `useNarration` is
- * ever called — an `audio` that starts `undefined` and later becomes defined would be a
- * hook conditionally appearing on the same component across renders, which the rules of
- * hooks forbid. `audio` is settled once, before either card mounts (the parent gates on
- * `sample.status`), so the choice below never actually flips — this is what keeps it
- * safe by construction rather than by accident.
+ * One narrator. The name on the card is the name the clip speaks — that match is the
+ * point of the beat (the founder checks it by ear at the device gate) — and comes from
+ * the one shared map, never a provider voice id.
+ *
+ * The visible label is the bare name; the descriptor is in the accessibility label. A
+ * reader hears this narrator before choosing, so the name is enough on screen, while a
+ * screen-reader user who cannot start a clip still learns which voice each card is.
  */
-function NarratorSampleCard(props: NarratorCardProps): React.JSX.Element {
-  if (props.audio === undefined) {
-    return <StaticNarratorCard {...props} />;
-  }
-
-  return <PlayableNarratorCard {...props} audio={props.audio} />;
-}
-
-function PlayableNarratorCard({
-  narrator,
-  audio,
-  selected,
-  onSelect,
-}: NarratorCardProps & { readonly audio: AudioRef }): React.JSX.Element {
-  const narration = useNarration(audio);
-
-  return (
-    <CardShell
-      narrator={narrator}
-      selected={selected}
-      onSelect={() => {
-        onSelect();
-        narration.toggle();
-      }}
-    >
-      <Icon name={narration.playing ? 'pause' : 'play'} tone="primary" size={28} />
-    </CardShell>
-  );
-}
-
-/** No sample for this narrator (a content gap, not an error) — still selectable, with
- *  no play affordance rather than a disabled-looking one for a control that was never
- *  going to work anyway. */
-function StaticNarratorCard({ narrator, selected, onSelect }: NarratorCardProps): React.JSX.Element {
-  return (
-    <CardShell narrator={narrator} selected={selected} onSelect={onSelect}>
-      <Icon name="book" tone="textMuted" size={28} />
-    </CardShell>
-  );
-}
-
-function CardShell({
+function NarratorCard({
   narrator,
   selected,
-  onSelect,
-  children,
+  playing,
+  onPress,
 }: {
   readonly narrator: NarratorId;
   readonly selected: boolean;
-  readonly onSelect: () => void;
-  readonly children: React.ReactNode;
+  readonly playing: boolean;
+  readonly onPress: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
+  const label = NARRATOR_LABELS[narrator];
 
   return (
     <Pressable
       testID={`onboarding-narrator-${narrator}`}
-      onPress={onSelect}
+      onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      accessibilityLabel={`${NARRATOR_LABELS[narrator]} narrator, tap to hear a sample`}
+      accessibilityLabel={`${label.name}, ${label.descriptor.toLowerCase()}. Tap to hear a hello.`}
       style={({ pressed }) => ({
         flex: 1,
         minHeight: MIN_TOUCH_TARGET * 2,
@@ -246,9 +227,9 @@ function CardShell({
             : theme.surfaceFor('card'),
       })}
     >
-      {children}
+      <Icon name={playing ? 'pause' : 'play'} tone="primary" size={28} />
       <Text variant="h3" tone={selected ? 'primary' : 'textPrimary'}>
-        {NARRATOR_LABELS[narrator]}
+        {label.name}
       </Text>
     </Pressable>
   );

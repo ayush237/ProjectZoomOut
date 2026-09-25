@@ -7,6 +7,8 @@ import {
   isProductionPublishable,
   leafSchema,
   leafSourceReferenceSchema,
+  NARRATOR_IDS,
+  NARRATOR_LABELS,
   scenarioOptionsSchema,
   SOURCE_LOCATOR_REQUIRED_MESSAGE,
   toPublicLeaf,
@@ -603,5 +605,35 @@ describe('VO-1.1 audio', () => {
     expect(
       audioRefSchema.safeParse({ ...clip('female'), narrator: 'robot' }).success,
     ).toBe(false);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Narrator names — one reader-facing map, ONBOARD-3                           */
+/* -------------------------------------------------------------------------- */
+
+describe('NARRATOR_LABELS (ONBOARD-3)', () => {
+  it('names the two narrators Lara and Druv, exactly as the founder ruled on 2026-09-24', () => {
+    // The whole map, not a spot check: a respelling ("Dhruv"), a swapped pair or a
+    // changed descriptor is a change to what readers are told, and should be a
+    // deliberate edit to this assertion too.
+    expect(NARRATOR_LABELS).toEqual({
+      female: { name: 'Lara', descriptor: 'Female voice' },
+      male: { name: 'Druv', descriptor: 'Male voice' },
+    });
+  });
+
+  it('has an entry for every narrator id and nothing else', () => {
+    expect(Object.keys(NARRATOR_LABELS).sort()).toEqual([...NARRATOR_IDS].sort());
+  });
+
+  it('never shows a reader the TTS provider’s voice ids', () => {
+    // Achernar and Sadaltager are what the provider calls the voices. They are not
+    // spoken in the greetings and are not names a reader is ever told.
+    const shown = Object.values(NARRATOR_LABELS).flatMap((label) => [label.name, label.descriptor]);
+
+    for (const text of shown) {
+      expect(text).not.toMatch(/achernar|sadaltager/iu);
+    }
   });
 });

@@ -371,3 +371,56 @@ describe('listLeaves', () => {
     await expect(service.listLeaves('t1')).rejects.toBeInstanceOf(ContentNotFoundError);
   });
 });
+
+describe('getNarratorSamples (ONBOARD-3)', () => {
+  it('builds the clip URLs on MEDIA_BASE_URL, not on the backend’s private path to the CMS', () => {
+    // The two coincide by default and diverge the moment a phone is involved (PILOT-1).
+    // Set apart here so a service that reads the wrong one fails: a device handed the
+    // private host would get a URL it cannot reach, and the beat's play button would
+    // go quietly dead.
+    const config = loadConfig({
+      NODE_ENV: 'development',
+      DATABASE_URL: 'postgres://user:pass@127.0.0.1:5432/zoomout',
+      AUTH_JWT_SECRET: 'x'.repeat(48),
+      CONTENT_API_URL: 'http://cms.internal.test:3001/api',
+      MEDIA_BASE_URL: 'https://cdn.example.test',
+    });
+    const service = new ContentService(
+      repositoryReturning([]),
+      config,
+      stubLogger(),
+      policyReturning(false),
+    );
+
+    const samples = service.getNarratorSamples();
+
+    expect(samples.female.url).toBe('https://cdn.example.test/api/media/file/narrator-greeting-female.mp3');
+    expect(samples.male.url).toBe('https://cdn.example.test/api/media/file/narrator-greeting-male.mp3');
+  });
+
+  it('never reads the CMS, so it cannot depend on which Tracks exist or have narration', () => {
+    // The requirement is "always available", and the cheapest way to lose it is for
+    // someone to look the greetings up through the repository "for consistency".
+    // The spies are held by name rather than read back off the repository, so this is
+    // asserting on the mocks themselves and not on unbound methods.
+    const spies = {
+      listTracks: vi.fn(),
+      findTrack: vi.fn(),
+      listLeavesForTrack: vi.fn(),
+      findLeaf: vi.fn(),
+    };
+    const service = new ContentService(
+      spies,
+      configFor('development'),
+      stubLogger(),
+      policyReturning(false),
+    );
+
+    service.getNarratorSamples();
+
+    expect(spies.listTracks).not.toHaveBeenCalled();
+    expect(spies.findTrack).not.toHaveBeenCalled();
+    expect(spies.listLeavesForTrack).not.toHaveBeenCalled();
+    expect(spies.findLeaf).not.toHaveBeenCalled();
+  });
+});

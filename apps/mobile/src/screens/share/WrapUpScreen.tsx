@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { SessionSummary } from '@zoomout/shared';
 
 import { useApi } from '../../auth/AuthProvider';
@@ -13,6 +13,42 @@ import { useAsyncResource } from '../useAsyncResource';
 import { ShareCard } from './ShareCard';
 
 type WrapUpNavigation = NativeStackNavigationProp<AppStackParamList, 'WrapUp'>;
+
+type Props = NativeStackScreenProps<AppStackParamList, 'WrapUp'> & {
+  /**
+   * Ends the reader's onboarding. Called **only** when the route carries
+   * `onboarding: true`; an ordinary arrival records nothing and marks nothing.
+   */
+  readonly markSeen: () => void;
+};
+
+/** What the header says. The only thing the closing changes — see `WrapUpScreen`. */
+export interface WrapUpCopy {
+  readonly eyebrow: string;
+  readonly headline: string;
+  /** Null when there is nothing to add under the headline. */
+  readonly body: string | null;
+}
+
+/**
+ * The closing, for a reader whose first Leaf has just ended (ONBOARD-3): welcome, this was
+ * your first Leaf, here's to a great learning journey. **A first draft, and the founder's
+ * call** — read at the device gate, like all first-run copy.
+ */
+export const CLOSING_COPY: WrapUpCopy = {
+  eyebrow: 'Welcome to ZoomOut',
+  headline: 'That was your first Leaf',
+  body: 'Here’s to a great learning journey. Take your time — every Leaf you finish adds to it.',
+};
+
+/** Every other arrival. Word for word what the screen said before ONBOARD-3. */
+function ordinaryCopy(leafCount: number): WrapUpCopy {
+  return {
+    eyebrow: 'Session complete',
+    headline: leafCount === 0 ? 'Nothing yet today' : 'That is a session',
+    body: leafCount === 0 ? 'Finish a Leaf and this becomes something worth sharing.' : null,
+  };
+}
 
 /**
  * The end of a reading day, and the app's only screen built to leave the app.
@@ -31,10 +67,29 @@ type WrapUpNavigation = NativeStackNavigationProp<AppStackParamList, 'WrapUp'>;
  * **The cap leads here rather than to a second ending.** When the cap fires, the player
  * offers this same screen; two differently-styled endings to one day is worse than one
  * good one.
+ *
+ * **It is also where a new reader's onboarding ends (ONBOARD-3).** When the route carries
+ * `onboarding: true` — set by the first-run flow and carried by the player's completion
+ * exits — the header becomes a warm closing message instead of "Session complete", and
+ * the screen marks onboarding seen **on mount**. It is a copy-only diff on one layout,
+ * the principle WP25 set for this screen: the share card, the stats, the wrap ceremony and
+ * the way out all behave as they always have.
+ *
+ * **Marked on mount, not when the message renders**, so a summary that is slow or fails to
+ * load cannot leave a reader who has finished their first Leaf un-marked and meeting the
+ * narrator beat again. It is deliberately not detected from the `first-wrap` achievement,
+ * which unlocks when the reader *taps* wrap — after this screen has opened.
  */
-export function WrapUpScreen(): React.JSX.Element {
+export function WrapUpScreen({ route, markSeen }: Props): React.JSX.Element {
   const api = useApi();
   const navigation = useNavigation<WrapUpNavigation>();
+  const onboarding = route.params?.onboarding === true;
+
+  useEffect(() => {
+    if (onboarding) {
+      markSeen();
+    }
+  }, [onboarding, markSeen]);
 
   const load = useCallback(async (): Promise<SessionSummary> => api.getSessionSummary(), [api]);
   const summary = useAsyncResource<SessionSummary>(load);
@@ -64,6 +119,7 @@ export function WrapUpScreen(): React.JSX.Element {
   return (
     <WrapUpView
       summary={summary.data}
+      onboarding={onboarding}
       onDone={() => {
         navigation.goBack();
       }}
@@ -73,9 +129,11 @@ export function WrapUpScreen(): React.JSX.Element {
 
 function WrapUpView({
   summary,
+  onboarding,
   onDone,
 }: {
   readonly summary: SessionSummary;
+  readonly onboarding: boolean;
   readonly onDone: () => void;
 }): React.JSX.Element {
   const api = useApi();
@@ -134,24 +192,27 @@ function WrapUpView({
 
   const leafCount = summary.leaves.length;
   const book = summary.leaves.at(-1)?.trackTitle ?? null;
+  const copy = onboarding ? CLOSING_COPY : ordinaryCopy(leafCount);
 
   return (
     <Screen testID="wrap-up-screen">
       <ScrollView contentContainerStyle={{ gap: theme.spacing.xl, paddingBottom: theme.spacing.xxl }}>
         <View style={{ gap: theme.spacing.sm }}>
-          {/* Static across both endings — the two states differ in what follows, never
-              in this label (WP25 acceptance criterion: one layout, copy-only diff). */}
-          <Text variant="caption" tone="primary">
-            Session complete
+          {/* Static across the voluntary and cap-hit endings — those two differ in what
+              follows, never in this label (WP25 acceptance criterion: one layout,
+              copy-only diff). The closing (ONBOARD-3) is the one arrival that replaces
+              it, and only its words: the structure around it is the same. */}
+          <Text variant="caption" tone="primary" testID="wrap-up-eyebrow">
+            {copy.eyebrow}
           </Text>
-          <Text variant="display">
-            {leafCount === 0 ? 'Nothing yet today' : 'That is a session'}
+          <Text variant="display" testID="wrap-up-headline">
+            {copy.headline}
           </Text>
-          {leafCount === 0 ? (
-            <Text variant="body" tone="textMuted">
-              Finish a Leaf and this becomes something worth sharing.
+          {copy.body === null ? null : (
+            <Text variant="body" tone="textMuted" testID="wrap-up-message">
+              {copy.body}
             </Text>
-          ) : null}
+          )}
         </View>
 
         {notice === null ? null : (
@@ -224,9 +285,15 @@ function WrapUpView({
            * at all. A reader who opens the summary to look at it and does not want to
            * end their day needs a visible way back, and the label stays "Back to
            * Journey" rather than anything final because wrapping up is not a lock.
+           *
+           * **The closing's exit reads "Done" instead (ONBOARD-3).** It goes back to
+           * `Tabs`, which opens on Explore — a first-run reader has never been to
+           * Journey, so "Back to Journey" would name a place they are not going. The
+           * "not final" reasoning above is about ending a *day*; this ends an onboarding,
+           * which is final.
            */}
           <Button
-            label="Back to Journey"
+            label={onboarding ? 'Done' : 'Back to Journey'}
             variant="secondary"
             onPress={onDone}
             testID="wrap-up-exit"

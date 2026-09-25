@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { NARRATOR_IDS, type AchievementStatus, type NarratorId } from '@zoomout/shared';
+import { NARRATOR_IDS, NARRATOR_LABELS, type AchievementStatus } from '@zoomout/shared';
 
 import type { DayStatus } from '../api/client';
 import { useNarrator } from '../audio';
@@ -263,15 +263,14 @@ function AchievementGrid(): React.JSX.Element | null {
   );
 }
 
-/** Reader-facing names — never the pipeline's provider voice names. See
- *  `NarrationControl`'s own copy of this table for why the two stay apart. */
-const NARRATOR_LABELS: Record<NarratorId, string> = {
-  female: 'Female',
-  male: 'Male',
-};
-
 /**
  * VO-3: which voice narrates a Leaf's four narrated slides.
+ *
+ * **Each option shows the narrator's name and a descriptor (ONBOARD-3).** Profile is a
+ * chooser with nothing to play — a reader picks here without hearing anyone — so a bare
+ * "Lara" or "Druv" would be a blind choice. The descriptor ("Female voice") is what tells
+ * them which is which. Both come from the one shared map, so this can never say something
+ * the onboarding beat and the player's accessibility label do not.
  *
  * **Owns the preference and its default, not first-run choosing** — a separate,
  * later onboarding package writes the same `zoomout.narrator` key before a reader
@@ -314,12 +313,13 @@ function NarratorCard(): React.JSX.Element {
               }}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
-              accessibilityLabel={`${NARRATOR_LABELS[id]} narrator`}
+              accessibilityLabel={`${NARRATOR_LABELS[id].name}, ${NARRATOR_LABELS[id].descriptor.toLowerCase()}`}
               style={({ pressed }) => ({
                 flex: 1,
                 minHeight: MIN_TOUCH_TARGET,
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: theme.spacing.xs,
                 paddingVertical: theme.spacing.md,
                 borderRadius: theme.radius.lg,
                 borderWidth: selected ? theme.borderWidth.focus : theme.borderWidth.hairline,
@@ -332,7 +332,10 @@ function NarratorCard(): React.JSX.Element {
               })}
             >
               <Text variant="body" tone={selected ? 'primary' : 'textPrimary'}>
-                {NARRATOR_LABELS[id]}
+                {NARRATOR_LABELS[id].name}
+              </Text>
+              <Text variant="small" tone="textMuted">
+                {NARRATOR_LABELS[id].descriptor}
               </Text>
             </Pressable>
           );

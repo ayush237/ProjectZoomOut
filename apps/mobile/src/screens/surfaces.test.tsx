@@ -639,6 +639,31 @@ describe('Profile narrator (VO-3)', () => {
     });
     await expect(SecureStore.getItemAsync('zoomout.narrator')).resolves.toBe('female');
   });
+
+  it('names the narrators Lara and Druv, each with a descriptor — Profile has no clip to play', async () => {
+    // ONBOARD-3. A reader chooses here without hearing anyone, so a bare name would be a
+    // blind choice; the descriptor is what says which is which. Neither a bare
+    // "Female"/"Male" nor a provider voice id may appear.
+    const view = await renderSignedIn(<ProfileScreen />, new FakeBackend());
+
+    await waitFor(() => {
+      expect(view.getByTestId('profile-narrator')).toBeOnTheScreen();
+    });
+
+    expect(view.getByText('Lara')).toBeOnTheScreen();
+    expect(view.getByText('Female voice')).toBeOnTheScreen();
+    expect(view.getByText('Druv')).toBeOnTheScreen();
+    expect(view.getByText('Male voice')).toBeOnTheScreen();
+    expect(view.queryByText(/^(fe)?male$/iu)).toBeNull();
+    expect(view.queryByText(/achernar|sadaltager/iu)).toBeNull();
+
+    expect(view.getByTestId('narrator-option-female').props['accessibilityLabel']).toBe(
+      'Lara, female voice',
+    );
+    expect(view.getByTestId('narrator-option-male').props['accessibilityLabel']).toBe(
+      'Druv, male voice',
+    );
+  });
 });
 
 describe('Journey resume', () => {

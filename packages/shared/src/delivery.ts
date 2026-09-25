@@ -19,7 +19,7 @@
  */
 
 import type { LeafProgress } from './progress.js';
-import type { PayoffSlide, PublicLeaf } from './content.js';
+import type { AudioRef, NarratorId, PayoffSlide, PublicLeaf } from './content.js';
 import type { Achievement, UnlockedAchievement } from './gamification.js';
 
 /**
@@ -189,3 +189,29 @@ export interface StreakStatus {
   /** Null for a reader who has never completed a Leaf. */
   readonly lastActiveLocalDate: string | null;
 }
+
+/**
+ * One narrator's self-introduction clip, as the onboarding narrator beat needs it
+ * (ONBOARD-3): **a URL, and nothing else.**
+ *
+ * **Deliberately not an `AudioRef`.** `AudioRef` describes a clip that narrates one
+ * slide's text, so `textDigest` (what makes it safe to serve) and `durationSeconds` mean
+ * something about *that text and that take*. A greeting has no slide text to digest, and
+ * its length can change the next time the founder re-records it — a hardcoded duration
+ * would be a value the clip outgrows silently. The only thing the preview ever reads is
+ * the URL (`useNarration` hands `entry.url` to the player and touches nothing else), so
+ * the honest type carries exactly that. Derived from `AudioRef` so the two cannot
+ * disagree about what a clip URL is: absolute, already resolved against `MEDIA_BASE_URL`.
+ */
+export type NarratorSample = Pick<AudioRef, 'url'>;
+
+/**
+ * Both narrators' self-introduction clips (`GET /content/narrator-samples`).
+ *
+ * **A total map over `NarratorId`, not a list.** There are exactly two fixed clips, one
+ * per narrator, and the type says so: a narrator with no clip is a compile error on the
+ * server, and the client never has to ask "is there a Female sample?". It is also why
+ * this does not depend on any Track — the beat must work whichever Tracks exist or have
+ * narration.
+ */
+export type NarratorSamples = Readonly<Record<NarratorId, NarratorSample>>;

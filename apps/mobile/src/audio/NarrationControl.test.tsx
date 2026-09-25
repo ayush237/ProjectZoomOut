@@ -95,7 +95,7 @@ describe('NarrationControl — what renders', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('narration-control').props['accessibilityLabel']).toBe(
-        'Play Summary narration, Female voice',
+        "Play Summary narration, Lara's voice",
       );
     });
 
@@ -109,14 +109,38 @@ describe('NarrationControl — the accessibility label', () => {
     await renderControl([MALE]);
 
     const control = screen.getByTestId('narration-control');
-    expect(control.props['accessibilityLabel']).toBe('Play Summary narration, Male voice');
+    expect(control.props['accessibilityLabel']).toBe("Play Summary narration, Druv's voice");
 
     await user.press(control);
 
     await waitFor(() => {
-      expect(control.props['accessibilityLabel']).toBe('Pause Summary narration, Male voice');
+      expect(control.props['accessibilityLabel']).toBe("Pause Summary narration, Druv's voice");
     });
   });
+
+  it.each([
+    ['female', FEMALE, 'Lara'],
+    ['male', MALE, 'Druv'],
+  ] as const)(
+    'names the %s narrator by name — never "Female"/"Male" alone, never a provider voice id',
+    async (narrator, clip, name) => {
+      // ONBOARD-3, and the one place a narrator is named that cannot be seen on a screen:
+      // this label is what a screen reader says, so a wrong name here is invisible to
+      // every other test. The rule (founder, 2026-09-24): wherever a narrator is named to
+      // a reader it reads Lara or Druv.
+      await SecureStore.setItemAsync('zoomout.narrator', narrator);
+
+      await renderControl([clip]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('narration-control').props['accessibilityLabel']).toContain(name);
+      });
+
+      const label = screen.getByTestId('narration-control').props['accessibilityLabel'] as string;
+      expect(label).not.toMatch(/\b(fe)?male\b/iu);
+      expect(label).not.toMatch(/achernar|sadaltager/iu);
+    },
+  );
 });
 
 describe('NarrationControl — playback', () => {
