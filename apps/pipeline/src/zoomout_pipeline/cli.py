@@ -1852,6 +1852,28 @@ def narrate(
         # light. Equal to `MAX_NARRATION_ATTEMPTS`, and `tests/test_attempt_defaults.py` fails
         # if the two drift apart.
     ] = 3,
+    tempo: Annotated[
+        float,
+        typer.Option(
+            min=1.0,
+            max=1.5,
+            help="How much faster than the model's own pace the narration plays: a time-stretch "
+            "of the audio already synthesised, at the same pitch, so it buys no clip. 1.0 leaves "
+            "the audio as the model returned it.",
+        ),
+        # A literal, for the reason `--max-attempts` gives. Equal to `NARRATION_TEMPO`, with the
+        # range of `MIN_TEMPO`..`MAX_TEMPO`, and `tests/test_tempo_defaults.py` fails if either
+        # drifts.
+    ] = 1.3,
+    no_synthesis: Annotated[
+        bool,
+        typer.Option(
+            help="Make the run unable to buy a clip: Cloud TTS is never called and nothing is "
+            "reserved for speech. A clip whose audio is not on disk stops the run, naming it; "
+            "a retry that is not on disk ends that line's retries. The guard still listens, "
+            "and still costs."
+        ),
+    ] = False,
 ) -> None:
     """Read a run's Leaves aloud, in **both** ruled narrators, and attach them as drafts.
 
@@ -1865,6 +1887,14 @@ def narrate(
     Re-running is safe and free for anything already done: clips are cached by what was
     asked, uploads are found by the hash of their bytes before being made, and a Leaf whose
     draft already carries exactly this audio is verified rather than written again.
+
+    **Faster than the model's own pace** (VO-4): `--tempo` (default 1.3) time-stretches every
+    clip on its way to the mp3, from the raw audio on disk and at the same pitch — the founder's
+    ruling of 2026-09-25, after the device gate found the lessons slow beside the narrator
+    hellos. It is a DSP step and buys no clip; the raw audio in `raw/` is never touched. A clip
+    at a new tempo is a new file, so it is listened to again (the guard's cost) and uploaded
+    under a new name, and the old Media stays in the CMS, since the machine key cannot delete
+    it. `--no-synthesis` makes a run unable to spend on speech at all.
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError
     from zoomout_pipeline.assets.narration import (
@@ -1878,6 +1908,7 @@ def narrate(
     from zoomout_pipeline.assets.speech import SpeechError
     from zoomout_pipeline.graph.narration_nodes import (
         NarrationHeldError,
+        NarrationNotOnDiskError,
         NarrationWriteError,
         attach_leaf_narration,
         render_line,
@@ -1892,7 +1923,9 @@ def narrate(
         narrators = ", ".join(
             f"{narrator.value}={name}" for narrator, name in NARRATOR_VOICES.items()
         )
-        typer.echo(f"narrators  : {narrators}{' — render only' if render_only else ''}\n")
+        typer.echo(f"narrators  : {narrators}{' — render only' if render_only else ''}")
+        unable = " — --no-synthesis: no clip can be bought" if no_synthesis else ""
+        typer.echo(f"tempo      : x{tempo:g}{unable}\n")
         narration = dict(session.state.cms_narration)
         leaves = session.leaves[:limit] if limit else session.leaves
 
@@ -1922,12 +1955,14 @@ def narrate(
                         record=session.record,
                         guard=session.guard,
                         max_attempts=max_attempts,
+                        tempo=tempo,
+                        no_synthesis=no_synthesis,
                     )
                     for voice_name in NARRATOR_VOICES.values()
                     for narrated in lines
                 ]
-            except (BudgetExceededError, SpeechError) as error:
-                # Both are a stop, not a crash: what was rendered is on disk and on the
+            except (BudgetExceededError, SpeechError, NarrationNotOnDiskError) as error:
+                # All three are a stop, not a crash: what was rendered is on disk and on the
                 # ledger, and the review is still built from it below.
                 halted = str(error)
                 session.checkpoint()
@@ -2001,6 +2036,13 @@ def narrate(
                     "Every clip levelled to the same speech loudness, given the same 60 ms head "
                     "and 350 ms tail, and encoded once as 64 kbps mono mp3 — this track is the "
                     "uploaded files, decoded, in reading order.",
+                    (
+                        f"**Time-stretched ×{tempo:g}**: the speech was sped up after synthesis, "
+                        "at the same pitch, and the pauses shrink with it. The pace in the table "
+                        "below is the stretched clip's."
+                        if tempo != 1.0
+                        else "Not stretched: the pace is the model's own."
+                    ),
                     "Listening model: "
                     + (session.guard.model if session.guard else "**off — no clip was checked**"),
                 ],
