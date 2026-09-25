@@ -163,12 +163,14 @@ B=$(lsof -nP -tiTCP:3000 -sTCP:LISTEN | head -1); [ -n "$B" ] && ps eww -p "$B" 
 docker exec zoomout-postgres psql -U postgres -d zoomout_cms -tA -c "select id||' '||cover_url from tracks where id in ('42','50') order by id" | while read u; do case "$u" in *"$IP"*) echo "cover OK:    $u";; *) echo "cover STALE: $u";; esac; done
 for n in female male; do curl -s -o /dev/null -w "greeting $n: HTTP %{http_code}\n" --max-time 5 "http://$IP:3001/api/media/file/narrator-greeting-$n.mp3"; done
 curl -s -o /dev/null -w "narrator-samples route: HTTP %{http_code} (401 = new backend, 404 = old: restart it)\n" --max-time 5 "http://$IP:3000/content/narrator-samples"
+S=$(find packages/shared/src -type f ! -name "*.test.ts" -exec stat -f %m {} + | sort -n | tail -1); D=$(find packages/shared/dist -type f -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1); [ "${D:-0}" -ge "${S:-1}" ] && echo "shared build OK" || echo "shared build STALE (the app bundles dist): npm run build --workspace=packages/shared"
 ```
 
 **If a line is wrong:**
 
 - **The IP changed** → fix `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` (one line, key once), both Tracks' `coverUrl` in admin (`http://localhost:3001/admin`, in the **Mac's** browser — not the phone's), and restart the backend with the flags below.
 - **`narrator-samples route: HTTP 404`** → the backend on `:3000` predates ONBOARD-3. `git pull` in `ZO`, then restart it with the flags below. Until it is restarted the narrator beat shows an error screen with only *Try again* — no way past it (register row).
+- **`shared build STALE`** → `npm run build --workspace=packages/shared`, then reload the app (`r` in the Expo terminal). `packages/shared/dist` is gitignored build output that **both the app and the backend resolve `@zoomout/shared` from**; a `git pull` does not rebuild it, and a stale copy crashes the phone (2026-09-25: `NARRATOR_LABELS` was `undefined`, a red screen on the narrator beat).
 - **A port is DOWN** → start it, each in its own terminal (they run until stopped):
 
 ```bash
