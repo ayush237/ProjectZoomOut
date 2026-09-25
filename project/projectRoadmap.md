@@ -92,6 +92,12 @@ in a linked worktree** — branch from `origin/main` instead.
   (`dist` had 0 mentions, `src` had 2) and the narrator beat threw *"Cannot convert undefined value to object"*.
   Manager's own device pass never saw it: it ran in its own worktree, after a fresh build. The pre-flight now
   checks it.
+- **Orphaned backend watchers wake up and steal the port.** Three detached `npm run dev` trees (parent PID 1, 13
+  to 17 days old) were found on 2026-09-25. A `node --watch` restarts its server when any watched file
+  changes — a `git pull`, a `packages/shared` rebuild — so a *dormant* one wakes, races the founder's own
+  backend for `:3000`, and wins **with no `MEDIA_BASE_URL`**: text loads and every audio file and image
+  silently fails on the phone. `Ctrl+C` cannot reach them (no terminal). **Killing the listener's group is not
+  enough — list every `--watch src/index.ts` process.** The pre-flight now lists detached ones.
 - **An Architect session cannot read `.env` files** (permission denied) — ask the founder to paste the line.
   Services an Architect session starts in the background may not outlive it; re-run the pre-flight after a
   clear.

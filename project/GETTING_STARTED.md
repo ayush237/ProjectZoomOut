@@ -164,6 +164,7 @@ docker exec zoomout-postgres psql -U postgres -d zoomout_cms -tA -c "select id||
 for n in female male; do curl -s -o /dev/null -w "greeting $n: HTTP %{http_code}\n" --max-time 5 "http://$IP:3001/api/media/file/narrator-greeting-$n.mp3"; done
 curl -s -o /dev/null -w "narrator-samples route: HTTP %{http_code} (401 = new backend, 404 = old: restart it)\n" --max-time 5 "http://$IP:3000/content/narrator-samples"
 S=$(find packages/shared/src -type f ! -name "*.test.ts" -exec stat -f %m {} + | sort -n | tail -1); D=$(find packages/shared/dist -type f -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1); [ "${D:-0}" -ge "${S:-1}" ] && echo "shared build OK" || echo "shared build STALE (the app bundles dist): npm run build --workspace=packages/shared"
+ps -axo pid,pgid,tty,etime,command | grep -- "--watch src/index.ts" | grep -v grep | awk '$3=="??"{n++; print "DETACHED backend watcher: pid "$1" group "$2" up "$4} END{if(!n) print "no detached backend watchers"}'
 ```
 
 **If a line is wrong:**
@@ -171,6 +172,7 @@ S=$(find packages/shared/src -type f ! -name "*.test.ts" -exec stat -f %m {} + |
 - **The IP changed** → fix `EXPO_PUBLIC_API_URL` in `apps/mobile/.env` (one line, key once), both Tracks' `coverUrl` in admin (`http://localhost:3001/admin`, in the **Mac's** browser — not the phone's), and restart the backend with the flags below.
 - **`narrator-samples route: HTTP 404`** → the backend on `:3000` predates ONBOARD-3. `git pull` in `ZO`, then restart it with the flags below. Until it is restarted the narrator beat shows an error screen with only *Try again* — no way past it (register row).
 - **`shared build STALE`** → `npm run build --workspace=packages/shared`, then reload the app (`r` in the Expo terminal). `packages/shared/dist` is gitignored build output that **both the app and the backend resolve `@zoomout/shared` from**; a `git pull` does not rebuild it, and a stale copy crashes the phone (2026-09-25: `NARRATOR_LABELS` was `undefined`, a red screen on the narrator beat).
+- **`DETACHED backend watcher`** → kill its process group (a detached tree has no terminal, so `Ctrl+C` cannot reach it): `kill -TERM -- -<group>`, using the group the line printed. **Do it before you start your own backend, and re-run the pre-flight after any pull or rebuild.** A dormant `node --watch` restarts its server whenever a watched file changes, so it wakes on a pull or a `packages/shared` rebuild, races your backend for `:3000`, and can win with no media flags (2026-09-25: text loaded, every audio file and image silently failed).
 - **A port is DOWN** → start it, each in its own terminal (they run until stopped):
 
 ```bash
