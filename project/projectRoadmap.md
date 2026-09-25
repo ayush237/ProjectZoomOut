@@ -4,7 +4,7 @@ Owned by Architect.
 
 ## Where things stand — 2026-09-25
 
-**Read this first if you are a fresh session.** Rewritten 2026-09-24 at an Architect clear; **the ONBOARD bullets were patched 2026-09-25 at ONBOARD-3's sign-off.** The previous
+**Read this first if you are a fresh session.** Rewritten 2026-09-24 at an Architect clear; **the bullets below were patched 2026-09-25 at the ONBOARD-3 and ONBOARD-2.1 sign-offs and the archive pass.** The previous
 version was dated 2026-09-18 and had been patched in place since — by the end it still said two merged PRs
 were open and that a ruling was pending which had been executed two days earlier.
 
@@ -33,10 +33,11 @@ in a linked worktree** — branch from `origin/main` instead.
   `narrate` at three attempts. **The cost-ledger lock is still open and slightly more urgent** — a
   precondition of book #3's narration package.
 - **Waiting on the founder:** *proposed, not yet approved:* **ONBOARD-3.1** — Manager, Sonnet, after the
-  device gate: the narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip
-  races, and a copy pass (Explore's two "fifteen minutes" lines, two drafted lines that are factually wrong,
-  whatever the founder edits at the gate). Then a small Manager bundle — a relative `coverUrl` in the admin
-  publish rule (ends the LAN-IP pinning below) and a Python CI job (also below).
+  device gate; **its full contents, the copy candidates included, are in `projectplan.md`**. Then a small
+  Manager bundle — a relative `coverUrl` in the admin publish rule (ends the LAN-IP pinning below; the Mac's IP
+  changed on 2026-09-25 and both covers went stale) and a Python CI job (also below). **Also open, none
+  blocking:** **book #3** — which book, and a spend ceiling, and nothing is drafted until both; **WP26.1** —
+  approve or drop, undecided since 2026-09-10; the budget's reservation shape (register; not urgent).
 - **The archive pass ran 2026-09-25** (log, board, decisions; both peer sessions idle, every PR merged).
   **Next:** the founder's device gate, then the ONBOARD-3.1 go/no-go with the founder's copy words. A natural
   Architect clear follows — the record is complete. **The register is now the heaviest thing left (~26k

@@ -72,3 +72,52 @@ handoff says so explicitly rather than re-assuming the original design.
   the Leaf player — the founder's own device gate confirmed that path works.
 - A real-time or per-user text-to-speech capability.
 - Redesigning `WrapUpScreen`'s core purpose or its opt-in, end-of-day framing.
+
+### ONBOARD-3.1 — proposed 2026-09-25, awaiting the founder's go (after the device gate)
+
+**Not approved.** Manager, Sonnet. Written down so that an Architect clear loses nothing: the analysis lives in
+the register rows named below and in ONBOARD-3's review. **Every fix here is a hypothesis to verify, not a
+specification.**
+
+1. **The narrator beat fails open.** A failed samples fetch shows `ErrorState` with only *Try again*, and an old
+   backend answers 404, so backend-before-mobile is a hard deploy order. The fix I believe in: on a fetch
+   error still show the beat (cards inert, or descriptor-only as Profile does) with **Continue** —
+   `narratorOnly` marks seen and lands on Tabs, `full` goes to pick-book — as the onboarding gate itself fails
+   open. A missing or unplayable greeting must not be a dead card either (`playbackFailed` is not surfaced
+   there). *Register: "The narrator beat has no graceful failure".*
+2. **A stored narrator is not overwritten.** `selected` is seeded from `DEFAULT_NARRATOR` and Continue writes it
+   back, so a repeat pass — reachable through the accepted quit-mid-first-Leaf design — silently reverts the
+   reader's choice. Fix: seed from the stored narrator and write only if the reader tapped a card. *Register:
+   "The narrator beat's choice and audio handling", (a).*
+3. **Audio stops on Continue.** In `full`, Continue *pushes* pick-book over the beat, so a clip still playing
+   finishes over the next screen. *(b).* The one-voice rule keying on `playing` (c) and replay of a *finished*
+   clip (d) are in only if the founder hears them at the gate.
+4. **Pick-book races.** `busy` disables only the pressed card: Skip and the other card stay live across
+   `addToLibrary` and `listLibrary`, a late `reset` can put a reader who skipped into `[Tabs, LeafPlayer]`, and
+   two Choose taps add both books. Fix: one in-flight guard, and ignore a completion once the screen has been
+   left. *Register: "Pick-book: `choose` and `skip` race".*
+5. **Three soft spots in ONBOARD-3's tests:** an absence assertion that cannot tell "not mounted" from "still
+   loading", fixtures cast through `unknown`, and no test of audio stopping on Continue.
+6. **The copy pass**, in one commit, with whatever the founder edits at the gate. Candidates, as whole
+   sentences:
+   - *Promise* (a Leaf does not end on the question — it is slide 2 of 5): **Each one asks you a question only
+     you can answer, so you're thinking rather than skimming.**
+   - *Narrator beat* (only Ikigai has narration today, and slide 4 has no voice button): **Leaves can be read
+     aloud, if you'd like. Tap a card to hear each narrator say hello.**
+   - *Explore, first-run* (`ExploreScreen.tsx`, the line beginning "Add one below"): **Add a book below to get
+     started — you'll read it in short lessons, over many sessions.**
+   - *Explore, empty catalogue* (the line beginning "Tracks arrive here"): **Tracks arrive here once there are
+     books to read. Each one turns a non-fiction book into short lessons built around active recall.**
+
+   Grepped 2026-09-25: the two Explore strings are the only reader-facing "a book in fifteen minutes" claims in
+   `apps/` and `packages/`, and no test pins either. The share card's footer, "15 minutes a day", is a habit
+   claim consistent with the session cap, not this framing.
+
+**Out of it:** the cost-ledger lock, and anything in `apps/pipeline`; and the pre-existing gaps in the register
+row "Three pre-existing gaps ONBOARD-3 found and deliberately left" ("Back to Journey", the per-install
+onboarding flag, `AppStack`'s five other routes ignoring Reduce Motion).
+
+**When the handoff is written:** cite ONBOARD-3 by commit (`b32191a`, its merge; the completion report is in
+`collaboration-log.md` or `git show b32191a:project/collaboration-log.md`), not by location. The persona rules
+that apply: a state table draws its failure rows and says what a repeat pass starts from (the omission behind
+items 1 and 2), and the device gate names observations, not commands.
