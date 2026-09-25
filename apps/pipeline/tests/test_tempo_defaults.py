@@ -53,7 +53,10 @@ def _default(function: Any, name: str) -> Any:
 
 
 def _keywords_passed(function_name: str, keyword: str) -> list[str]:
-    """`callee=value` for every call inside `function_name` that passes `keyword=<a name>`."""
+    """`callee=value` for every call inside `function_name` that passes `keyword=<anything>`.
+
+    Any expression, not only a bare name: a hardcoded `tempo=1.3` slipped into the audition is
+    exactly the drift this exists to see, and a name-only scan would walk straight past it."""
     tree = ast.parse((PIPELINE_ROOT / "src/zoomout_pipeline/cli.py").read_text(encoding="utf-8"))
     found: list[str] = []
     for function in ast.walk(tree):
@@ -63,9 +66,8 @@ def _keywords_passed(function_name: str, keyword: str) -> list[str]:
             if not isinstance(node, ast.Call):
                 continue
             for arg in node.keywords:
-                if arg.arg == keyword and isinstance(arg.value, ast.Name):
-                    callee = ast.unparse(node.func)
-                    found.append(f"{callee}={arg.value.id}")
+                if arg.arg == keyword:
+                    found.append(f"{ast.unparse(node.func)}={ast.unparse(arg.value)}")
     return found
 
 
