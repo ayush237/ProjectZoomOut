@@ -129,8 +129,9 @@ proportionately for the book clips … as long as the pace is increasing."** The
   first, so **real headroom ≈ $0.90**): one full pass and one redo fit, a third does not. **The founder confirms
   the number before the paid step** (the Pipeline Manager asks, and Leaf 0 runs alone first). **One `narrate`
   process at a time** — the ledger lock is still open.
-- **Free checks before any spend:** tempo 1.0 with no synthesis must reproduce today's bytes for all 144 clips
-  ($0 — every one already has a cached listen under the current guard, verified 2026-09-25); a table of the
+- **Free checks before any spend:** tempo 1.0 must reproduce today's bytes for all 144 clips — by a script that
+  never listens, and by a CLI run under a **$1.83 ceiling that leaves no room for a listen**, so a cache miss
+  halts instead of buying (every clip has a cached listen under the current guard, verified 2026-09-25); a table of the
   stretch against the accepted clips (duration, pitch, speech rate, loudness, pauses; the fastest clip under the
   band); the greetings untouched.
 - **Kept for later, not rejected:** an in-app speed control (1× / 1.25× / 1.5× in the Leaf player) — free,
