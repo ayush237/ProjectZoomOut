@@ -155,3 +155,22 @@ The burn rate is about to fall on its own. These changes are worth making becaus
 **Open debt is not archived, only resolved debt is.** The register is 140 open rows and 85KB — the largest remaining item, and the obvious next cut. It was deliberately left alone: **open debt that is not loaded is debt that gets forgotten**, and this project's own record says a defect is not recorded until it reaches a list someone reads. Shrinking it is a real decision about what to stop tracking, not a tidy-up, and it should be made deliberately rather than at the end of a session that is already over budget.
 
 **So the remaining gap to the 40k target is the debt register, and closing it needs a ruling rather than a script.**
+
+---
+
+## Measured again — 2026-09-25, after the archive pass
+
+| | before | after |
+|---|---|---|
+| `collaboration-log.md` | 271KB / ~68k | **103KB / ~26k** |
+| `projectRoadmap.md` | 169KB / ~42k | **141KB / ~35k** |
+| **Active pair** | ~109k | **~61k** |
+
+**The habit held, and the target is still missed for one reason: the debt register is 102KB (~26k tokens),
+three-quarters of the roadmap.** It is deliberately not archived — open debt that is not loaded is debt that
+gets forgotten — so closing the last ~20k needs a ruling about what to stop tracking, not a script.
+
+**The log went from ~56KB on 2026-09-22 to 271KB on 2026-09-25**: six long packages in three days, with the
+archive deferred each time by "never archive mid-package" (the roadmap recorded each deferral). The pass ran
+when both peer sessions were idle and every PR was merged. **If overlapping packages continue, that boundary
+has to be made on purpose:** merge, let both sessions go idle, archive, then hand off the next package.
