@@ -53,7 +53,7 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 | 1 | **ONBOARD-2** | Pipeline Manager | Sonnet | Two narrator self-introduction clips — **Lara and Druv** | ✅ Signed off 2026-09-24 (6/6); Media 350/351, verified |
 | 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | ✅ **Signed off 2026-09-25 (17/17)** — merged as PR #61 (`b32191a`); the device gate is the founder's |
 | 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, and the copy pass | ⬜ **Proposed 2026-09-25 — needs the founder's go, after the device gate** |
-| 4 | **ONBOARD-2.1** | Pipeline Manager | Sonnet | The legal fence pinned, the three money lines pinned, an upload pre-flight, `narrate` at three attempts. **$0, no model calls** | 📤 **Handed off 2026-09-25** — approved by the founder. The cost-ledger lock is out of it |
+| 4 | **ONBOARD-2.1** | Pipeline Manager | Sonnet | The legal fence pinned, the three money lines pinned, an upload pre-flight, `narrate` at three attempts. **$0, no model calls** | ✅ **Signed off 2026-09-25 (14/14)**; merged as PR #62 (`6c5d8fd`). The cost-ledger lock is out of it and still open |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
