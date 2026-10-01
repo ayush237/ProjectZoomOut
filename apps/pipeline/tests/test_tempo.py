@@ -93,6 +93,22 @@ def test_a_sine_keeps_its_pitch_and_its_level_and_gains_no_clicks(hz: float, tem
     assert np.max(np.abs(step_out)) <= 1.05 * np.max(np.abs(step_in))
 
 
+def test_a_constant_signal_comes_through_as_the_same_constant() -> None:
+    """The window's claim, checked directly: frames laid half a frame apart weigh exactly one.
+
+    A symmetric Hann window does not - its half-frame-offset copies sum to 1 +- 0.4% - and a stretch
+    made with one would ripple the level by about 0.03 dB at the frame rate: nothing a level
+    tolerance can see, and not what `change_tempo`'s docstring says. A constant is the one signal
+    on which every alignment is perfect, so whatever the output is not, is the windows. The last two
+    frames are left out: there the second frame of the pair reads past the end of the input."""
+    source = Pcm(samples=np.full(2 * RATE, 0.25, dtype=np.float32), rate=RATE)
+
+    for tempo in (1.1, 1.3, 1.5):
+        stretched = change_tempo(source, tempo)
+        interior = stretched.samples[: -2 * 720]
+        assert float(np.max(np.abs(interior - 0.25))) < 1e-6, tempo
+
+
 def test_a_stretch_is_never_louder_than_what_it_was_made_from() -> None:
     """Every output sample is a weighted average of input samples whose weights add to one, so
     the peak cannot rise. `_render_attempt` levels again afterwards because the *speech level* can
