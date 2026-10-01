@@ -10,6 +10,7 @@ import { INTRO_HANDOFF_MS } from '../screens/intro/introBeats';
 import { setIntroSeen } from '../screens/intro/introSeenStore';
 import { getOnboardingSeen, setOnboardingSeen } from '../screens/onboarding/onboardingSeenStore';
 import { CLOSING_COPY } from '../screens/share/WrapUpScreen';
+import { fakeAudioPlayers, resetFakeAudio } from '../testing/fakeExpoAudio';
 import {
   COMPLETION,
   CORRECT_ANSWER,
@@ -54,6 +55,7 @@ const METRICS: Metrics = {
  */
 beforeEach(async () => {
   (SecureStore as ResettableSecureStore).__reset();
+  resetFakeAudio();
   await setIntroSeen();
   await setOnboardingSeen();
 });
@@ -295,6 +297,15 @@ describe('Onboarding', () => {
     progress: { trackId: 't1', totalLeaves: 1, completedLeaves: 0, nextLeafId: 'l1', isComplete: false },
   };
 
+  const FEMALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-female.mp3';
+  const MALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-male.mp3';
+
+  const workingHellos = (): Response => json({ female: { url: FEMALE_HELLO }, male: { url: MALE_HELLO } });
+
+  /** An old backend that has never heard of the route — the version-skew the beat must survive. */
+  const oldBackendHellos = (): Response =>
+    json({ error: { code: 'NOT_FOUND', message: 'no such route' } }, 404);
+
   /**
    * A signed-in backend with one real Track and everything the flow touches — the
    * greetings, pick-book, the first Leaf all the way to completion, and the wrap-up — so
@@ -312,7 +323,11 @@ describe('Onboarding', () => {
    * `narrator-samples` answers with two URLs and **no Track serves any narration** — the
    * beat must work without one.
    */
-  function onboardingBackend(initialLibraryEntries: unknown[]): typeof fetch {
+  function onboardingBackend(
+    initialLibraryEntries: unknown[],
+    /** How `/content/narrator-samples` answers. Working hellos unless a test says otherwise. */
+    hellos: () => Response = workingHellos,
+  ): typeof fetch {
     const entries = [...initialLibraryEntries];
 
     return (input) => {
@@ -324,14 +339,7 @@ describe('Onboarding', () => {
         entries.push(LIBRARY_ENTRY);
         return Promise.resolve(json({ unlocked: [] }));
       }
-      if (url.includes('/content/narrator-samples')) {
-        return Promise.resolve(
-          json({
-            female: { url: 'https://cdn.test/api/media/file/narrator-greeting-female.mp3' },
-            male: { url: 'https://cdn.test/api/media/file/narrator-greeting-male.mp3' },
-          }),
-        );
-      }
+      if (url.includes('/content/narrator-samples')) return Promise.resolve(hellos());
       if (url.includes('/content/tracks/t1/leaves')) {
         return Promise.resolve(json({ leaves: [LEAF_SUMMARY] }));
       }
@@ -510,6 +518,15 @@ describe('Onboarding', () => {
       await waitFor(() => {
         expect(view.getByTestId('leaf-player')).toBeOnTheScreen();
       });
+      // Explore is *underneath* the player — mounted and covered, not absent and not still
+      // loading. Pick-book resets into `[Tabs, LeafPlayer]`, so the shell is there; waiting
+      // for Explore's own list to have rendered (hidden elements included) is what makes
+      // "not showing" mean "covered by the Leaf". The bare `queryByTestId('explore-screen')`
+      // check this sits beside was just as true of a reset that left `Tabs` out, or of an
+      // Explore that had not rendered yet, and so could not tell those from the real thing.
+      await waitFor(() => {
+        expect(view.getByTestId('explore-list', { includeHiddenElements: true })).toBeTruthy();
+      });
       expect(view.queryByTestId('explore-screen')).toBeNull();
 
       // Read from the store after the reset, not inferred from the route: the seen flag
@@ -612,6 +629,88 @@ describe('Onboarding', () => {
     });
   });
 
+  describe('the narrator beat when the hellos cannot load (Tier A)', () => {
+    // The onboarding gate fails open (`useOnboardingGate`), and this beat used to be the one
+    // place that did not: a failed hellos fetch showed an error screen with Retry and no way
+    // onward. The backend answering 404 is the realistic cause — an old backend that has never
+    // heard of `/content/narrator-samples` — which makes backend-before-mobile a hard deploy
+    // order, so that is the failure used here. Every other kind is pinned on the screen itself.
+
+    it('narratorOnly: the beat still appears, and Continue marks seen and lands on Explore', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const view = await renderApp({
+        refreshToken: 'stored',
+        fetchFn: onboardingBackend([LIBRARY_ENTRY], oldBackendHellos),
+      });
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-hellos-notice')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(true);
+
+      warn.mockRestore();
+    });
+
+    it('full: the beat still appears, and Continue goes on to pick-book without marking seen', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const view = await renderApp({
+        refreshToken: 'stored',
+        fetchFn: onboardingBackend([], oldBackendHellos),
+      });
+
+      await skipIntro(view);
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-continue')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-hellos-notice')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-pickbook-screen')).toBeOnTheScreen();
+      });
+      await expect(getOnboardingSeen()).resolves.toBe(false);
+
+      warn.mockRestore();
+    });
+
+    it('full: a clip still playing when Continue is tapped does not carry on over pick-book', async () => {
+      // The same rule as on the screen's own tests, through the real `AppStack`: in `full`
+      // Continue *pushes* pick-book, so the beat stays mounted underneath it.
+      const view = await renderApp({ refreshToken: 'stored', fetchFn: onboardingBackend([]) });
+
+      await skipIntro(view);
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-promise-continue')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-promise-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-narrator-female')).toBeOnTheScreen();
+      });
+      await fireEvent.press(view.getByTestId('onboarding-narrator-female'));
+      const clip = fakeAudioPlayers().find((player) => player.source === FEMALE_HELLO);
+      await waitFor(() => {
+        expect(clip?.playing).toBe(true);
+      });
+
+      await fireEvent.press(view.getByTestId('onboarding-narrator-continue'));
+
+      await waitFor(() => {
+        expect(view.getByTestId('onboarding-pickbook-screen')).toBeOnTheScreen();
+      });
+      expect(clip?.playing).toBe(false);
+    });
+  });
+
   describe('a reader who quits mid-first-Leaf', () => {
     it('meets the narrator beat once more on the next launch, is marked seen at Continue, and never sees the closing', async () => {
       // Their book is already in the Library, so the gate resolves `narratorOnly` — an
@@ -667,6 +766,9 @@ describe('Onboarding', () => {
       // Explore's first-run state (ONBOARD-1's skip ruling) — an empty Library, however
       // it got that way, lands on the same designed state, never a blank catalogue.
       expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
+      // ONBOARD-3.1: it must not frame a book as "about fifteen minutes" (the founder's
+      // objection to beat 1) — a book is read over many sessions. The claim, not the words.
+      expect(view.getByTestId('explore-first-run')).not.toHaveTextContent(/fifteen minutes/iu);
       await expect(getOnboardingSeen()).resolves.toBe(true);
     });
 
@@ -687,5 +789,80 @@ describe('Onboarding', () => {
       expect(view.getByTestId('explore-first-run')).toBeOnTheScreen();
       await expect(getOnboardingSeen()).resolves.toBe(true);
     });
+  });
+});
+
+describe('Profile’s narrator hellos, through the real tabs (ONBOARD-3.1)', () => {
+  const FEMALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-female.mp3';
+  const MALE_HELLO = 'https://cdn.test/api/media/file/narrator-greeting-male.mp3';
+
+  /** A signed-in shell whose narrator hellos work, recording every request it is asked. */
+  function shellWithHellos(requested: string[]): typeof fetch {
+    return (input, init) => {
+      const url = urlOf(input);
+      requested.push(url);
+
+      if (url.includes('/content/narrator-samples')) {
+        return Promise.resolve(json({ female: { url: FEMALE_HELLO }, male: { url: MALE_HELLO } }));
+      }
+
+      return signedInBackend(input, init);
+    };
+  }
+
+  /**
+   * Presses a tab by its label. `getByText` alone is ambiguous once Profile has mounted (its
+   * own header says "Profile" too), so this takes the label that sits in the tab bar: the
+   * one whose ancestors include a pressable that is not part of a screen.
+   */
+  async function pressTab(view: Awaited<ReturnType<typeof renderApp>>, label: string): Promise<void> {
+    const candidates = view.getAllByText(label);
+    // The tab bar renders after the screens, so its label is the last match.
+    const tab = candidates[candidates.length - 1];
+    if (tab === undefined) {
+      throw new Error(`no "${label}" tab label on screen`);
+    }
+    await fireEvent.press(tab);
+  }
+
+  it('stops a playing hello when the reader switches tab, and fetches the hellos once, not on every focus', async () => {
+    // Both halves are properties of the tab navigator, which no screen test can see: a bare
+    // `ProfileScreen` has no focus to lose, and mounts exactly once whatever the code does.
+    const requested: string[] = [];
+    const view = await renderApp({ refreshToken: 'stored', fetchFn: shellWithHellos(requested) });
+
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    await pressTab(view, 'Profile');
+    await waitFor(() => {
+      expect(view.getByTestId('narrator-option-female')).toBeOnTheScreen();
+    });
+    await waitFor(() => {
+      expect(
+        view.queryByTestId('narrator-option-female-glyph', { includeHiddenElements: true }),
+      ).not.toBeNull();
+    });
+
+    await fireEvent.press(view.getByTestId('narrator-option-female'));
+    const clip = fakeAudioPlayers().find((player) => player.source === FEMALE_HELLO);
+    await waitFor(() => {
+      expect(clip?.playing).toBe(true);
+    });
+
+    await pressTab(view, 'Explore');
+    await waitFor(() => {
+      expect(view.getByTestId('explore-screen')).toBeOnTheScreen();
+    });
+    expect(clip?.playing).toBe(false);
+    // …and switching away started nothing: the other voice was never touched.
+    expect(fakeAudioPlayers().find((player) => player.source === MALE_HELLO)?.play).not.toHaveBeenCalled();
+
+    // Back to Profile: the tab was kept mounted and refocused, and nothing refetched.
+    await pressTab(view, 'Profile');
+    await waitFor(() => {
+      expect(view.getByTestId('narrator-option-female')).toBeOnTheScreen();
+    });
+    expect(requested.filter((url) => url.includes('/content/narrator-samples'))).toHaveLength(1);
   });
 });

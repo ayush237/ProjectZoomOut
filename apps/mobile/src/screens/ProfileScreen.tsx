@@ -1,14 +1,16 @@
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { NARRATOR_IDS, NARRATOR_LABELS, type AchievementStatus } from '@zoomout/shared';
+import { NARRATOR_LABELS, type AchievementStatus } from '@zoomout/shared';
 
 import type { DayStatus } from '../api/client';
 import { useNarrator } from '../audio';
 import { useApi, useAuth } from '../auth/AuthProvider';
 import { badgeBlobPath, Button, Icon, Screen, StatusMessage, Text } from '../components';
 import { MIN_TOUCH_TARGET, useTheme } from '../design';
+import { NarratorPreview, type NarratorCardState } from './NarratorPreview';
 import { useAsyncResource } from './useAsyncResource';
+import { useNarratorSamples } from './useNarratorSamples';
 import { useRefreshOnFocus } from './useRefreshOnFocus';
 
 /**
@@ -266,15 +268,28 @@ function AchievementGrid(): React.JSX.Element | null {
 /**
  * VO-3: which voice narrates a Leaf's four narrated slides.
  *
- * **Each option shows the narrator's name and a descriptor (ONBOARD-3).** Profile is a
- * chooser with nothing to play — a reader picks here without hearing anyone — so a bare
- * "Lara" or "Druv" would be a blind choice. The descriptor ("Female voice") is what tells
- * them which is which. Both come from the one shared map, so this can never say something
- * the onboarding beat and the player's accessibility label do not.
+ * **Tapping a tile chooses that narrator and plays its hello (ONBOARD-3.1)**, exactly as on
+ * the onboarding beat, one voice at a time — the founder's request, since a reader picking
+ * here had no way to hear who they were picking. The behaviour is `NarratorPreview`'s, shared
+ * with the beat, so it is defined once; this file only decides what a tile looks like. A tile
+ * shows the beat's play/pause control when its hello is loaded, and a clip stops when the
+ * reader switches tab or leaves.
  *
- * **Owns the preference and its default, not first-run choosing** — a separate,
- * later onboarding package writes the same `zoomout.narrator` key before a reader
- * ever reaches this screen. This card only ever *changes* an existing choice.
+ * **Profile must not break if the hellos cannot be fetched**, and does not: with no samples
+ * the tiles are exactly what they were before — a press only chooses, no play control, no
+ * notice, no error. The hellos are fetched once per mount, never on focus (the endpoint is
+ * authenticated and Profile is only reachable signed in), so a fetch that failed stays failed
+ * until the tab is next mounted; the beat is where a reader gets a *Try again*.
+ *
+ * **Each option shows the narrator's name and a descriptor (ONBOARD-3).** A reader may pick
+ * here before any hello has loaded — or without one ever loading — so a bare "Lara" or
+ * "Druv" would still be a blind choice; the descriptor ("Female voice") is what tells them
+ * which is which. Both come from the one shared map, so this can never say something the
+ * onboarding beat and the player's accessibility label do not.
+ *
+ * **Owns the preference and its default, not first-run choosing** — the onboarding beat writes
+ * the same `zoomout.narrator` key before a reader ever reaches this screen, and only when they
+ * tap a card. This card only ever *changes* an existing choice.
  *
  * Reads once per mount via `useNarrator`, the same trade `useIntroSeen` makes: nothing
  * else on screen needs the value at the same time, so there is no Context to keep in
@@ -283,6 +298,7 @@ function AchievementGrid(): React.JSX.Element | null {
 function NarratorCard(): React.JSX.Element {
   const theme = useTheme();
   const { narrator, setNarrator } = useNarrator();
+  const hellos = useNarratorSamples();
 
   return (
     <View
@@ -301,51 +317,92 @@ function NarratorCard(): React.JSX.Element {
       </Text>
 
       <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-        {NARRATOR_IDS.map((id) => {
-          const selected = narrator === id;
-
-          return (
-            <Pressable
-              key={id}
-              testID={`narrator-option-${id}`}
-              onPress={() => {
-                setNarrator(id);
-              }}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              accessibilityLabel={`${NARRATOR_LABELS[id].name}, ${NARRATOR_LABELS[id].descriptor.toLowerCase()}`}
-              style={({ pressed }) => ({
-                flex: 1,
-                minHeight: MIN_TOUCH_TARGET,
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: theme.spacing.xs,
-                paddingVertical: theme.spacing.md,
-                borderRadius: theme.radius.lg,
-                borderWidth: selected ? theme.borderWidth.focus : theme.borderWidth.hairline,
-                borderColor: selected ? theme.palette.primary : theme.palette.border,
-                backgroundColor: pressed
-                  ? theme.surfaceFor('pressed')
-                  : selected
-                    ? theme.surfaceFor('raised')
-                    : theme.surfaceFor('card'),
-              })}
-            >
-              <Text variant="body" tone={selected ? 'primary' : 'textPrimary'}>
-                {NARRATOR_LABELS[id].name}
-              </Text>
-              <Text variant="small" tone="textMuted">
-                {NARRATOR_LABELS[id].descriptor}
-              </Text>
-            </Pressable>
-          );
-        })}
+        <NarratorPreview
+          samples={hellos.samples}
+          selected={narrator}
+          onSelect={setNarrator}
+          renderCard={(card) => <NarratorTile {...card} />}
+        />
       </View>
 
       <Text variant="small" tone="textMuted">
         Changes which voice plays on your next Leaf.
       </Text>
     </View>
+  );
+}
+
+/**
+ * One narrator's tile.
+ *
+ * **The `testID` and the accessibility label are the ones this tile has always had**
+ * (`narrator-option-<id>`, "Lara, female voice"); what a hello adds is a play/pause control
+ * above the name — offered only when there is a hello to play — a hint saying so, and, when
+ * a hello will not play, the failure glyph and a line beneath. The hint carries the failure
+ * to a screen reader rather than the label changing under a name a reader already knows.
+ */
+function NarratorTile({
+  narrator,
+  selected,
+  playable,
+  playing,
+  playbackFailed,
+  onPress,
+}: NarratorCardState): React.JSX.Element {
+  const theme = useTheme();
+  const label = NARRATOR_LABELS[narrator];
+
+  const hint = !playable
+    ? undefined
+    : playbackFailed
+      ? 'Couldn’t play the hello. Tap to try again.'
+      : 'Plays a short hello.';
+
+  return (
+    <Pressable
+      testID={`narrator-option-${narrator}`}
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={`${label.name}, ${label.descriptor.toLowerCase()}`}
+      {...(hint === undefined ? {} : { accessibilityHint: hint })}
+      style={({ pressed }) => ({
+        flex: 1,
+        minHeight: MIN_TOUCH_TARGET,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: theme.spacing.xs,
+        paddingVertical: theme.spacing.md,
+        borderRadius: theme.radius.lg,
+        borderWidth: selected ? theme.borderWidth.focus : theme.borderWidth.hairline,
+        borderColor: selected ? theme.palette.primary : theme.palette.border,
+        backgroundColor: pressed
+          ? theme.surfaceFor('pressed')
+          : selected
+            ? theme.surfaceFor('raised')
+            : theme.surfaceFor('card'),
+      })}
+    >
+      {playable ? (
+        <Icon
+          testID={`narrator-option-${narrator}-glyph`}
+          name={playbackFailed ? 'unresolved' : playing ? 'pause' : 'play'}
+          tone="primary"
+          size={22}
+        />
+      ) : null}
+      <Text variant="body" tone={selected ? 'primary' : 'textPrimary'}>
+        {label.name}
+      </Text>
+      <Text variant="small" tone="textMuted">
+        {label.descriptor}
+      </Text>
+      {playbackFailed ? (
+        <Text variant="small" tone="textMuted" testID={`narrator-option-${narrator}-failed`}>
+          Couldn’t play
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }
 
