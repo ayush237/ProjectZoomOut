@@ -434,6 +434,166 @@ list anyone reads.
 
 ## Completions (Manager → Architect)
 
+### Completed: ONBOARD-3.1 — the narrator beat fails open, Profile plays the hello, pick-book stops racing itself, and the copy pass — 2026-10-01
+
+*Manager. Branch `onboard-3-1-narrator-hardening`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `265fa99`. PR: opened below — the founder merges.*
+
+**All 11 acceptance criteria verified except the live device pass**, which this report hands to the founder with exact steps. `apps/mobile` only — confirmed: `git diff --stat origin/main` touches nothing outside it. 817 of 817 tests pass against a baseline of 770 (+47); lint, typecheck, test and build all pass on a cold `rm -rf dist/.next` gate. Every new guard was shown failing before it was trusted — 56 mutations, zero survivors — detailed below.
+
+**This package ran across a gap.** Implementation, the mutation pass and the cold gate finished in one sitting on 2026-09-25/26; the session's weekly limit then reset and picked back up 2026-10-01 mid-way through a manual simulator walkthrough. Nothing on the branch changed in between (confirmed: `git status` clean, `origin/main` unmoved at `265fa99`, re-ran `tsc` and the full suite on resume — still 817/817). The only casualty was the scratchpad holding my mutation-harness script and report drafts, which is session-scoped and did not survive; this report is reconstructed from the conversation's own record of what each run produced, not re-derived from memory of code I hadn't re-read.
+
+## What the founder will notice
+
+- **A dead or old backend no longer strands the narrator beat.** With the backend down (or an older one that answers 404 for `/content/narrator-samples`), the beat still appears: the same two cards — a tap **chooses** that narrator, nothing plays, no play icon — one line saying the hellos couldn't load, a *Try again*, and **Continue**, which does exactly what it does when the hellos load. *Try again* turns the cards playable again and keeps whichever narrator you picked in the meantime. Before, this was an error screen with a retry and no way onward.
+- **A repeat pass no longer silently reverts your narrator.** The beat opens with your stored choice selected and Continue writes nothing unless you tapped a card.
+- **The hello stops when you leave.** Tap a card, then Continue: the clip no longer finishes over pick-book.
+- **Pick-book can't be raced.** While a book is being added, both cards and *Skip* are dimmed and inert; Skip-then-late-Leaf and two books added are gone. Hardware back mid-add leaves the book added and does nothing else.
+- **Profile plays the hello.** Tap Lara or Druv: you hear that hello and that tile becomes the selected one; the other stops; switching tab stops it. With the backend down the tiles still select, exactly as before, and nothing appears.
+- **Four strings changed**, exactly as the handoff gave them (Part 6 below), plus two new ones the handoff asked for without wording — flagged under *Decisions*.
+
+## Decisions needing a ruling
+
+1. **The beat's first line drops its second sentence when there are no hellos.** The handoff gave the line as *"Leaves can be read aloud, if you'd like. Tap a card to hear each narrator say hello."*; I render exactly that when the hellos loaded, and only *"Leaves can be read aloud, if you'd like."* when they didn't (the cards' accessibility labels drop "Tap to hear a hello." the same way). Leaving the second sentence in would promise a tap that plays nothing, directly above a notice saying so. **Cost of being wrong:** a one-line copy edit. Founder's words supersede.
+2. **Wording I had to invent** (the handoff specifies the states, not the words): the notice *"The hellos couldn't load, but you can still pick a narrator."*, the button *"Try again"*, and the failed-hello caption *"Couldn't play"* (accessibility label: *"…Couldn't play the hello. Tap to try again."*). **Cost:** none beyond a copy edit; each is in one file.
+3. **A 200 whose body is not two usable clips counts as a failed fetch** — a captive portal's HTML page or a body with one narrator. Beyond the handoff's table (network error, 4xx, 5xx, 404), but inside its intent: the alternative reaches `useNarration(undefined.url)` and crashes the render — stranding the reader by a different route. **Cost of being wrong:** none visible; it only adds a route into a state the reader already has.
+4. **A hello that will not play shows its failed state on Profile's tiles too**, not just the beat. Not asked for; it falls out of sharing the implementation, and without it a dead file would make a Profile tile look like a dead tap — the exact problem the register row names for the beat.
+5. **Part 4's guard is one piece of state, not state plus a ref.** Every card and Skip derive `disabled` from `pendingId !== null`; there is no second, ref-based check in the handlers. A ref guard only differs from the state when two presses land in the same tick, which a touch never produces (React commits between touch events) — so nothing through the UI could distinguish it, and it would be code no test could pin. **Cost of being wrong:** a same-tick double invocation from a non-touch source (none exists today) would get through.
+6. **No request in this app carries a deadline** (verified: `api/client.ts` never sets a signal or timeout, and nothing else in `apps/mobile` does either). The handoff's table keeps *loading* as a spinner, so I left it — but the fail-open guarantee covers *errors*, not *silence*: a request that hangs holds the beat's spinner, and the onboarding gate's blank frame, indefinitely. React Native's `fetch` has no default timeout on Android. **For Architect:** one shared `AbortSignal.timeout` in `ApiClient.dispatch` would close this for every screen at once; cross-cutting, so not done here.
+7. **The founder's own device pass is still outstanding** — see "What I could not verify" below. This is not a minor gap: it is the authoritative check for sound and timing, which no amount of automated testing reaches.
+
+## What changed, by part — and the hypotheses, checked
+
+The handoff's four fixes were hypotheses. **All four survived contact with the code; one needed a detail the handoff didn't have.**
+
+| Part | What I did | Hypothesis check |
+|---|---|---|
+| **1 — fails open** | New `useNarratorSamples` (the one consumer of `getNarratorSamples`) and `NarratorPreview` (below). The beat renders `hellos.status === 'ready'` → playable cards, `'failed'` → the same cards select-only + notice + Try again + Continue, `'loading'` → the spinner. | **Confirmed.** `useNarration` requires an `entry` and `useAudioPlayer` builds its player once from the first source, so the players cannot exist before the clips do; they live in `PlayableNarrators`, mounted only once there are two. |
+| **2 — stored narrator** | `picked` is `null` until a tap; `selected = picked ?? narrator`; Continue writes only when `picked !== null`. | **Confirmed, and the race is real:** `useNarrator` restores asynchronously, so a Continue tapped before the restore resolves would write the *default* over the stored value under any "always write `selected`" variant — mutation 19 shows the test catching it. |
+| **3 — audio stops** | `PlayableNarrators` listens for `blur` and pauses what reports `playing`, via the hook's existing `toggle`. `useNarration` is untouched. | **Confirmed in the real navigator — with one addition.** The listener is registered once, so it must read the players through a ref: a stale "not playing" `toggle` would *start* the clip it meant to stop. Mutations 8 and 9 pin the ref and the "only what is playing" guard separately. |
+| **4 — pick-book** | `disabled` on every other card and on Skip while `pendingId !== null`; a `mounted` ref checked after each round trip; a failed add releases the screen. | **Confirmed**, with decision 5 above on why it is state and not state + ref. |
+| **5 — Profile plays the hello** | Extracted the beat's preview into `NarratorPreview` (component, render-prop `renderCard`) + `useNarratorSamples` (hook); the beat and Profile each supply only their own card. Profile keeps every `testID` and label; adds the beat's play/pause glyph, an `accessibilityHint` ("Plays a short hello."), and a failed state. Fetched once per mount, no refetch on focus. | **Confirmed.** One definition of the one-voice rule (`players[other].playing` appears once, in `NarratorPreview.tsx`) and one call site of `getNarratorSamples` (in `useNarratorSamples.ts`; `api/client.ts` is its definition) — see the grep under *Evidence*. |
+| **6 — copy** | Four strings, exactly as given, JSX text keeping `&rsquo;`. | Grep below. |
+| **7 — soft spots** | (a) the `:513` assertion now waits for Explore's own list (hidden included) and asserts it is mounted-and-covered; (b) `firstLeaf.ts` fixtures typed, not cast; (c) audio-stops-on-Continue, on the screen and again through the real `AppStack`. | (a) **The register's own description was imprecise — see Findings.** |
+
+**Files touched** (all `apps/mobile/src`; nothing else): `screens/NarratorPreview.tsx` *(new)*, `screens/useNarratorSamples.ts` *(new)*, `screens/onboarding/OnboardingNarratorScreen.tsx`, `OnboardingPickBookScreen.tsx`, `OnboardingBookCard.tsx`, `OnboardingPromiseScreen.tsx`, `screens/ProfileScreen.tsx`, `screens/ExploreScreen.tsx`, `testing/firstLeaf.ts`, and the tests beside each: `OnboardingNarratorScreen.test.tsx`, `OnboardingPickBookScreen.test.tsx`, `OnboardingPromiseScreen.test.tsx`, `screens/surfaces.test.tsx`, `navigation/navigation.test.tsx`.
+
+## Findings worth knowing
+
+- **The `:513` assertion was blind in a different way from the register's account.** At that moment Explore is not "still loading": it is mounted, its list already rendered, and simply hidden under the Leaf player (`[Tabs, LeafPlayer]`). `queryByTestId('explore-screen')).toBeNull()` is true of "covered" and of "absent" alike. **Shown, not argued:** a mutation that resets into the player with no `Tabs` underneath leaves the original walk test green (a *different* test, "ends at the closing", happened to catch it); against the new assertion the walk test goes red too.
+- **`testing/firstLeaf.ts`'s casts were hiding three real mismatches:** two scenario options where `PublicLeaf` requires a three-tuple, no `status` and no timestamps, and a `trackCompleted` on `AnswerOutcome` that the type does not have (it is read off the *completion* outcome). Dropping `status` from the typed fixture is now a `tsc` TS2741 error; under the old `as unknown as` form the same edit compiled silently — shown both ways.
+- **`failFakePlayer` reports the error but leaves the fake's `playing` true.** A real player that failed to load is not playing. This made "the glyph ignored the failure" invisible in one of the two failed-play cases until the mutation pass caught it; my tests now set `playing = false` themselves before calling it. I did not change the shared fake (outside this package's scope; `NarrationControl`'s own tests use it) — worth a small fix later.
+- **`useAsyncResource` keeps the last good `data` after a later failure.** Harmless today (nothing reloads after a success) but a trap for the next caller; `useNarratorSamples`'s result is a discriminated type (`samples` is non-null exactly when `status` is `'ready'`) so a caller cannot read clips off a failed one even by accident.
+- **`narratorOnly`'s "Continue stops the clip" needs no new code** — the reset unmounts the beat and `useNarration`'s own cleanup pauses. The test pins that existing behaviour; it cannot be mutation-checked without editing `useNarration`, out of scope.
+
+## The limit this inherits (named, as the handoff asked)
+
+`playing` turns true only once audio is flowing. A clip asked to play but still **buffering** when the reader leaves the screen — or taps the other card — reports `playing: false`, so neither the blur rule nor the one-voice rule stops it, and it plays over whatever follows. `useNarration` has no separate `pause` and also drives the Leaf player, so I did not touch it. **No test can see this** (the fake sets `playing` synchronously) — it is a device question, and the founder's own *"tap the second card while the first is still starting up"* check is the only evidence there will be.
+
+## Mutation checks (56 — zero survivors)
+
+**How they were run.** One exact-string edit per row (asserted to match exactly once), the five affected test files run (narrator screen, pick-book, promise, `surfaces`, `navigation` — 130 tests), the red tests read from Jest's JSON output, the file restored with `git checkout`, and the worktree re-checked with an empty `git status` before the next row — nothing was ever restored by hand. **No mutation survived, and no row turned red anything unexpected.** Where two changes could each explain a green test, they are separate rows (marked ⇄), per the project's mutation-discipline rule.
+
+"Beat" = `OnboardingNarratorScreen.test.tsx`; "Nav" = `navigation.test.tsx` (through `RootNavigator`); "Profile" = `surfaces.test.tsx`; "Pick" = `OnboardingPickBookScreen.test.tsx`. "The five failure rows" = network error / 404 / 500 / captive-portal 200 / one-narrator 200.
+
+| # | Breakage | Red |
+|---|---|---|
+| **The samples hook** | | |
+| 1 ⇄ | No shape validation of the answer | **4** — the two malformed-200 rows, on the beat and on Profile |
+| 2 ⇄ | Validation still logs but no longer throws | **2** — the one-narrator body (beat, Profile); the captive-portal body stays green: `data !== null` also refuses it (row 6's job) |
+| 3 ⇄ | No `console.warn` when the fetch fails | **5** — network / 404 / 500 on the beat, 404 / 500 on Profile |
+| 4 ⇄ | No `console.warn` when the answer is malformed | **4** — same four as row 1 |
+| 5 | `retry` does nothing | **2** — both Try-again tests |
+| 6 ⇄ | `ready` no longer checks `data !== null` | **`tsc` TS2322** — no test; the discriminated result type enforces it |
+| **The shared preview** | | |
+| 7 ⇄ | No `blur` listener | **5** — beat ×3 (Continue stops it · loses focus another route · pauses only the playing clip), the same through the real `AppStack`, and the tab switch through the real tabs |
+| 8 ⇄ | The blur handler reads stale players (ref never updated) | **the same 5** |
+| 9 ⇄ | Blur `toggle`s every player, playing or not | **3** — "leaving without playing anything starts nothing", "pauses only the playing clip" (beat), the tab switch "starts nothing else" (Nav). *The Continue-stops-it tests stay green here — these three exist for exactly this row* |
+| 10 | No one-voice rule | **2** — one per screen: the rule is one shared implementation |
+| 11 | A press does not choose the narrator | **6** |
+| 12 | A press does not play the hello | **15** |
+| 13 | A select-only press does nothing | **12** |
+| 14 | `playbackFailed` never reported | **5** |
+| 15 | `playing` never reported (the glyph never shows pause) | **2** — the one-voice test on each screen, which asserts the glyph swaps |
+| 16 | Select-only cards claim to be playable | **9** — the five failure rows on the beat, four on Profile |
+| 17 | The blur listener assumes a navigator exists | **11** — every standalone Profile render: outside a navigator there is no focus to lose |
+| **The beat** | | |
+| 18 ⇄ | Selection ignores the stored narrator (seeds from the default) | **1** — "pre-selects the stored narrator" |
+| 19 ⇄ | Continue always writes the selection | **2** — "keeps a stored choice without tapping" (reds *because* Continue beats the async restore), "writes nothing when nothing is stored" |
+| 20 | Continue never writes a pick | **4** |
+| 21 | **The original bug** (18 + 19) | **3** — exactly the stored-narrator tests |
+| 22 | No Continue after a failed fetch | **10** — the five failure rows, both Continue rows, "Try again that fails again", both `RootNavigator` rows |
+| 23 | Try again does nothing | **2** |
+| 24 | No Try again control | **7** |
+| 25 | No notice | **11** |
+| 26 | The card label promises a hello when there is none | **5** — the failure rows |
+| 27 | The intro line always promises a hello | **5** — the failure rows |
+| 28 | The play glyph shows without hellos | **5** — the failure rows |
+| 29 | No failed caption | **3** |
+| 30 | No spinner while loading | **1** |
+| 31 | Try again drops the choice made meanwhile | **1** |
+| 32 | The glyph ignores a failed play | **2** — one per failed-play case (this was **1** until the fake was told a failed load is not playing — see Findings) |
+| 33 | The failed card's label unchanged | **2** |
+| 34 | A card press does not record the pick | **10** |
+| **Pick-book** | | |
+| 35 ⇄ | Skip not disabled while adding | **2** — "inert", "ignores Skip and still lands in the Leaf" |
+| 36 ⇄ | The other cards not disabled | **2** — "inert", "adds exactly one book when a second card is tapped" |
+| 37 ⇄ | The card ignores its `disabled` prop | **2** — same two as row 36 |
+| 38 ⇄ | No leave check after the add | **1** — "left before the add finishes" (no further lookup) |
+| 39 ⇄ | No leave check after the lookup | **2** — both completion kinds |
+| 40 | No leave checks at all (38 + 39) | **3** |
+| 41 | A failed add does not release the screen | **1** |
+| **Profile** | | |
+| 42 | The tile's accessibility label changes | **1** |
+| 43 | No accessibility hint | **1** |
+| 44 | Refetch the hellos on every focus | **1** — through the real tabs only |
+| 45 | The play glyph shows without hellos | **4** |
+| 46 | No failed caption | **2** |
+| 47 | The glyph ignores a failed play | **2** |
+| 48 | Passes no samples to the preview | **7** |
+| **The copy** | | |
+| 49 | Promise back to "ends with a question" | **1** |
+| 50 | Explore's first-run line back to "about fifteen minutes" | **1** — through the real flow |
+| 51 | Explore's empty-catalogue body back to "about fifteen minutes" | **1** |
+| 52 | The beat's intro back to "Every Leaf can be read aloud" | **1** |
+| **Part 7** | | |
+| 53 | Pick-book resets with no `Tabs` underneath, against the **original** `navigation.test.tsx` | the walk test (holding the `:513` assertion) **stays green**; only "ends at the closing" reds |
+| 54 | The same, against the **new** one | **2** — the walk test reds too |
+| 55 | Drop `status` from the typed `FIRST_LEAF` | **`tsc` TS2741** |
+| 56 | The old `as unknown as DeliveredLeaf` form, `status` still dropped | **`tsc` exits 0** — the blind spot the typing closes |
+
+**Assertions that cannot be mutation-checked, or are not pinned — for WP14:**
+- **`narratorOnly`: Continue stops a playing clip.** No line of this package to break — the reset unmounts the beat and `useNarration`'s own cleanup pauses. Guards a future regression.
+- **The buffering-window limit** (above): the fake sets `playing` synchronously, so no test can reach it.
+- **Exact copy wording.** Pinned as *claims*, not strings — the promise test's own rule is that words are the founder's to edit. The four exact strings are confirmed by grep (below), not by mutation.
+- **The screen-reader announcement of a failed play.** The card's label carries it; nothing announces it when it happens (follow-up).
+
+## Evidence, by kind
+
+- **Unit/component tests (real screens, real navigator):** the 47 new/changed tests across the five files above, all through `@testing-library/react-native` against the actual components — not shallow renders.
+- **Mutation:** the 56 rows above.
+- **Grep, structural:** `grep -rn "getNarratorSamples" apps packages` shows one call site outside `api/client.ts` (`useNarratorSamples.ts`); `grep -n "players\[other\].playing" apps/mobile/src` shows one definition (`NarratorPreview.tsx`); `grep -i "fifteen minutes" apps packages` shows no reader-facing "about fifteen minutes" claim outside the promise's unchanged session cap and `ShareCard`'s unrelated "15 minutes a day" tagline.
+- **Full suite + cold gate:** `rm -rf packages/shared/dist apps/backend/dist apps/admin/.next apps/mobile/dist`, fresh `npm ci`, then lint/typecheck/test/build — all green. 817/817 tests (baseline 770, **+47**); counts by workspace: mobile 817 (+47), backend 533 (unchanged), shared 80 (unchanged), admin 204 (unchanged) — no drop to reconcile outside mobile, which is this package's own scope.
+- **A real, disposable backend+DB pass** (not the device gate — see below): migrated a throwaway Postgres (zero founder-port contact: `55432`, never `5432`) and confirmed by querying it directly that all ten expected tables exist; started the backend against it and confirmed `/health` returns `{"status":"ok"}` and `/content/narrator-samples` returns 401 unauthenticated (the new-backend signature the pre-flight checks for); created a real account via `POST /auth/signup` and confirmed by querying the database directly that the user row exists with the right email and display name — "verify effect, never execution" applied to the infra itself, not just the app logic.
+
+## What I could not verify
+
+**The actual device/simulator walkthrough did not happen**, and this is the one acceptance criterion not met. I built a dedicated iOS simulator (`ZO-vo3-verify`, per `[[dedicated-simulator-recipe]]`), a disposable backend and Postgres, and my own Metro, all isolated from the founder's — confirmed by port and container checks before and after that the founder's `:3000`/`:3001`/`:8081` and both their original Postgres containers were never touched. The infra came up clean (health check, migration, a real signup). But the session's weekly limit reset mid-walkthrough, the simulator's Expo Go process did not survive the gap, and getting back to a signed-in screen hit the same `@`-in-email keyboard-input fragility `[[dedicated-simulator-recipe]]` already names — chunked typing, which worked in an earlier package, corrupted the field twice in a row this time. Given the strength of the automated and mutation evidence above (every acceptance-criterion state is exercised through the real screens, and every guard has been shown failing), and that the handoff itself reserves sound/timing for the founder's ear, I judged further time against the keyboard problem a bad trade and stopped — tearing down all three pieces of throwaway infra cleanly rather than leaving them running across another gap.
+
+**What this means for the founder's device gate:** none of it is skippable, all of it is exactly the handoff's own script. In particular, two checks have *no* substitute — **"Audio stops"** (a buffering clip may not stop, per the named limit above) and the two explicitly-open questions (replaying a finished clip; tapping the second card while the first is still starting). Everything else in the handoff's device-gate section is strongly *predicted* by the automated evidence (every state, both failure and success, is pinned through the real screen or the real navigator) but not *seen*.
+
+## Where the time went
+
+Implementation (Parts 1–7): roughly half. Writing and running the 56-row mutation harness: a third. The cold gate, the aborted device walkthrough, and this report: the rest.
+
+## Follow-ups for Architect
+
+- **The founder's device gate is still the open item** — run the handoff's own script. If anything in the "fails open" or "audio stops" rows looks wrong on-device despite the automated evidence, treat that as higher-priority than anything else here.
+- **`AbortSignal.timeout` on `ApiClient.dispatch`** (decision 6) — no request in the app has a deadline; a hang is indistinguishable from "working on it" everywhere, not just here.
+- **The buffering-window limit** (named above, inherited from ONBOARD-3, not newly introduced) is still open and still untestable without touching `useNarration`.
+- **`failFakePlayer` should set `playing = false`** itself rather than leaving callers to do it (Findings) — a small fix to the shared fake, outside this package.
+- **The screen-reader announcement of a failed play** is carried in the card's label only, not announced live when the failure happens — a possible `accessibilityLiveRegion` follow-up.
+- **The `:513`-class assertion pattern** — "not mounted" checked by a bare `queryByTestId(...).toBeNull()` — may exist elsewhere in the suite with the same "covered vs. absent" blind spot; not swept here, flagged for WP14.
+
 ### Completed: ONBOARD-2.1 — the fence pinned, the ceiling pinned, "both or neither" made true where it can be, and `narrate` at three attempts — 2026-09-25
 
 *Pipeline Manager. Branch `onboard-2-1-fence-and-cap`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `2f52e47`. PR: [#62](https://github.com/ayush237/ProjectZoomOut/pull/62) — the founder merges.*
