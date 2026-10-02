@@ -512,18 +512,19 @@ list anyone reads.
 
 ## Completions (Manager → Architect)
 
-### Completed: VO-4.1 — Part A built and verified at $0; Part B (the finish) waits on Payload and the founder's yes — 2026-10-02
+### Completed: VO-4.1 — the book is finished: all 18 Leaves wait as drafts at ×1.3, every `textDigest` matching its own text, and Leaf 9's payoff is narrated fresh; Part B cost $0.2155 — 2026-10-03
 
-*Pipeline Manager. Branch `vo-4-1-finish-the-book`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `9997b14` (PR #64's merge). PR: [#65](https://github.com/ayush237/ProjectZoomOut/pull/65), a **draft** until Part B is done — the founder merges.*
+*Pipeline Manager. Branch `vo-4-1-finish-the-book`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `9997b14` (PR #64's merge). PR: [#65](https://github.com/ayush237/ProjectZoomOut/pull/65) — the founder merges. Part A was built on 2026-10-02. Part B ran on the night of 2026-10-02 → 03: the free checks, then the two paid runs (B2 23:48–00:13, B3 00:15–00:20), then the free whole-book pass and the verification.*
 
-**Part A: every acceptance criterion verified, and it cost $0. Part B: not run — all three of the founder's answers are in; it waits only on Payload.** The founder said **"1.3x is fine"** and **"I want to keep the edit in leaf 9"**, and then, shown the figures below, chose **"Yes — all of Part B, up to $2.75"**, which is the explicit yes to speech the handoff asks for (B0, below). Payload on `:3001` is the founder's dev server and was still down at my last check, after the yes; I do not start it.
+**Every acceptance criterion is verified, Part B cost $0.2155, and nothing is published.** All 18 Leaves now wait as **pending drafts**: 144 audio rows, each serving the exact bytes in `final/` and carrying the digest of its own Leaf's *current* text — read back by REST (B5) and again by the new `narration-stale` command. Leaf 9's payoff was narrated fresh from the text it holds now (the founder's "keep the edit"), and both voices passed the guard on the first attempt. **What is not verified is the sound.** The guard read the whole book at 136 exact, 8 minor, 0 major of 144 clips, and it is a noisy listener (B6 has a case); whether ×1.3 is clearly faster *and not rushed* is the founder's ear (device gate, below). Publishing the 18 drafts in the admin is what gives Leaf 9's payoff its sound back — it has been silent since 2026-09-18.
 
 | | |
 |---|---|
 | Part A | A1 a drifted Leaf is held on its own · A2 `narrate --leaf N` · A3 `narration-stale` (free, read-only, its own command) · A4 a partial run cannot shrink a review · A5 the not-on-disk pin refuses any 12-character window · A6 README and docstrings match the code |
-| Gate | `ruff format --check` **133** files (baseline 130) · `ruff check` clean · `mypy` strict **115** (baseline 112) · `pytest` **750 passed** (baseline 690, **+60** = 39 in `test_narrate_hold.py` + 21 in `test_narration_stale.py`), 6 deselected as `live`. Run **without** the Vertex variables, as the handoff says |
-| Spend | **$0, no model called.** The saved ledger is identical before and after Part A: narration (speech) **$1.2964**, narration_guard **$0.7203**, **$2.0167** together |
-| Left alone | `raw/` 374 files, `final/` 216, `checks/` 268, `snapshots/` 55: each tree's hash identical before and after · the six `review-before-vo4/` files (below) identical · the greetings' sha256 `c79a8725…` and `e598939f…` identical · `git diff origin/main` of `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `assets/audio.py` and `prompts/` is empty, and nothing outside `apps/pipeline` changed |
+| Part B | **B1** the stale check named exactly Leaf 9's payoff, both voices, live · **B2** Leaves 10–17 attached (64 clips, 69 listens), Leaf 9 held NOT ON DISK, exit 1 as written · **B3** Leaf 9's two payoff clips synthesised, both exact on the first attempt · **B4** whole-book pass: 18 of 18 already held, $0, exit 0, reviews rebuilt at 72 clips a voice — **22:57** Achernar and **23:26** Sadaltager, from 29:11 and 29:52 at 1.0× · **B5** 144 of 144 bytes and 144 of 144 `textDigest`, live Leaves untouched · **B6** one take differs from the one VO-2.1 accepted (Leaf 2 scenario, Achernar); two lines are new words (Leaf 9's payoffs) · **B7** below |
+| Gate | After Part A, **re-run after Part B** (Part B changed no tracked file; `git status` clean): `ruff format --check` **133** files (baseline 130) · `ruff check` clean · `mypy` strict **115** (baseline 112) · `pytest` **750 passed** (baseline 690, **+60** = 39 in `test_narrate_hold.py` + 21 in `test_narration_stale.py`), 6 deselected as `live`. Run **without** the Vertex variables, as the handoff says (none was exported) |
+| Spend | Part A **$0, no model called.** **Part B $0.2155:** speech **+$0.0123** (the two payoff clips), guard **+$0.2032** (75 listens: B2 69 for $0.1884, B3 6 for $0.0148). Narration total **$2.0167 → $2.2322 of the $2.75 ceiling**, headroom **$0.5178**; the ceiling was never near. The handoff expected ≈ $0.24 and ≈ $2.26 |
+| Left alone | After Part A and again after Part B: the six `review-before-vo4/` files (below) identical · the greetings' sha256 `c79a8725…` and `e598939f…` identical · `git diff origin/main` of `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `assets/audio.py` and `prompts/` is empty, and nothing outside `apps/pipeline` (and this entry) changed. **`raw/` gained exactly the four files of the two clips B3 synthesised; the other 374 are byte-identical** (Part B, below) |
 | Mutation-checked | **56 breakages, 56 red, none survived** (A1 17, A2 6, A3 18, A4 11, A5 1, A6 3); every file restored and hash-verified after every run. Table below |
 | Existing tests | **Two modified, both named below, and one helper added** (`git diff --numstat origin/main`: `test_narrate_cli.py` +19 −10, `test_no_synthesis.py` +6 −2, `narration_fakes.py` +16 −0). Everything else is new |
 
@@ -542,13 +543,38 @@ list anyone reads.
 
 ## What the founder would notice
 
-- **Nothing yet.** Part A changes what the *next* `narrate` run does; it touched no Leaf and no audio. Leaf 9's payoff is still silent in the app, and stays so until Part B's B3 makes its two clips and the founder publishes the draft.
-- **After it:** a Leaf whose text was edited is named and skipped instead of stopping the run; `narrate --leaf N` does just those Leaves; `narration-stale` lists every silent slide in one read-only command; and a partial run writes its review beside a fuller one instead of replacing it.
+- **Nothing in the app yet.** Nothing is published: the 18 Leaves' new audio waits in pending drafts, and the published book is exactly as it was (every live Leaf's `updatedAt` and audio rows re-read and unchanged).
+- **After they publish:** the book's narration plays about **21% shorter** (the full-book review tracks go 29:11 → 22:57 in Achernar and 29:52 → 23:26 in Sadaltager) in the same two voices; and **Leaf 9's payoff has a play control in both voices again** — the thing missing since 2026-09-18. Every other slide is the same words in the same take VO-2.1 accepted, sped up, except one: the Leaf 2 scenario in Achernar (B6).
+- **For whoever runs `narrate` next:** a Leaf whose text was edited is named and skipped instead of stopping the run; `narrate --leaf N` does just those Leaves; `narration-stale` lists every silent slide in one read-only command; a partial run writes its review beside a fuller one instead of replacing it.
 
 ## Needs the founder
 
-1. **Payload on `:3001`.** `narrate` and `narration-stale` both read the Leaves through REST. Down at my last check; I don't start it. **This is the only thing Part B is waiting on.**
-2. ~~Yes to the money~~ — **given** (B0, below).
+1. **Listen** — the device gate, next section. You confirmed ×1.3 (B0). Leaves 10–17 have not been heard at ×1.3 by anyone, and Leaf 9's new payoff has not been heard at all.
+2. **Publish the 18 drafts in the admin.** That is the step that makes any of this audible, and it is what fixes Leaf 9's payoff. Publishing leaves the 144 old Media documents referenced by nothing (B7); the machine key cannot delete Media, so they stay until someone removes them.
+3. **Merge [#65](https://github.com/ayush237/ProjectZoomOut/pull/65)** (the code and this entry). Merging changes no audio.
+
+## Device gate — for the founder's ear
+
+*Every path is absolute and in `ZO-pipeline`, not `ZO`. Open the `.html` — the cue sheet is at the top and the audio is embedded; the `.mp3` is the same track.*
+
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-achernar.html` — Lara, **72 clips, 22:57 in total**
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-sadaltager.html` — Druv, **72 clips, 23:26 in total**
+
+Cue-sheet times (positions in each narrator's track):
+
+| Where | Achernar | Sadaltager |
+|---|---|---|
+| **Leaf 9 payoff — new, narrated from the text you kept** (B3) | **11:59** (18.4 s) | **12:12** (19.2 s) |
+| Leaf 9 as a run, to hear the payoff beside its neighbours: summary → scenario → payoff → takeaway | 11:19 → 11:43 → 11:59 → 12:18 | 11:31 → 11:54 → 12:12 → 12:32 |
+| **Leaf 2 scenario — the one take that differs from the one you approved** (B6) | **02:44** (9.5 s) | 02:47 (same take as before) |
+| Fastest clips, for "clearly faster, not rushed" (the cue sheet's overall pace, pauses in) | Leaf 10 payoff **13:03**, 217 wpm (typical payoff 161) · Leaf 0 summary 00:00, 188 | Leaf 14 scenario **18:09**, 204 wpm (typical 170) · Leaf 10 payoff 13:16, 197 |
+| Flagged by the cue sheet for its ending | — | Leaf 7 payoff **09:30**: "the model's audio ended mid-sound — the last syllable may be clipped". **Not new**: the 1.0× sheet flagged the same clip at 12:06, and the stretch keeps the model's own edges |
+
+**What to listen for:** clearly faster, not rushed; shorter pauses between sentences; any warble, doubled syllable or clipped consonant — the guard flagged none (0 major of 144), but it transcribes what it hears and is not a judge of artefacts, so name any clip you catch; takeaways that still come to rest; and that Leaf 9's new payoff sounds like the Leaves around it. The 8 clips the guard read as *minor* are one- and two-word differences, none of them a missing sentence — Leaf 5 payoff (both voices), Leaf 7 takeaway and Leaf 12 payoff and Leaf 13 summary (Achernar), Leaf 9 scenario, Leaf 11 scenario and Leaf 16 summary (Sadaltager): "apprentice" heard as "apprentices", "you have" as "you've", "antifragility" as "anti fragility".
+
+**Beside them, superseded, not deleted.** B2 and B3 each wrote a partial review next to the full one, as A4 says a partial run must: `ikigai-narration-{achernar,sadaltager}-leaves-0-8+10-17.{html,mp3,md}` (68 clips) and `…-leaves-9.{html,mp3,md}` (4 clips). The full tracks above cover all of it; the founder can delete those twelve files, and I did not. `review-before-vo4/` (the only 1.0× copy) and `review/vo4-before-after/` are untouched.
+
+**After publishing, in the app:** Leaf 9's payoff slide has a play control in both voices. That check is the founder's.
 
 ## B0 — the founder's answers
 
@@ -558,6 +584,7 @@ list anyone reads.
    - **B2, guard only, Leaves 10–17:** 64 clips; the most it can buy is **69 listens** (every reachable attempt, the retry chains on Leaf 12's scenario and Leaf 14's summary included), at the **$0.0025** each that VO-4's 77 listens cost: **$0.161–$0.174**. *The handoff estimated "≈ 77 listens, ≈ $0.21"; the raw cache says 69 at most.*
    - **B3, Leaf 9's payoff:** speech for two ~30 s clips **$0.0152** (worst case six, three attempts in each voice: **$0.0457**), plus **6–10** listens (**$0.015–$0.025**).
    - **Total** ≈ **$0.20** expected, **≈ $0.25** worst, taking the ledger to **≈ $2.21–$2.27** of the **$2.75** ceiling. `NarrationBudget` reserves a call's worst case *before* making it (**$0.164** for a speech call, **$0.032** for a listen), so the run cannot cross the ceiling: it halts instead, and raising it is the founder's decision.
+   - **What it actually cost (B7):** B2 **$0.1884** — *above* the $0.161–$0.174 I gave, which is a miss of mine (below) — and B3 **$0.0271** (speech $0.0123, listens $0.0148): **$0.2155** together, inside the "≈ $0.20 expected, ≈ $0.25 worst" the founder was shown.
 
 ---
 
@@ -644,6 +671,58 @@ Each breakage is a set of exact-match edits that must match exactly once, applie
 | D2 | A6 | The --no-synthesis help says a clip not on disk stops the run again | 2 | hold `no_text_says_a_missing_clip_stops_the_run`; hold `help_and_the_readme_describe_the_hold_and_the_options` |
 | D3 | A6 | The README does not mention the stale-check command | 1 | hold `help_and_the_readme_describe_the_hold_and_the_options` |
 
+## Part B — what ran, and what it found
+
+Every paid command ran with the ceiling inline (`ZOOMOUT_PIPELINE_MAX_NARRATION_USD=2.75`, never in `.env`) and its header shows it; one `narrate` process ran at a time; Payload on `:3001` is the founder's and I never started it. **The only synthesis anywhere was B3's two clips.**
+
+| Step | Command | What came out | Cost |
+|---|---|---|---|
+| **B1** | `narration-stale --run-id ikigai` | "compared 216 audio entries — 144 in the published versions, 72 in 9 pending drafts"; **exactly** `leaf 9 payoff female live stored 13c9a963 current 66262e04` and the male row; "1 stale slide in 1 Leaf — 2 audio entries (live 2, draft 0)"; exit 1. As predicted: nothing in any draft | $0 |
+| **B3a** | `narrate --run-id ikigai --leaf 9 --no-synthesis --tempo 1.3` | "HELD — NOT ON DISK: payoff (female, Achernar), payoff (male, Sadaltager); nothing rendered, listened to or attached" — **exactly the two clips**, no words printed; exit 1; spend line unchanged at $2.0167 | $0 |
+| **B2** | `narrate --run-id ikigai --no-synthesis --tempo 1.3` (24 min) | `budget : $2.0167 of the $2.75 voiceover ceiling`. Leaves 0–8 "already held"; **Leaf 9 held NOT ON DISK, nothing listened to**; Leaves 10–17 each "draft written; 8 uploaded; verified" (**64 clips**); guard "129 exact, 7 minor, 0 major, 0 unchecked — of 136 clips"; the review written **BESIDE** the 36-clip one (68 clips a voice); exit 1, because of Leaf 9 — as written | **$0.1884** for 69 listens; speech line unmoved |
+| **B3** | `narrate --run-id ikigai --leaf 9 --tempo 1.3` (4 min 38 s) | `budget : $2.2051 …`; **`will buy : 2 clips — leaf 9 payoff (female, Achernar), leaf 9 payoff (male, Sadaltager); and a retry for any clip the guard fails`**; both **exact on the first attempt** (18.4 s and 19.2 s at ×1.3); "draft written; 8 uploaded; verified"; guard 7 exact, 1 minor of 8; exit 0 | **$0.0271:** speech +$0.0123 (2 clips), 6 listens +$0.0148 |
+| **B4** | `narrate --run-id ikigai --no-synthesis --tempo 1.3` (39 s) | all **18** "draft already held this audio; 0 uploaded; verified"; guard "136 exact, 8 minor, 0 major, 0 unchecked — of 144 clips"; reviews rebuilt for all 18; exit 0 | **$0** |
+
+**What the paid runs put on disk — the handoff's "exactly".** The four trees, each hashed as the sha256 of its sorted per-file sha256 listing:
+
+| | before Part B | after B2 | after B3 | after B4 |
+|---|---|---|---|---|
+| `raw/` | 374 · `8d901c89…` | 374 · `8d901c89…` | **378** · `ff4c2995…` | 378 · `ff4c2995…` |
+| `final/` | 216 · `72c13790…` | 280 · `bb09f4d0…` | 288 · `012e5f3e…` | 288 · `012e5f3e…` |
+| `checks/` | 268 · `28a8c65e…` | 337 · `8747dab0…` | 343 · `35369431…` | 343 · `35369431…` |
+| `snapshots/` | 55 · `84b31ead…` | 72 · `5698f7e1…` | 73 · `d35e38e7…` | **91** · `f664cb0d…` |
+
+- **`raw/` did not change in B2** (guard only) and **gained exactly four files in B3**: `8b2b723b….{wav,json}` (Achernar's payoff) and `1aeec941….{wav,json}` (Sadaltager's), the two clips "will buy" named. A per-file sha256 listing taken immediately before B3 and one after differ only by those four lines: **none changed, none removed.** B3 listened to six clips, not eight: Achernar's summary and scenario had been listened to in VO-4's run.
+- **In the CMS**, Part B wrote nine drafts (Leaves 9–17; Leaves 0–8 already held VO-4's) and uploaded **72 Media documents** (B2 64, B3 8). It wrote nothing to any published version (B5).
+- **B4 is idempotent for everything but `snapshots/`.** The ledger, `raw/`, `final/` and `checks/` are identical to after B3, and by the code path (the already-attached branch calls no `update_leaf_draft`) and the 0 uploads it reports, the CMS was not written to. `snapshots/` rose 73 → 91: one local read-back file per Leaf visited (`leaf-NN-before-K`, K = snapshots already taken for that Leaf + 1), taken before the attach step knows whether there is anything to attach. That is VO-4's behaviour, not new (B2 added 17 and B3 one), roughly 20 KB each, and it grows with every pass over the book.
+
+**B5 — from outside, and by the check VO-4 lacked.** Two independent readers, against the real Payload, the machine key's identity checked first:
+- A REST script (scratch, not in the repo): **144 draft audio rows; served bytes equal the `final/` clip (sha256) for 144 of 144; `textDigest` equals the sha256 of the Leaf's current text for 144 of 144** — Leaf 9's payoff included; no Leaf without a pending draft; **no live Leaf changed** since the snapshot taken before B2 (`updatedAt` and every live audio row compared). Its first run failed before reading anything (no database URL in its environment); the numbers are from the rerun.
+- `narration-stale`: "compared 288 audio entries — 144 in the published versions, 144 in 18 pending drafts"; the only entries it reports are Leaf 9's payoff, both narrators, **live** (stored `13c9a963`, current `66262e04`) — "1 stale slide in 1 Leaf — 2 audio entries (live 2, draft 0)", exit 1. Expected: publishing the draft is what fixes them. The drafts are clean.
+
+**B6 — the take-change table.** Each of the 144 attached lines was matched to the take VO-2.1 accepted (every raw attempt re-rendered at 1.0× and matched to a pre-VO-4 `final/` mp3: 144 recovered) and the attached attempt compared. **144 = 141 the same take + 1 a different take + 2 new words.**
+
+| Line | VO-2.1 accepted | Attached now | The guard's reading | Listen |
+|---|---|---|---|---|
+| **Leaf 2 · scenario · Achernar** | attempt 2 at 1.0× — read 27 of 27, exact | attempt 1 at ×1.3 (9.5 s) | attempt 1 at ×1.3: **27 of 27, exact**. *The same attempt at 1.0×: 22 of 27* — not heard: "what is your next move" | Achernar **02:44** |
+| **Leaf 9 · payoff · Achernar** — *new words*, not a take choice | the live clip was made from the older sentence (`13c9a963…`) | new synthesis, attempt 1 at ×1.3 (18.4 s) | exact | Achernar **11:59** |
+| **Leaf 9 · payoff · Sadaltager** — *new words* | same | new synthesis, attempt 1 at ×1.3 (19.2 s) | exact | Sadaltager **12:12** |
+
+The Leaf 2 row is the one take the founder has not approved by ear. **A time-stretch cannot add words to a clip**, so the five words the guard did not hear at 1.0× were in attempt 1's audio all along; the likeliest reading is that VO-2.1 discarded a sound take on a bad reading. Whether attempt 1 *sounds* as good as the attempt 2 the founder approved is the ear's call. The guard is a noisy listener: the same samples read 22 of 27 and 27 of 27.
+
+**B7 — the figures.**
+
+| Node | Before Part B | After | Change |
+|---|---|---|---|
+| `narration` (speech) | $1.2964 | $1.3087 | **+$0.0123** (the two payoff clips) |
+| `narration_guard` | $0.7203 | $0.9235 | **+$0.2032** (B2 $0.1884 + B3 $0.0148; 75 listens, `checks/` 268 → 343) |
+| **narration total** | $2.0167 | **$2.2322** | **+$0.2155** — 81% of the $2.75 ceiling; **headroom $0.5178** |
+| whole run, every node | $6.3600 | $6.5755 | +$0.2155 |
+
+- **Idempotence run (B4): $0** — the spend line reads $2.2322 before and after.
+- **Orphans: 144.** The live versions point at 144 files, all 144 still in the CMS; the pending drafts point at 144 others; **none is in both**. When the founder publishes, **144 old Media documents are referenced by nothing**, and the machine key cannot delete Media.
+- **The review tracks, from the cue sheets' own lines:** `**72 clips, 22:57 in total.**` (Achernar) and `**72 clips, 23:26 in total.**` (Sadaltager); at 1.0× (`review-before-vo4/`) 29:11 and 29:52. The six `review-before-vo4/` files hash identically to the table above after Part B.
+
 ## What I got wrong, and what surprised me
 
 - **My listener could not tell one Leaf's clip from another's.** The stock fake voice makes audio from the text's *length* only, so Leaves 1, 2 and 3's payoffs were identical bytes, and my `{sha256 → text}` registry silently kept the last writer. A one-word mishearing is only "minor", so tests passed partly by luck, and the first `StopIteration` is what showed it. Fixed by a fake voice whose audio depends on the text and by a registry that **refuses to be built** if two texts share their bytes (`ContentBackend`, `prime`).
@@ -651,20 +730,17 @@ Each breakage is a set of exact-match edits that must match exactly once, applie
 - **I wrote an `assert` for type-narrowing in production code**, then replaced it with an explicit argument: the repo's standard is explicit errors, and `-O` would have stripped it.
 - **A regression script of mine said "144 of 216".** `final/` now holds two generations, the 144 originals and VO-4's 72 at ×1.3, and the script assumed one. Split by age and re-derived each at its own tempo, it reads 144/144 and 72/72.
 - **Cost of the tests:** the hold tests render real clips through the real command, so `test_narrate_hold.py` takes about 30 s of a suite that now takes about 50 s (it was ~22 s). The raw cache is bought once per module and copied per test, which took it from 51 s to 30 s.
+- **Part B — my "no other `narrate` is running" check before B3 was malformed, and I did not gate on it.** I counted processes by matching the text `zoomout-pipeline narrate`; it printed `2` beside "(must be 0)" and the paid run started in the same command anyway. The 2 were the harness's own shell wrappers, whose command lines contain that text: a read-only command with no `narrate` in it prints 2 the same way. No second `narrate` was running. B2's exit code was recorded and B3's header read B2's final $2.2051; the ledger moved by exactly B3's own printed delta ($2.2322 − $2.2051 = $0.0271 = $0.0123 + $0.0148); `raw/` gained the four files and `checks/` the six that B3 reports. B4's check was a real gate (processes whose command is not a `zsh -c` wrapper; abort unless there are none) and found none. The "one `narrate` at a time" rule held, but I had not verified it when I spent, and a check that is not a gate is not a check.
+- **Part B — B2 cost more than the figure I gave the founder, and the miss is mine:** **$0.1884** against the **$0.161–$0.174** I quoted before the yes. The 69-listen bound was exact (the run bought exactly 69); the dollar figure priced them at VO-4's $0.00252 a listen, and B2's came to $0.00273. Leaves 10–17's clips run about 4.5% longer than Leaves 0–8's (a mean of 18.6 s against 17.8 s), which explains about half of the 8.5% rise; I did not trace the rest. Part B still came in under the handoff's ≈ $0.24 ($0.2155) and the ceiling was never near, but the range I gave should have allowed for a dearer listen.
+- **Part B — my first B6 pass called 12 lines "new words", and ten were my script's error.** I compared a raw sidecar's text, which is the *spoken* text, with `textDigest`, which hashes the *field* text. The two are not byte-identical for some slides (Leaves 2, 4, 7, 11 and 14, both voices; I did not trace which characters), so ten correct lines read as changed. The live clip's `textDigest` equals the attached one for all ten, checked line by line, so the words never changed. Compared digest to digest (live against attached), exactly two lines differ: Leaf 9's payoffs. The B6 figures are from the corrected script, and anyone who matches a sidecar's text to a stored digest will meet the same trap.
+- **Part B — B4 is not idempotent for `snapshots/`** (73 → 91; explained under B7). I saw it because I measured the four trees after B4 instead of assuming a run that uploads nothing writes nothing. It is VO-4's behaviour and writes nothing to the CMS, but "idempotent" is true of the ledger, `raw/`, `final/` and `checks/`, not of that folder.
+- **Part B — in the good direction:** both payoff clips passed the guard on the first attempt, so B3 used none of its retry budget; speech cost **$0.0123** against the $0.0152 I estimated for two clips (worst case $0.0457).
 
 ## What I could not verify
 
-- **Nothing in Part A has run against the real CMS.** `narration-stale` and the hold were exercised against a fake Payload that replaces a group wholesale as the real one does; their first live run is B1. What the check relies on, that a pending draft is the newest version with `_status == "draft"` and a Leaf with none reports `published`, was *observed* on the real Payload during VO-4 (Leaf 0 after its attach: draft `draft`, live `published`; the rest `published`).
-- **The Part B figures are estimates** priced at the ledger's own rates; the 69-listen bound is exact, the dollar figure is not.
-
-## Part B — not run
-
-Needs Payload up and the founder's yes. As written in the handoff, with the stop rules:
-
-- **B1** (free) `narration-stale`: expected exactly Leaf 9's payoff, both narrators, live; nothing in any draft. **Anything else: stop and report.**
-- **B2** (guard only) `ZOOMOUT_PIPELINE_MAX_NARRATION_USD=2.75 narrate --run-id ikigai --no-synthesis --tempo 1.3`: Leaves 0–8 "already held" at $0; **Leaf 9 held NOT ON DISK, no listens**; Leaves 10–17 render, are listened to and attach; exit 1 because of Leaf 9; **the speech line must not move.**
-- **B3** (the only synthesis) first `narrate --leaf 9 --no-synthesis` (free): it must name **exactly** the two payoff clips, else stop. Then, with the founder's yes to *speech*, `narrate --run-id ikigai --leaf 9 --tempo 1.3`.
-- **B4** one whole-book pass, **B5** the re-verification by REST (all 144 draft rows' bytes *and* `textDigest`), **B6** the take-change table (Leaf 2 scenario Achernar is one), **B7** the report. The ledger total must stay under $2.75; if a run halts on the ceiling I stop and report.
+- **The sound.** Every "exact" above is a guard reading, a model's transcript of each clip, not a listening. It cannot judge pace, a warble or whether ×1.3 feels rushed, and B6's 22 of 27 against 27 of 27 on the same samples shows it can miss. That is the device gate, and it is the founder's.
+- **Playback in the app.** B5 proves what the backend's drop rule needs: every draft row's `textDigest` equals the sha256 of its slide's current text, compared as the backend compares it, and the CMS serves the exact clip bytes. I did not run the backend or the mobile app against the drafts, and nothing can play until the founder publishes.
+- **Part A against the real CMS: now done.** The hold and `narration-stale` were first exercised against a fake Payload; B1, B2 and B3a ran them against the real one and each did what the fake said. What the check relies on, that a pending draft is the newest version with `_status == "draft"` and a Leaf with none reports `published`, was seen on the real Payload in VO-4 and is what B1 and B5 read.
 
 ## Files touched
 
@@ -673,6 +749,7 @@ All under `apps/pipeline`; the one path outside it is this entry.
 - **Source:** `src/zoomout_pipeline/graph/narration_nodes.py` (`clip_key`, `MissingClip`, `missing_first_attempts`, `leaves_label`, `existing_review_clips`, `ReviewTarget`, `review_target`; `_render_attempt` builds its key through `clip_key`) · `src/zoomout_pipeline/graph/narration_stale.py` **(new)** · `src/zoomout_pipeline/cli.py` (`narrate`: `--leaf`, the pre-flight, the hold, the will-buy line, the review rule; `narration-stale`; `_checked_cms`; `_select_leaves`, `_planned_purchases`, `_will_buy`) · `README.md`.
 - **Tests, new:** `tests/test_narrate_hold.py` (39) · `tests/test_narration_stale.py` (21). **Changed, named above:** `tests/test_narrate_cli.py`, `tests/test_no_synthesis.py`, `tests/narration_fakes.py`.
 - **Deliberately untouched:** `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `assets/audio.py`, `prompts/`, `packages/shared`, every other app. **No Leaf's text was edited, Leaf 9's included.**
+- **Part B touched no tracked file except this entry.** What it wrote is under `runs/` (gitignored) and in the CMS: `raw/` +4, `final/` +72 (64 + 8), `checks/` +75, `snapshots/` +36 (17 + 1 + 18), the reviews under `review/`; and in Payload nine pending drafts (Leaves 9–17) and 72 Media documents. No published version was written.
 
 ---
 
