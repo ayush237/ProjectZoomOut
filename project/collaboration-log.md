@@ -1036,3 +1036,211 @@ Rough — I have no clock on it. Reading the flow and its ONBOARD-1 tests ~25%; 
 **Deliberately untouched:** `IntroScreen.tsx` and its four siblings, the 144 per-Leaf clips, how `NarrationControl` and `useNarration` behave, `apps/admin`, `apps/pipeline`, `projectplan.md`, `projectRoadmap.md`.
 
 ---
+
+### Completed: VO-4 — the tempo stretch shipped and verified; 9 of 18 Leaves attached, Leaf 9's own text drift blocks the rest — 2026-10-02
+
+*Pipeline Manager. Branch `vo-4-narration-tempo`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `5e352e8` (rebased once, cleanly, onto ONBOARD-3.1's merge — no file either package touched overlaps). PR: [#64](https://github.com/ayush237/ProjectZoomOut/pull/64) — the founder merges.*
+
+**11 of 14 acceptance criteria fully verified. Three are not, each named: #5's CLI leg runs and halts at Leaf 9 instead of completing; #6 (the real-clip table) is verified with a reported finding, not a silent pass; #9 (all 18 Leaves attached) stands at 9 of 18, blocked by a fact outside this package — Leaf 9's own text was edited after it was narrated, a week before this package started (its `updatedAt` is 2026-09-18).** Given the choice between finishing Leaf 9 (new synthesis, out of scope), fixing its text myself (not my role), or shipping the 9 clean Leaves now and naming the rest as a follow-up, **the founder chose the third, explicitly, in chat.**
+
+| | |
+|---|---|
+| Attached | **9 of 18 Leaves (0–8), 72 clips, all passing** — 69 exact, 3 minor (Leaf 5 payoff both voices, Leaf 7 takeaway Achernar; the same clips that were minor before the stretch). Verified independently by REST, not the command's own verdict: every served byte matches its URL's hash, every live Leaf's `updatedAt` is untouched, every clip's `tempo` is `1.3` in the run's own state |
+| Held at | **Leaf 9, by design.** `NarrationNotOnDiskError`, named, nothing reserved, nothing called. Leaves 10–17 never attempted — `narrate`'s loop stops the whole run on this error, not just the one Leaf, and there is no `--skip`. See "Leaf 9," below |
+| Spend | **$0.1937** this package: narration (speech) unchanged at **$1.2964** — confirming zero synthesis — narration_guard (listening) **$0.5266 → $0.7203**, which is **77 new listens** (72 kept clips + 3 retried first attempts + 2 on Leaf 9's Achernar summary and scenario, listened to before the halt at its payoff: ≈$0.006 on clips that were never attached). Ledger **$2.0167** of the **$2.75** ceiling the founder approved in chat, Google Cloud. A second run at the same tempo: **$0**, 0 uploads, "draft already held this audio" for all 9 |
+| Gate | `ruff format --check` **130** files (baseline 125) · `ruff check` clean · `mypy --strict` **112** files (baseline 107) · `pytest` **690 passed** (baseline 573, **+117**, 6 deselected as `live`). Every new test lives in 5 new files; **zero existing tests modified** |
+| Mutation-checked | **34 breakages** — the stretch's properties, the three render-placement traps, every no-synthesis case, the five pinned defaults plus `render_line`'s own, the state recording. **33 were red the first time; one survived** (the window-overlap property), which exposed a missing pin; the pin was added and that mutation re-run red. Every file restored and hash-verified after every run. Table below, with the tests that went red |
+
+---
+
+## What the founder would notice
+
+- **The book narration is ~30% faster, for 9 of 18 Leaves.** The other 9 wait on Leaf 9 (below) — not a quality problem with the stretch, a pre-existing fact about Leaf 9's text.
+- **Nothing was lost.** The old (1.0×) audio for Leaves 0–8 stays live and untouched until you publish; the new drafts wait beside it. Leaves 9–17 are exactly as they were.
+- **Leaf 9's payoff slide plays no narration for readers today, in either voice** — and has not since its text was edited. This is not caused by VO-4 and is not fixed by it: the backend drops an audio entry whose `textDigest` no longer matches the slide's current text (see "Leaf 9," below). The other 142 entries are fine.
+- **One real finding on the audio numbers, not hidden:** nearly half of Sadaltager's clips (32 of 72) miss the table's literal pitch tolerance — explained below; it looks like a measurement artefact rather than an audible change, but only an ear can confirm that.
+- **72 old Media documents will become orphans once you publish** (the machine key can't delete Media) — expected, named in the handoff, not a bug.
+- **The two review tracks now cover Leaves 0–8 only** (see "Device gate"); the full-book originals are preserved in `review-before-vo4/`.
+
+## Needs a ruling
+
+1. **Leaf 9.** Its payoff text changed after VO-2.1 narrated it (shown below, word for word), and the slide is silent until that is resolved. I presented three options in chat — finish at 9/18 now, fix the text first and I continue today, or synthesise it fresh as a separate paid step — **the founder chose the first.** What's left: decide what Leaf 9's payoff should actually say. **My recommendation: keep the edit.** VO-2.1's own report flagged the old sentence as reading like a slip ("the verb is correct for the compound subject, but it reads as a slip"), so the new wording looks deliberate, and the cost of narrating it fresh is about $0.03 (two clips, in the same run as the remainder — Follow-ups #1). **Reverting** is free and brings the audio back the moment the revert is published, but it undoes an apparent editorial fix to save three cents. It is the founder's text either way.
+2. **Should one drifted Leaf stop the whole run?** The handoff said a missing first attempt "stops the run", and it does — which is why one Leaf blocked eight clean ones. I'd make it **Leaf-local** (hold that Leaf, name it, carry on, exit non-zero — the shape `NarrationHeldError` already has). It is a ~10-line change with tests, but it reverses an explicit line of the handoff, so it is yours to rule, not mine to take.
+3. **The pitch-measurement finding** (Part 5, below) is reported, not resolved. `measure()`'s own `pitch_median_hz`/`voiced_fraction` is not touched by this package and the finding doesn't block anything, but it's worth an Architect look since it would affect how *any* future comparison across a stretch reads these three fields.
+
+---
+
+## Part 1 — the stretch (`assets/audio.py`)
+
+`change_tempo(pcm, tempo) -> Pcm`: WSOLA, pure NumPy, no new dependency — 30 ms frames, half-frame output hop, ±10 ms similarity search against the natural continuation of the last frame, periodic (not symmetric) Hann windows so two copies half a frame apart sum to exactly one. `tempo == 1.0` returns the input object itself. Deterministic (same bytes twice, verified). Refuses outside `1.0`–`1.5` **before** `shape_edges` is reached, via a shared `require_tempo` so a bad tempo is caught before anything is bought, not after.
+
+**Speed:** minutes at most for the whole set, as the handoff asked. A full pass over the 157 cached ruled-narrator attempts took between 24 s and about 2½ minutes across my runs (the spread is machine load, not the algorithm); the real-clip table, which renders every accepted clip twice and runs the pitch analysis on both, took about a minute.
+
+**Tested on synthetic signals, none reading `runs/`:** a sine keeps its frequency within 1% and its level within 1 dB at every tempo in range, with no step larger than the source signal's own slope allows (no clicks); tone–silence–tone shows every segment — both tones and the silence between — shrinking by the tempo, not just the tones; an exponential sweep and a two-tone signal both show **band power** within 3 dB everywhere (not peak-bin level, which a first draft used and which reported a false 1.2 dB "loss" on an unchanged 300 Hz tone — a Hann window's scalloping loss, not a real level change, and length-dependent in a way the stretch itself changes); identity at 1.0 is the same object, the same audio gives the same bytes twice, an empty clip comes back as itself; every value outside 1.0–1.5 including `nan`/`inf`/negative is refused. **One property a first pass missed and a mutation found:** a constant signal must come through as the same constant at every tempo — this is what actually proves the overlapping windows sum to one; a window that doesn't (a plain Hann instead of the periodic one) passed every other test here and still rippled the level by about 0.03 dB at the frame rate, invisible to a level tolerance. Added, and the mutation that exposed it is in the table below.
+
+## Part 2 — the three traps, and the real-clip confirmation
+
+All three are pinned at the unit level (`tests/test_tempo.py`, `tests/test_narration_tempo.py`) and separately confirmed on **all 144 real accepted clips** (Part 5):
+
+1. **Pads, loudness, peak.** The stretch runs *inside* `shape_edges`, after the head/tail are decided but before they're applied — so the 60 ms head and 350 ms tail are the constants `words_per_minute` subtracts, at every tempo, not the constants divided by it. Confirmed on the real set: 144/144 unchanged. Levelling runs a second time after the stretch (a stretch is not exactly level-neutral — proven on noise, not the tone-burst fake, which happens to come through level-neutral and would have hidden a missing second `level()` call).
+2. **The edge report describes the model's own ending, at every tempo.** `shape_edges` scans for speech, decides the breath-cut and the mid-sound-ending verdicts, **before** stretching — so a 0.30 s breath that would read as 0.23 s (under `MAX_DECAY_SECONDS`) at 1.3× if decided after the stretch is still cut, because the decision was never made on the stretched audio. Confirmed: `EdgeReport` identical at 1.0 and 1.3 on 144/144 real clips, `gain_db` identical on 144/144.
+3. **`raw/` is never written by a stretch, and the stretch runs once.** Confirmed by re-running the full 0–8 pass twice (once as the real paid run, once as its idempotent repeat): `raw/`'s tree hash is **identical** before and after both — `8d901c89…` — 374 files, byte for byte. Duration ratio is `1/tempo`, not `1/tempo²`, confirmed to within 0.5% on the spoken span of all 144 clips (Part 5).
+
+## Part 3 — no synthesis
+
+`--no-synthesis` (and the same keyword on `render_line`/`_render_attempt`) makes a run **unable** to buy a clip, not merely unlikely to: the speech backend is never touched, and `budget.reserve` for speech is never reached. Tested with a speech fake that **raises** on any call, across every case the handoff names: a cached first attempt (no call); a missing first attempt (`NarrationNotOnDiskError`, named, no call); a missing *later* attempt (ends that line's retries, keeps the best attempt so far — the same outcome as attempts exhausted, so a stretched clip the guard still fails holds its Leaf rather than causing a paid regeneration); a full 8-clip Leaf pass with the ledger's speech line unchanged to the cent.
+
+**Confirmed live, not just on the fake.** `narration` stayed at exactly **$1.2964** across both paid invocations of this package — the exact figure it was at before VO-4 touched anything. Every cent spent was `narration_guard`.
+
+## Part 4 — the five defaults
+
+`NARRATION_TEMPO = 1.3` is pinned equal in the constant, the CLI option's literal, `narrate`'s docstring, the README, and what `narrate` passes to `render_line` — five places, five tests, the same shape `test_attempt_defaults.py` used for the attempts ruling. `render_line`'s own default is `1.0` and is pinned **different** from `NARRATION_TEMPO`: every other caller — `audition-voices`, every existing test — keeps the model's own pace, confirmed by an AST scan of `cli.py` that `audition_voices` passes neither `tempo` nor `no_synthesis` to anything. `tempo` is carried on `RenderedClip` and recorded in `AttachedLeaf.media[...]`, confirmed live: every one of the 72 attached clips reads `tempo: 1.3` back from the run's own checkpoint state.
+
+## Part 5 — the free checks
+
+**5.1 The regression.** Both ways, exactly as specified, **free — no model is ever called:**
+(a) A throwaway script with `guard=None`, re-deriving all 144 accepted clips from their cached raw audio at tempo 1.0 through the real render path (`_render_attempt`) and comparing sha256 against `final/`: **144 of 144 equal.** (Built Payload-free, against the raw cache's own sidecars, since Payload was down when this check first ran; one real wrinkle — `narration_direction.md` was edited once early in Ikigai's history, leaving two raw files for one semantic attempt (Leaf 11 summary, Achernar, attempt 1) under two old prompts; deduplicating by (leaf, slide, voice, attempt, text) rather than by raw digest file fixed a self-inflicted double-count in the check script, not a defect in the code under test.)
+(b) The CLI, `ZOOMOUT_PIPELINE_MAX_NARRATION_USD=1.83 narrate --render-only --no-synthesis --tempo 1.0`: **all 72 clips of Leaves 0–8 printed `(cached)` (counted: 72 of 72), the ledger stayed at $1.8230 to the cent, no spend.** It then halts at Leaf 9 — the same halt the paid run later hit, for the same reason (below) — so it did **not** complete "with no HALT" as the handoff pictured, and it never reached the 72 clips of Leaves 9–17; those are covered by leg (a), which does re-derive all 144. Run twice (once before Payload went down, once after), same result both times. Everything this leg *can* prove, it proves at $0.
+
+**5.2 The real-clip table.** All 144 accepted clips, old vs. ×1.3, through `_render_attempt` with `guard=None, no_synthesis=True` — no listen, no spend.
+
+| Measure | Tolerance | Result (min / median / max) | Verdict |
+|---|---|---|---|
+| Duration ratio, spoken span (file minus the fixed 60 ms + 350 ms) | 1/1.3 = 0.7692 ±0.5% | 0.7687 / 0.7699 / 0.7716 | **144/144** |
+| Duration ratio, whole file, literal | 0.7692 ±0.5% | 0.7716 / 0.7741 / 0.7806 | **36/144** — see note |
+| Articulation rate (speech-only wpm), ratio | 1.3 ±3% | 1.274 / 1.292 / 1.312 | **144/144** |
+| Longest pause, new − old/1.3 | ±0.1 s | −0.082 / −0.001 / +0.092 | **144/144** |
+| Pace band (100–330 wpm of speech) | inside the band | 141 / 206 / 278 | **144/144**, fastest at 278 |
+| `EdgeReport` identical at 1.0 and 1.3 | equal | — | **144/144** |
+| `gain_db` identical | equal | — | **144/144** |
+| `pitch_median_hz`, new/old − 1 | ±2% | −0.51% / +0.76% / +7.96% | **111/144** — see finding |
+| `pitch_spread_semitones`, new − old | ±0.3 st | −0.71 / −0.03 / +1.09 | **128/144** — see finding |
+| `voiced_fraction`, new − old | ±0.03 | −0.047 / −0.007 / +0.026 | **122/144** — see finding |
+
+**The whole-file duration miss is a definition artefact, not a drift.** The mp3 encoder's own fixed delay and padding (well under a tenth of a second) doesn't scale with the tempo, so it's a bigger share of a shorter clip; the literal reading drifts from 1/tempo by a near-constant *absolute* offset. Measured on the spoken span alone — what `words_per_minute` actually reads — the ratio is dead on, 144/144.
+
+**The pitch/voicing finding, not tuned away.** The three misses above are **concentrated almost entirely in one voice**: Sadaltager fails pitch tolerance on 32 of 72 clips (median +1.93%), Achernar on 1 of 72 (median +0.35%); `voiced_fraction` the same shape (Sadaltager −0.026 median, 22/72 outside; Achernar 0/72). I didn't stop at the aggregate. A **frame-aligned** comparison — the same instant in the speech, before vs. after, matched by mapped time rather than by population statistics — shows the real pitch shift is **≤0.17 semitones (1%) even in the single worst clip** (the one that misses the batch tolerance by 7.96%). So the batch `pitch_median_hz`/`voiced_fraction` numbers are moving because the stretch slightly changes *which* borderline frames the autocorrelation-based voicing threshold (`SPEECH_DB + 5`, in `pitch_track`) counts as voiced for a lower-pitched voice — a property of `measure()`'s own aggregation, pre-existing and untouched by this package — not because any sound's pitch actually changed. I did not touch `pitch_track`, `measure`, or the thresholds to make this pass; the handoff's instruction was to report a table that misses its tolerance, not tune to it, and that's what this is.
+
+## Part 6 — the paid step
+
+Ledger, ceiling, expected cost and real headroom were given to the founder in chat before anything was spent — narration $1.2964, narration_guard $0.5266, ledger $1.8230 of $3.00 default; proposed ceiling $2.75; expected **≈$0.42** for a full 153-listen pass (144 kept + 9 earlier attempts on 7 lines that needed a retry — independently reconfirmed from this package's own regression, matching the handoff's own count exactly); real headroom **≈$0.93**, verified against `guard_worst_case_usd` (~$0.032/call reserved, ~$0.0028/call actually settled) rather than just quoted. **The founder said yes, with the ceiling at $2.75, after Payload was started.**
+
+**Leaf 0 first**, as instructed: `narrate --no-synthesis --tempo 1.3 --limit 1`, with the ceiling set inline; the header confirmed it before any spend (`budget : $1.8230 of the $2.75 voiceover ceiling`). 8 clips, all cached, all exact, draft written, 8 uploaded, verified — $1.8230 → $1.8417 (+$0.0187). Checked independently by REST before going further (below). Then the rest, no `--limit`: Leaves 1–8 the same way, **halting at Leaf 9** exactly as the free check had already predicted. Spend: $2.0167 of $2.75 — **$0.73 of the approved ceiling was never touched.**
+
+**The 77 listens, accounted for** (`checks/` went 191 → 268 files, every new one dated 2026-10-01): 72 kept clips for Leaves 0–8, plus 3 first attempts that failed and were retried (Leaf 3 Achernar summary; Leaf 7 scenario in both voices), plus **2 on Leaf 9's Achernar summary and scenario**. Those two are the avoidable part: a Leaf's clips are rendered line by line with the listen inline, so the run had already bought them when it reached Leaf 9's payoff and found it was not on disk. About $0.006, and they were never attached — but nothing about the order needs it (Follow-ups #2).
+
+*(One thing for my own record: the backgrounded invocation of the full pass was piped through `grep | tee` for log filtering, and that pipeline's own exit code — what the background-task notification reported — was `0`, because `tee` is the last command in the pipe and always exits 0 regardless of what `zoomout-pipeline` itself returned. The printed `HALTED:` line is unambiguous and only one code path produces it; a direct, unpiped re-run of the same command confirmed the real process exit code is `1`, as the code's `raise typer.Exit(1)` says it should be. Not a defect — a gap in how I invoked it the first time.)*
+
+## Part 7 — attach, verify, idempotence, orphans
+
+**Verified by REST, not the command's own verdict**, for all 9 attached Leaves: every one of the 72 draft audio rows' served bytes (`fetch_media`, hashed independently) match the sha256 embedded in their own URL; every live Leaf's `updatedAt` is byte-for-byte the same as a snapshot taken immediately before the paid step; every clip's `tempo` reads `1.3` from the run's own checkpoint state (`cms_narration`), not inferred.
+
+**A second run at the same tempo**, same command: all 9 Leaves report **"draft already held this audio; 0 uploaded; verified,"** spend unchanged at $2.0167 to the cent, and the halt at Leaf 9 reproduces identically. This is the determinism and idempotence proof.
+
+**Orphans:** all **72** of the old (tempo-1.0) Media documents for Leaves 0–8 are confirmed still present and findable by filename. They are not referenced by the pending drafts (which point at the new ×1.3 files) and will become true orphans the moment the founder publishes — expected, and the machine key cannot delete Media, per the handoff.
+
+## Leaf 9 — found, explained, handed off
+
+The live, published text of Leaf 9's `payoff.body`, today:
+
+> *"…while a secondary income stream, paired with small investments, exposes you to massive potential gains…"*
+
+What the attached (currently-live) audio was narrated from — the text in both attach-time snapshots (`runs/ikigai/audio/snapshots/leaf-09-before-1.json` and `-2.json`), which is also what the live rows' `textDigest` (`13c9a963…`) hashes. It is VO-2.1's re-render of this line after the founder corrected its text (the VO-2.1 handoff names Leaf 9's payoff as one of the two corrected texts). 291 characters:
+
+> *"…while a secondary income stream and small investments expose you to massive potential gains…"*
+
+(`raw/` also holds the text from before that correction — "…while small investments and a secondary income stream expose you…", also 291 characters, rendered the day before — which is why it has two candidates for this line.)
+
+**The text changed again after the attach.** Both snapshots still hold the narrated text, so the audio matched its slide when it was attached; Leaf 9's `updatedAt` is now 2026-09-18T04:38:18Z (live and draft alike), and nothing has written to it since, so the change happened at or before then. It reads like a grammar fix — singular "stream … exposes" for the old plural "stream and investments expose" — but that is my reading of the diff, not a recorded intent. The debt register's row *"No pipeline gate catches a misspelling"* (archive, closed 2026-09-22) records this Leaf's payoff being hand-edited and corrected, and may be this edit. **I did not verify who changed it or why**: Payload's version history would show it, and Payload was down when I tried to read it.
+
+**The live effect — which is not about VO-4:** `apps/backend/src/content/content.mapper.ts` drops a slide-audio entry whose `textDigest` no longer matches its narrated field's current text ("dropped rather than served"), with a non-fatal warning. So **Leaf 9's payoff slide plays no narration for either narrator today**; the other 142 entries are unaffected. I read this from the mapper's code and did not run the backend. Checked isolated: of all 144 live audio rows across all 18 Leaves, these two are the only ones whose `textDigest` no longer matches the Leaf's current text.
+
+On this package's side, the no-synthesis contract is working exactly as designed: a Leaf whose text no longer matches its cache stops the run rather than silently serving stale audio or silently buying new audio.
+
+I gave the founder three options in chat before doing anything further: finish this package at 9/18 now and name the rest as a follow-up; fix Leaf 9's text first (revert it, or confirm the edit and accept it needs fresh narration later) and I continue today; or treat a fresh synthesis of Leaf 9's current text as its own small paid step, out of this package's no-synthesis scope. **The founder chose the first, explicitly.** Nothing about Leaf 9 was changed by me — its live audio is exactly what it was before this package started.
+
+## Mutation table
+
+Every guard broken on purpose by a scratch harness (not kept in the repo): each breakage is a set of exact-match edits that must match exactly once, applied in place, the five new test files run in the foreground, then the files restored in a `finally` and verified byte-identical **by hash**. **34 breakages. 33 were red the first time; #33 survived** (see Part 1), a pin was added, and it was re-run red. `git status` was clean after every batch.
+
+Tests are named by file — **N** `test_narration_tempo`, **T** `test_tempo`, **S** `test_no_synthesis`, **D** `test_tempo_defaults`, **C** `test_narrate_cli` — with the `test_` prefix dropped. "Red" is the count of tests that failed; the three named are the first three that did, in the order pytest ran them (the harness printed three, not the full list).
+
+| # | Breakage | Red | First tests red |
+|---|---|---|---|
+| 1 | Stretch applied **after** `shape_edges` (pads scale) | 4 | N `the_clip_that_reaches_the_encoder_has_the_same_pads_loudness_and_peak[1.3]`, `[1.5]`, `a_breath_the_model_left_is_cut_from_the_stretched_clip_too` |
+| 2 | Stretch applied twice (1/tempo²) | 6 | N `the_edge_report_is_the_same_raw_at_tempo_1_0_and_1_3`, `a_clip_the_model_cut_off_mid_sound_is_still_reported…`, `a_breath_the_model_left_is_cut…` |
+| 3 | A stretched file written to `raw/` | 5 | N `a_stretched_render_leaves_every_raw_file_byte_identical_and_adds_none`, `a_clip_synthesised_at_a_tempo_is_stored_raw_as_the_model_returned_it`, `the_stretch_is_applied_once_not_twice` |
+| 4 | Edges decided on the stretched audio | 29 | T `the_edge_report_is_the_models_own_at_every_tempo[…]` (and its siblings) |
+| 5 | Lead-in stretched with the speech | 5 | T `the_head_and_the_tail_are_constants_at_every_tempo[1.3]`, `[1.5]`, `a_lead_in_shorter_than_the_pad_is_kept_as_the_model_made_it` |
+| 6 | No second `level()` after the stretch | 2 | N `a_stretch_that_comes_out_quieter_is_levelled_again_before_it_is_encoded[1.3]`, `[1.5]` |
+| 7 | `no_synthesis` branch never taken (reaches `synthesize`) | 4 | S `a_first_attempt_that_is_not_on_disk_is_a_typed_error_naming_the_line`, `a_failing_first_attempt_with_a_missing_second…`, `the_second_attempt_is_used_when_it_is_on_disk…` |
+| 8 | Refusal placed **after** `budget.reserve` | 3 | S `…typed_error_naming_the_line`, `…failing_first_attempt_with_a_missing_second…`; C `a_clip_that_is_not_on_disk_stops_the_run_cleanly_and_names_the_line` |
+| 9 | A missing *later* attempt raises instead of ending the retries | 2 | S `…failing_first_attempt_with_a_missing_second…`, `…second_attempt_is_used_when…` |
+| 10 | `render_line` doesn't pass `no_synthesis` down | 4 | S (the same first three as #7) |
+| 11 | The not-on-disk error repeats the line's words | 1 | S `…typed_error_naming_the_line` |
+| 12 | `narrate` doesn't catch the new error (a traceback, not a stop) | 1 | C `a_clip_that_is_not_on_disk_stops_the_run_cleanly_and_names_the_line` |
+| 13 | `--no-synthesis` on by default | 2 | D `no_synthesis_is_off_by_default`; C `without_no_synthesis_the_header_does_not_claim_it` |
+| 14 | `narrate` passes `no_synthesis=False` regardless of the flag | 2 | D `the_command_passes_the_option_and_the_switch_through_to_the_render`; C `…stops_the_run_cleanly…` |
+| 15 | Default place 1 — `NARRATION_TEMPO = 1.25` | 5 | D `the_narration_tempo_is_ruled_at_one_point_three`, `the_narrate_option_defaults_to_the_library_constant`, `narrates_docstring_states_the_default_the_code_has` |
+| 16 | Default place 2 — the option's literal is 1.2 | 3 | D `the_narrate_option_defaults_to_the_library_constant`, `the_help_shows_the_default_a_bare_run_will_use`; C `the_default_pace_is_what_actually_reaches_the_render` |
+| 17 | Default place 3 — `narrate`'s docstring says 1.4 | 1 | D `narrates_docstring_states_the_default_the_code_has` |
+| 18 | Default place 4 — README table row says 1.4 | 1 | D `the_readme_states_the_default_the_code_has` |
+| 19 | Default place 4 — README paragraph says 1.4 | 1 | D `the_readme_states_the_default_the_code_has` |
+| 20 | Default place 5 — `narrate` doesn't pass `tempo` | 2 | D `the_command_passes_the_option_and_the_switch_through…`; C `the_default_pace_is_what_actually_reaches_the_render` |
+| 21 | Default place 5 — `narrate` passes a hardcoded 1.0 | 2 | (the same two as #20) |
+| 22 | `render_line` defaults to `NARRATION_TEMPO` instead of 1.0 | 2 | N `render_line_keeps_the_models_pace_unless_it_is_asked_not_to`; D `render_lines_own_default_is_the_models_pace_and_deliberately_not_the_ruled_one` |
+| 23 | `render_line` drops the tempo it was given | 13 | N `a_breath_the_model_left_is_cut…`, `a_clip_synthesised_at_a_tempo_is_stored_raw…`, `the_stretch_is_applied_once_not_twice` (and ten more) |
+| 24 | `audition-voices` given a hardcoded `tempo=1.3` | 1 | D `the_audition_keeps_the_models_pace_and_may_still_buy` |
+| 25 | `_render_attempt` given defaults for `tempo`/`no_synthesis` | 1 | D `the_render_attempt_must_be_told_its_tempo_and_whether_it_may_buy` |
+| 26 | `tempo` not recorded in `AttachedLeaf.media` | 2 | N `the_tempo_is_recorded_on_every_clip_and_in_the_runs_state`, `the_state_says_when_a_clip_is_not_stretched_too` |
+| 27 | `RenderedClip` doesn't carry its tempo | 3 | N `a_clip_synthesised_at_a_tempo_is_stored_raw…`, `the_tempo_is_recorded_on_every_clip…`; S `a_cached_first_attempt_renders_and_calls_nothing` |
+| 28 | A bad tempo isn't refused before the synthesis | 5 | N `a_bad_tempo_is_refused_before_anything_is_bought[0.9]`, `[1.6]`, `[2.0]` |
+| 29 | `change_tempo` doesn't check its own range | 9 | T `a_tempo_outside_one_to_one_and_a_half_is_an_error[0.99]`, `[0.0]`, `[-1.3]` |
+| 30 | Tempo 1.0 returns a copy, not the input | 2 | T `a_tempo_of_one_returns_the_input_itself_not_a_copy`, `an_empty_clip_comes_back_as_it_was` |
+| 31 | The stretch isn't deterministic (noise injected) | 4 | T `a_sine_keeps_its_pitch_and_its_level_and_gains_no_clicks[1.1-60.0]`, `[1.3-60.0]`, `the_same_audio_gives_the_same_bytes_every_time` |
+| 32 | No similarity search (frames taken where they nominally fall) | 13 | T `a_sine_keeps_its_pitch_and_its_level_and_gains_no_clicks[1.1-60.0]`, `[1.1-150.0]`, `[1.1-440.0]` |
+| 33 | A plain Hann window instead of the periodic one (overlaps don't sum to 1) | **0 → 1** | **Survived** every other test. Red once `T a_constant_signal_comes_through_as_the_same_constant` was added |
+| 34 | `shape_edges` changes its own tempo-1.0 output (head pad off by a frame) | 5 | T `at_a_tempo_of_one_shape_edges_is_the_function_it_always_was[long lead-in, clean end]`, `[decay kept]`, `[breath cut]` |
+
+## What surprised me
+
+- **`measure()`'s own `pitch_median_hz` is noisier than I expected for a lower-pitched voice**, and it took a time-aligned comparison — not just a tighter tolerance — to tell a real pitch shift from a population-statistics artefact of which frames clear the voicing threshold.
+- **The exit-code pipe trap** in Part 6's footnote — I'd read `background-subshell-completion-notice` in memory and still walked into the *sibling* version of it (a `grep | tee` pipeline, not a `( … ) &` subshell) on the very command whose exit status mattered most.
+- **`narration_direction.md` really was edited mid-run**, exactly as the handoff warns it can be — I found the evidence (two raw files, one semantic attempt) by accident, deduplicating a regression script's own double-count, not by looking for it.
+
+## What I could not verify
+
+- **Whether the stretched audio actually sounds right.** Nothing in this pipeline can hear, by design — that's what the before/after folder below is for, and it needs the founder's ear, not mine.
+- **Leaves 10–17 at this tempo**, at all — never attempted, blocked entirely on Leaf 9.
+- **Who changed Leaf 9's payoff, when, and why.** I have the bounds (after the attach, at or before 2026-09-18T04:38:18Z) and the diff, not the provenance. Payload's version history would show it; Payload was down when I tried to read it, and it is the founder's dev server, not mine to start.
+- **That Leaf 9's payoff is silent in the app.** I read it from `content.mapper.ts`; I did not run the backend or open the app on that slide.
+
+## Device gate
+
+**Absolute path, in `ZO-pipeline` as ever:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/vo4-before-after/` — 9 before/after pairs (18 files) plus a `README.md` with a table of speech wpm, overall wpm and longest pause per pair. **Leaf 11**, both narrators, all four slides — its Sadaltager scenario clip has the longest pause in the whole 144-clip set (1.17 s → 0.91 s), the clearest test of "do the pauses feel shorter, not just the words." Plus the set's single fastest clip (Leaf 10, payoff, Achernar: 215 → 278 wpm) and single slowest (Leaf 11's own takeaway, Achernar: 108 → 141 wpm — already inside the Leaf 11 set). 
+
+**The two review tracks are not what the handoff pictured.** `narrate` builds `review/` from the clips a run rendered, and this run halted at Leaf 9, so `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-achernar.html` and `…/ikigai-narration-sadaltager.html` (each with its `.mp3` and `.md` beside it) now cover **Leaves 0–8 at ×1.3 only — 36 clips, 11:19 and 11:31.** The full-book tracks as they were before this package (72 clips, 29:11 and 29:52, at the model's own pace) are intact in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review-before-vo4/`, a copy taken before the first run. **`runs/` is gitignored and that copy is the only one — it should not be cleaned.** (An earlier commit of this entry called the new tracks the full ~28-minute ones; that was wrong.) They are reference, not something to sit through.
+
+**Listen for:** whether it's "clearly faster, not rushed"; whether the pauses feel shorter, not just the words; any artefact — warble, doubled syllable, clipped consonant, a word that sounds different, named by clip; whether the takeaways still come to rest or feel cut off. Nothing here proves the sound — that's the founder's ear, not a table.
+
+## Follow-ups for Architect
+
+1. **Leaf 9's text needs a ruling, and the remainder is then one command.** Two ways, with what each costs:
+   - **Keep the edit (my recommendation, Needs a ruling #1):** run `narrate --tempo 1.3` **without** `--no-synthesis`, ceiling set inline. Leaf 9's two payoff clips are synthesised (≈$0.03), everything else is cached. Leaves 0–8 report "already held" at $0; Leaves 9–17 are listened to (≈77 listens including retries on Leaf 12's scenario and Leaf 14's summary, ≈$0.21). **About $0.24 against $0.73 of headroom under the $2.75 ceiling** — an estimate from the ledger's own rates, not a measurement. This would also rebuild the review tracks for all 18 Leaves at ×1.3.
+   - **Revert the text:** no synthesis; the live audio plays again as soon as the revert is published, and `narrate --no-synthesis --tempo 1.3` then carries on past Leaf 9 for the first time with no code change.
+2. **Two small improvements to `narrate`, if you want them.** (a) Before the first paid listen of a Leaf, check that all eight of its raw clips are on disk (free); this run bought two listens on Leaf 9 before discovering its payoff wasn't. (b) A free, read-only **`--check-stale`**: list every slide whose attached `textDigest` no longer matches its Leaf's current text. I did this ad hoc with a 30-line script; it is what found Leaf 9 and what proved it is the only one. The underlying gap is that **nothing in the pipeline or the admin connects "text edited" to "audio stale"** — the only symptom is a silent slide and a backend warning.
+3. **Should one drifted Leaf stop the whole run** — Needs a ruling #2. Recommendation: Leaf-local.
+4. **`narrate` rebuilds `review/` from whatever it rendered**, so a halted run replaces the full-book tracks with a partial set (this one: 72 clips → 36). The originals are safe in `review-before-vo4/`, but it is a quiet way to lose a review. Minor; a name that carries the tempo and coverage, or refusing to shrink an existing review, would do.
+5. **The pitch-measurement finding** (Part 5.2) is a property of `pitch_track`'s voicing threshold and a lower-pitched voice, not of this package's stretch — worth a look if `measure()`'s pitch fields are ever used to gate anything automatically, since a stretch (or likely any DSP step that changes frame boundaries) can move them without any audible change.
+6. **The cost-ledger lock** (a register row, still open) is more pressing now than before ONBOARD-2.1 flagged it: this package ran real `narrate` invocations back to back by hand, and the remainder above is another one that must not race.
+
+## Files touched
+
+All under `apps/pipeline`; the one path outside it is this entry.
+
+- **Source:** `src/zoomout_pipeline/assets/audio.py` (`change_tempo`, `require_tempo`, `shape_edges(..., tempo=...)`, the tempo constants) · `src/zoomout_pipeline/graph/narration_nodes.py` (`NARRATION_TEMPO`, `NarrationNotOnDiskError`, `tempo`/`no_synthesis` on `render_line`/`_render_attempt`, `RenderedClip.tempo`, the module docstring) · `src/zoomout_pipeline/cli.py` (`narrate --tempo`/`--no-synthesis`, the header, the review preamble) · `README.md` (the tempo row and the no-synthesis paragraph).
+- **Tests, all new:** `tests/test_tempo.py` (Part 1, 68 cases) · `tests/test_narration_tempo.py` (Part 2's three traps plus the state/money checks, 22 cases) · `tests/test_no_synthesis.py` (Part 3, 7 cases) · `tests/test_tempo_defaults.py` (Part 4, 13 cases) · `tests/test_narrate_cli.py` (the command end to end as far as fakes reach, 7 cases).
+- **Runs (gitignored, not part of this diff):** `runs/ikigai/audio/review/vo4-before-after/` (new, 19 files) · `runs/ikigai/audio/review/ikigai-narration-*.{mp3,md,html}` **rewritten** by the paid run, Leaves 0–8 only · `runs/ikigai/audio/review-before-vo4/` (new: a copy of the pre-VO-4 `review/`, the only copy of the full-book tracks — do not clean) · `runs/ikigai/audio/raw/` untouched (confirmed by tree hash) · `runs/ikigai/audio/final/` gained **72** files, the ×1.3 mp3s (144 → 216); the 144 accepted originals are byte-identical (tree hash `b08db153…` before and after) · `runs/ikigai/audio/snapshots/` gained **19** (36 → 55: one per attach call — Leaf 0's first run, the full pass's nine, the repeat's nine) · `runs/ikigai/audio/checks/` grew by 77 real listens (accounted for in Part 6).
+- **Deliberately untouched:** `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `prompts/` (confirmed empty diff against `origin/main`), `packages/shared`, every other app.
+
+---

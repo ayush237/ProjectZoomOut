@@ -65,6 +65,23 @@ MIN_PAUSE_SECONDS = 0.15
 
 MP3_BITRATE_KBPS = 64
 
+# The range `change_tempo` accepts. Below 1.0 the frame positions its search is written around
+# would run backwards, and above 1.5 a constant stretch of speech starts to sound processed:
+# 1.5 already puts the fastest of Ikigai's clips near the pace band's ceiling (VO-4).
+MIN_TEMPO = 1.0
+MAX_TEMPO = 1.5
+
+# The stretch's frame, and how far either side of its nominal position a frame may be taken.
+# 30 ms holds two pitch periods of a low voice; +-10 ms is a full period of anything above
+# 50 Hz, so the search can always find a frame that lines up with the last one.
+_STRETCH_FRAME_SECONDS = 0.030
+_STRETCH_SEARCH_SECONDS = 0.010
+# How much a candidate loses, at the far end of the search, against one at its nominal
+# position. It breaks ties toward "do not move" - in silence every candidate scores the same,
+# and a frame that wandered there would move where the next word starts - and is far too small
+# to outweigh a real difference in how well two frames line up.
+_STRETCH_CENTRE_PULL = 0.01
+
 
 class AudioError(RuntimeError):
     """Audio that cannot be read, or that contains no speech."""
@@ -173,6 +190,84 @@ def concatenate(parts: Sequence[tuple[Pcm, float]]) -> Pcm:
     return Pcm(samples=np.concatenate(pieces).astype(np.float32), rate=rate)
 
 
+# ------------------------------------------------------------------------------ tempo
+
+
+def require_tempo(tempo: float) -> float:
+    """`tempo` itself if `change_tempo` accepts it, an `AudioError` if not.
+
+    Separate so a render can refuse a bad tempo **before** it asks the voice for anything - a
+    clip bought and then lost to a mistyped option is money spent on nothing.
+    """
+    if not (math.isfinite(tempo) and MIN_TEMPO <= tempo <= MAX_TEMPO):
+        raise AudioError(f"tempo must be between {MIN_TEMPO} and {MAX_TEMPO}, got {tempo!r}")
+    return tempo
+
+
+def change_tempo(pcm: Pcm, tempo: float) -> Pcm:
+    """The same audio `tempo` times as fast, at the same pitch: WSOLA, in NumPy alone.
+
+    **Not resampling** (that moves the pitch with the speed) and **not a phase vocoder** (it
+    smears consonants, which is where speech carries its words). Waveform-similarity overlap-add
+    cuts the audio into overlapping 30 ms frames, lays them down at half a frame's spacing, and
+    takes each one from within 10 ms of where a constant speed-up would put it - at whichever
+    position lines up best with what naturally follows the frame before. Every frame is a real
+    piece of the voice, joined to the last where their waveforms agree, so pitch and timbre are
+    the voice's own.
+
+    **Silence scales with the speech.** A 0.8 s dwell at 1.3x is a 0.6 s dwell: the overall pace
+    rises as much as the speech rate does, but a long pause is not thinned out beyond that.
+
+    Both ends are padded with half a frame of silence for the overlap and the padding is dropped
+    from the result, so the first and last sound are not tapered by the frame's window. The
+    output holds exactly `round(len / tempo)` samples. A pure function of its input: the same
+    samples in give the same samples out, which the clip's filename and its cached listening
+    both rest on.
+
+    `tempo == 1.0` returns `pcm` itself. Outside `MIN_TEMPO`..`MAX_TEMPO` is an `AudioError`.
+    """
+    require_tempo(tempo)
+    if tempo == MIN_TEMPO or pcm.samples.size == 0:
+        return pcm
+
+    total = int(pcm.samples.size)
+    half = max(2, round(_STRETCH_FRAME_SECONDS * pcm.rate / 2))
+    size = 2 * half
+    reach = max(1, round(_STRETCH_SEARCH_SECONDS * pcm.rate))
+    length = round(total / tempo)
+    # Output frame k lands at k * half of the padded output and is taken from about
+    # k * tempo * half of the padded input. Two frames cover every sample that is kept.
+    frames = 2 + (length - 1) // half
+    nominal = [round(k * tempo * half) for k in range(frames)]
+
+    padded = np.zeros(max(half + total, nominal[-1] + reach + size), dtype=np.float64)
+    padded[half : half + total] = pcm.samples
+    # Periodic, not symmetric: two of them half a frame apart sum to exactly 1, so a stretch
+    # that lined every frame up perfectly would change nothing about the level.
+    window = 0.5 - 0.5 * np.cos(2.0 * np.pi * np.arange(size) / size)
+    candidates = np.arange(2 * reach + 1)
+
+    out = np.zeros((frames + 1) * half, dtype=np.float64)
+    out[:size] += window * padded[:size]
+    start = 0
+    for k in range(1, frames):
+        # What the last frame's second half would have been followed by, had the audio simply
+        # carried on: the thing the next frame's first half should look like.
+        follows = padded[start + half : start + size]
+        lowest = max(0, nominal[k] - reach)
+        span = padded[lowest : nominal[k] + reach + half]
+        correlation = np.correlate(span, follows, mode="valid")
+        squares = np.concatenate(([0.0], np.cumsum(span * span)))
+        energy = np.maximum(squares[half:] - squares[:-half], 0.0)
+        scale = np.sqrt(energy * float(follows @ follows))
+        score = np.divide(correlation, scale, out=np.zeros_like(correlation), where=scale > 1e-12)
+        pull = _STRETCH_CENTRE_PULL * np.abs(candidates[: score.size] - (nominal[k] - lowest))
+        start = lowest + int(np.argmax(score - pull / reach))
+        out[k * half : k * half + size] += window * padded[start : start + size]
+
+    return Pcm(samples=out[half : half + length].astype(np.float32), rate=pcm.rate)
+
+
 # ----------------------------------------------------------------------------- levels
 
 
@@ -234,8 +329,17 @@ class EdgeReport:
         return self.raw_end_db > SPEECH_DB
 
 
-def shape_edges(pcm: Pcm) -> tuple[Pcm, EdgeReport]:
-    """The same head, the same tail, and no breath at the cut, on every clip."""
+def shape_edges(pcm: Pcm, *, tempo: float = MIN_TEMPO) -> tuple[Pcm, EdgeReport]:
+    """The same head, the same tail, and no breath at the cut, on every clip.
+
+    **`tempo` speeds up the speech between the two edges, and only that** (`change_tempo`, VO-4).
+    The edges are decided from the clip as the model returned it - where the speech starts,
+    whether what follows the last word is a decaying consonant or a breath - so the report is
+    the same at every tempo, and a 0.30 s breath is cut at 1.3x as it is at 1.0 rather than
+    shrinking to 0.23 s and slipping under `MAX_DECAY_SECONDS`. The head and the tail are then
+    the constants above, not the constants divided by the tempo, and the fades are laid on the
+    stretched speech. At 1.0 the result is the one this function has always returned.
+    """
     levels = frame_levels_db(pcm)
     frame = max(1, round(FRAME_SECONDS * pcm.rate))
     speech = np.flatnonzero(levels > SPEECH_DB)
@@ -250,9 +354,13 @@ def shape_edges(pcm: Pcm) -> tuple[Pcm, EdgeReport]:
     breath = decay_seconds > MAX_DECAY_SECONDS
     kept = round(BREATH_CUT_KEEP_SECONDS / FRAME_SECONDS) if breath else decay
 
+    onset = first * frame
     start = max(0, (first - round(HEAD_PAD_SECONDS / FRAME_SECONDS)) * frame)
     end = min(len(pcm.samples), (last + 1 + kept) * frame)
-    body = pcm.samples[start:end].copy()
+    # The lead-in stays as the model made it; the speech from the first loud frame on is what
+    # a tempo above 1.0 scales. At 1.0 the two pieces are exactly `pcm.samples[start:end]`.
+    stretched = change_tempo(Pcm(samples=pcm.samples[onset:end], rate=pcm.rate), tempo)
+    body = np.concatenate([pcm.samples[start:onset], stretched.samples]).astype(np.float32)
 
     fade_in = min(len(body), round(FADE_IN_SECONDS * pcm.rate))
     if fade_in:
@@ -390,10 +498,13 @@ def measure(pcm: Pcm) -> ClipMetrics:
 
 
 __all__ = [
+    "MAX_TEMPO",
+    "MIN_TEMPO",
     "AudioError",
     "ClipMetrics",
     "EdgeReport",
     "Pcm",
+    "change_tempo",
     "concatenate",
     "decode_mp3",
     "decode_wav",
@@ -403,6 +514,7 @@ __all__ = [
     "level",
     "measure",
     "pitch_track",
+    "require_tempo",
     "shape_edges",
     "speech_level_db",
 ]

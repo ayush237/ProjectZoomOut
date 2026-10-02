@@ -6,13 +6,20 @@ there, and Ikigai's has.
 
 ## Render — per line
 
-Cache → budget → Cloud TTS → **disk** → level and edge → mp3 → measure → listen.
+Cache → budget → Cloud TTS → **disk** → level and edge (**and stretch**) → mp3 → measure → listen.
 
 - **Cached by what was asked**, so nothing already paid for is bought twice. A re-run, a
   resumed run and the audition all draw from the same files; a new voice or a new direction
   is a new clip rather than a stale one.
 - **On disk before anything can fail.** The raw audio is the thing that cost money, and WP30
   lost its most important evidence to a temporary directory.
+- **Faster than the model, without buying anything (VO-4).** `tempo` speeds the speech up on the
+  way to the mp3 (`shape_edges`, `change_tempo`), from the raw audio as the model returned it.
+  `raw/` is never written by a stretch, so a stretched clip cannot be served back as raw and
+  stretched again, and the cache key does not move: the same asked-for clip, a different mp3.
+- **Unable to spend, on request.** `no_synthesis` refuses, before the budget or the client is
+  touched, any clip whose audio is not already on disk. The guard's listening is a separate
+  purchase and is not affected.
 - **Bounded regeneration.** A clip the guard calls major — a spoken tag, a dropped phrase —
   is attempted again, up to `MAX_NARRATION_ATTEMPTS` in all. Then the best attempt is kept and
   named in the review, because a Leaf with a flagged clip is a listening task, and a Leaf with
@@ -49,6 +56,7 @@ from typing import Any, Protocol
 
 from zoomout_pipeline.assets.audio import (
     HEAD_PAD_SECONDS,
+    MIN_TEMPO,
     TAIL_SILENCE_SECONDS,
     AudioError,
     ClipMetrics,
@@ -59,6 +67,7 @@ from zoomout_pipeline.assets.audio import (
     encode_mp3,
     level,
     measure,
+    require_tempo,
     shape_edges,
 )
 from zoomout_pipeline.assets.budget import NarrationBudget
@@ -119,6 +128,19 @@ NARRATION_NODES = frozenset({NARRATION_NODE, GUARD_NODE})
 # `tests/test_attempt_defaults.py`; the greeting library keeps its own (`MAX_GREETING_ATTEMPTS`).
 MAX_NARRATION_ATTEMPTS = 3
 
+# How much faster than the model's own pace a book's narration is played (VO-4). **Ruled by the
+# founder 2026-09-25**: at the device gate the lessons were "too slow and boring" next to the
+# narrator hellos, and a constant time-stretch of the clips already on disk was chosen over an
+# audition or a re-render. +30% takes the median lesson from about 160 to about 208 words a
+# minute of speech - audiobook pace - and the fastest clip from about 215 to about 280, inside
+# the pace band's 330. It is a founder's-ear number, not a derived one: matching the hellos would
+# take about 1.5x, which is where a stretch starts to sound processed.
+#
+# `narrate --tempo` defaults to this and `tests/test_tempo_defaults.py` pins the five places it is
+# stated. **`render_line`'s own default is 1.0, deliberately**: every other caller (the audition,
+# every existing test) keeps the model's pace, and only the command the founder runs is faster.
+NARRATION_TEMPO = 1.3
+
 MP3_MIME = "audio/mpeg"
 
 # How long a clip of unknown length is assumed to run, for charging a call that timed out and
@@ -142,6 +164,15 @@ class NarrationHeldError(NarrationWriteError):
     **A clip that says other words does not proceed — not with a flag.** It stays on disk and
     in the review track for a person to hear. The whole Leaf waits, because three clips and a
     silent fourth reads as a broken player rather than as a decision.
+    """
+
+
+class NarrationNotOnDiskError(RuntimeError):
+    """`no_synthesis` was asked to render a clip whose audio is not already on disk.
+
+    Nothing was synthesised and nothing was reserved. It names the line and the voice, never the
+    words: a Leaf's text is ZoomOut's own prose, but an error message is read and logged in
+    places its text was never meant to be.
     """
 
 
@@ -238,10 +269,18 @@ class RenderedClip:
     guard_failed: bool
     from_cache: bool
     attempts_made: int = 1
+    # How much faster than the model's own audio this clip plays (1.0 = as it came back). Carried
+    # so the run's state records which clips are stretched, and so a reader of `cms_narration`
+    # never has to infer it from a filename or a date.
+    tempo: float = MIN_TEMPO
 
     @property
     def words_per_minute(self) -> float:
-        """The pace a listener hears: words over the clip's spoken span, pauses included."""
+        """The pace a listener hears: words over the clip's spoken span, pauses included.
+
+        The head and the tail are subtracted as the constants they are: `_render_attempt` gives
+        every clip the same 60 ms and 350 ms whatever its tempo, which is what keeps this figure
+        honest for a stretched clip."""
         spoken = self.duration_seconds - HEAD_PAD_SECONDS - TAIL_SILENCE_SECONDS
         return speaking_rate(self.line.text, spoken)
 
@@ -301,21 +340,50 @@ def render_line(
     record: SpendSink,
     guard: Guard | None,
     max_attempts: int = MAX_NARRATION_ATTEMPTS,
+    tempo: float = MIN_TEMPO,
+    no_synthesis: bool = False,
 ) -> RenderedClip:
-    """One line, spoken, checked, and ready to upload — the best of at most `max_attempts`."""
+    """One line, spoken, checked, and ready to upload — the best of at most `max_attempts`.
+
+    **`tempo`** speeds the speech up by that factor without synthesising anything: the clip is
+    made from the model's audio as it came back, exactly as before, and stretched on the way to
+    the mp3. Its default is 1.0 - the model's own pace - and stays there: `narrate` passes
+    `NARRATION_TEMPO` and everything else, the audition included, keeps the pace it always had.
+
+    **`no_synthesis`** makes the render unable to buy a clip. Cloud TTS is never called and no
+    speech is reserved against the budget; the guard still listens, and still costs. A first
+    attempt that is not on disk is a `NarrationNotOnDiskError`. A *later* attempt that is not on
+    disk ends this line's retries and keeps the best attempt so far, the same outcome as
+    attempts exhausted - so a clip the guard still fails holds its Leaf, and does not cause a
+    paid regeneration.
+    """
     tried: list[RenderedClip] = []
     for attempt in range(1, max_attempts + 1):
-        clip = _render_attempt(
-            line=line,
-            speech=speech,
-            voice=voice,
-            prompt=prompt,
-            attempt=attempt,
-            store=store,
-            budget=budget,
-            record=record,
-            guard=guard,
-        )
+        try:
+            clip = _render_attempt(
+                line=line,
+                speech=speech,
+                voice=voice,
+                prompt=prompt,
+                attempt=attempt,
+                store=store,
+                budget=budget,
+                record=record,
+                guard=guard,
+                tempo=tempo,
+                no_synthesis=no_synthesis,
+            )
+        except NarrationNotOnDiskError:
+            if not tried:
+                raise
+            _log.warning(
+                "narration.retries_ended_not_on_disk",
+                leaf=line.order,
+                slide=line.slide.value,
+                voice=voice,
+                attempt=attempt,
+            )
+            break
         tried.append(clip)
         if clip.passed:
             break
@@ -352,7 +420,12 @@ def _render_attempt(
     budget: NarrationBudget,
     record: SpendSink,
     guard: Guard | None,
+    tempo: float,
+    no_synthesis: bool,
 ) -> RenderedClip:
+    # Before anything can be bought: a bad tempo found after a synthesis is a clip paid for and
+    # never used.
+    require_tempo(tempo)
     digest = clip_digest(
         model=speech.model,
         voice=voice,
@@ -365,6 +438,13 @@ def _render_attempt(
     from_cache = raw_path.exists()
     if from_cache:
         raw = decode_wav(raw_path.read_bytes())
+    elif no_synthesis:
+        # Refused before `budget.reserve` and before the client is touched: this branch is what
+        # makes a run over cached audio unable to buy a clip.
+        raise NarrationNotOnDiskError(
+            f"{line.label} in {voice} (attempt {attempt}) is not on disk, and this run may not "
+            "synthesise. Nothing was reserved and nothing was called."
+        )
     else:
         budget.reserve(
             worst_case_usd=worst_case_usd(
@@ -433,8 +513,18 @@ def _render_attempt(
             record(spend)
             budget.settle(spend.usd)
 
+    # **Where the stretch goes, and why.** The model's audio is levelled and its edges decided as
+    # ever, from the audio as the model returned it: `edges` is therefore the same at every tempo,
+    # which is what the review's "cut a breath" and "ended mid-sound" notes rest on. A tempo above
+    # 1.0 then speeds up only the speech between the two edges, inside `shape_edges`, so the head
+    # and the tail are the 60 ms and 350 ms `words_per_minute` subtracts as constants rather than
+    # those divided by the tempo. The result is levelled once more: a stretch is not exactly
+    # level-neutral, and the loudness and the peak ceiling belong to what reaches the encoder.
+    # Nothing here writes to `raw/`, which holds what the model returned and nothing else.
     levelled, gain_db = level(raw)
-    shaped, edges = shape_edges(levelled)
+    shaped, edges = shape_edges(levelled, tempo=tempo)
+    if tempo != MIN_TEMPO:
+        shaped, _residual_gain_db = level(shaped)
     mp3 = encode_mp3(shaped)
     decoded = decode_mp3(mp3)
     content_hash = hashlib.sha256(mp3).hexdigest()
@@ -480,6 +570,7 @@ def _render_attempt(
         check=check,
         guard_failed=guard_failed,
         from_cache=from_cache,
+        tempo=tempo,
     )
 
 
@@ -687,6 +778,9 @@ def attach_leaf_narration(
             "textDigest": ref.text_digest,
             "attempt": clip.attempt,
             "severity": clip.severity.value if clip.severity is not None else None,
+            # Which clips are stretched, and by how much, is state worth keeping: nothing in
+            # the CMS says so.
+            "tempo": clip.tempo,
         }
 
     already = all(
@@ -731,11 +825,13 @@ __all__ = [
     "MAX_NARRATION_ATTEMPTS",
     "NARRATION_NODE",
     "NARRATION_NODES",
+    "NARRATION_TEMPO",
     "AttachedLeaf",
     "ClipStore",
     "Guard",
     "NarrationCms",
     "NarrationHeldError",
+    "NarrationNotOnDiskError",
     "NarrationWriteError",
     "RenderedClip",
     "attach_leaf_narration",

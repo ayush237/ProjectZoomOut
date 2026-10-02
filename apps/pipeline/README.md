@@ -283,6 +283,7 @@ uv run zoomout-pipeline narrate --run-id ikigai --listen-for moai
 | Synthesis | LINEAR16, cached under a hash of everything asked | Nothing paid for is bought twice; a new voice or direction is a new clip |
 | Budget | Reserves the **longest response Cloud TTS can return** before each call | A clip's length is the model's choice; the ceiling is a stop, not a report |
 | Levelling | Every clip to the same speech loudness, 60 ms head, 350 ms tail, breath cut | A set, not 72 files; VO-3's player can rely on how a clip ends |
+| Tempo | `--tempo` (default 1.3, between 1.0 and 1.5): the speech between the head and the tail is time-stretched, pitch kept, from the raw audio on disk | The lessons ran slow beside the hellos (VO-4); a stretch buys no clip, and the head, tail, loudness and peak ceiling are set around it |
 | Encoding | 64 kbps mono mp3, measured by decoding the uploaded bytes | `Media` accepts `audio/mpeg` only; `durationSeconds` is measured, not estimated |
 | Guard | A **blind** transcript (Gemini on Vertex), compared word by word | A clip that says other words is a fabrication in an author's name |
 | Pace | Words per minute **of speech**, pauses excluded, must be 100–330 | Catches a spoken direction even when the transcriber leaves it out |
@@ -294,6 +295,26 @@ default 3; attempts already on disk are reused) holds its **whole Leaf**: not at
 and left in the review track for a person — and now that holds across both narrators, not just
 across a Leaf's four slides. Spend is written back to the run after every call, and a timed-out
 call is charged even when no clip came back.
+
+**Faster than the model's own pace (VO-4).** `narrate --tempo` (default 1.3) time-stretches every
+clip on its way to the mp3 — waveform-similarity overlap-add in `assets/audio.py:change_tempo`,
+NumPy only, at the same pitch — **from the raw audio already in `raw/`, so it synthesises
+nothing**. The founder ruled it on 2026-09-25: at the device gate the lessons were "too slow and
+boring" beside the narrator hellos, and an audition or a re-render was ruled out. Only the speech
+between the two edges is stretched, so every clip keeps the 60 ms head, the 350 ms tail, the speech
+loudness and the peak ceiling, and its edge report still describes the model's own ending. **The
+pauses shrink with the speech** (0.8 s is 0.6 s at 1.3×): the overall pace rises as much as the
+speech rate, but a long pause is not thinned out beyond that. `raw/` is never written by a stretch.
+**A new tempo is a new file**: it is listened to again (the guard's cost), uploaded under a new
+name, and the old Media stays in the CMS as an orphan — the machine key cannot delete Media.
+`--tempo 1.0` reproduces the clips already attached, byte for byte. `render_line`'s own default is
+1.0, so `audition-voices` and every other caller keep the model's pace.
+
+**`--no-synthesis` makes a run unable to buy a clip**, not merely unlikely to: Cloud TTS is never
+called and nothing is reserved for speech. A clip whose audio is not on disk stops the run and
+names the line; a *retry* that is not on disk ends that line's retries and keeps the best attempt
+so far, so a clip the guard still fails holds its Leaf rather than causing a paid regeneration.
+It forbids speech only — the guard's listens still happen, and still cost.
 
 **`textDigest`** is `sha256` hex of the narrated field exactly as the clip was made from it —
 `assets/narration.py:text_digest`, never `speakable()`'s TTS-rewritten form. The backend
