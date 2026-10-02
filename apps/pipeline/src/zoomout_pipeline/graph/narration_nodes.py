@@ -20,6 +20,17 @@ Cache → budget → Cloud TTS → **disk** → level and edge (**and stretch**)
 - **Unable to spend, on request.** `no_synthesis` refuses, before the budget or the client is
   touched, any clip whose audio is not already on disk. The guard's listening is a separate
   purchase and is not affected.
+
+## Plan — before anything is bought (VO-4.1)
+
+`narrate` asks the cache's own key, for free, what a run will need: `missing_first_attempts`
+runs `clip_key` over each Leaf's *current* text. A `--no-synthesis` run **holds** a Leaf with any
+clip missing — named, nothing rendered or listened to — and carries on with the next; a run that
+may synthesise prints what it is about to buy. `render_line` and `_render_attempt` are unchanged
+for library callers and still raise `NarrationNotOnDiskError`; deciding that one Leaf's edited
+text must not stop eight clean ones is the command's job, not the render's. `review_target` is
+the same kind of decision for the review tracks: a partial run writes beside a fuller review
+instead of replacing it.
 - **Bounded regeneration.** A clip the guard calls major — a spoken tag, a dropped phrase —
   is attempted again, up to `MAX_NARRATION_ATTEMPTS` in all. Then the best attempt is kept and
   named in the review, because a Leaf with a flagged clip is a listening task, and a Leaf with
@@ -49,7 +60,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+import re
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
@@ -74,10 +86,12 @@ from zoomout_pipeline.assets.budget import NarrationBudget
 from zoomout_pipeline.assets.narration import (
     NARRATED_FIELDS,
     NARRATOR_VOICES,
+    NarratedSlide,
     NarrationLine,
     clip_alt,
     clip_digest,
     clip_filename,
+    direction_for,
     narrator_for_voice,
     text_digest,
 )
@@ -112,6 +126,7 @@ from zoomout_pipeline.cms.mapper import (
 from zoomout_pipeline.cost import RunCost, TokenSpend
 from zoomout_pipeline.llm.client import LLMError, StructuredClient
 from zoomout_pipeline.logging import get_logger
+from zoomout_pipeline.models import NarratorId
 
 _log = get_logger(__name__)
 
@@ -172,7 +187,8 @@ class NarrationNotOnDiskError(RuntimeError):
 
     Nothing was synthesised and nothing was reserved. It names the line and the voice, never the
     words: a Leaf's text is ZoomOut's own prose, but an error message is read and logged in
-    places its text was never meant to be.
+    places its text was never meant to be. `narrate` treats it as a hold on that one Leaf
+    (VO-4.1), not a stop for the run.
     """
 
 
@@ -234,6 +250,136 @@ class ClipStore:
         path = folder / f"leaf-{order:02d}-before-{taken + 1}.json"
         path.write_text(json.dumps(documents, indent=2, ensure_ascii=False), encoding="utf-8")
         return path
+
+
+# ----------------------------------------------------------------------------- plan
+#
+# What a run is going to do, decided before it does anything and for free. Nothing here calls a
+# model, reads audio, or writes a file: a key, a `stat`, and the text of a review's cue sheet.
+
+
+def clip_key(
+    *, speech: SpeechClient, voice: str, prompt: str, line: NarrationLine, attempt: int
+) -> str:
+    """The raw cache's key for one attempt at one line — **the only place it is built.**
+
+    `_render_attempt` reads and writes `raw/` through it, and the pre-flight below asks it
+    whether a clip is already paid for. They must agree to the character, because the
+    pre-flight is only worth anything if it answers the question the render is about to ask. The
+    key includes the line's *text*, which is what turns a Leaf whose words were edited after it
+    was narrated into a cache miss instead of a stale hit.
+    """
+    return clip_digest(
+        model=speech.model,
+        voice=voice,
+        language=speech.language_code,
+        prompt=prompt,
+        text=line.spoken,
+        attempt=attempt,
+    )
+
+
+@dataclass(frozen=True)
+class MissingClip:
+    """A clip whose first attempt is not in `raw/`, named by slide and narrator and **never by
+    its words**: an error message is read and logged in places a Leaf's text was never meant
+    to be."""
+
+    slide: NarratedSlide
+    narrator: NarratorId
+    voice: str
+
+    def describe(self) -> str:
+        return f"{self.slide.value} ({self.narrator.value}, {self.voice})"
+
+
+def missing_first_attempts(
+    *,
+    lines: Sequence[NarrationLine],
+    narrators: Mapping[NarratorId, str],
+    speech: SpeechClient,
+    store: ClipStore,
+    direction: Callable[[NarratedSlide], str] = direction_for,
+) -> list[MissingClip]:
+    """Every clip of `lines`, in every narrator's voice, whose first attempt is not on disk.
+
+    **Through the cache's own key over the lines' current text** (`clip_key`), not through a
+    proxy for it. The VO-4 handoff said all 144 accepted clips were cached, having checked by
+    (Leaf, slide, voice); that key passes exactly when the text has drifted, which is the case
+    that matters, and the run halted at Leaf 9's payoff for it. In render order: each narrator's
+    voice in turn, each line in reading order.
+    """
+    missing: list[MissingClip] = []
+    for narrator, voice in narrators.items():
+        for line in lines:
+            digest = clip_key(
+                speech=speech, voice=voice, prompt=direction(line.slide), line=line, attempt=1
+            )
+            if not store.raw_path(digest).exists():
+                missing.append(MissingClip(slide=line.slide, narrator=narrator, voice=voice))
+    return missing
+
+
+_REVIEW_CLIPS = re.compile(r"\*\*(\d+) clips, ")
+
+
+def leaves_label(orders: Iterable[int]) -> str:
+    """Leaf orders as ranges, for a file name that says what it covers: `0-3+8+10-11`."""
+    runs: list[list[int]] = []
+    for order in sorted(set(orders)):
+        if runs and order == runs[-1][1] + 1:
+            runs[-1][1] = order
+        else:
+            runs.append([order, order])
+    return "+".join(str(first) if first == last else f"{first}-{last}" for first, last in runs)
+
+
+def existing_review_clips(destination: Path) -> int | None:
+    """How many clips the review at `destination` (no suffix) holds: **0** if there is none, and
+    **None** if there is one whose count cannot be read — which a caller must take as "do not
+    overwrite", since a review nobody can read the size of cannot be shown to be smaller."""
+    parts = [destination.with_suffix(suffix) for suffix in (".mp3", ".md", ".html")]
+    if not any(part.exists() for part in parts):
+        return 0
+    sheet = destination.with_suffix(".md")
+    if not sheet.exists():
+        return None
+    found = _REVIEW_CLIPS.search(sheet.read_text(encoding="utf-8"))
+    return int(found.group(1)) if found else None
+
+
+@dataclass(frozen=True)
+class ReviewTarget:
+    """Where one voice's review is written, and whether that is beside the existing one."""
+
+    destination: Path
+    beside: bool
+    existing_clips: int | None
+    covered: str
+
+
+def review_target(
+    *, folder: Path, name: str, asked: Iterable[int], covered: Iterable[int], clips: int
+) -> ReviewTarget:
+    """Where a run's review is written: over the existing one, or beside it.
+
+    **A partial run cannot shrink a review.** VO-4's run covered Leaves 0-8, rebuilt `review/`
+    from them, and replaced the 72-clip full-book tracks with 36-clip ones; the originals
+    survived only because a copy had been taken by hand. So a run overwrites an existing review
+    only when it covers **every Leaf it was asked for and at least as many clips** as the review
+    it replaces. Anything else is written beside it, under a name that carries the coverage
+    (`<name>-leaves-0-8+10-17`). With no existing review there is nothing to shrink and the
+    standard name is used; an existing review whose size cannot be read is never overwritten.
+    """
+    standard = folder / name
+    existing = existing_review_clips(standard)
+    covered_set = set(covered)
+    label = leaves_label(covered_set)
+    if existing == 0:
+        return ReviewTarget(standard, False, 0, label)
+    if existing is not None and covered_set >= set(asked) and clips >= existing:
+        return ReviewTarget(standard, False, existing, label)
+    return ReviewTarget(folder / f"{name}-leaves-{label}", True, existing, label)
 
 
 # ---------------------------------------------------------------------------- render
@@ -426,14 +572,7 @@ def _render_attempt(
     # Before anything can be bought: a bad tempo found after a synthesis is a clip paid for and
     # never used.
     require_tempo(tempo)
-    digest = clip_digest(
-        model=speech.model,
-        voice=voice,
-        language=speech.language_code,
-        prompt=prompt,
-        text=line.spoken,
-        attempt=attempt,
-    )
+    digest = clip_key(speech=speech, voice=voice, prompt=prompt, line=line, attempt=attempt)
     raw_path = store.raw_path(digest)
     from_cache = raw_path.exists()
     if from_cache:
@@ -829,12 +968,19 @@ __all__ = [
     "AttachedLeaf",
     "ClipStore",
     "Guard",
+    "MissingClip",
     "NarrationCms",
     "NarrationHeldError",
     "NarrationNotOnDiskError",
     "NarrationWriteError",
     "RenderedClip",
+    "ReviewTarget",
     "attach_leaf_narration",
+    "clip_key",
+    "existing_review_clips",
+    "leaves_label",
+    "missing_first_attempts",
     "narration_spent_usd",
     "render_line",
+    "review_target",
 ]

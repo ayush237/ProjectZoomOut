@@ -1530,6 +1530,49 @@ class RunLedger:
         self._graph.update_state(self._config, {"cost": self.cost})
 
 
+def _checked_cms(
+    deps: Any, state: PipelineState, track_id: int, *, purpose: str
+) -> tuple[Any, dict[str, Any], list[dict[str, Any]]]:
+    """The CMS client, who it is, and the run's Leaves in order — before anything is read or
+    written through it.
+
+    **Who, before what.** A wrong auth scheme is served as anonymous with a 200, drafts vanish,
+    and an empty Track reads as "nothing to do" — so an anonymous key is refused here, and a
+    Track whose Leaves are not the ones this run wrote is refused too. Shared by `narrate` and
+    the stale check (VO-4.1), which must be able to say "nothing is stale" only when it could
+    actually see the drafts.
+    """
+    from zoomout_pipeline.cms.client import PayloadClient
+
+    settings = deps.settings
+    client: Any = deps.payload_client or PayloadClient(
+        base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+    )
+    identity = client.whoami()
+    if not identity.get("email"):
+        typer.secho(
+            "Payload served this key as ANONYMOUS — refusing to continue. Check "
+            "ZOOMOUT_PIPELINE_PAYLOAD_API_KEY.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(1)
+
+    leaves = client.list_leaves(track_id=track_id)
+    found = {int(leaf["id"]) for leaf in leaves}
+    expected = set(state.cms_leaf_ids.values())
+    if found != expected:
+        typer.secho(
+            f"Track {track_id}: Payload returned {len(found)} Leaves and the run "
+            f"wrote {len(expected)} ({sorted(found ^ expected)} differ). Refusing to {purpose} "
+            "a Track whose Leaves are not the ones this run knows.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(1)
+    return client, identity, sorted(leaves, key=lambda leaf: int(leaf["orderIndex"]))
+
+
 class _Narration:
     """What both voiceover commands need, opened and checked once.
 
@@ -1540,7 +1583,6 @@ class _Narration:
     def __init__(self, graph: Any, deps: Any, run_id: str, *, guard: bool) -> None:
         from zoomout_pipeline.assets.budget import NarrationBudget
         from zoomout_pipeline.assets.speech import SpeechClient
-        from zoomout_pipeline.cms.client import PayloadClient
         from zoomout_pipeline.graph.narration_nodes import (
             ClipStore,
             Guard,
@@ -1557,34 +1599,9 @@ class _Narration:
             raise typer.Exit(1)
 
         settings = deps.settings
-        self.client: PayloadClient = deps.payload_client or PayloadClient(
-            base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
+        self.client, identity, self.leaves = _checked_cms(
+            deps, state, state.cms_track_id, purpose="narrate"
         )
-        # **Who, before what.** A wrong auth scheme is served as anonymous with a 200, drafts
-        # vanish, and an empty Track reads as "nothing to do".
-        identity = self.client.whoami()
-        if not identity.get("email"):
-            typer.secho(
-                "Payload served this key as ANONYMOUS — refusing to continue. Check "
-                "ZOOMOUT_PIPELINE_PAYLOAD_API_KEY.",
-                fg=typer.colors.RED,
-                bold=True,
-            )
-            raise typer.Exit(1)
-
-        leaves = self.client.list_leaves(track_id=state.cms_track_id)
-        found = {int(leaf["id"]) for leaf in leaves}
-        expected = set(state.cms_leaf_ids.values())
-        if found != expected:
-            typer.secho(
-                f"Track {state.cms_track_id}: Payload returned {len(found)} Leaves and the run "
-                f"wrote {len(expected)} ({sorted(found ^ expected)} differ). Refusing to narrate "
-                "a Track whose Leaves are not the ones this run knows.",
-                fg=typer.colors.RED,
-                bold=True,
-            )
-            raise typer.Exit(1)
-        self.leaves: list[dict[str, Any]] = sorted(leaves, key=lambda leaf: int(leaf["orderIndex"]))
 
         self.speech = SpeechClient(
             project=settings.vertex_project,
@@ -1637,6 +1654,71 @@ def _clip_line(clip: Any) -> str:
     retried = f", {clip.attempts_made} attempts" if clip.attempts_made > 1 else ""
     return (
         f"{clip.line.slide.value:<9}{clip.duration_seconds:>6.1f}s  {severity:<9}{retried}{cached}"
+    )
+
+
+def _select_leaves(
+    leaves: list[dict[str, Any]], *, only: list[int] | None, limit: int
+) -> list[dict[str, Any]]:
+    """The Leaves a narration command will do, in order.
+
+    `--leaf N` names them (repeatable, by orderIndex; the order they are given in does not
+    matter and a repeat is the same Leaf); `--limit N` takes the first N. **An index the run has
+    no Leaf for is refused here, before anything is rendered, listened to or written** — a typo
+    that quietly selected nothing would read as "nothing to do".
+    """
+    if not only:
+        return list(leaves[:limit] if limit else leaves)
+    wanted = set(only)
+    have = {int(leaf["orderIndex"]) for leaf in leaves}
+    unknown = sorted(wanted - have)
+    if unknown:
+        typer.secho(
+            f"no Leaf at orderIndex {', '.join(str(order) for order in unknown)}; this run has "
+            f"Leaves {', '.join(str(order) for order in sorted(have))}. Nothing was done.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(2)
+    return [leaf for leaf in leaves if int(leaf["orderIndex"]) in wanted]
+
+
+def _planned_purchases(leaves: list[dict[str, Any]], session: Any) -> list[tuple[int, Any]]:
+    """What a run that may synthesise is about to buy: every clip whose first attempt is not on
+    disk, by Leaf. Free — the cache's own key over each Leaf's current text."""
+    from zoomout_pipeline.assets.narration import (
+        NARRATOR_VOICES,
+        NarrationSourceError,
+        narration_script,
+    )
+    from zoomout_pipeline.graph.narration_nodes import missing_first_attempts
+
+    planned: list[tuple[int, Any]] = []
+    for leaf in leaves:
+        try:
+            lines = narration_script(leaf)
+        except NarrationSourceError:
+            continue  # the loop raises it, where it always has
+        order = int(leaf["orderIndex"])
+        planned += [
+            (order, clip)
+            for clip in missing_first_attempts(
+                lines=lines, narrators=NARRATOR_VOICES, speech=session.speech, store=session.store
+            )
+        ]
+    return planned
+
+
+def _will_buy(planned: list[tuple[int, Any]]) -> str:
+    """One line, before the first call: how many clips, and which — by slide and narrator, never
+    by their words."""
+    if not planned:
+        return "will buy   : no clip — every first attempt is already on disk"
+    named = ", ".join(f"leaf {order} {clip.describe()}" for order, clip in planned)
+    count = len(planned)
+    return (
+        f"will buy   : {count} {'clip' if count == 1 else 'clips'} — {named}; "
+        "and a retry for any clip the guard fails"
     )
 
 
@@ -1832,6 +1914,15 @@ def replace_voice(clip: Any, label: str) -> Any:
 def narrate(
     run_id: Annotated[str, typer.Option(help="The run whose Leaves should be read aloud.")],
     limit: Annotated[int, typer.Option(help="Stop after N Leaves. 0 means all.")] = 0,
+    only_leaves: Annotated[
+        list[int] | None,
+        typer.Option(
+            "--leaf",
+            help="Only this Leaf, by orderIndex. Repeatable. Leaves are done in order whatever "
+            "order they are named in; an index the run has no Leaf for is refused before "
+            "anything runs. Not with --limit.",
+        ),
+    ] = None,
     render_only: Annotated[
         bool, typer.Option(help="Render, check and build the review track; write nothing.")
     ] = False,
@@ -1869,9 +1960,10 @@ def narrate(
         bool,
         typer.Option(
             help="Make the run unable to buy a clip: Cloud TTS is never called and nothing is "
-            "reserved for speech. A clip whose audio is not on disk stops the run, naming it; "
-            "a retry that is not on disk ends that line's retries. The guard still listens, "
-            "and still costs."
+            "reserved for speech. A Leaf with a clip whose audio is not on disk is held on its "
+            "own, named, with nothing rendered, listened to or attached, and the run carries "
+            "on; a retry that is not on disk ends that line's retries. The guard still "
+            "listens, and still costs."
         ),
     ] = False,
 ) -> None:
@@ -1895,6 +1987,15 @@ def narrate(
     at a new tempo is a new file, so it is listened to again (the guard's cost) and uploaded
     under a new name, and the old Media stays in the CMS, since the machine key cannot delete
     it. `--no-synthesis` makes a run unable to spend on speech at all.
+
+    **One Leaf's edited text holds that Leaf, not the run** (VO-4.1). With `--no-synthesis`, a
+    Leaf with any clip not on disk — in practice, one whose text was edited after it was
+    narrated — is held NOT ON DISK before anything is rendered or listened to for it: named,
+    free, nothing attached, and the run goes on to the next Leaf. A run that may synthesise holds
+    nothing for this reason and says what it is about to buy before it buys it. Only a budget or a
+    speech failure stops the whole run. `--leaf N` does just those Leaves. The exit code is 1 if
+    any Leaf was held for any reason. A run that covers fewer Leaves or clips than the review it
+    would overwrite writes beside it instead, under a name that carries what it covers.
     """
     from zoomout_pipeline.assets.budget import BudgetExceededError
     from zoomout_pipeline.assets.narration import (
@@ -1911,23 +2012,51 @@ def narrate(
         NarrationNotOnDiskError,
         NarrationWriteError,
         attach_leaf_narration,
+        missing_first_attempts,
         render_line,
+        review_target,
     )
+
+    if only_leaves and limit:
+        typer.secho(
+            "--leaf and --limit cannot be combined: --limit takes the first N Leaves, --leaf "
+            "names them. Nothing was done.",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        raise typer.Exit(2)
 
     rendered: list[Any] = []
     halted = ""
     failed: list[str] = []
     held: list[str] = []
+    # A Leaf with a clip that is not on disk, by Leaf: what is missing, in words that are never
+    # the Leaf's own.
+    not_on_disk: dict[str, list[str]] = {}
+    # The ones of those that the render itself met half way through a Leaf, after the pre-flight
+    # had passed it: their earlier clips were already listened to, and that is on the ledger.
+    found_midway: set[str] = set()
     with run_context() as (graph, deps):
         session = _Narration(graph, deps, run_id, guard=guard)
+        leaves = _select_leaves(session.leaves, only=only_leaves, limit=limit)
         narrators = ", ".join(
             f"{narrator.value}={name}" for narrator, name in NARRATOR_VOICES.items()
         )
         typer.echo(f"narrators  : {narrators}{' — render only' if render_only else ''}")
         unable = " — --no-synthesis: no clip can be bought" if no_synthesis else ""
-        typer.echo(f"tempo      : x{tempo:g}{unable}\n")
+        typer.echo(f"tempo      : x{tempo:g}{unable}")
+        if only_leaves:
+            which = ", ".join(str(int(leaf["orderIndex"])) for leaf in leaves)
+            typer.echo(f"leaves     : {which} of {len(session.leaves)}\n")
+        elif limit:
+            typer.echo(f"leaves     : the first {len(leaves)} of {len(session.leaves)}\n")
+        else:
+            typer.echo(f"leaves     : all {len(session.leaves)}\n")
+        if not no_synthesis:
+            # A run that may buy says what, before the first call. Nothing is held for a
+            # missing clip here: it is bought.
+            typer.echo(_will_buy(_planned_purchases(leaves, session)) + "\n")
         narration = dict(session.state.cms_narration)
-        leaves = session.leaves[:limit] if limit else session.leaves
 
         for leaf in leaves:
             order = int(leaf["orderIndex"])
@@ -1944,6 +2073,28 @@ def narrate(
 
             try:
                 lines = narration_script(leaf)
+                if no_synthesis:
+                    # **Before anything is rendered or listened to for this Leaf**: are all of
+                    # its clips on disk, by the cache's own key over its current text? Free. If
+                    # not, it is held on its own and the run goes on - a Leaf whose text was
+                    # edited after it was narrated is the ordinary result of editing, and not a
+                    # reason to stop for eight clean ones.
+                    absent = missing_first_attempts(
+                        lines=lines,
+                        narrators=NARRATOR_VOICES,
+                        speech=session.speech,
+                        store=session.store,
+                    )
+                    if absent:
+                        names = [clip.describe() for clip in absent]
+                        not_on_disk[key] = names
+                        typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
+                        typer.secho(
+                            f"           HELD — NOT ON DISK: {', '.join(names)}; nothing "
+                            "rendered, listened to or attached",
+                            fg=typer.colors.RED,
+                        )
+                        continue
                 clips = [
                     render_line(
                         line=narrated,
@@ -1961,9 +2112,19 @@ def narrate(
                     for voice_name in NARRATOR_VOICES.values()
                     for narrated in lines
                 ]
-            except (BudgetExceededError, SpeechError, NarrationNotOnDiskError) as error:
-                # All three are a stop, not a crash: what was rendered is on disk and on the
-                # ledger, and the review is still built from it below.
+            except NarrationNotOnDiskError as missing:
+                # Not expected after the check above - it needs a raw file to vanish between
+                # the check and the render - and the same hold if it happens: this Leaf's clips
+                # are discarded, never attached, and the run carries on.
+                not_on_disk[key] = [str(missing)]
+                found_midway.add(key)
+                session.checkpoint()
+                typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
+                typer.secho(f"           HELD — NOT ON DISK: {missing}", fg=typer.colors.RED)
+                continue
+            except (BudgetExceededError, SpeechError) as error:
+                # Both are a stop, not a crash, and they stop the whole run: what was rendered
+                # is on disk and on the ledger, and the review is still built from it below.
                 halted = str(error)
                 session.checkpoint()
                 break
@@ -2025,12 +2186,27 @@ def narrate(
                 continue
             report = consistency(own, listen_terms=listen_for or [])
             track, cues = join_in_order(own)
+            # A partial run cannot shrink a review (VO-4.1): over the existing one only if this
+            # run covers every Leaf it was asked for and at least as many clips; otherwise beside.
+            target = review_target(
+                folder=session.store.root / "review",
+                name=f"{title_slug(session.book_title)}-narration-{voice_name.lower()}",
+                asked=[int(leaf["orderIndex"]) for leaf in leaves],
+                covered={clip.line.order for clip in own},
+                clips=len(own),
+            )
             files = write_review(
-                destination=session.store.root
-                / "review"
-                / f"{title_slug(session.book_title)}-narration-{voice_name.lower()}",
+                destination=target.destination,
                 heading=f"{session.book_title} — narration review",
                 preamble=[
+                    *(
+                        [
+                            f"**Partial: Leaves {target.covered} only.** The review this would "
+                            "have replaced covers more, and was left as it was."
+                        ]
+                        if target.beside
+                        else []
+                    ),
                     f"Narrator **{voice_name}**, `{session.speech.model}` via "
                     f"`{session.speech.endpoint}` ({session.speech.project}).",
                     "Every clip levelled to the same speech loudness, given the same 60 ms head "
@@ -2051,6 +2227,17 @@ def narrate(
                 report=report,
             )
             typer.echo(f"\nreview     : {files.audio}\nlisten     : {files.page}")
+            if target.beside:
+                had = (
+                    "one whose size could not be read"
+                    if target.existing_clips is None
+                    else f"{target.existing_clips} clips"
+                )
+                typer.secho(
+                    f"             partial: Leaves {target.covered} ({len(own)} clips) written "
+                    f"BESIDE the existing review ({had}), which was left as it was",
+                    fg=typer.colors.YELLOW,
+                )
         counts = {level: 0 for level in GuardSeverity}
         for clip in rendered:
             if clip.severity is not None:
@@ -2072,13 +2259,111 @@ def narrate(
             fg=typer.colors.RED,
             bold=True,
         )
+    if not_on_disk:
+        count = len(not_on_disk)
+        typer.secho(
+            f"\n{count} {'Leaf' if count == 1 else 'Leaves'} HELD — NOT ON DISK. Nothing was "
+            f"attached for {'it' if count == 1 else 'them'}, and the check that found "
+            f"{'it' if count == 1 else 'them'} renders, listens to and spends nothing:",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        for leaf_key, names in not_on_disk.items():
+            midway = (
+                " (found while rendering: its earlier clips were already listened to, and "
+                "that is on the ledger)"
+                if leaf_key in found_midway
+                else ""
+            )
+            typer.secho(f"  leaf {leaf_key}: {', '.join(names)}{midway}", fg=typer.colors.RED)
+        again = " ".join(f"--leaf {leaf_key}" for leaf_key in not_on_disk)
+        typer.secho(
+            "The usual cause is that the Leaf's text changed after it was narrated, so the audio "
+            "on disk is for words it no longer says. Two ways out: narrate it — "
+            f"`narrate --run-id {run_id} {again}` without --no-synthesis, which says what it "
+            "will buy before it buys it — or revert the text in the admin.",
+            fg=typer.colors.RED,
+        )
     if not render_only:
         typer.secho(
             "\nNothing was published. Each Leaf's audio waits in a pending draft until a human "
             "publishes it.",
             fg=typer.colors.YELLOW,
         )
-    if halted or failed or held:
+    if halted or failed or held or not_on_disk:
+        raise typer.Exit(1)
+
+
+@app.command("narration-stale")
+def narration_stale(
+    run_id: Annotated[str, typer.Option(help="The run whose Leaves should be checked.")],
+) -> None:
+    """Which narrated slides carry audio for words the Leaf no longer says. Free and read-only.
+
+    A clip's `textDigest` is the hash of the text it was made from, and the backend **drops**
+    an audio entry whose digest no longer matches the slide's current text: an edit to a
+    narrated field silences that slide, in both voices, and nothing else says so. This reads
+    every Leaf of the run's Track — the published version and any pending draft — and prints
+    each entry that would be dropped: Leaf, slide, narrator, which version, and the stored and
+    current digest (eight hex digits). The last line counts the slides; the exit code is 1 if
+    there are any, 0 if there are none.
+
+    **It cannot spend or write.** It is a command of its own, not a flag on `narrate`, so the
+    code that can buy a clip is never even constructed here: no speech client, no listening
+    model, no budget. It reads the run's state and two documents per Leaf, and checks who the
+    key is first — an anonymous 200 shows no drafts and would report "clean".
+    """
+    from zoomout_pipeline.graph.narration_stale import LIVE, check_leaf, summary
+
+    with run_context() as (graph, deps):
+        state = read_run_state(graph, run_id)
+        if state.cms_track_id is None or not state.cms_leaf_ids:
+            typer.secho(f"run {run_id} has no Leaves in Payload to check", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        client, identity, leaves = _checked_cms(deps, state, state.cms_track_id, purpose="check")
+        typer.echo(
+            f"cms        : {identity.get('email')} ({identity.get('accountType', '?')}), "
+            f"Track {state.cms_track_id}, {len(leaves)} Leaves"
+        )
+        typer.echo(
+            "checking   : every narrated slide, in the published version and in any pending "
+            "draft. Read-only: no model, no speech, no write.\n"
+        )
+        checks = [
+            check_leaf(
+                order=int(leaf["orderIndex"]),
+                live=client.get_leaf(int(leaf["id"]), draft=False),
+                latest=client.get_leaf(int(leaf["id"]), draft=True),
+            )
+            for leaf in leaves
+        ]
+
+    for check in checks:
+        for entry in check.stale:
+            typer.secho(entry.line(), fg=typer.colors.RED)
+    live_compared = sum(check.live_compared for check in checks)
+    draft_compared = sum(check.draft_compared for check in checks)
+    pending = sum(1 for check in checks if check.pending_draft)
+    typer.echo(
+        f"\ncompared   : {live_compared + draft_compared} audio entries — {live_compared} in "
+        f"the published versions, {draft_compared} in {pending} pending drafts — each against "
+        "the text it sits beside"
+    )
+    stale = [entry for check in checks for entry in check.stale]
+    typer.secho(summary(checks), fg=typer.colors.RED if stale else typer.colors.GREEN, bold=True)
+    if stale:
+        in_live = any(entry.version == LIVE for entry in stale)
+        typer.echo(
+            "A stale entry is dropped by the backend rather than served: that slide plays no "
+            "narration in that voice until audio is made for the words it now says, or the text "
+            "is put back."
+            + (
+                " Publishing a pending draft that carries matching audio fixes a stale "
+                "published entry."
+                if in_live
+                else ""
+            )
+        )
         raise typer.Exit(1)
 
 

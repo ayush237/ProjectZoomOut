@@ -311,10 +311,45 @@ name, and the old Media stays in the CMS as an orphan — the machine key cannot
 1.0, so `audition-voices` and every other caller keep the model's pace.
 
 **`--no-synthesis` makes a run unable to buy a clip**, not merely unlikely to: Cloud TTS is never
-called and nothing is reserved for speech. A clip whose audio is not on disk stops the run and
-names the line; a *retry* that is not on disk ends that line's retries and keeps the best attempt
-so far, so a clip the guard still fails holds its Leaf rather than causing a paid regeneration.
-It forbids speech only — the guard's listens still happen, and still cost.
+called and nothing is reserved for speech. A *retry* that is not on disk ends that line's retries
+and keeps the best attempt so far, so a clip the guard still fails holds its Leaf rather than
+causing a paid regeneration. It forbids speech only — the guard's listens still happen, and still
+cost.
+
+**A Leaf with a clip not on disk is held on its own, and the run carries on (VO-4.1).** Before
+anything is rendered or listened to for a Leaf, a `--no-synthesis` run asks the raw cache — by its
+own key, over the Leaf's *current* text — whether all eight first attempts are there. If not (in
+practice: the Leaf's text was edited after it was narrated), that Leaf is **held NOT ON DISK**:
+named by slide and narrator (never by its words), nothing rendered, listened to, attached or
+spent, and the run goes on to the next Leaf. The end of the run says so under its own heading, with
+the two ways out: `narrate --leaf N` without `--no-synthesis`, or revert the text. A run that
+*may* synthesise holds nothing for this reason; it prints what it is about to buy, before the
+first call. **Only a budget or a speech failure stops the whole run.** The exit code is 1 if any
+Leaf was held, for any reason.
+
+**`narrate --leaf N`** (repeatable, by `orderIndex`) does just those Leaves, in order; an index the
+run has no Leaf for is refused before anything runs, and `--leaf` cannot be combined with
+`--limit`. The header says which Leaves it will do.
+
+**A partial run cannot shrink a review.** `narrate` rebuilds the review tracks from the clips it
+rendered, and VO-4's run — which covered Leaves 0–8 — replaced the 72-clip full-book tracks with
+36-clip ones. A run now overwrites a voice's review only if it covers every Leaf it was asked for
+**and** at least as many clips as the review it replaces; otherwise it writes beside it, under a
+name that carries the coverage (`<book>-narration-<voice>-leaves-0-8+10-17`), says so, and leaves
+the existing one as it was. With no existing review there is nothing to shrink.
+
+**`narration-stale --run-id <id>`** is free and read-only: it lists every narrated slide whose
+stored `textDigest` no longer matches its Leaf's current text — in the published version and in
+any pending draft — which is exactly what the backend drops. It is a command of its own, not a
+`narrate` flag, so the code that can spend is never constructed: no speech client, no guard, no
+budget. It checks who the key is first (an anonymous 200 shows no drafts and would report
+"clean"), prints how many entries it compared, and exits 1 if anything is stale, 0 if nothing is.
+
+```bash
+uv run zoomout-pipeline narration-stale --run-id ikigai            # which slides are silent, and why
+uv run zoomout-pipeline narrate --run-id ikigai --no-synthesis     # carries on past a drifted Leaf
+uv run zoomout-pipeline narrate --run-id ikigai --leaf 9           # says what it will buy, then buys it
+```
 
 **`textDigest`** is `sha256` hex of the narrated field exactly as the clip was made from it —
 `assets/narration.py:text_digest`, never `speakable()`'s TTS-rewritten form. The backend

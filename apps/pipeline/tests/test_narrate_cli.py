@@ -2,9 +2,13 @@
 
 ONBOARD-2.1 recorded that nothing ran the command beyond its help text (Tier C). VO-4 changes what
 the command does when a clip is missing and what pace it renders at, so the pieces of that which
-are the *command's* — the header, the stop, the review's note, the default that reaches the render —
+are the *command's* — the header, the hold, the review's note, the default that reaches the render —
 are pinned here, with a session stub and nothing else stubbed: the render, the budget, the store
 and the review writer are the real ones, over a real (fake-backed) speech client and a real cache.
+
+VO-4.1 reversed one of them: a clip not on disk used to stop the run and now holds its Leaf on its
+own (`test_narrate_hold.py` pins that across several Leaves). The single-Leaf test below is the one
+existing test that changed with it.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from zoomout_pipeline.assets.narration import NARRATOR_VOICES, direction_for, na
 from zoomout_pipeline.cost import TokenSpend
 from zoomout_pipeline.graph.narration_nodes import NARRATION_TEMPO, ClipStore, render_line
 
-from .narration_fakes import FakeSpeechBackend, leaf_doc, speech_client
+from .narration_fakes import FakeSpeechBackend, leaf_doc, leaked_window, speech_client
 
 BOOK = "Ikigai"
 
@@ -113,25 +117,30 @@ def test_a_tempo_outside_the_range_is_refused_by_the_command_itself(tempo: str) 
     assert "--tempo" in result.output
 
 
-# ============================================================================== the stop
+# ================================================================================ the hold
 
 
-def test_a_clip_that_is_not_on_disk_stops_the_run_cleanly_and_names_the_line(
-    drive: Any,
-) -> None:
-    """The live run found this on Leaf 9: no clip for its current text, and a run that may not
-    synthesise has to stop. Stopped *cleanly*: a named line and an exit code, not a traceback."""
+def test_a_clip_that_is_not_on_disk_holds_its_leaf_cleanly_and_names_it(drive: Any) -> None:
+    """**Rewritten by VO-4.1 (A1); it used to pin "stops the run" and the HALTED line.** The live
+    run found this on Leaf 9: no clip for the text it holds now. A run that may not synthesise
+    holds that Leaf - named, free, a plain exit code and no traceback - and the words of the Leaf
+    are never in what the command prints. `HALTED` is kept for a budget or a speech failure."""
     backend = _ExplodingBackend()
+    texts = [line.text for line in narration_script(leaf_doc())]
 
     result, session = drive(backend, "--no-synthesis")
 
     assert result.exit_code == 1
-    assert "HALTED:" in result.output and "Leaf 4" in result.output
-    assert "is not on disk" in result.output and "Nothing was reserved" in result.output
+    assert "HELD — NOT ON DISK" in result.output and "leaf  4" in result.output
+    assert "payoff (female, Achernar)" in result.output
+    assert "takeaway (male, Sadaltager)" in result.output
+    assert "HALTED" not in result.output, "only a budget or a speech failure stops a run"
     assert result.exception is None or isinstance(result.exception, SystemExit), result.exception
     assert backend.calls == 0
     assert session.budget.spent_usd == 0.0 and session.spends == []
     assert "Traceback" not in result.output
+    for text in texts:
+        assert leaked_window(text, result.output) is None, "named by slide, never by its words"
 
 
 # ================================================================ the header, the note, the pace
