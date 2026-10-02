@@ -54,7 +54,8 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 | 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | ✅ **Signed off 2026-09-25 (17/17)** — merged as PR #61 (`b32191a`); the device gate is the founder's |
 | 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, **Profile plays the narrator's hello**, and the copy pass | ✅ **Signed off 2026-10-01 (13/13, code-verified)** — merged as PR #63 (`90e15b7`); the live Android/sound walkthrough is the founder's |
 | 4 | **ONBOARD-2.1** | Pipeline Manager | Sonnet | The legal fence pinned, the three money lines pinned, an upload pre-flight, `narrate` at three attempts. **$0, no model calls** | ✅ **Signed off 2026-09-25 (14/14)**; merged as PR #62 (`6c5d8fd`). The cost-ledger lock is out of it and still open |
-| 5 | **VO-4** | Pipeline Manager | Sonnet | The book narration re-paced: a proportional **1.3× time-stretch of the 144 clips already on disk**, no synthesis, no audition; the guard re-listens to the new bytes | 🔵 **Approved and handed off 2026-09-25** (top of `collaboration-log.md`). Google Cloud ≈ $0.41 expected, under a $2.75 ledger ceiling the founder confirms before the paid step |
+| 5 | **VO-4** | Pipeline Manager | Sonnet | The book narration re-paced: a proportional **1.3× time-stretch of the 144 clips already on disk**, no synthesis, no audition; the guard re-listens to the new bytes | ✅ **Signed off 2026-10-02 (code package)** — PR #64 open; 9 of 18 Leaves attached as ×1.3 drafts, Leaf 9 stopped the run; finished by VO-4.1 |
+| 6 | **VO-4.1** | Pipeline Manager | Sonnet | A drifted Leaf holds on its own, `narrate --leaf`, a free stale-audio check, a review that cannot shrink; then Leaves 10–17 and Leaf 9's two payoff clips | 🔵 **Issued 2026-10-02** (top of `collaboration-log.md`) — Part A $0; Part B ≈ $0.24 of Google Cloud, the founder's explicit yes first |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
@@ -98,7 +99,7 @@ handoff says so explicitly rather than re-assuming the original design.
   repeat pass starts from) are the point; each new guard must be shown red before it is trusted; the preview
   must be one definition, by grep, not two copies.
 
-### VO-4 — re-pace the book narration — approved 2026-09-25; handed to Pipeline Manager
+### VO-4 — re-pace the book narration — built and signed off 2026-10-02 (9 of 18 Leaves attached); finished by VO-4.1
 
 **Design ruled by the founder: no audition and no direction re-render — "just increase words per minute
 proportionately for the book clips … as long as the pace is increasing."** The handoff is at the top of
@@ -137,3 +138,41 @@ proportionately for the book clips … as long as the pace is increasing."** The
 - **Kept for later, not rejected:** an in-app speed control (1× / 1.25× / 1.5× in the Leaf player) — free,
   reader-controlled, works on every book at once; a separate small Manager change if the founder wants it.
 - **Not in it:** the cost-ledger lock, a second book's narration, any mobile change, publishing, deleting Media.
+
+**Outcome, 2026-10-02.** Built, and re-verified by the Architect rather than taken from the report (gate by hand
+130 / 112 / 690; the run's saved ledger — speech unchanged to the cent; 72 draft media files byte-identical to the
+rendered clips; 20 mutants on a scratch copy, 19 red). **9 of 18 Leaves (0–8) are attached as ×1.3 drafts, nothing
+published.** **Leaf 9 stopped the run: its payoff has been silent since 2026-09-18** (a human edit published over audio
+narrated from the earlier text). The report's pitch finding is a measurement artefact. Two corrections to this
+section's own design: **"a missing first attempt stops the run" was wrong** (ruled 2026-10-02: a drifted Leaf holds on
+its own), and **"all 144 accepted lines are cached" was derived by the wrong key** (not by `clip_digest` from each
+Leaf's current text).
+
+### VO-4.1 — finish the book — issued 2026-10-02; the founder's paste is the go
+
+Pipeline Manager, Sonnet. The full handoff is at the top of `collaboration-log.md`. **Part A is $0 and calls no
+model; Part B spends (Google Cloud, ≈ $0.24 expected) only after the founder's explicit yes in the Pipeline Manager's
+session, and only after the founder has confirmed the tempo by ear.**
+
+- **Part A (code, offline tests):** (A1) `narrate --no-synthesis` checks, before rendering or listening to anything
+  for a Leaf, that every clip's first-attempt raw is on disk (`clip_digest` from the Leaf's *current* text); a Leaf
+  with any missing is **held — NOT ON DISK**, free, named, and the run carries on (exit 1; budget and speech
+  failures still stop the run). (A2) `narrate --leaf N`. (A3) a free read-only stale check — a separate command, so
+  the code that can spend is never constructed — comparing every audio entry's `textDigest` with its slide's current
+  text, in the live version and the latest draft. (A4) a partial run cannot shrink a review. (A5) a pin tightened (a
+  prefix leak in the not-on-disk message). (A6) README and docstrings.
+- **Part B (the finish, after the founder's tempo confirmation, Leaf 9 ruling and explicit yes):** the stale check
+  (expect exactly Leaf 9's payoff, live); `narrate --no-synthesis` for Leaves 10–17 (guard only, ≈ $0.21; Leaf 9
+  held, named); Leaf 9's payoff — `narrate --leaf 9 --no-synthesis` must name exactly the two payoff clips, then the
+  one synthesising run (≈ $0.014, worst case ≈ $0.04, plus ≈ $0.016 of listens); a whole-book `--no-synthesis` pass
+  ($0, 18 of 18 "already held", the review rebuilt for all 18); re-verification from outside **including every draft
+  slide's `textDigest` against its Leaf's current text** (the check VO-4 lacked); **a take-change table** (every line
+  whose attached attempt differs from the take VO-2.1 accepted — Leaf 2 scenario, Lara is one).
+- **Spend:** ledger $2.0167 of the $2.75 ceiling → ≈ $2.26 after Part B; a change of tempo costs ≈ $0.2 more and still
+  fits, a second would not. **One `narrate` process at a time** — the ledger lock is still open.
+- **Not in it:** any change to `apps/admin`, `apps/backend` or `apps/mobile` (**the admin warning when a narrated
+  field is edited under audio is the Manager bundle**); `measure()`; editing any Leaf's text; publishing; deleting
+  Media; a second book.
+- **The founder's part:** merge PR #64 · listen (the nine pairs, and a stretch of the attached Druv track) · rule on
+  Leaf 9 (keep the edit — recommended) · paste VO-4.1 · later, the yes to the money · **publish all 18 Leaves in admin
+  together**, then check that Leaf 9's payoff has a play control in both voices.
