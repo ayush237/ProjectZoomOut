@@ -320,6 +320,7 @@ def test_a_drifted_leaf_is_held_before_any_listen_and_the_run_carries_on(
     assert len(session.spends) == 16
     # The end of the run gives the held Leaf its own heading, the cause, and both ways out.
     assert "1 Leaf HELD — NOT ON DISK" in out
+    assert "found while rendering" not in out, "the pre-flight found it: nothing was listened to"
     assert "narrate --run-id ikigai --leaf 2" in out and "revert the text" in out
     assert "text changed after it was narrated" in out
     # And never the words, not even twelve characters of them, from any Leaf.
@@ -448,6 +449,8 @@ def test_a_not_on_disk_error_arising_mid_leaf_is_the_same_hold(
     assert "HALTED" not in result.output
     assert session.attached == [301, 303]
     assert "1 Leaf HELD — NOT ON DISK" in result.output
+    # Honest about what it cost: this hold was found after two clips of the Leaf were listened to.
+    assert "found while rendering: its earlier clips were already listened to" in result.output
 
 
 def test_a_run_that_may_synthesise_holds_nothing_and_says_what_it_will_buy(
