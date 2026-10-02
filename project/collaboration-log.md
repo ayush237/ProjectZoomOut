@@ -516,7 +516,7 @@ list anyone reads.
 
 *Pipeline Manager. Branch `vo-4-1-finish-the-book`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `9997b14` (PR #64's merge). PR: [#65](https://github.com/ayush237/ProjectZoomOut/pull/65), a **draft** until Part B is done — the founder merges.*
 
-**Part A: every acceptance criterion verified, and it cost $0. Part B: not run.** It starts only with Payload on `:3001` (the founder's dev server; it was down when I last tried) and the founder's explicit yes to the money. Two of its three preconditions are in, in the founder's own words: **"1.3x is fine"** and **"I want to keep the edit in leaf 9"** (B0, below). The third is asked for in chat, with the figures, and recorded here when given.
+**Part A: every acceptance criterion verified, and it cost $0. Part B: not run — all three of the founder's answers are in; it waits only on Payload.** The founder said **"1.3x is fine"** and **"I want to keep the edit in leaf 9"**, and then, shown the figures below, chose **"Yes — all of Part B, up to $2.75"**, which is the explicit yes to speech the handoff asks for (B0, below). Payload on `:3001` is the founder's dev server and was still down at my last check, after the yes; I do not start it.
 
 | | |
 |---|---|
@@ -547,14 +547,14 @@ list anyone reads.
 
 ## Needs the founder
 
-1. **Payload on `:3001`.** `narrate` and `narration-stale` both read the Leaves through REST. I don't start it.
-2. **Yes to the money for Part B**, after the figures in chat: ledger **$2.0167**, ceiling **$2.75** inline (the header must show it), expected **≈ $0.20**, worst case **≈ $0.25**, headroom **$0.7333**. Google Cloud, not Anthropic. Derived below.
+1. **Payload on `:3001`.** `narrate` and `narration-stale` both read the Leaves through REST. Down at my last check; I don't start it. **This is the only thing Part B is waiting on.**
+2. ~~Yes to the money~~ — **given** (B0, below).
 
 ## B0 — the founder's answers
 
 1. **Tempo:** "1.3x is fine." (Quoted from the session; `NARRATION_TEMPO` stays 1.3, so the nine attached Leaves stand.)
 2. **Leaf 9's text:** "I want to keep the edit in leaf 9." (So Leaf 9's payoff is narrated fresh from the text it holds now; B3. I did not touch the Leaf.)
-3. **The money:** *not yet given.* The figures prepared for it, all derived from the raw cache through the real key (`clip_key`) and the ledger's own rates, not typed in:
+3. **The money:** asked in the session with the figures below, and answered **"Yes — all of Part B, up to $2.75"** (2026-10-02), the option whose description named the speech: Leaves 10–17 listened to, Leaf 9's two payoff clips synthesised and listened to. The figures given with the question, all derived from the raw cache through the real key (`clip_key`) and the ledger's own rates, not typed in:
    - **B2, guard only, Leaves 10–17:** 64 clips; the most it can buy is **69 listens** (every reachable attempt, the retry chains on Leaf 12's scenario and Leaf 14's summary included), at the **$0.0025** each that VO-4's 77 listens cost: **$0.161–$0.174**. *The handoff estimated "≈ 77 listens, ≈ $0.21"; the raw cache says 69 at most.*
    - **B3, Leaf 9's payoff:** speech for two ~30 s clips **$0.0152** (worst case six, three attempts in each voice: **$0.0457**), plus **6–10** listens (**$0.015–$0.025**).
    - **Total** ≈ **$0.20** expected, **≈ $0.25** worst, taking the ledger to **≈ $2.21–$2.27** of the **$2.75** ceiling. `NarrationBudget` reserves a call's worst case *before* making it (**$0.164** for a speech call, **$0.032** for a listen), so the run cannot cross the ceiling: it halts instead, and raising it is the founder's decision.
