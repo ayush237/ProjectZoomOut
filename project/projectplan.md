@@ -4,6 +4,8 @@ Owned by Architect. Represents the single feature currently being planned or imp
 
 ## Active: onboarding refinement — approved 2026-09-24
 
+**Status 2026-10-03: complete.** ONBOARD-2, 2.1, 3 and 3.1 and VO-4 and VO-4.1 are signed off, merged and device-gated; the founder's phone pass said everything looks good, and the book's narration is published at ×1.3. **No next feature is chosen** — the candidates are in the roadmap's "What is true today": the Manager bundle (relative `coverUrl` first), LEDGER-1, book #3. This file is overwritten when one starts.
+
 **ONBOARD-1 shipped and the founder walked the real device gate for the first time** (2026-09-23/24, after
 a long infrastructure detour — stale `node_modules`, a duplicated env line, `MEDIA_BASE_URL`/
 `HIDE_PLACEHOLDER_CONTENT` never set for the session, both fully resolved and logged in
@@ -52,10 +54,10 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 |---|---|---|---|---|---|
 | 1 | **ONBOARD-2** | Pipeline Manager | Sonnet | Two narrator self-introduction clips — **Lara and Druv** | ✅ Signed off 2026-09-24 (6/6); Media 350/351, verified |
 | 2 | **ONBOARD-3** | Manager | Sonnet | Pre-intro, intro repositioning, beat reorder, the closing screen, a small backend addition to serve ONBOARD-2's clips, and one shared narrator-name map | ✅ **Signed off 2026-09-25 (17/17)** — merged as PR #61 (`b32191a`); the device gate is the founder's |
-| 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, **Profile plays the narrator's hello**, and the copy pass | ✅ **Signed off 2026-10-01 (13/13, code-verified)** — merged as PR #63 (`90e15b7`); the live Android/sound walkthrough is the founder's |
+| 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, **Profile plays the narrator's hello**, and the copy pass | ✅ **Signed off 2026-10-01 (13/13, code-verified)** — merged as PR #63 (`90e15b7`); **device gate walked by the founder 2026-10-03 — everything looks good** |
 | 4 | **ONBOARD-2.1** | Pipeline Manager | Sonnet | The legal fence pinned, the three money lines pinned, an upload pre-flight, `narrate` at three attempts. **$0, no model calls** | ✅ **Signed off 2026-09-25 (14/14)**; merged as PR #62 (`6c5d8fd`). The cost-ledger lock is out of it and still open |
-| 5 | **VO-4** | Pipeline Manager | Sonnet | The book narration re-paced: a proportional **1.3× time-stretch of the 144 clips already on disk**, no synthesis, no audition; the guard re-listens to the new bytes | ✅ **Signed off 2026-10-02 (code package)** — PR #64 open; 9 of 18 Leaves attached as ×1.3 drafts, Leaf 9 stopped the run; finished by VO-4.1 |
-| 6 | **VO-4.1** | Pipeline Manager | Sonnet | A drifted Leaf holds on its own, `narrate --leaf`, a free stale-audio check, a review that cannot shrink; then Leaves 10–17 and Leaf 9's two payoff clips | ✅ **Signed off 2026-10-03** — PR #65 open; all 18 Leaves wait as pending drafts at ×1.3, Part B cost $0.2155; nothing published |
+| 5 | **VO-4** | Pipeline Manager | Sonnet | The book narration re-paced: a proportional **1.3× time-stretch of the 144 clips already on disk**, no synthesis, no audition; the guard re-listens to the new bytes | ✅ **Signed off 2026-10-02 (code package)** — merged as PR #64 (`9997b14`); 9 of 18 Leaves attached as ×1.3 drafts, Leaf 9 stopped the run; finished by VO-4.1 |
+| 6 | **VO-4.1** | Pipeline Manager | Sonnet | A drifted Leaf holds on its own, `narrate --leaf`, a free stale-audio check, a review that cannot shrink; then Leaves 10–17 and Leaf 9's two payoff clips | ✅ **Signed off and published 2026-10-03** — merged as PR #65 (`aee8c8a`); all 18 Leaves play at ×1.3, Part B cost $0.2155; the founder said everything looks good |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
@@ -187,3 +189,10 @@ Druv), **publishing the 18 Leaves in admin**, and checking that Leaf 9's payoff 
 different take than the one approved at 1.0 (Leaf 2 scenario, Lara). **Open from this package:** the admin warning
 when a narrated field is edited under audio (Manager bundle), the cost-ledger lock (proposed as LEDGER-1), and one
 missing pin in `clip_key`'s test (register).
+
+**Closed 2026-10-03.** The founder merged PR #65, published the 18 Ikigai Leaves, and walked the Android pass ("completed
+all steps. everything looks good"). **Verified by the Architect after publishing:** 0 pending drafts, 144 published audio
+rows, **0 silent**, and the backend's own mapper serves 144 of 144 entries with no warnings — Leaf 9's payoff has both
+voices again, 15 days after it went silent. The two packages cost **$0.41** of Google Cloud; narration ledger **$2.2322 of
+$2.75**. Left over: 144 old (1.0×) narration files stay in the CMS (≈ 28 MB, harmless), and the register holds the
+VO-4.1 leftovers, the missing `clip_key` pin, the admin warning for edits under audio, and the cost-ledger lock.
