@@ -4,7 +4,7 @@ Owned by Architect. Represents the single feature currently being planned or imp
 
 ## Active: onboarding refinement — approved 2026-09-24
 
-**Status 2026-10-03: complete.** ONBOARD-2, 2.1, 3 and 3.1 and VO-4 and VO-4.1 are signed off, merged and device-gated; the founder's phone pass said everything looks good, and the book's narration is published at ×1.3. **No next feature is chosen** — the candidates are in the roadmap's "What is true today": the Manager bundle (relative `coverUrl` first), LEDGER-1, book #3. This file is overwritten when one starts.
+**Status 2026-10-03: complete.** ONBOARD-2, 2.1, 3 and 3.1 and VO-4 and VO-4.1 are signed off, merged and device-gated; the founder's phone pass said everything looks good, and the book's narration is published at ×1.3. **Two $0 packages were issued the same day — GUARD-1 (Manager) and LEDGER-1 (Pipeline Manager); their handoffs are at the top of `collaboration-log.md` and the roadmap's board holds their rows.** **Book #3 is deferred** (founder, 2026-10-03): enhancement changes are coming, and they become the next plan. This file is overwritten when they start.
 
 **ONBOARD-1 shipped and the founder walked the real device gate for the first time** (2026-09-23/24, after
 a long infrastructure detour — stale `node_modules`, a duplicated env line, `MEDIA_BASE_URL`/

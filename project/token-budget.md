@@ -174,3 +174,21 @@ gets forgotten — so closing the last ~20k needs a ruling about what to stop tr
 archive deferred each time by "never archive mid-package" (the roadmap recorded each deferral). The pass ran
 when both peer sessions were idle and every PR was merged. **If overlapping packages continue, that boundary
 has to be made on purpose:** merge, let both sessions go idle, archive, then hand off the next package.
+
+---
+
+## Measured again — 2026-10-03, after the second archive pass and the issue of GUARD-1 and LEDGER-1
+
+Bytes ÷ 4, as before.
+
+| | 2026-09-25 (after the pass) | 2026-10-03 (after the pass, `70d4dd9`) | 2026-10-03 (two handoffs issued) |
+|---|---|---|---|
+| `collaboration-log.md` | 103KB / ~26k | 131KB / ~33k | **172KB / ~43k** |
+| `projectRoadmap.md` | 141KB / ~35k | 140KB / ~35k | **145KB / ~36k** |
+| **Active pair** | ~61k | ~68k | **~79k** |
+
+**The pair is back above its 2026-09-25 mark for two named reasons, and neither is drift.** (1) The log holds **four packages' worth of open or just-closed material**: VO-4 and VO-4.1 (handoffs and completion reports, ~45KB, kept because the next voiceover package builds directly on `narrate`) and the two new handoffs — **GUARD-1 22KB and LEDGER-1 19KB, ~10k tokens between them**, each a full template because an executor cold-starts from it. (2) The roadmap gained ~5KB for the same two issues (two board rows, two decisions rows, the status bullets). **Both leave at the sign-offs:** the open-handoff exception is absolute until then, and the pass at their sign-offs takes VO-4 and VO-4.1 out with them. **Estimated floor after that pass ≈ 60k** — the roadmap's ~36k plus a log holding only GUARD-1's and LEDGER-1's handoffs and completions.
+
+**The register is the constant: 145 rows by the `| **` count, 110KB, ~27.5k tokens — about three-quarters of the roadmap.** It is still a ruling about what to stop tracking, not a script. **A reasonable moment for it is soon:** with book #3 deferred and the enhancement work not yet specified, little new is being added to the register's most crowded areas (narration, onboarding) for a while.
+
+**What worked this time.** The pass ran at a clean boundary (both peers idle, every PR merged) and **promoted seven rules into `agents/architect.md` before moving the rows that taught them** — the constraint the decisions log states ("do not archive a ruling until its rule has a home"). **What did not:** the two handoffs were issued after the pass, as the founder's last act of the session, so the log grew by 40KB within an hour of shrinking. That is the "open handoff is never pruned" rule doing its job, not a failure of it — but it does mean the cheapest moment to archive is *before* a handoff goes out, and the second-cheapest is at its sign-off.
