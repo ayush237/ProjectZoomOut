@@ -175,6 +175,24 @@ log, with the reason, and I owned it.
 the ceiling set inline, the expected cost, the worst case and the real headroom (the budget reserves a call's worst case
 first, so headroom is smaller than the cap). Google Cloud is not the Claude plan; say which.
 
+## Two rules promoted — 2026-10-04
+
+From LEDGER-1's sign-off (the cost-ledger lock).
+
+**A pin on a derived value states the expected value independently of the function it pins.** `clip_key` was "pinned" by
+tests that primed the cache through `clip_key` and asked a pre-flight that also goes through `clip_key`, so a mutant that
+changed the key consistently was invisible to 887 tests (my sample at VO-4.1's sign-off; the Pipeline Manager reproduced it
+in LEDGER-1). **The lock key had the same flaw in the same package**: it was only ever compared with itself, so its
+namespace could change with every test green (my sample at LEDGER-1's sign-off). For a key, digest, hash or count, build
+the expected value from the spec by hand or write the literal; and in a sign-off sample, change the derivation
+*consistently* as well as breaking it.
+
+**When an executor flags "I did not test what happens when…" about state or money, answer it before ruling, if it is
+cheap and free.** The Pipeline Manager left `run --run-id <an existing run>` unverified; I ran it twice on one thread with
+the repo's own fakes against a scratch database, and the second call **reset the run's cost ledger and its Payload links**
+— a data-loss path no lock prevents, and not a question to rule on by instinct. The experiment took twenty minutes and
+turned a register row into a package.
+
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
 - `researcher` — library/API/best-practice investigation, read-only
