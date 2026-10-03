@@ -55,7 +55,7 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 | 3 | **ONBOARD-3.1** | Manager | Sonnet | The narrator beat's failure handling and stored-preference overwrite, pick-book's choose/skip races, **Profile plays the narrator's hello**, and the copy pass | ✅ **Signed off 2026-10-01 (13/13, code-verified)** — merged as PR #63 (`90e15b7`); the live Android/sound walkthrough is the founder's |
 | 4 | **ONBOARD-2.1** | Pipeline Manager | Sonnet | The legal fence pinned, the three money lines pinned, an upload pre-flight, `narrate` at three attempts. **$0, no model calls** | ✅ **Signed off 2026-09-25 (14/14)**; merged as PR #62 (`6c5d8fd`). The cost-ledger lock is out of it and still open |
 | 5 | **VO-4** | Pipeline Manager | Sonnet | The book narration re-paced: a proportional **1.3× time-stretch of the 144 clips already on disk**, no synthesis, no audition; the guard re-listens to the new bytes | ✅ **Signed off 2026-10-02 (code package)** — PR #64 open; 9 of 18 Leaves attached as ×1.3 drafts, Leaf 9 stopped the run; finished by VO-4.1 |
-| 6 | **VO-4.1** | Pipeline Manager | Sonnet | A drifted Leaf holds on its own, `narrate --leaf`, a free stale-audio check, a review that cannot shrink; then Leaves 10–17 and Leaf 9's two payoff clips | 🔵 **Issued 2026-10-02** (top of `collaboration-log.md`) — Part A $0; Part B ≈ $0.24 of Google Cloud, the founder's explicit yes first |
+| 6 | **VO-4.1** | Pipeline Manager | Sonnet | A drifted Leaf holds on its own, `narrate --leaf`, a free stale-audio check, a review that cannot shrink; then Leaves 10–17 and Leaf 9's two payoff clips | ✅ **Signed off 2026-10-03** — PR #65 open; all 18 Leaves wait as pending drafts at ×1.3, Part B cost $0.2155; nothing published |
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
@@ -148,7 +148,7 @@ section's own design: **"a missing first attempt stops the run" was wrong** (rul
 its own), and **"all 144 accepted lines are cached" was derived by the wrong key** (not by `clip_digest` from each
 Leaf's current text).
 
-### VO-4.1 — finish the book — issued 2026-10-02; the founder's paste is the go
+### VO-4.1 — finish the book — built and signed off 2026-10-03; waiting on the founder to publish
 
 Pipeline Manager, Sonnet. The full handoff is at the top of `collaboration-log.md`. **Part A is $0 and calls no
 model; Part B spends (Google Cloud, ≈ $0.24 expected) only after the founder's explicit yes in the Pipeline Manager's
@@ -176,3 +176,14 @@ session, and only after the founder has confirmed the tempo by ear.**
 - **The founder's part:** merge PR #64 · listen (the nine pairs, and a stretch of the attached Druv track) · rule on
   Leaf 9 (keep the edit — recommended) · paste VO-4.1 · later, the yes to the money · **publish all 18 Leaves in admin
   together**, then check that Leaf 9's payoff has a play control in both voices.
+
+**Outcome, 2026-10-03.** Both parts done, and re-verified by the Architect against the CMS database rather than taken
+from the report: **18 pending drafts, 144 audio rows, each row's `textDigest` equal to the sha256 of its own Leaf's
+current text, every file byte-identical to the rendered clip, and every non-audio field of every draft identical to
+its published row — publishing ships audio only.** Part B cost **$0.2155** (speech +$0.0123 for Leaf 9's two payoff
+clips, guard +$0.2032); ledger **$2.2322 of $2.75**. The founder confirmed the tempo ("1.3x is fine"), kept Leaf 9's
+edit, and said yes to the money. **Not done, and the founder's:** listening to the full-book tracks (22:57 Lara, 23:26
+Druv), **publishing the 18 Leaves in admin**, and checking that Leaf 9's payoff plays. One attached line is a
+different take than the one approved at 1.0 (Leaf 2 scenario, Lara). **Open from this package:** the admin warning
+when a narrated field is edited under audio (Manager bundle), the cost-ledger lock (proposed as LEDGER-1), and one
+missing pin in `clip_key`'s test (register).
