@@ -22,6 +22,8 @@ from pydantic import BaseModel, SecretStr
 from zoomout_pipeline.cms.client import PayloadClient
 from zoomout_pipeline.config import PipelineSettings
 from zoomout_pipeline.cost import TokenSpend
+from zoomout_pipeline.db import run_lock
+from zoomout_pipeline.db.run_lock import PostgresRunLocker
 from zoomout_pipeline.db.schema import EMBEDDING_DIMENSIONS, apply_schema
 from zoomout_pipeline.graph.dependencies import NodeDependencies
 from zoomout_pipeline.llm.client import GenerationResult
@@ -35,6 +37,9 @@ from zoomout_pipeline.models import (
     PlannedLeaf,
     ScenarioOptionDraft,
 )
+
+from .run_lock_fakes import InProcessRunLocker
+from .run_lock_support import ForeignHolders, wait_until_no_locks
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -177,6 +182,72 @@ class RefusingPayloadClient:
 
     def find_leaf(self, *, track_id: int, order_index: int) -> int | None:
         return None
+
+
+@pytest.fixture(autouse=True)
+def hermetic_run_locks(monkeypatch: pytest.MonkeyPatch) -> Iterator[InProcessRunLocker]:
+    """**No test takes a lock in the real database** (LEDGER-1).
+
+    The commands take their run's lock first, and most of the suite drives them under the run id
+    `ikigai` with a faked graph. Left to the real locker, each would take a lock on `ikigai` in the
+    database the environment names — the real one — and a `pytest` run would refuse, or be refused
+    by, a `narrate` that is spending real money. So every test gets a locker that holds nothing and
+    refuses nothing (`run_lock_fakes.py`), and the tests that are about the lock ask for the real
+    one (`real_run_locker`, in `test_run_lock.py`), against a database of their own.
+    """
+    locker = InProcessRunLocker()
+    monkeypatch.setattr(run_lock, "_active", locker)
+    yield locker
+    locker.release_all()
+
+
+@pytest.fixture
+def lock_database() -> str:
+    """A database whose advisory locks belong to the test alone — the server's own maintenance
+    database, because advisory locks are per database: nothing taken there can meet a lock on a real
+    run in `zoomout_pipeline`, and it is not the scratch database `db_connection` drops and creates.
+
+    Skips — loudly, like `db_connection` — when Postgres is not reachable.
+    """
+    try:
+        with psycopg.connect(_ADMIN_URL, autocommit=True) as probe:
+            probe.execute("SELECT 1")
+    except psycopg.OperationalError as error:
+        pytest.skip(
+            f"Postgres not reachable at {_ADMIN_URL}: {error}. "
+            "Start the pipeline's container — see apps/pipeline/README.md."
+        )
+    return _ADMIN_URL
+
+
+@pytest.fixture
+def hold_elsewhere(lock_database: str) -> Iterator[ForeignHolders]:
+    """Sessions that are not this process, to hold a run's lock the way a `psql` window would.
+
+    **Also where a leaked lock is found.** Once the test has finished and its sessions are closed,
+    no run lock may still be held in the database: a lock one test leaves behind is a refusal the
+    next one cannot explain.
+    """
+    holders = ForeignHolders(lock_database)
+    yield holders
+    holders.close()
+    leaked = wait_until_no_locks(lock_database)
+    assert not leaked, f"a test left run locks held in the database: {leaked}"
+
+
+@pytest.fixture
+def real_run_locker(
+    lock_database: str, hold_elsewhere: ForeignHolders, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[PostgresRunLocker]:
+    """The real locker, on real connections, installed in place of the hermetic one.
+
+    Depends on `hold_elsewhere` so it is always set up after it and torn down before it: the locker
+    lets go of its locks first, then the foreign sessions close and the leak is looked for.
+    """
+    locker = PostgresRunLocker(lock_database)
+    monkeypatch.setattr(run_lock, "_active", locker)
+    yield locker
+    locker.release_all()
 
 
 @pytest.fixture

@@ -12,9 +12,17 @@ draft, compare each audio entry's stored digest with the digest of the slide's *
 reads two documents and writes nothing. It knows nothing about speech, listening or budgets, and
 the command that uses it never constructs any of them.
 
-**Compared the way the backend compares**: trimmed and lower-cased, so it calls a slide stale
-exactly when the backend would drop it. An entry with no digest at all is stale too, because the
-backend drops that as well.
+**A digest check, and only that.** Digests are compared the way the backend compares them, trimmed
+and lower-cased, so for this one reason an entry is dropped the check agrees with the backend
+exactly; an entry with no digest at all is stale too, because the backend drops that as well. It is
+**not** every entry the backend would drop. It does not see an unknown narrator, an empty url, a
+zero duration, a duplicated narrator (the backend drops both rows) or a `stickyNotes.audio` entry,
+none of which is reachable through the pipeline's own attach. A clean answer from here says "no
+stale digest", not "everything is served".
+
+**Looking at nothing is not clean** (VO-4.1 said it could not read as clean, and it did). A Track
+whose Leaves carry no audio entry at all compares nothing: `summary` says so instead of printing the
+clean line, and `exit_code` is a third code, distinct from clean and from stale.
 """
 
 from __future__ import annotations
@@ -25,10 +33,19 @@ from dataclasses import dataclass
 from typing import Any
 
 from zoomout_pipeline.assets.narration import NARRATED_FIELDS, text_digest
-from zoomout_pipeline.cms.mapper import DRAFT_STATUS
 
 LIVE = "live"
 DRAFT = "draft"
+
+# The one status the backend reads as published (`mapStatus` in `content.mapper.ts`): anything else,
+# a status that is absent included, is a draft.
+PUBLISHED = "published"
+
+# What the command exits with. 2 is not here: it is what every command says when it was refused
+# before it did anything, and a check that ran to the end and found nothing to look at is not that.
+EXIT_CLEAN = 0
+EXIT_STALE = 1
+EXIT_NOTHING_COMPARED = 3
 
 # What a slide's current text is worth when it has none: not a digest anything can equal, so
 # audio left beside a field that no longer says anything is stale, not silently fine.
@@ -100,9 +117,14 @@ def check_leaf(*, order: int, live: Mapping[str, Any], latest: Mapping[str, Any]
 
     Where the newest version *is* the published one there is no pending draft, and the Leaf is
     reported once, as live; comparing it with itself would count every stale entry twice.
+
+    **Published means the version says `published`, and nothing else does.** The backend reads any
+    other status, an absent one included, as a draft (`mapStatus`), and so does this: Payload omits
+    `_status` on some reads, and a slide reported twice is the safe direction where a pending draft
+    not looked at is not.
     """
     live_compared, live_stale = _compare(order=order, doc=live, version=LIVE)
-    pending = latest.get("_status") == DRAFT_STATUS
+    pending = latest.get("_status") != PUBLISHED
     draft_compared, draft_stale = (
         _compare(order=order, doc=latest, version=DRAFT) if pending else (0, [])
     )
@@ -119,11 +141,31 @@ def _plural(count: int, one: str, many: str) -> str:
     return f"{count} {one if count == 1 else many}"
 
 
+def compared(checks: Sequence[LeafCheck]) -> int:
+    """How many audio entries were compared, in the published versions and the pending drafts."""
+    return sum(check.live_compared + check.draft_compared for check in checks)
+
+
+def exit_code(checks: Sequence[LeafCheck]) -> int:
+    """0 only when at least one entry was compared and none is stale; 1 if any is stale; 3 when
+    nothing was compared, which is not a clean bill."""
+    if any(check.stale for check in checks):
+        return EXIT_STALE
+    return EXIT_CLEAN if compared(checks) else EXIT_NOTHING_COMPARED
+
+
 def summary(checks: Sequence[LeafCheck]) -> str:
-    """The last line: how many slides in how many Leaves, or that there are none."""
+    """The last line: how many slides in how many Leaves, or that there are none — or that nothing
+    was looked at, which is never worded as none."""
     stale = [entry for check in checks for entry in check.stale]
     if not stale:
-        return f"no stale slides in {_plural(len(checks), 'Leaf', 'Leaves')}"
+        in_leaves = _plural(len(checks), "Leaf", "Leaves")
+        if compared(checks) == 0:
+            return (
+                f"nothing was compared in {in_leaves}: no audio entry was there to check, "
+                "so nothing can be called clean"
+            )
+        return f"no stale slides in {in_leaves}"
     slides = {(entry.order, entry.slide) for entry in stale}
     leaves = {entry.order for entry in stale}
     versions = Counter(entry.version for entry in stale)
@@ -137,9 +179,15 @@ def summary(checks: Sequence[LeafCheck]) -> str:
 
 __all__ = [
     "DRAFT",
+    "EXIT_CLEAN",
+    "EXIT_NOTHING_COMPARED",
+    "EXIT_STALE",
     "LIVE",
+    "PUBLISHED",
     "LeafCheck",
     "StaleEntry",
     "check_leaf",
+    "compared",
+    "exit_code",
     "summary",
 ]

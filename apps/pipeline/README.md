@@ -194,6 +194,78 @@ uv run zoomout-pipeline purge-raw-text --run-id <run-id>
 reconstruct, so it is recorded at ingest or not at all. `undocumented` is an honest answer;
 silence is not.
 
+## One spender per run (LEDGER-1)
+
+A run's cost ledger lives in its checkpoint, and a command that spends loads the whole ledger when
+it opens the run, adds its own spend in memory and writes the whole ledger back. Two processes on
+one run therefore overwrite each other's entries, and each starts its budget from its own copy of
+what has been spent, so two of them can each believe they have all of the voiceover ceiling's
+headroom. The ceiling is enforced by that ledger, and for the first three packages that spent
+real money the only thing enforcing the ledger was a sentence in this file. It is a lock now.
+
+**The lock** is a Postgres advisory lock on a connection of its own, keyed by the run id, in **the
+database the ledger lives in** (`src/zoomout_pipeline/db/run_lock.py`). It is there and not in a
+file under `runs/` because `runs/` is per worktree and the ledger is not: a `narrate` started from
+`ZO` while another runs from `ZO-pipeline` has to meet it. The server frees the lock when its
+connection ends, however the process ends: a normal exit, an error, Ctrl-C, SIGTERM or `kill -9`.
+**A killed process never leaves a run held and nothing needs cleaning up** (measured against this
+container: free two milliseconds after a SIGKILL). It relies on a direct connection, so a
+connection pooler between the pipeline and Postgres would defeat it; there is none.
+
+**Which commands take it.** Every command that opens a run for models, creates a run or writes its
+checkpoint takes the lock as its first act, before it builds a client or reads the ledger: `run`,
+`resume`, `measure-breakdown`, `write-drafts`, `generate-assets`, `review-track`, `rewrite-leaf`,
+`balance-distractors`, `audition-voices` and `narrate`. It is **per run**: two different runs spend
+at once. **Reads are free**: `status`, `cost`, `narration-stale` and `purge-raw-text` never take it
+and work while a `narrate` is going; `narration-stale` is what you run while one is. A test sorts
+every registered command into one of those groups (or into "has no run id"), so a new command
+cannot be added without deciding which. `generate-covers` and `generate-greetings` have no run and
+so no lock: the first spends against a $0.50 ceiling it computes afresh each time, the second
+keeps its own ledger in `runs/greetings/spend.json`, and neither is protected from a second copy
+of itself.
+
+**A refusal** is red, exits with code 2 like the paid-tier refusal, and comes before anything was
+read, built, called or written. It names the run, who holds it (the holder's connection is named
+`zoomout-pipeline <command> <run> pid <pid>`, read back from `pg_stat_activity` with its Postgres
+backend and how long it has held the run) and the two ways out: wait for it, or stop it.
+
+```
+RUN 'ikigai' IS HELD BY ANOTHER PROCESS — refused before anything was read, built, called or written.
+
+  holder : zoomout-pipeline narrate ikigai pid 41233
+           Postgres backend 5190, holding it for 12 min 4 s (since 17:42:11)
+
+Two ways out:
+  - wait for it to finish, then run this again;
+  - stop it ("kill 41233", on the machine that started it). ...
+```
+
+**There is no `--force` and no `--wait`.** A flag that overrides it is the unguarded ledger again,
+and a command that queues behind a `narrate` for an hour is a second spender with a delay.
+
+**If the holder is truly dead and the server has not noticed**, which means a machine that lost
+power rather than a process that died, the server frees the lock when its keepalive probes give up
+(about a minute; the lock connection asks for them). To do it by hand, in `psql` against the
+pipeline's own database, with the backend pid from the refusal:
+
+```sql
+select pg_terminate_backend(5190);
+```
+
+**A lost lock stops the run.** If the lock's connection dies while its process lives (a Postgres
+restart, a network drop, somebody's `pg_terminate_backend`), the process would be unguarded and
+would not know. So every write to a run's checkpoint first asks the server whether this connection
+still holds the lock; if it does not, the command stops (exit code 1), says what it left unrecorded
+and writes nothing further. The spend that was in flight when the lock went is the only one that
+can follow it, and what it bought is on disk for the next run to reuse. `run` and `resume` write
+through the graph's own checkpointer and are not checked write by write: they take the lock first
+and hold it, but they would not notice losing it.
+
+The tests: nothing in the suite takes a lock in the real database (a conftest fixture puts a
+locker that holds nothing in front of every test), and the lock's own tests use the server's
+maintenance database, `postgres`, since advisory locks are per database. They skip loudly when
+Postgres is not reachable, like the others.
+
 ## Scenario illustrations: one identity, many places
 
 Two files, and the split is the point.
@@ -328,22 +400,33 @@ first call. **Only a budget or a speech failure stops the whole run.** The exit 
 Leaf was held, for any reason.
 
 **`narrate --leaf N`** (repeatable, by `orderIndex`) does just those Leaves, in order; an index the
-run has no Leaf for is refused before anything runs, and `--leaf` cannot be combined with
-`--limit`. The header says which Leaves it will do.
+run has no Leaf for is refused before anything is rendered, listened to, spent or written to the CMS
+(the run's checkpoint has by then recorded which door it used, so "nothing written" would be untrue),
+and `--leaf` cannot be combined with `--limit`. The header says which Leaves it will do.
 
 **A partial run cannot shrink a review.** `narrate` rebuilds the review tracks from the clips it
 rendered, and VO-4's run — which covered Leaves 0–8 — replaced the 72-clip full-book tracks with
 36-clip ones. A run now overwrites a voice's review only if it covers every Leaf it was asked for
-**and** at least as many clips as the review it replaces; otherwise it writes beside it, under a
-name that carries the coverage (`<book>-narration-<voice>-leaves-0-8+10-17`), says so, and leaves
-the existing one as it was. With no existing review there is nothing to shrink.
+**and every Leaf the review it replaces covers** (read from that review's cue sheet: by Leaf, not by
+count, since a run over other Leaves can have as many clips and would still lose the old review).
+Otherwise it writes beside it, under a name that carries the coverage
+(`<book>-narration-<voice>-leaves-0-8+10-17`) and that no review already has (a second partial run
+of the same Leaves gets `-2`), says so, and leaves the existing ones as they were. With no existing
+review there is nothing to shrink, and a review whose Leaves cannot be read is never overwritten.
 
 **`narration-stale --run-id <id>`** is free and read-only: it lists every narrated slide whose
-stored `textDigest` no longer matches its Leaf's current text — in the published version and in
-any pending draft — which is exactly what the backend drops. It is a command of its own, not a
-`narrate` flag, so the code that can spend is never constructed: no speech client, no guard, no
-budget. It checks who the key is first (an anonymous 200 shows no drafts and would report
-"clean"), prints how many entries it compared, and exits 1 if anything is stale, 0 if nothing is.
+stored `textDigest` no longer matches its Leaf's current text, in the published version and in any
+pending draft. The backend drops an entry like that, which is how an edit to a narrated field
+silences a slide in both voices. **It is a digest check and only that, not every entry the backend
+would drop:** it does not see an unknown narrator, an empty url, a zero duration, a duplicated
+narrator (the backend drops both rows) or a `stickyNotes.audio` entry, none of which is reachable
+through the pipeline's own attach. It is a command of its own, not a `narrate` flag, so the code
+that can spend is never constructed: no speech client, no guard, no budget. It checks who the key
+is first (an anonymous 200 shows no drafts and would report "clean"), prints how many entries it
+compared, and exits **0** if it compared at least one entry and none is stale, **1** if any is
+stale, and **3** if it compared nothing, because no Leaf carries an audio entry. That last case is
+said plainly and never printed as clean: a check that looked at nothing has found nothing, and that
+is not the same as the audio being fine.
 
 ```bash
 uv run zoomout-pipeline narration-stale --run-id ikigai            # which slides are silent, and why
@@ -357,7 +440,8 @@ recomputes the same hash from whatever Payload serves and silently drops any ent
 longer matches, so this is the one place a stray `.strip()` would make clips vanish with no
 error anywhere; `tests/test_narration_write.py::TestTextDigest` is the guard.
 
-**Run one `narrate` at a time per run.** Two processes on one run would race on its cost ledger.
+**A second `narrate` on the same run is refused**, not left to the operator's memory: see
+[One spender per run](#one-spender-per-run-ledger-1).
 
 **The first direction was read aloud.** It began "Read the text exactly as written: every word,
 in order…", and Gemini-TTS spoke everything after the colon before the Leaf text in 12 of 13

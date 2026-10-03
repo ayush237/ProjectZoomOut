@@ -50,6 +50,7 @@ from zoomout_pipeline.graph.narration_nodes import (
     Guard,
     clip_key,
     existing_review_clips,
+    existing_review_leaves,
     leaves_label,
     missing_first_attempts,
     render_line,
@@ -782,13 +783,94 @@ def test_the_first_review_of_a_run_takes_the_standard_name_even_when_partial(
     assert not list(review.glob("*-leaves-*"))
 
 
+def test_a_run_over_other_leaves_with_as_many_clips_does_not_take_a_reviews_name(
+    tmp_path: Path, drive: Any, world: Any
+) -> None:
+    """**The defect by Leaf, through the command.** Leaves 1-2 are reviewed (eight clips a voice);
+    a run over Leaves 2-3 has the same count and covers everything it was asked for, which the count
+    rule overwrote with, and it would have lost Leaf 1's review. It writes beside instead."""
+    docs, heard = world
+    drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)),
+        "--no-synthesis",
+        "--leaf",
+        "1",
+        "--leaf",
+        "2",
+    )
+    review = tmp_path / "review"
+    assert "8 clips" in _md(review, "achernar")
+    before = tree(review)
+
+    other = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)),
+        "--no-synthesis",
+        "--leaf",
+        "2",
+        "--leaf",
+        "3",
+    )
+
+    assert other.exit_code == 0, other.output
+    after = tree(review)
+    assert {name: digest for name, digest in after.items() if name in before} == before, (
+        "the review of Leaves 1-2 is byte-identical"
+    )
+    assert (review / "ikigai-narration-achernar-leaves-2-3.md").exists()
+    assert "BESIDE the existing review (8 clips)" in other.output
+
+
+def test_a_second_partial_run_never_overwrites_the_first_ones_beside_files(
+    tmp_path: Path, drive: Any, world: Any
+) -> None:
+    """Beside is where a partial run goes so that nothing is lost. The same partial run twice must
+    not take the first one's files either: the second goes beside under a name that is free."""
+    docs, heard = world
+    drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), "--no-synthesis"
+    )
+    review = tmp_path / "review"
+    partial = ("--no-synthesis", "--leaf", "1")
+    drive(Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), *partial)
+    first = tree(review)
+    assert (review / "ikigai-narration-achernar-leaves-1.md").exists()
+
+    again = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), *partial
+    )
+
+    after = tree(review)
+    assert again.exit_code == 0, again.output
+    assert {name: digest for name, digest in after.items() if name in first} == first, (
+        "nothing that was already there changed: not the review, not the first beside"
+    )
+    assert (review / "ikigai-narration-achernar-leaves-1-2.md").exists()
+    assert "ikigai-narration-achernar-leaves-1-2" in again.output
+
+
 # ----------------------------------------------------------------- the rule, without the command
 
 
-def _write_review(folder: Path, name: str, *, clips: int | None) -> None:
+def _write_review(
+    folder: Path, name: str, *, clips: int | None, leaves: Sequence[int] = ()
+) -> None:
+    """A review as `write_review` leaves it: the count, and a row in the table for each clip of
+    each of `leaves` (four slides a Leaf). With no `leaves` it has a count and no rows: a sheet that
+    says how many clips it has and not which Leaves they are."""
     folder.mkdir(parents=True, exist_ok=True)
     header = f"**{clips} clips, 10:00 in total.**" if clips is not None else "no count here"
-    (folder / f"{name}.md").write_text(f"# Review\n\n{header}\n", encoding="utf-8")
+    rows = "".join(
+        f"| 00:{at:02d} | Leaf {leaf} {slide} | 10.0s | 150 wpm | 1.0 st |  |\n"
+        for leaf in leaves
+        for at, slide in enumerate(("Summary", "Scenario", "Payoff", "Takeaway"))
+    )
+    table = (
+        "\n## Every clip\n\n| At | Clip | Length | Pace | Pitch moves | Notes |\n"
+        f"|---|---|---|---|---|---|\n{rows}"
+        if rows
+        else ""
+    )
+    (folder / f"{name}.md").write_text(f"# Review\n\n{header}\n{table}", encoding="utf-8")
     (folder / f"{name}.mp3").write_bytes(b"audio")
     (folder / f"{name}.html").write_text("<html></html>", encoding="utf-8")
 
@@ -808,7 +890,9 @@ def test_review_target_overwrites_only_a_review_it_does_not_shrink(
     tmp_path: Path, asked: list[int], covered: list[int], clips: int, existing: int, beside: bool
 ) -> None:
     if existing:
-        _write_review(tmp_path, "book-narration-achernar", clips=existing)
+        _write_review(
+            tmp_path, "book-narration-achernar", clips=existing, leaves=list(range(existing // 4))
+        )
 
     target = review_target(
         folder=tmp_path, name="book-narration-achernar", asked=asked, covered=covered, clips=clips
@@ -820,6 +904,91 @@ def test_review_target_overwrites_only_a_review_it_does_not_shrink(
     else:
         assert target.destination == tmp_path / "book-narration-achernar"
     assert target.existing_clips == existing
+
+
+@pytest.mark.parametrize(
+    ("covered", "beside"),
+    [
+        ([0, 1, 2], False),  # the review's own Leaves: over it
+        ([0, 1, 2, 3], False),  # and one more: over it
+        ([3, 4, 5], True),  # as many clips, **other Leaves**: it would lose Leaves 0-2
+        ([3, 4, 5, 6], True),  # more clips, other Leaves: the same
+        ([1, 2, 3], True),  # as many clips, one Leaf of the review's missing
+    ],
+)
+def test_a_review_is_overwritten_only_by_a_run_that_covers_its_leaves(
+    tmp_path: Path, covered: list[int], beside: bool
+) -> None:
+    """**By Leaf, not by count** (VO-4.1's A4 compared clips, which was the spec's wording): a run
+    over Leaves 3-5 has as many clips as a review of Leaves 0-2, and by that measure shrinks
+    nothing, yet it would take the review's name and lose Leaves 0-2."""
+    _write_review(tmp_path, "book-narration-achernar", clips=12, leaves=[0, 1, 2])
+
+    target = review_target(
+        folder=tmp_path,
+        name="book-narration-achernar",
+        asked=covered,
+        covered=covered,
+        clips=4 * len(covered),
+    )
+
+    assert target.beside is beside
+
+
+def test_a_review_whose_leaves_cannot_be_read_is_never_overwritten(tmp_path: Path) -> None:
+    """A sheet that counts its clips and does not say which Leaves they are cannot be shown to be
+    covered by anything, for the same reason as one whose count cannot be read."""
+    _write_review(tmp_path, "book-narration-achernar", clips=12)
+
+    target = review_target(
+        folder=tmp_path,
+        name="book-narration-achernar",
+        asked=[0, 1, 2],
+        covered=[0, 1, 2],
+        clips=12,
+    )
+
+    assert target.beside and target.existing_clips == 12
+    assert existing_review_leaves(tmp_path / "book-narration-achernar") is None
+
+
+def test_existing_review_leaves_reads_the_table_and_nothing_else(tmp_path: Path) -> None:
+    _write_review(tmp_path, "book-narration-achernar", clips=8, leaves=[2, 7])
+    sheet = tmp_path / "book-narration-achernar.md"
+    # The "Listen here first" bullets and prose name Leaves too, and are not coverage.
+    sheet.write_text(
+        sheet.read_text(encoding="utf-8")
+        + "\n- **03:10** Leaf 9 Payoff — a note\nSee Leaf 11 for the other one.\n",
+        encoding="utf-8",
+    )
+
+    assert existing_review_leaves(tmp_path / "book-narration-achernar") == frozenset({2, 7})
+    assert existing_review_leaves(tmp_path / "nothing-here") == frozenset()
+
+
+def test_a_review_with_only_an_mp3_has_no_readable_leaves_either(tmp_path: Path) -> None:
+    (tmp_path / "book-narration-achernar.mp3").write_bytes(b"audio")
+
+    assert existing_review_leaves(tmp_path / "book-narration-achernar") is None
+
+
+def test_a_beside_name_that_is_taken_is_never_reused(tmp_path: Path) -> None:
+    """Beside is where a partial run goes so that nothing is lost; a second partial run of the same
+    Leaves must not take the first one's files."""
+    _write_review(tmp_path, "book-narration-achernar", clips=12, leaves=[0, 1, 2])
+    name = "book-narration-achernar"
+
+    first = review_target(folder=tmp_path, name=name, asked=[1], covered=[1], clips=4)
+    assert first.destination.name == f"{name}-leaves-1"
+    _write_review(tmp_path, first.destination.name, clips=4, leaves=[1])
+
+    second = review_target(folder=tmp_path, name=name, asked=[1], covered=[1], clips=4)
+    assert second.destination.name == f"{name}-leaves-1-2"
+    _write_review(tmp_path, second.destination.name, clips=4, leaves=[1])
+
+    third = review_target(folder=tmp_path, name=name, asked=[1], covered=[1], clips=4)
+    assert third.destination.name == f"{name}-leaves-1-3"
+    assert second.beside and third.beside
 
 
 def test_a_review_whose_size_cannot_be_read_is_never_overwritten(tmp_path: Path) -> None:
@@ -910,3 +1079,254 @@ def test_the_help_and_the_readme_describe_the_hold_and_the_options() -> None:
         "Only a budget or a speech failure stops the whole run",
     ):
         assert needed in readme, needed
+
+
+# ================================================== A7 — the VO-4.1 leftovers (LEDGER-1, Part 2)
+#
+# Wording that was untrue, said true, and each one pinned: the sentence is read from the command's
+# own output, so a later edit that brings the old claim back goes red.
+
+
+class _Log:
+    """`cli._log`, recording instead of printing: a structured event is a name and its fields."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str, dict[str, Any]]] = []
+
+    def _record(self, level: str, event: str, **fields: Any) -> None:
+        self.events.append((level, event, fields))
+
+    def info(self, event: str, **fields: Any) -> None:
+        self._record("info", event, **fields)
+
+    def warning(self, event: str, **fields: Any) -> None:
+        self._record("warning", event, **fields)
+
+    def error(self, event: str, **fields: Any) -> None:
+        self._record("error", event, **fields)
+
+    def named(self, event: str) -> list[tuple[str, dict[str, Any]]]:
+        return [(level, fields) for level, name, fields in self.events if name == event]
+
+
+def test_the_unknown_leaf_refusal_says_what_it_did_not_do_and_not_that_nothing_was_written(
+    tmp_path: Path, drive: Any, world: Any
+) -> None:
+    """(d) The checkpoint is written twice before `--leaf 9` is found to be nothing (which door the
+    run used), so "nothing was written" was untrue. What is true: nothing was rendered, listened
+    to, spent or written to the CMS."""
+    docs, heard = world
+    session = Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard))
+
+    result = drive(session, "--no-synthesis", "--leaf", "9")
+
+    assert result.exit_code == 2
+    out = " ".join(result.output.split())
+    assert "nothing was rendered, listened to, spent or written to the CMS" in out
+    assert "Nothing was done beyond recording the run's transport" in out
+    assert "Nothing was done." not in out
+    assert "nothing written" not in out.lower()
+
+
+def test_the_help_and_the_readme_say_the_same_about_an_unknown_leaf() -> None:
+    group: Any = typer.main.get_command(cli.app)
+    params = {param.name: param for param in group.commands["narrate"].params}
+    readme = " ".join(
+        (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8").split()
+    )
+    said = "refused before anything is rendered, listened to, spent or written to the CMS"
+
+    assert said in " ".join(params["only_leaves"].help.split())
+    assert said in readme
+    assert "refused before anything runs" not in readme
+    assert "refused before anything runs" not in " ".join(params["only_leaves"].help.split())
+
+
+@pytest.mark.parametrize(
+    ("options", "with_listener", "carried"),
+    [
+        ((), True, "--leaf 2 --tempo 1.3 --max-attempts 3"),
+        (
+            ("--tempo", "1.2", "--max-attempts", "2", "--no-guard"),
+            False,
+            "--leaf 2 --tempo 1.2 --max-attempts 2 --no-guard",
+        ),
+        (("--tempo", "1.5", "--max-attempts", "1"), False, "--leaf 2 --tempo 1.5 --max-attempts 1"),
+    ],
+)
+def test_the_way_out_carries_the_options_the_run_was_given(
+    tmp_path: Path,
+    drive: Any,
+    world: Any,
+    options: tuple[str, ...],
+    with_listener: bool,
+    carried: str,
+) -> None:
+    """(g) A bare `--leaf 2` would narrate again at the defaults, and with the guard back on if this
+    run had switched it off. The suggestion says what this run was run with. (A listener is only
+    registered for the tempo the module was primed at, so a run at another tempo has none.)"""
+    docs, heard = world
+    edit_payoff(docs[1])
+    session = Session(
+        tmp_path,
+        ExplodingBackend(),
+        docs,
+        listener=EchoListener(heard) if with_listener else None,
+    )
+
+    result = drive(session, "--no-synthesis", "--leaf", "2", *options)
+
+    assert result.exit_code == 1, result.output
+    out = " ".join(result.output.split())
+    suggestion = out.split("Two ways out: narrate it — ")[1].split(" without --no-synthesis")[0]
+    assert suggestion == f"`narrate --run-id ikigai {carried}`"
+
+
+def test_the_tail_says_a_leafs_audio_waits_in_a_draft_only_when_some_does(
+    tmp_path: Path, drive: Any, world: Any
+) -> None:
+    """(h) The last line used to say each Leaf's audio waits in a pending draft under a heading that
+    said nothing was attached."""
+    docs, heard = world
+
+    # Every Leaf attached: the old sentence, as it was.
+    everything = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), "--no-synthesis"
+    )
+    assert everything.exit_code == 0, everything.output
+    out = " ".join(everything.output.split())
+    assert "Each Leaf's audio waits in a pending draft until a human publishes it." in out
+
+    # Leaf 2 held and 1 and 3 attached: it says which, and that the others were not.
+    edit_payoff(docs[1])
+    mixed = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), "--no-synthesis"
+    )
+    out = " ".join(mixed.output.split())
+    assert "publishes it (Leaves 1, 3; the others were not attached)." in out
+
+    # Every Leaf held: nothing waits in a draft, and it does not say so.
+    nothing = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)),
+        "--no-synthesis",
+        "--leaf",
+        "2",
+    )
+    out = " ".join(nothing.output.split())
+    assert nothing.exit_code == 1
+    assert "Nothing was published, and nothing was attached" in out
+    assert "waits in a pending draft" not in out
+
+
+def test_the_will_buy_line_promises_only_the_retry_the_run_can_make(
+    tmp_path: Path, drive: Any, world: Any
+) -> None:
+    """(i) With the guard off nothing listens, so "a retry for any clip the guard fails" is untrue;
+    what can still be bought again is a clip whose measured pace is unnatural."""
+    docs, _heard = world
+    edit_payoff(docs[1])
+    session = Session(tmp_path, ContentBackend(), docs, listener=None)
+
+    result = drive(session, "--no-guard")
+    out = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "will buy : 2 clips — leaf 2 payoff (female, Achernar), leaf 2 payoff (male, "
+        "Sadaltager); and a retry for any clip whose pace is not natural (the guard is off)"
+    ) in out
+    assert "the guard fails" not in out
+
+
+def test_a_hold_found_midway_does_not_claim_to_have_listened_when_the_guard_is_off(
+    tmp_path: Path, drive: Any, monkeypatch: pytest.MonkeyPatch, world: Any
+) -> None:
+    """(i) "Its earlier clips were already listened to, and that is on the ledger" is true with the
+    guard on and untrue with it off."""
+    docs, _heard = world
+    edit_payoff(docs[1])
+    monkeypatch.setattr(narration_nodes, "missing_first_attempts", lambda **_kwargs: [])
+    session = Session(tmp_path, ExplodingBackend(), docs, listener=None)
+
+    result = drive(session, "--no-synthesis", "--no-guard")
+    out = " ".join(result.output.split())
+
+    assert result.exit_code == 1, result.output
+    assert (
+        "found while rendering: its earlier clips were rendered, and nothing was listened to" in out
+    )
+    assert "already listened to" not in out and "on the ledger" not in out
+
+
+def test_a_hold_found_by_the_pre_flight_leaves_a_structured_event(
+    tmp_path: Path, drive: Any, monkeypatch: pytest.MonkeyPatch, world: Any
+) -> None:
+    """(k) A hold was a line of output and nothing else: no event for whoever reads the logs. One
+    per hold, naming the Leaf and why, and never a word of the Leaf's text."""
+    docs, heard = world
+    narrated = {int(doc["orderIndex"]): texts_of(doc) for doc in docs}
+    log = _Log()
+    monkeypatch.setattr(cli, "_log", log)
+    edit_payoff(docs[1])
+
+    drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), "--no-synthesis"
+    )
+
+    ((level, fields),) = log.named("narration.leaf_held")
+    assert level == "info"
+    assert fields == {
+        "run_id": "ikigai",
+        "leaf": 2,
+        "reason": "not_on_disk",
+        "found": "pre_flight",
+        "clips": ["payoff (female, Achernar)", "payoff (male, Sadaltager)"],
+    }
+    for _level, _event, logged in log.events:
+        for texts in narrated.values():
+            for text in texts:
+                assert leaked_window(text, repr(logged)) is None, "names, never words"
+
+
+def test_a_hold_found_midway_leaves_a_structured_event_too(
+    tmp_path: Path, drive: Any, monkeypatch: pytest.MonkeyPatch, world: Any
+) -> None:
+    docs, heard = world
+    log = _Log()
+    monkeypatch.setattr(cli, "_log", log)
+    monkeypatch.setattr(narration_nodes, "missing_first_attempts", lambda **_kwargs: [])
+    edit_payoff(docs[1])
+
+    drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard)), "--no-synthesis"
+    )
+
+    ((level, fields),) = log.named("narration.leaf_held")
+    assert (level, fields["leaf"], fields["reason"], fields["found"]) == (
+        "info",
+        2,
+        "not_on_disk",
+        "while_rendering",
+    )
+
+
+def test_a_hold_by_the_guard_leaves_a_structured_event_too(
+    tmp_path: Path, drive: Any, monkeypatch: pytest.MonkeyPatch, world: Any
+) -> None:
+    """A clip that still does not say its text after its attempts holds its Leaf, and says so as a
+    warning: it is the hold that wants a person to listen."""
+    docs, heard = world
+    log = _Log()
+    monkeypatch.setattr(cli, "_log", log)
+    wrong = {digest for digest, text in heard.items() if text == texts_of(docs[0])[2]}
+
+    result = drive(
+        Session(tmp_path, ExplodingBackend(), docs, listener=EchoListener(heard, wrong=wrong)),
+        "--no-synthesis",
+        "--max-attempts",
+        "1",
+    )
+
+    assert result.exit_code == 1, result.output
+    ((level, fields),) = log.named("narration.leaf_held")
+    assert (level, fields) == ("warning", {"run_id": "ikigai", "leaf": 1, "reason": "guard"})
