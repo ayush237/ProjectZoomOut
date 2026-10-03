@@ -7,9 +7,11 @@ import {
   isProductionPublishable,
   leafSchema,
   leafSourceReferenceSchema,
+  NARRATED_FIELDS,
   NARRATOR_IDS,
   NARRATOR_LABELS,
   scenarioOptionsSchema,
+  SLIDE_KEYS,
   SOURCE_LOCATOR_REQUIRED_MESSAGE,
   toPublicLeaf,
   trackSchema,
@@ -634,6 +636,49 @@ describe('NARRATOR_LABELS (ONBOARD-3)', () => {
 
     for (const text of shown) {
       expect(text).not.toMatch(/achernar|sadaltager/iu);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Which field of which slide is narrated — GUARD-1                            */
+/* -------------------------------------------------------------------------- */
+
+describe('NARRATED_FIELDS (GUARD-1)', () => {
+  it('is exactly the four narrated slides and the field each is read from, in reading order', () => {
+    // The whole map, in order: the CMS warning, and later the backend mapper and the
+    // pipeline, read narration from these fields and nowhere else. Adding a fifth, or
+    // pointing a slide at another field, changes what is narrated and is a deliberate
+    // edit to this assertion too. `toEqual` ignores key order, so the order is pinned
+    // on its own line.
+    expect(NARRATED_FIELDS).toEqual({
+      summary: 'body',
+      scenario: 'prompt',
+      payoff: 'body',
+      takeaway: 'body',
+    });
+    expect(Object.keys(NARRATED_FIELDS)).toEqual(['summary', 'scenario', 'payoff', 'takeaway']);
+  });
+
+  it('leaves stickyNotes out — it has no narrated field', () => {
+    expect(NARRATED_FIELDS).not.toHaveProperty('stickyNotes');
+  });
+
+  it('names only real slides', () => {
+    for (const slide of Object.keys(NARRATED_FIELDS)) {
+      expect(SLIDE_KEYS as readonly string[]).toContain(slide);
+    }
+  });
+
+  it('points each slide at a field that the slide actually has', () => {
+    // The compile-time `satisfies` already refuses a name the slide type lacks; this
+    // is the runtime half, checked against a parsed Leaf rather than the type.
+    const leaf = leafSchema.parse(buildLeafInput());
+
+    for (const [slide, field] of Object.entries(NARRATED_FIELDS)) {
+      const slideValue = leaf[slide as keyof typeof NARRATED_FIELDS] as Record<string, unknown>;
+
+      expect(typeof slideValue[field]).toBe('string');
     }
   });
 });

@@ -62,6 +62,42 @@ export const SLIDE_KEYS = ['summary', 'scenario', 'payoff', 'stickyNotes', 'take
 export const slideKeySchema = z.enum(SLIDE_KEYS);
 
 /**
+ * Which field of which slide is read aloud (GUARD-1).
+ *
+ * Four slides are narrated and `stickyNotes` is not: a slide's clips are generated from
+ * exactly one text field, and each clip's `textDigest` is the sha256 of that field. The
+ * value is the field's name inside the slide's group — `payoff: 'body'` is `payoff.body`.
+ * `stickyNotes` is absent by construction, which is what makes any audio entry on it
+ * unverifiable and always dropped (`content.mapper.ts`).
+ *
+ * **One TypeScript home for a fact that was written out in several places.** The backend
+ * mapper's four `mapAudioEntries` calls and the CMS's stale-narration warning both depend
+ * on it. This constant is new and they do not read it yet — the mapper is untouched by
+ * GUARD-1, and the CMS warning is the first consumer; the mapper can adopt it later. The
+ * pipeline holds the same fact in Python (`assets/narration.py:NARRATED_FIELDS`, whose
+ * values are `(group, field)` tuples rather than field names), which nothing can import
+ * across: the two agree by hand.
+ *
+ * **Typed against the slide shapes**, so renaming `prompt` in `scenarioSlideSchema`
+ * fails this file's build rather than leaving a warning pointed at a field that no longer
+ * exists. The keys are in reading order.
+ */
+export const NARRATED_FIELDS = {
+  summary: 'body',
+  scenario: 'prompt',
+  payoff: 'body',
+  takeaway: 'body',
+} as const satisfies {
+  readonly summary: keyof SummarySlide;
+  readonly scenario: keyof ScenarioSlide;
+  readonly payoff: keyof PayoffSlide;
+  readonly takeaway: keyof TakeawaySlide;
+};
+
+/** The slides that are read aloud — `SlideKey` without `stickyNotes`. */
+export type NarratedSlideKey = keyof typeof NARRATED_FIELDS;
+
+/**
  * The two narrators a reader can choose between (VO-1.1).
  *
  * **Keys are ZoomOut's, not Google's.** The pipeline's TTS provider names voices
