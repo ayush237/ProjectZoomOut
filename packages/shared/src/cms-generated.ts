@@ -171,7 +171,7 @@ export interface Track {
    */
   publisher?: string | null;
   /**
-   * URL of the book cover image.
+   * The book cover image. For an image uploaded in Media, enter its path — /api/media/file/<file name> — which keeps working when the server moves. A full https:// address that points directly at an image file also works, but an absolute URL has to be edited whenever the host changes.
    */
   coverUrl?: string | null;
   description?: string | null;

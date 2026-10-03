@@ -72,7 +72,9 @@ export const Tracks: CollectionConfig = {
       name: 'coverUrl',
       type: 'text',
       admin: {
-        description: 'URL of the book cover image.',
+        // Wording only: what the field accepts is `checkCoverUrlIsImage`'s to decide.
+        description:
+          'The book cover image. For an image uploaded in Media, enter its path — /api/media/file/<file name> — which keeps working when the server moves. A full https:// address that points directly at an image file also works, but an absolute URL has to be edited whenever the host changes.',
       },
     },
     {

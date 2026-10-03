@@ -107,6 +107,25 @@ export function checkCoverUrlPresent(track: TrackDocumentInput): RuleResult {
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'] as const;
 
 /**
+ * Where Payload serves an uploaded image from, and the form it stores for one:
+ * `/api/media/file/<file name>` — the `url` on a Media document.
+ */
+const MEDIA_PATH_PREFIX = '/api/media/file/';
+
+/**
+ * A host for the URL parser to resolve a media path against, so the path can be
+ * normalised the way the backend normalises it. Nothing is ever fetched from it:
+ * `.invalid` is reserved (RFC 2606) and cannot resolve.
+ */
+const PARSE_ORIGIN = 'http://cms.invalid';
+
+/** What an author is told a cover can be, wherever a message has to say so. */
+const COVER_FORMS =
+  `Use the path of an image uploaded in Media (${MEDIA_PATH_PREFIX}<file name>), which ` +
+  'keeps working if the server moves, or a full https:// address that points directly at ' +
+  'an image file.';
+
+/**
  * A published Track's cover must actually be an image.
  *
  * `checkCoverUrlPresent` above only asks whether the field is filled, and the seeded
@@ -114,14 +133,21 @@ const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'] as 
  * silently rendered the fallback icon. Nothing was broken enough to fail; it just
  * looked unfinished, which is the kind of defect that survives review.
  *
- * **This is an honest heuristic, not proof.** It checks that the URL parses, is http(s),
- * and that its *path* ends in an image extension. It deliberately does not fetch the
- * URL: a `beforeChange` hook that makes a network call blocks every save on someone
- * else's uptime, turns an offline laptop into a CMS that cannot save, and would still
- * only prove what the server returned at that moment. What it catches is the whole of
- * the observed failure — a page URL where an image belongs. What it misses is a URL
- * that ends in `.png` and serves something else, which no cheap check can catch and
- * which nobody has done by accident.
+ * **Two forms are accepted**, and a value belongs to exactly one of them by its first
+ * character. A leading slash is a Payload media path — the form the Media document
+ * stores, which the backend resolves against its own media host when it serves the
+ * Track (`resolveMediaUrl`), so the cover follows the host when the host changes (an
+ * absolute address broke both published covers each time the Mac's LAN address did).
+ * Anything else has to be an absolute http(s) address, as before.
+ *
+ * **This is an honest heuristic, not proof.** It checks that the value is one of those
+ * two forms and that its *path* ends in an image extension. It deliberately does not
+ * fetch anything: a `beforeChange` hook that makes a network call blocks every save on
+ * someone else's uptime, turns an offline laptop into a CMS that cannot save, and would
+ * still only prove what the server returned at that moment. What it catches is the
+ * whole of the observed failure — a page URL where an image belongs. What it misses is
+ * a URL that ends in `.png` and serves something else, which no cheap check can catch
+ * and which nobody has done by accident.
  */
 export function checkCoverUrlIsImage(track: TrackDocumentInput): RuleResult {
   // Absence is `checkCoverUrlPresent`'s to report. Failing twice for one empty field
@@ -131,20 +157,26 @@ export function checkCoverUrlIsImage(track: TrackDocumentInput): RuleResult {
   }
 
   const raw = track.coverUrl.trim();
+
+  // The backend's own test for "resolve this against the media host" is `startsWith('/')`
+  // (`resolveMediaUrl`), so this is where the two sides have to agree.
+  if (raw.startsWith('/')) {
+    return checkMediaPathCover(raw);
+  }
+
   let url: URL;
 
   try {
     url = new URL(raw);
   } catch {
-    return failed(
-      'coverUrl',
-      'The cover image URL is not a valid URL. It should start with https:// and point ' +
-        'directly at an image file.',
-    );
+    return failed('coverUrl', `The cover image is not a usable address. ${COVER_FORMS}`);
   }
 
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    return failed('coverUrl', 'The cover image URL must be an http or https address.');
+    return failed(
+      'coverUrl',
+      `The cover image has to be an http or https address, or a media path. ${COVER_FORMS}`,
+    );
   }
 
   // The path only — a query string legitimately carries resizing parameters, and
@@ -157,6 +189,61 @@ export function checkCoverUrlIsImage(track: TrackDocumentInput): RuleResult {
       'The cover image URL must point directly at an image file, not at a web page. ' +
         `It should end in one of: ${IMAGE_EXTENSIONS.join(', ')}. ` +
         'On a retailer product page, right-click the cover and copy the image address.',
+    );
+  }
+
+  return PASSED;
+}
+
+/**
+ * The slash-prefixed branch of `checkCoverUrlIsImage`: a Payload media path.
+ *
+ * "Starts with `/`" does not mean "on the media host". `resolveMediaUrl` hands any such
+ * value to `new URL(value, MEDIA_BASE_URL)`, and the URL parser reads `//host/x.png`,
+ * `/\host/x.png` and `/<tab>/host/x.png` as an authority — the stored "relative" value
+ * then names another host, and a Track's cover is whatever that host serves. So the
+ * value has to begin with the media folder *literally*, which none of those do.
+ *
+ * That alone is not enough, because a value can begin with the folder and still leave
+ * it: `/api/media/file/../../x.png` is `/x.png` once the parser has resolved the dot
+ * segments (`%2e%2e` and `..\` are dot segments to it too). So the folder is checked a
+ * second time on the *normalised* path, which is also the path whose extension is read.
+ *
+ * Neither check can stand in for the other: the first is the only one that sees a
+ * protocol-relative value that repeats the folder after the host
+ * (`//evil.test/api/media/file/x.png`, whose normalised path looks fine), and the second
+ * is the only one that sees an escape the literal text hides.
+ */
+function checkMediaPathCover(raw: string): RuleResult {
+  if (!raw.startsWith(MEDIA_PATH_PREFIX)) {
+    return failed(
+      'coverUrl',
+      `A cover that starts with / has to be a media path beginning ${MEDIA_PATH_PREFIX} — ` +
+        `the path of an image uploaded in Media. ${COVER_FORMS}`,
+    );
+  }
+
+  // Cannot throw: the value starts with `/` followed by a path character, so it is a
+  // path-absolute reference and the parser takes the host from the base.
+  const { pathname } = new URL(raw, PARSE_ORIGIN);
+
+  if (!pathname.startsWith(MEDIA_PATH_PREFIX)) {
+    return failed(
+      'coverUrl',
+      `The cover path leaves ${MEDIA_PATH_PREFIX} once its ".." segments are resolved. ` +
+        'Use the path exactly as Media shows it for the uploaded image.',
+    );
+  }
+
+  // The path only, as for an absolute cover: the query string and fragment are not the
+  // file name.
+  const path = pathname.toLowerCase();
+
+  if (!IMAGE_EXTENSIONS.some((extension) => path.endsWith(extension))) {
+    return failed(
+      'coverUrl',
+      'The cover path must name an image file. ' +
+        `It should end in one of: ${IMAGE_EXTENSIONS.join(', ')}.`,
     );
   }
 
