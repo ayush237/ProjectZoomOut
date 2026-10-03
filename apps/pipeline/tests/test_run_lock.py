@@ -305,6 +305,7 @@ def test_a_lock_connection_that_dies_is_noticed_and_stays_lost(
     assert run_is_free(lock_database, run_id), "and the server freed the run when it ended it"
 
 
+@pytest.mark.filterwarnings("ignore:This process .* is multi-threaded:DeprecationWarning")
 def test_a_forked_child_never_lets_go_of_its_parents_lock(
     real_run_locker: PostgresRunLocker, lock_database: str
 ) -> None:

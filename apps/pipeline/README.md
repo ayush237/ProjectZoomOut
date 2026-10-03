@@ -400,22 +400,33 @@ first call. **Only a budget or a speech failure stops the whole run.** The exit 
 Leaf was held, for any reason.
 
 **`narrate --leaf N`** (repeatable, by `orderIndex`) does just those Leaves, in order; an index the
-run has no Leaf for is refused before anything runs, and `--leaf` cannot be combined with
-`--limit`. The header says which Leaves it will do.
+run has no Leaf for is refused before anything is rendered, listened to, spent or written to the CMS
+(the run's checkpoint has by then recorded which door it used, so "nothing written" would be untrue),
+and `--leaf` cannot be combined with `--limit`. The header says which Leaves it will do.
 
 **A partial run cannot shrink a review.** `narrate` rebuilds the review tracks from the clips it
 rendered, and VO-4's run — which covered Leaves 0–8 — replaced the 72-clip full-book tracks with
 36-clip ones. A run now overwrites a voice's review only if it covers every Leaf it was asked for
-**and** at least as many clips as the review it replaces; otherwise it writes beside it, under a
-name that carries the coverage (`<book>-narration-<voice>-leaves-0-8+10-17`), says so, and leaves
-the existing one as it was. With no existing review there is nothing to shrink.
+**and every Leaf the review it replaces covers** (read from that review's cue sheet: by Leaf, not by
+count, since a run over other Leaves can have as many clips and would still lose the old review).
+Otherwise it writes beside it, under a name that carries the coverage
+(`<book>-narration-<voice>-leaves-0-8+10-17`) and that no review already has (a second partial run
+of the same Leaves gets `-2`), says so, and leaves the existing ones as they were. With no existing
+review there is nothing to shrink, and a review whose Leaves cannot be read is never overwritten.
 
 **`narration-stale --run-id <id>`** is free and read-only: it lists every narrated slide whose
-stored `textDigest` no longer matches its Leaf's current text — in the published version and in
-any pending draft — which is exactly what the backend drops. It is a command of its own, not a
-`narrate` flag, so the code that can spend is never constructed: no speech client, no guard, no
-budget. It checks who the key is first (an anonymous 200 shows no drafts and would report
-"clean"), prints how many entries it compared, and exits 1 if anything is stale, 0 if nothing is.
+stored `textDigest` no longer matches its Leaf's current text, in the published version and in any
+pending draft. The backend drops an entry like that, which is how an edit to a narrated field
+silences a slide in both voices. **It is a digest check and only that, not every entry the backend
+would drop:** it does not see an unknown narrator, an empty url, a zero duration, a duplicated
+narrator (the backend drops both rows) or a `stickyNotes.audio` entry, none of which is reachable
+through the pipeline's own attach. It is a command of its own, not a `narrate` flag, so the code
+that can spend is never constructed: no speech client, no guard, no budget. It checks who the key
+is first (an anonymous 200 shows no drafts and would report "clean"), prints how many entries it
+compared, and exits **0** if it compared at least one entry and none is stale, **1** if any is
+stale, and **3** if it compared nothing, because no Leaf carries an audio entry. That last case is
+said plainly and never printed as clean: a check that looked at nothing has found nothing, and that
+is not the same as the audio being fine.
 
 ```bash
 uv run zoomout-pipeline narration-stale --run-id ikigai            # which slides are silent, and why

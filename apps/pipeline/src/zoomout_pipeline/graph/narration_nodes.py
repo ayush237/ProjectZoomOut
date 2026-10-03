@@ -20,6 +20,10 @@ Cache → budget → Cloud TTS → **disk** → level and edge (**and stretch**)
 - **Unable to spend, on request.** `no_synthesis` refuses, before the budget or the client is
   touched, any clip whose audio is not already on disk. The guard's listening is a separate
   purchase and is not affected.
+- **Bounded regeneration.** A clip the guard calls major — a spoken tag, a dropped phrase —
+  is attempted again, up to `MAX_NARRATION_ATTEMPTS` in all. Then the best attempt is kept and
+  named in the review, because a Leaf with a flagged clip is a listening task, and a Leaf with
+  no clip is a player bug.
 
 ## Plan — before anything is bought (VO-4.1)
 
@@ -29,12 +33,9 @@ clip missing — named, nothing rendered or listened to — and carries on with 
 may synthesise prints what it is about to buy. `render_line` and `_render_attempt` are unchanged
 for library callers and still raise `NarrationNotOnDiskError`; deciding that one Leaf's edited
 text must not stop eight clean ones is the command's job, not the render's. `review_target` is
-the same kind of decision for the review tracks: a partial run writes beside a fuller review
-instead of replacing it.
-- **Bounded regeneration.** A clip the guard calls major — a spoken tag, a dropped phrase —
-  is attempted again, up to `MAX_NARRATION_ATTEMPTS` in all. Then the best attempt is kept and
-  named in the review, because a Leaf with a flagged clip is a listening task, and a Leaf with
-  no clip is a player bug.
+the same kind of decision for the review tracks: a run overwrites a review only if it covers every
+Leaf it was asked for **and every Leaf the review it replaces covers**; otherwise it writes beside
+it, under a name no earlier review already has.
 
 ## Attach — per Leaf
 
@@ -261,7 +262,9 @@ class ClipStore:
 def clip_key(
     *, speech: SpeechClient, voice: str, prompt: str, line: NarrationLine, attempt: int
 ) -> str:
-    """The raw cache's key for one attempt at one line — **the only place it is built.**
+    """The raw cache's key for one attempt at one line — **the only place it is built for Leaf
+    narration.** The greeting library builds its own (`graph/greeting_nodes.py`), from its own
+    fixed sentences and its own cache, and does not go through here.
 
     `_render_attempt` reads and writes `raw/` through it, and the pre-flight below asks it
     whether a clip is already paid for. They must agree to the character, because the
@@ -321,6 +324,9 @@ def missing_first_attempts(
 
 
 _REVIEW_CLIPS = re.compile(r"\*\*(\d+) clips, ")
+# One row of a cue sheet's "Every clip" table: `| 04:12 | Leaf 7 Payoff | 14.2s | ...`.
+_REVIEW_ROW = re.compile(r"^\| \d+:\d\d \| Leaf (\d+) ", re.MULTILINE)
+_REVIEW_SUFFIXES = (".mp3", ".md", ".html")
 
 
 def leaves_label(orders: Iterable[int]) -> str:
@@ -348,6 +354,30 @@ def existing_review_clips(destination: Path) -> int | None:
     return int(found.group(1)) if found else None
 
 
+def existing_review_leaves(destination: Path) -> frozenset[int] | None:
+    """Which Leaves the review at `destination` (no suffix) covers, read from its cue sheet's table:
+    **empty** if there is no review, and **None** if there is one whose Leaves cannot be read, which
+    a caller must take as "do not overwrite" for the same reason as an unreadable size: a review
+    nobody can say the coverage of cannot be shown to be covered by anything."""
+    parts = [destination.with_suffix(suffix) for suffix in _REVIEW_SUFFIXES]
+    if not any(part.exists() for part in parts):
+        return frozenset()
+    sheet = destination.with_suffix(".md")
+    if not sheet.exists():
+        return None
+    rows = _REVIEW_ROW.finditer(sheet.read_text(encoding="utf-8"))
+    return frozenset(int(row.group(1)) for row in rows) or None
+
+
+def _first_unused(stem: Path) -> Path:
+    """`stem`, or `stem-2`, `stem-3`... — the first of them that no review file is already using."""
+    candidate, number = stem, 1
+    while any(candidate.with_suffix(suffix).exists() for suffix in _REVIEW_SUFFIXES):
+        number += 1
+        candidate = stem.with_name(f"{stem.name}-{number}")
+    return candidate
+
+
 @dataclass(frozen=True)
 class ReviewTarget:
     """Where one voice's review is written, and whether that is beside the existing one."""
@@ -366,20 +396,32 @@ def review_target(
     **A partial run cannot shrink a review.** VO-4's run covered Leaves 0-8, rebuilt `review/`
     from them, and replaced the 72-clip full-book tracks with 36-clip ones; the originals
     survived only because a copy had been taken by hand. So a run overwrites an existing review
-    only when it covers **every Leaf it was asked for and at least as many clips** as the review
-    it replaces. Anything else is written beside it, under a name that carries the coverage
-    (`<name>-leaves-0-8+10-17`). With no existing review there is nothing to shrink and the
-    standard name is used; an existing review whose size cannot be read is never overwritten.
+    only when it covers **every Leaf it was asked for and every Leaf the review it replaces
+    covers** (and at least as many clips, which for whole Leaves is the same thing said twice).
+    **By Leaf, not by count**: a run over Leaves 9-17 has as many clips as a review of Leaves 0-8
+    and shrinks nothing by that measure, yet it would take the 0-8 review's name and lose it.
+    Anything else is written beside it, under a name that carries the coverage
+    (`<name>-leaves-0-8+10-17`) **and that no review already has**: a second partial run of the same
+    Leaves gets `-2`, never the first one's files. With no existing review there is nothing to
+    shrink and the standard name is used; an existing review whose size or whose Leaves cannot be
+    read is never overwritten.
     """
     standard = folder / name
     existing = existing_review_clips(standard)
+    there = existing_review_leaves(standard)
     covered_set = set(covered)
     label = leaves_label(covered_set)
     if existing == 0:
         return ReviewTarget(standard, False, 0, label)
-    if existing is not None and covered_set >= set(asked) and clips >= existing:
+    if (
+        existing is not None
+        and there is not None
+        and covered_set >= set(asked)
+        and covered_set >= there
+        and clips >= existing
+    ):
         return ReviewTarget(standard, False, existing, label)
-    return ReviewTarget(folder / f"{name}-leaves-{label}", True, existing, label)
+    return ReviewTarget(_first_unused(folder / f"{name}-leaves-{label}"), True, existing, label)
 
 
 # ---------------------------------------------------------------------------- render
@@ -978,6 +1020,7 @@ __all__ = [
     "attach_leaf_narration",
     "clip_key",
     "existing_review_clips",
+    "existing_review_leaves",
     "leaves_label",
     "missing_first_attempts",
     "narration_spent_usd",
