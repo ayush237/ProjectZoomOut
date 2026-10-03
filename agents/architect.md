@@ -135,6 +135,46 @@ calls**, so timing and feel go to the founder while rendering and state stay wit
 amendment visible; a ruling built on a misread is worth remembering as one.**
 
 
+## Seven rules promoted from the decisions log — 2026-10-03
+
+Rulings from the onboarding refinement and the voiceover pace work (ONBOARD-2.1 → VO-4.1), moved here before their
+rows were archived. **A feature decision ages out; a rule does not.**
+
+**Derive a "cached", "free" or "nothing to buy" claim through the cache's own key, over the current source — and
+recount by the mechanism, not by reading.** VO-4's handoff said all 144 accepted clips were cached; I had grouped the
+raw cache by `(leaf, slide, voice)`, a proxy that passes exactly when the text has drifted, and Leaf 9's payoff had
+been silent for two weeks. The same family: the register's "three unpinned money lines" were five when each line was
+deleted (ONBOARD-2.1), and a completion's "11 of 12" criteria were 13 when I counted the checkboxes (ONBOARD-3.1). Use
+the system's own function (`clip_digest`, `text_digest`), delete-and-run, or count the source list yourself.
+
+**Before you tell the founder to check something, confirm they can reach it.** I told them to check Leaf 9's payoff in
+the app; Leaves unlock in order and it is the tenth. What a reader will be served is checkable without a phone — the
+backend's own mapper over the live REST, or the one-line SQL in the pre-flight. Give the founder only steps you have run
+or can show are runnable, each command in its own code block.
+
+**A guard's "exact" is a transcript, not a listening.** VO-4.1's guard read one take 22 of 27 words at 1.0× and 27 of 27
+at ×1.3 — a stretch cannot add words, so the first reading was wrong. Say which parts of a package are unverified (the
+sound, the feel): the founder's ear is the check for them, and a paid step that depends on a by-ear judgement waits for it.
+
+**At sign-off, verify the system, and report where it differs from the report.** Run the gate by hand at the PR head,
+read the run's saved ledger, query the CMS database read-only, hash the media files, re-derive the claims the report
+rests on, and run an **independent mutation sample on a scratch copy**: it found a real gap (`clip_key`'s text input
+unpinned) in a package whose own table was 56 of 56 red, because a mutation table shows a guard is sensitive to *its
+author's* mutants. Use `code-reviewer` for the reading-based review of new logic; it found two overclaims that neither
+tests nor mutants could.
+
+**A ruling in a handoff can be wrong, too — reverse it where it was made.** VO-4's "a missing first attempt stops the
+run" had a good reason (a run over cached audio must be unable to buy) that `--no-synthesis` already guaranteed; Leaf 9
+showed a drifted Leaf is the ordinary outcome of editing text. The reversal went into the next handoff and the decisions
+log, with the reason, and I owned it.
+
+**A pace, a count or a cost is quoted with its measure.** Speech-only words a minute and overall (pauses in) differ by
+1.3×; "nearly twice" was a mixed-measure error. Say what is measured, and compare like with like.
+
+**Paid steps: Part A is $0, and the only spend waits for an explicit yes in the executor's session** — with the ledger,
+the ceiling set inline, the expected cost, the worst case and the real headroom (the budget reserves a call's worst case
+first, so headroom is smaller than the cap). Google Cloud is not the Claude plan; say which.
+
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
 - `researcher` — library/API/best-practice investigation, read-only

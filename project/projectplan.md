@@ -61,7 +61,7 @@ Install → pre-intro (new, once/install) → sign-in/sign-up → age gate → a
 
 **Sequenced deliberately** — same lesson as COVER-1/ONBOARD-1: ONBOARD-3's narrator beat cannot be
 device-gated meaningfully until ONBOARD-2's clips exist. **They now do** (swap verified 2026-09-24). Full
-handoffs: ONBOARD-3's is in `collaboration-log.md`, and ONBOARD-2's is in `archive/collaboration-log-activation.md`.
+handoffs: ONBOARD-3's, ONBOARD-2's, ONBOARD-2.1's and ONBOARD-3.1's are in `archive/collaboration-log-activation.md`.
 
 ### Scope note for ONBOARD-3
 
