@@ -283,3 +283,19 @@ class FakePayload:
         self.calls.append("fetch_media")
         data = self.blobs[url]
         return self.serve_override(data) if self.serve_override else data
+
+
+def leaked_window(text: str, haystack: str, *, width: int = 12) -> str | None:
+    """The first `width`-character window of `text` that appears in `haystack`, or None.
+
+    **Any window, not the whole text.** VO-4's not-on-disk message test refused the line's whole
+    text, so a message carrying the first 30 characters of it passed (VO-4.1 A5: the Architect's
+    prefix-leak mutant was the one of twenty that survived). What an error message, a log line or
+    a command's output must never do is quote a Leaf's words, in whole or in part; twelve
+    characters is long enough that two unrelated sentences do not share one by chance.
+    """
+    for start in range(max(0, len(text) - width + 1)):
+        window = text[start : start + width]
+        if window in haystack:
+            return window
+    return None

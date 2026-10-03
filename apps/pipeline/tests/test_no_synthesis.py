@@ -42,7 +42,7 @@ from zoomout_pipeline.graph.narration_nodes import (
 )
 
 from .conftest import ScriptedLLM
-from .narration_fakes import FakeSpeechBackend, leaf_doc, speech_client
+from .narration_fakes import FakeSpeechBackend, leaf_doc, leaked_window, speech_client
 
 MODEL = "gemini-3.6-flash"
 
@@ -151,7 +151,11 @@ def test_a_first_attempt_that_is_not_on_disk_is_a_typed_error_naming_the_line(
 
     message = str(refused.value)
     assert line.label in message and "Achernar" in message and "attempt 1" in message
-    assert line.text not in message and line.spoken not in message, "names the line, not its words"
+    # **Any twelve characters of the line, not just the whole of it** (VO-4.1 A5). This used to
+    # refuse only `line.text` and `line.spoken` whole, so a message that quoted the first thirty
+    # characters of the line - the Architect's prefix-leak mutant - passed.
+    assert leaked_window(line.text, message) is None, "names the line, not its words"
+    assert leaked_window(line.spoken, message) is None, "nor the words as they are spoken"
     assert backend.calls == 0
     assert budget.reserved == [], "nothing was reserved, so nothing could have been bought"
     assert not (tmp_path / "raw").exists(), "and nothing was stored"

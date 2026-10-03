@@ -512,6 +512,247 @@ list anyone reads.
 
 ## Completions (Manager → Architect)
 
+### Completed: VO-4.1 — the book is finished: all 18 Leaves wait as drafts at ×1.3, every `textDigest` matching its own text, and Leaf 9's payoff is narrated fresh; Part B cost $0.2155 — 2026-10-03
+
+*Pipeline Manager. Branch `vo-4-1-finish-the-book`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `9997b14` (PR #64's merge). PR: [#65](https://github.com/ayush237/ProjectZoomOut/pull/65) — the founder merges. Part A was built on 2026-10-02. Part B ran on the night of 2026-10-02 → 03: the free checks, then the two paid runs (B2 23:48–00:13, B3 00:15–00:20), then the free whole-book pass and the verification.*
+
+**Every acceptance criterion is verified, Part B cost $0.2155, and nothing is published.** All 18 Leaves now wait as **pending drafts**: 144 audio rows, each serving the exact bytes in `final/` and carrying the digest of its own Leaf's *current* text — read back by REST (B5) and again by the new `narration-stale` command. Leaf 9's payoff was narrated fresh from the text it holds now (the founder's "keep the edit"), and both voices passed the guard on the first attempt. **What is not verified is the sound.** The guard read the whole book at 136 exact, 8 minor, 0 major of 144 clips, and it is a noisy listener (B6 has a case); whether ×1.3 is clearly faster *and not rushed* is the founder's ear (device gate, below). Publishing the 18 drafts in the admin is what gives Leaf 9's payoff its sound back — it has been silent since 2026-09-18.
+
+| | |
+|---|---|
+| Part A | A1 a drifted Leaf is held on its own · A2 `narrate --leaf N` · A3 `narration-stale` (free, read-only, its own command) · A4 a partial run cannot shrink a review · A5 the not-on-disk pin refuses any 12-character window · A6 README and docstrings match the code |
+| Part B | **B1** the stale check named exactly Leaf 9's payoff, both voices, live · **B2** Leaves 10–17 attached (64 clips, 69 listens), Leaf 9 held NOT ON DISK, exit 1 as written · **B3** Leaf 9's two payoff clips synthesised, both exact on the first attempt · **B4** whole-book pass: 18 of 18 already held, $0, exit 0, reviews rebuilt at 72 clips a voice — **22:57** Achernar and **23:26** Sadaltager, from 29:11 and 29:52 at 1.0× · **B5** 144 of 144 bytes and 144 of 144 `textDigest`, live Leaves untouched · **B6** one take differs from the one VO-2.1 accepted (Leaf 2 scenario, Achernar); two lines are new words (Leaf 9's payoffs) · **B7** below |
+| Gate | After Part A, **re-run after Part B** (Part B changed no tracked file; `git status` clean): `ruff format --check` **133** files (baseline 130) · `ruff check` clean · `mypy` strict **115** (baseline 112) · `pytest` **750 passed** (baseline 690, **+60** = 39 in `test_narrate_hold.py` + 21 in `test_narration_stale.py`), 6 deselected as `live`. Run **without** the Vertex variables, as the handoff says (none was exported) |
+| Spend | Part A **$0, no model called.** **Part B $0.2155:** speech **+$0.0123** (the two payoff clips), guard **+$0.2032** (75 listens: B2 69 for $0.1884, B3 6 for $0.0148). Narration total **$2.0167 → $2.2322 of the $2.75 ceiling**, headroom **$0.5178**; the ceiling was never near. The handoff expected ≈ $0.24 and ≈ $2.26 |
+| Left alone | After Part A and again after Part B: the six `review-before-vo4/` files (below) identical · the greetings' sha256 `c79a8725…` and `e598939f…` identical · `git diff origin/main` of `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `assets/audio.py` and `prompts/` is empty, and nothing outside `apps/pipeline` (and this entry) changed. **`raw/` gained exactly the four files of the two clips B3 synthesised; the other 374 are byte-identical** (Part B, below) |
+| Mutation-checked | **56 breakages, 56 red, none survived** (A1 17, A2 6, A3 18, A4 11, A5 1, A6 3); every file restored and hash-verified after every run. Table below |
+| Existing tests | **Two modified, both named below, and one helper added** (`git diff --numstat origin/main`: `test_narrate_cli.py` +19 −10, `test_no_synthesis.py` +6 −2, `narration_fakes.py` +16 −0). Everything else is new |
+
+**`review-before-vo4/` — the only copy of the full-book 1.0× tracks, hashed before and after Part A (identical):**
+
+| File | sha256 |
+|---|---|
+| `ikigai-narration-achernar.html` | `9e355970db089f4b435d9f2cbd6bf9d37fcc50359708220051689474515f6c9c` |
+| `ikigai-narration-achernar.md` | `936600b7693b2626b94bc08ecfcf380e9f5ad3f16908c6966efa54fce8089696` |
+| `ikigai-narration-achernar.mp3` | `379a66183c7d5adf76c3391a24534dc05b289c89eb25728b17d57a53641844ec` |
+| `ikigai-narration-sadaltager.html` | `a3c7b628d73434343a6e9d96f9949950a82b3fde00f7e7e97fb0bf5991fb0b22` |
+| `ikigai-narration-sadaltager.md` | `a8e58fafe2e4b1436cc5c1e57c3f64443462b8e1b33bbd5a8fe208f17fbb3974` |
+| `ikigai-narration-sadaltager.mp3` | `1011a56e568897e30f025737a6b5866ceb8a4834c3c6c1a13405c8f71c88223b` |
+
+---
+
+## What the founder would notice
+
+- **Nothing in the app yet.** Nothing is published: the 18 Leaves' new audio waits in pending drafts, and the published book is exactly as it was (every live Leaf's `updatedAt` and audio rows re-read and unchanged).
+- **After they publish:** the book's narration plays about **21% shorter** (the full-book review tracks go 29:11 → 22:57 in Achernar and 29:52 → 23:26 in Sadaltager) in the same two voices; and **Leaf 9's payoff has a play control in both voices again** — the thing missing since 2026-09-18. Every other slide is the same words in the same take VO-2.1 accepted, sped up, except one: the Leaf 2 scenario in Achernar (B6).
+- **For whoever runs `narrate` next:** a Leaf whose text was edited is named and skipped instead of stopping the run; `narrate --leaf N` does just those Leaves; `narration-stale` lists every silent slide in one read-only command; a partial run writes its review beside a fuller one instead of replacing it.
+
+## Needs the founder
+
+1. **Listen** — the device gate, next section. You confirmed ×1.3 (B0). Leaves 10–17 have not been heard at ×1.3 by anyone, and Leaf 9's new payoff has not been heard at all.
+2. **Publish the 18 drafts in the admin.** That is the step that makes any of this audible, and it is what fixes Leaf 9's payoff. Publishing leaves the 144 old Media documents referenced by nothing (B7); the machine key cannot delete Media, so they stay until someone removes them.
+3. **Merge [#65](https://github.com/ayush237/ProjectZoomOut/pull/65)** (the code and this entry). Merging changes no audio.
+
+## Device gate — for the founder's ear
+
+*Every path is absolute and in `ZO-pipeline`, not `ZO`. Open the `.html` — the cue sheet is at the top and the audio is embedded; the `.mp3` is the same track.*
+
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-achernar.html` — Lara, **72 clips, 22:57 in total**
+- `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline/apps/pipeline/runs/ikigai/audio/review/ikigai-narration-sadaltager.html` — Druv, **72 clips, 23:26 in total**
+
+Cue-sheet times (positions in each narrator's track):
+
+| Where | Achernar | Sadaltager |
+|---|---|---|
+| **Leaf 9 payoff — new, narrated from the text you kept** (B3) | **11:59** (18.4 s) | **12:12** (19.2 s) |
+| Leaf 9 as a run, to hear the payoff beside its neighbours: summary → scenario → payoff → takeaway | 11:19 → 11:43 → 11:59 → 12:18 | 11:31 → 11:54 → 12:12 → 12:32 |
+| **Leaf 2 scenario — the one take that differs from the one you approved** (B6) | **02:44** (9.5 s) | 02:47 (same take as before) |
+| Fastest clips, for "clearly faster, not rushed" (the cue sheet's overall pace, pauses in) | Leaf 10 payoff **13:03**, 217 wpm (typical payoff 161) · Leaf 0 summary 00:00, 188 | Leaf 14 scenario **18:09**, 204 wpm (typical 170) · Leaf 10 payoff 13:16, 197 |
+| Flagged by the cue sheet for its ending | — | Leaf 7 payoff **09:30**: "the model's audio ended mid-sound — the last syllable may be clipped". **Not new**: the 1.0× sheet flagged the same clip at 12:06, and the stretch keeps the model's own edges |
+
+**What to listen for:** clearly faster, not rushed; shorter pauses between sentences; any warble, doubled syllable or clipped consonant — the guard flagged none (0 major of 144), but it transcribes what it hears and is not a judge of artefacts, so name any clip you catch; takeaways that still come to rest; and that Leaf 9's new payoff sounds like the Leaves around it. The 8 clips the guard read as *minor* are one- and two-word differences, none of them a missing sentence — Leaf 5 payoff (both voices), Leaf 7 takeaway and Leaf 12 payoff and Leaf 13 summary (Achernar), Leaf 9 scenario, Leaf 11 scenario and Leaf 16 summary (Sadaltager): "apprentice" heard as "apprentices", "you have" as "you've", "antifragility" as "anti fragility".
+
+**Beside them, superseded, not deleted.** B2 and B3 each wrote a partial review next to the full one, as A4 says a partial run must: `ikigai-narration-{achernar,sadaltager}-leaves-0-8+10-17.{html,mp3,md}` (68 clips) and `…-leaves-9.{html,mp3,md}` (4 clips). The full tracks above cover all of it; the founder can delete those twelve files, and I did not. `review-before-vo4/` (the only 1.0× copy) and `review/vo4-before-after/` are untouched.
+
+**After publishing, in the app:** Leaf 9's payoff slide has a play control in both voices. That check is the founder's.
+
+## B0 — the founder's answers
+
+1. **Tempo:** "1.3x is fine." (Quoted from the session; `NARRATION_TEMPO` stays 1.3, so the nine attached Leaves stand.)
+2. **Leaf 9's text:** "I want to keep the edit in leaf 9." (So Leaf 9's payoff is narrated fresh from the text it holds now; B3. I did not touch the Leaf.)
+3. **The money:** asked in the session with the figures below, and answered **"Yes — all of Part B, up to $2.75"** (2026-10-02), the option whose description named the speech: Leaves 10–17 listened to, Leaf 9's two payoff clips synthesised and listened to. The figures given with the question, all derived from the raw cache through the real key (`clip_key`) and the ledger's own rates, not typed in:
+   - **B2, guard only, Leaves 10–17:** 64 clips; the most it can buy is **69 listens** (every reachable attempt, the retry chains on Leaf 12's scenario and Leaf 14's summary included), at the **$0.0025** each that VO-4's 77 listens cost: **$0.161–$0.174**. *The handoff estimated "≈ 77 listens, ≈ $0.21"; the raw cache says 69 at most.*
+   - **B3, Leaf 9's payoff:** speech for two ~30 s clips **$0.0152** (worst case six, three attempts in each voice: **$0.0457**), plus **6–10** listens (**$0.015–$0.025**).
+   - **Total** ≈ **$0.20** expected, **≈ $0.25** worst, taking the ledger to **≈ $2.21–$2.27** of the **$2.75** ceiling. `NarrationBudget` reserves a call's worst case *before* making it (**$0.164** for a speech call, **$0.032** for a listen), so the run cannot cross the ceiling: it halts instead, and raising it is the founder's decision.
+   - **What it actually cost (B7):** B2 **$0.1884** — *above* the $0.161–$0.174 I gave, which is a miss of mine (below) — and B3 **$0.0271** (speech $0.0123, listens $0.0148): **$0.2155** together, inside the "≈ $0.20 expected, ≈ $0.25 worst" the founder was shown.
+
+---
+
+## Part A, item by item — what was built, and where the handoff's shapes were hypotheses
+
+**A1 — a Leaf whose audio is not on disk is held on its own.** `missing_first_attempts` (`graph/narration_nodes.py`) runs `clip_key` over each Leaf's *current* text and `stat`s the raw cache: free, in render order. `clip_key` is now the **only** place the cache's key is built, and `_render_attempt` calls it too, so the pre-flight cannot ask a different question from the render: the VO-4 handoff's mistake was a check by `(leaf, slide, voice)`, which passes exactly when the text has drifted (mutation H2 *is* that mistake, and goes red in six tests). In `narrate`, a `--no-synthesis` run checks before rendering or listening to anything for a Leaf; a Leaf with any clip missing is **held NOT ON DISK**, named by slide and narrator and never by words, and the run **carries on**. The end of the run gives these Leaves their own heading with the usual cause ("the Leaf's text changed after it was narrated") and both ways out (`narrate --leaf N` without `--no-synthesis`, or revert the text). **Exit 1 if any Leaf was held for any reason; only a budget or a speech failure stops the whole run** (each pinned through the command). A `NarrationNotOnDiskError` arising mid-Leaf is the same hold: its clips are discarded, never attached — and its heading says so honestly: *"found while rendering: its earlier clips were already listened to, and that is on the ledger"*, because unlike the pre-flight hold it has already spent a little. **A run that may synthesise holds nothing and prints what it will buy** (`will buy   : 2 clips — leaf 9 payoff (female, Achernar), …`), before the first call. `render_line`, `_render_attempt` and the typed error are unchanged for library callers: after the key refactor **all 144 clips at the model's pace re-derive byte for byte at tempo 1.0, and all 72 of VO-4's at 1.3** (script, guard off, synthesis impossible, $0).
+
+**A2 — `narrate --leaf N`.** Repeatable, by `orderIndex`; Leaves are done in order whatever order they are named, and a repeat is one Leaf. An unknown index is refused before anything runs (exit 2, nothing rendered, listened to, written or spent), and `--leaf` with `--limit` is refused before the session is even built. The header says which Leaves it will do.
+
+**A3 — `narration-stale --run-id`.** A command of its own, so the code that can spend is **never constructed**: pinned by exploding fakes (speech client, guard, budget and `_Narration` fail if built; the CMS refuses every write; the run's checkpoint refuses an update) **and** by a scan of the command's own source — and mutations C1a and C1b show the two pins are independently necessary (a dynamic construction only the fakes see; a named-but-never-run one only the scan sees). It reads the run through `read_run_state`, checks who the key is first (`_checked_cms`; an anonymous 200 shows no drafts), reads each Leaf's published version and latest draft, and prints every entry the backend would drop: Leaf, slide, narrator, version, eight hex of the stored and current digest, then the count of slides and Leaves and an exit code. It prints **how many entries it compared**, so a check that looked at nothing cannot read as clean. **Seen red against Leaf 9's actual shape before it was trusted**: the fixture is built from the two real sentences and the test asserts the digests the CMS showed (`13c9a963…` stored, `66262e04…` current).
+
+**A4 — a partial run cannot shrink a review.** `review_target` overwrites an existing review only when the run covers **every Leaf it was asked for and at least as many clips**; otherwise it writes beside it as `<book>-narration-<voice>-leaves-0-8+10-17` (a name that carries the coverage), says **BESIDE** in the output, puts "Partial: Leaves … only" in the cue sheet, and leaves the existing one byte-identical. No existing review: the standard name. An existing review whose size cannot be read is never overwritten. Tested both ways through the command, and as a truth table.
+
+**A5 — the pin.** `leaked_window` refuses any 12-character window of a line's text in the not-on-disk message. **Shown to be needed, not just asserted:** against the Architect's prefix-leak mutant (P1) the old whole-text assertion *passes* and the new one names the leaked window (`'You are buil'`). **A6 —** no README line, help text or source comment says a missing clip "stops the run" (a scan that also goes red on the old sentence: D1, D2), and the README documents `--leaf`, `narration-stale`, the hold and the review rule.
+
+**Where I departed from the handoff's hypotheses, and why.** (1) A3 said to reuse `_Narration`'s `whoami` check; `_Narration` builds the speech client, the budget and the guard, which the stale check must never build, so the identity and Track check was **extracted** into `_checked_cms` and both use it (`_Narration`'s behaviour is unchanged). (2) The review-naming rule and the pre-flight live in `narration_nodes.py`, not a new module; only the stale check got one (`graph/narration_stale.py`), as the handoff allowed. (3) **B2's figure:** the handoff says "≈ 77 listens, ≈ $0.21"; computed from the raw cache through the real key, the most B2 can buy is **69** (above).
+
+## The existing tests that changed (each named)
+
+- **`test_narrate_cli.py::test_a_clip_that_is_not_on_disk_stops_the_run_cleanly_and_names_the_line` — rewritten** as `…holds_its_leaf_cleanly_and_names_it`. It pinned exactly the behaviour A1 reverses (`HALTED`, "stops the run"), so it could not stay; it now pins the hold, the exit code, the slide and narrator names, that `HALTED` is absent, and that no 12-character window of the Leaf's text is printed. The module docstring and one import changed with it.
+- **`test_no_synthesis.py::test_a_first_attempt_that_is_not_on_disk_is_a_typed_error_naming_the_line` — one assertion strengthened (A5):** whole-text → any 12-character window. One import added.
+- **`narration_fakes.py` — `leaked_window` added** (a helper, nothing existing touched).
+
+## Mutation table — 56 breakages, 56 red
+
+Each breakage is a set of exact-match edits that must match exactly once, applied in place by a scratch harness (not kept in the repo), the relevant test files run in the foreground, then the files restored in a `finally` and **verified byte-identical by hash**; `git status` was clean after every batch, and the four mutable files hash identically before the first run and after the last. Test sets: the **hold/review** items ran `test_narrate_hold`, `test_narrate_cli`, `test_no_synthesis`; the **stale** items ran `test_narration_stale`, `test_paid_tier`, `test_tempo_defaults`, `test_narrate_cli`. "Red" is the count of failing tests; the three named are the first three, in pytest's order (the full lists are saved with the harness's results).
+
+| # | Item | Breakage | Red | First tests red |
+|---|---|---|---|---|
+| H1 | A1 | The pre-flight is never consulted | 4 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `render_only_holds_a_drifted_leaf_too_and_writes_nothing` (+1 more) |
+| H2 | A1 | The pre-flight checks by (leaf, slide, voice) - the VO-4 handoff's proxy key | 6 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `render_only_holds_a_drifted_leaf_too_and_writes_nothing` (+3 more) |
+| H3 | A1 | A held Leaf falls through to the render (no continue) | 3 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `render_only_holds_a_drifted_leaf_too_and_writes_nothing` |
+| H4 | A1 | A held Leaf breaks the loop instead of continuing | 4 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `render_only_holds_a_drifted_leaf_too_and_writes_nothing` (+1 more) |
+| H5 | A1 | The exit code ignores a Leaf held NOT ON DISK | 6 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `render_only_holds_a_drifted_leaf_too_and_writes_nothing` (+3 more) |
+| H6 | A1 | A NarrationNotOnDiskError stops the whole run again (the old behaviour) | 1 | hold `not_on_disk_error_arising_mid_leaf_is_the_same_hold` |
+| H7 | A1 | A run that may synthesise holds a Leaf for a missing clip too | 2 | hold `speech_failure_still_stops_the_whole_run`; hold `run_that_may_synthesise_holds_nothing_and_says_what_it_will_buy` |
+| H8 | A1 | The 'will buy' preview is gone | 2 | hold `run_that_may_synthesise_holds_nothing_and_says_what_it_will_buy`; hold `run_with_everything_on_disk_says_it_will_buy_nothing` |
+| H9 | A1 | The held line quotes thirty characters of a Leaf's words | 2 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; cli `clip_that_is_not_on_disk_holds_its_leaf_cleanly_and_names_it` |
+| H10 | A1 | The end heading drops the 'narrate --leaf N' way out | 2 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach` |
+| H11 | A1 | A budget failure no longer stops the run (it propagates) | 1 | hold `budget_failure_still_stops_the_whole_run` |
+| H12 | A1 | A budget or speech failure holds the Leaf and carries on instead of stopping | 1 | hold `speech_failure_still_stops_the_whole_run` |
+| N1 | A1 | A hold found mid-Leaf is not marked as such | 1 | hold `not_on_disk_error_arising_mid_leaf_is_the_same_hold` |
+| N2 | A1 | A pre-flight hold claims it was found while rendering | 1 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on` |
+| K1 | A1 | The pre-flight looks at the second attempt, not the first | 18 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `run_over_cached_audio_that_has_not_drifted_holds_nothing` (+15 more) |
+| K2 | A1 | The pre-flight ignores the direction (keys with an empty prompt) | 18 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `two_drifted_leaves_are_each_held_and_the_rest_attach`; hold `run_over_cached_audio_that_has_not_drifted_holds_nothing` (+15 more) |
+| K3 | A1 | The pre-flight checks only the first narrator | 5 | hold `drifted_leaf_is_held_before_any_listen_and_the_run_carries_on`; hold `run_that_may_synthesise_holds_nothing_and_says_what_it_will_buy`; hold `pre_flight_names_exactly_the_edited_slide_in_render_order` (+2 more) |
+| L1 | A2 | --leaf is ignored | 6 | hold `leaf_does_just_the_named_leaves_in_order_whatever_order_they_are_named`; hold `repeated_leaf_is_one_leaf`; hold `unknown_leaf_is_refused_before_anything_runs` (+3 more) |
+| L2 | A2 | An unknown index is not refused | 1 | hold `unknown_leaf_is_refused_before_anything_runs` |
+| L3 | A2 | An unknown index is reported but the run goes on | 1 | hold `unknown_leaf_is_refused_before_anything_runs` |
+| L4 | A2 | --leaf with --limit is not refused | 1 | hold `leaf_with_limit_is_refused_before_the_session_is_even_built` |
+| L5 | A2 | Leaves are done in the order named, not in order | 1 | hold `leaf_does_just_the_named_leaves_in_order_whatever_order_they_are_named` |
+| L6 | A2 | The header does not say which Leaves | 2 | hold `leaf_does_just_the_named_leaves_in_order_whatever_order_they_are_named`; hold `repeated_leaf_is_one_leaf` |
+| S1 | A3 | Compares only the published version | 4 | stale `draft_that_fixes_a_stale_published_entry_leaves_the_published_one_reported`; stale `draft_whose_own_text_was_edited_under_its_audio_is_stale_in_the_draft`; stale `summary_line_counts_slides_and_leaves_not_just_entries` (+1 more) |
+| S2 | A3 | Compares only the pending draft | 12 | stale `leaf_nines_actual_shape_is_stale_in_both_voices_in_the_published_version`; stale `clean_leaf_is_clean_and_says_how_much_it_looked_at`; stale `leaf_with_no_pending_draft_is_reported_once_not_twice` (+9 more) |
+| S3 | A3 | Does not trim and lower-case a stored digest as the backend does | 1 | stale `stored_digest_is_compared_the_way_the_backend_compares_it` |
+| S4 | A3 | An entry with no digest is called fine | 1 | stale `entry_with_no_digest_is_stale_because_the_backend_drops_it_too` |
+| S5 | A3 | Every Leaf is treated as having a pending draft (reported twice) | 9 | stale `leaf_nines_actual_shape_is_stale_in_both_voices_in_the_published_version`; stale `clean_leaf_is_clean_and_says_how_much_it_looked_at`; stale `leaf_with_no_pending_draft_is_reported_once_not_twice` (+6 more) |
+| S6 | A3 | No Leaf is ever treated as having a pending draft | 4 | stale `draft_that_fixes_a_stale_published_entry_leaves_the_published_one_reported`; stale `draft_whose_own_text_was_edited_under_its_audio_is_stale_in_the_draft`; stale `summary_line_counts_slides_and_leaves_not_just_entries` (+1 more) |
+| S7 | A3 | Audio beside a field with no text is skipped, not stale | 1 | stale `audio_beside_a_field_with_no_text_is_stale_not_silently_fine` |
+| S8 | A3 | The summary counts entries as slides | 3 | stale `summary_line_counts_slides_and_leaves_not_just_entries`; stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_reads_a_pending_draft_as_well_as_the_published_version` |
+| S9 | A3 | The line loses which version an entry is in | 3 | stale `line_names_leaf_slide_narrator_version_and_eight_hex_of_each_digest`; stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_reads_a_pending_draft_as_well_as_the_published_version` |
+| C1 | A3 | The command constructs a NarrationBudget | 2 | stale `it_cannot_construct_anything_that_spends_or_write_anything`; stale `command_never_names_a_paid_client_a_write_or_the_narration_session` |
+| C1a | A3 | The command constructs a NarrationBudget by a dynamic lookup the source scan cannot see | 1 | stale `it_cannot_construct_anything_that_spends_or_write_anything` |
+| C1b | A3 | The command names NarrationBudget in code that never runs, so nothing is constructed | 1 | stale `command_never_names_a_paid_client_a_write_or_the_narration_session` |
+| C2 | A3 | The command writes the run's state | 8 | stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_is_green_on_clean_leaves_and_still_shows_what_it_looked_at`; stale `it_reads_a_pending_draft_as_well_as_the_published_version` (+5 more) |
+| C3 | A3 | An anonymous key is no longer refused | 1 | stale `anonymous_key_is_refused_before_a_single_leaf_is_read` |
+| C4 | A3 | A Track whose Leaves are not the run's is no longer refused | 1 | stale `track_whose_leaves_are_not_the_runs_is_refused` |
+| C5 | A3 | Stale entries found, exit code 0 | 3 | stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_reads_a_pending_draft_as_well_as_the_published_version`; stale `it_cannot_construct_anything_that_spends_or_write_anything` |
+| C6 | A3 | The 'compared N audio entries' line is gone | 3 | stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_is_green_on_clean_leaves_and_still_shows_what_it_looked_at`; stale `it_reads_a_pending_draft_as_well_as_the_published_version` |
+| C7 | A3 | The command reads the run's state itself instead of through read_run_state | 9 | stale `it_is_red_against_leaf_nines_actual_shape`; stale `it_is_green_on_clean_leaves_and_still_shows_what_it_looked_at`; stale `it_reads_a_pending_draft_as_well_as_the_published_version` (+6 more) |
+| R1 | A4 | A partial run always overwrites | 6 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone`; hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips`; hold `review_target_overwrites_only_a_review_it_does_not_shrink[asked2-covered2-11-12-True]` (+3 more) |
+| R2 | A4 | A run always writes beside, even when there is nothing to shrink | 9 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone`; hold `run_that_covers_every_leaf_it_was_asked_for_and_enough_clips_overwrites`; hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips` (+6 more) |
+| R3 | A4 | The 'every Leaf asked for' clause is dropped | 2 | hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips`; hold `review_target_overwrites_only_a_review_it_does_not_shrink[asked3-covered3-12-12-True]` |
+| R4 | A4 | The 'at least as many clips' clause is dropped | 3 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone`; hold `review_target_overwrites_only_a_review_it_does_not_shrink[asked2-covered2-11-12-True]`; hold `review_target_overwrites_only_a_review_it_does_not_shrink[asked4-covered4-4-12-True]` |
+| R5 | A4 | A review whose size cannot be read is overwritten | 1 | hold `review_whose_size_cannot_be_read_is_never_overwritten` |
+| R6 | A4 | The beside name does not carry the coverage | 5 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone`; hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips`; hold `review_target_overwrites_only_a_review_it_does_not_shrink[asked2-covered2-11-12-True]` (+2 more) |
+| R7 | A4 | Leaves_label does not merge consecutive Leaves into ranges | 5 | hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips`; hold `leaves_label_carries_the_coverage[orders0-0-8]`; hold `leaves_label_carries_the_coverage[orders2-0-3+8+10-11]` (+2 more) |
+| R8 | A4 | A review with only an mp3 is read as absent, not unreadable | 1 | hold `review_with_only_an_mp3_is_unreadable_not_absent` |
+| R9 | A4 | The command passes what it covered as what it was asked for | 1 | hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips` |
+| R10 | A4 | The command no longer says BESIDE | 2 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone`; hold `run_asked_for_more_than_it_covered_never_overwrites_even_with_enough_clips` |
+| R11 | A4 | A partial review's cue sheet does not say it is partial | 1 | hold `partial_run_writes_beside_a_fuller_review_and_leaves_it_alone` |
+| P1 | A5 | The not-on-disk message carries the first thirty characters of the line (the Architect's prefix-leak mutant) | 1 | nosyn `first_attempt_that_is_not_on_disk_is_a_typed_error_naming_the_line` |
+| D1 | A6 | The README says a clip not on disk stops the run again | 1 | hold `no_text_says_a_missing_clip_stops_the_run` |
+| D2 | A6 | The --no-synthesis help says a clip not on disk stops the run again | 2 | hold `no_text_says_a_missing_clip_stops_the_run`; hold `help_and_the_readme_describe_the_hold_and_the_options` |
+| D3 | A6 | The README does not mention the stale-check command | 1 | hold `help_and_the_readme_describe_the_hold_and_the_options` |
+
+## Part B — what ran, and what it found
+
+Every paid command ran with the ceiling inline (`ZOOMOUT_PIPELINE_MAX_NARRATION_USD=2.75`, never in `.env`) and its header shows it; one `narrate` process ran at a time; Payload on `:3001` is the founder's and I never started it. **The only synthesis anywhere was B3's two clips.**
+
+| Step | Command | What came out | Cost |
+|---|---|---|---|
+| **B1** | `narration-stale --run-id ikigai` | "compared 216 audio entries — 144 in the published versions, 72 in 9 pending drafts"; **exactly** `leaf 9 payoff female live stored 13c9a963 current 66262e04` and the male row; "1 stale slide in 1 Leaf — 2 audio entries (live 2, draft 0)"; exit 1. As predicted: nothing in any draft | $0 |
+| **B3a** | `narrate --run-id ikigai --leaf 9 --no-synthesis --tempo 1.3` | "HELD — NOT ON DISK: payoff (female, Achernar), payoff (male, Sadaltager); nothing rendered, listened to or attached" — **exactly the two clips**, no words printed; exit 1; spend line unchanged at $2.0167 | $0 |
+| **B2** | `narrate --run-id ikigai --no-synthesis --tempo 1.3` (24 min) | `budget : $2.0167 of the $2.75 voiceover ceiling`. Leaves 0–8 "already held"; **Leaf 9 held NOT ON DISK, nothing listened to**; Leaves 10–17 each "draft written; 8 uploaded; verified" (**64 clips**); guard "129 exact, 7 minor, 0 major, 0 unchecked — of 136 clips"; the review written **BESIDE** the 36-clip one (68 clips a voice); exit 1, because of Leaf 9 — as written | **$0.1884** for 69 listens; speech line unmoved |
+| **B3** | `narrate --run-id ikigai --leaf 9 --tempo 1.3` (4 min 38 s) | `budget : $2.2051 …`; **`will buy : 2 clips — leaf 9 payoff (female, Achernar), leaf 9 payoff (male, Sadaltager); and a retry for any clip the guard fails`**; both **exact on the first attempt** (18.4 s and 19.2 s at ×1.3); "draft written; 8 uploaded; verified"; guard 7 exact, 1 minor of 8; exit 0 | **$0.0271:** speech +$0.0123 (2 clips), 6 listens +$0.0148 |
+| **B4** | `narrate --run-id ikigai --no-synthesis --tempo 1.3` (39 s) | all **18** "draft already held this audio; 0 uploaded; verified"; guard "136 exact, 8 minor, 0 major, 0 unchecked — of 144 clips"; reviews rebuilt for all 18; exit 0 | **$0** |
+
+**What the paid runs put on disk — the handoff's "exactly".** The four trees, each hashed as the sha256 of its sorted per-file sha256 listing:
+
+| | before Part B | after B2 | after B3 | after B4 |
+|---|---|---|---|---|
+| `raw/` | 374 · `8d901c89…` | 374 · `8d901c89…` | **378** · `ff4c2995…` | 378 · `ff4c2995…` |
+| `final/` | 216 · `72c13790…` | 280 · `bb09f4d0…` | 288 · `012e5f3e…` | 288 · `012e5f3e…` |
+| `checks/` | 268 · `28a8c65e…` | 337 · `8747dab0…` | 343 · `35369431…` | 343 · `35369431…` |
+| `snapshots/` | 55 · `84b31ead…` | 72 · `5698f7e1…` | 73 · `d35e38e7…` | **91** · `f664cb0d…` |
+
+- **`raw/` did not change in B2** (guard only) and **gained exactly four files in B3**: `8b2b723b….{wav,json}` (Achernar's payoff) and `1aeec941….{wav,json}` (Sadaltager's), the two clips "will buy" named. A per-file sha256 listing taken immediately before B3 and one after differ only by those four lines: **none changed, none removed.** B3 listened to six clips, not eight: Achernar's summary and scenario had been listened to in VO-4's run.
+- **In the CMS**, Part B wrote nine drafts (Leaves 9–17; Leaves 0–8 already held VO-4's) and uploaded **72 Media documents** (B2 64, B3 8). It wrote nothing to any published version (B5).
+- **B4 is idempotent for everything but `snapshots/`.** The ledger, `raw/`, `final/` and `checks/` are identical to after B3, and by the code path (the already-attached branch calls no `update_leaf_draft`) and the 0 uploads it reports, the CMS was not written to. `snapshots/` rose 73 → 91: one local read-back file per Leaf visited (`leaf-NN-before-K`, K = snapshots already taken for that Leaf + 1), taken before the attach step knows whether there is anything to attach. That is VO-4's behaviour, not new (B2 added 17 and B3 one), roughly 20 KB each, and it grows with every pass over the book.
+
+**B5 — from outside, and by the check VO-4 lacked.** Two independent readers, against the real Payload, the machine key's identity checked first:
+- A REST script (scratch, not in the repo): **144 draft audio rows; served bytes equal the `final/` clip (sha256) for 144 of 144; `textDigest` equals the sha256 of the Leaf's current text for 144 of 144** — Leaf 9's payoff included; no Leaf without a pending draft; **no live Leaf changed** since the snapshot taken before B2 (`updatedAt` and every live audio row compared). Its first run failed before reading anything (no database URL in its environment); the numbers are from the rerun.
+- `narration-stale`: "compared 288 audio entries — 144 in the published versions, 144 in 18 pending drafts"; the only entries it reports are Leaf 9's payoff, both narrators, **live** (stored `13c9a963`, current `66262e04`) — "1 stale slide in 1 Leaf — 2 audio entries (live 2, draft 0)", exit 1. Expected: publishing the draft is what fixes them. The drafts are clean.
+
+**B6 — the take-change table.** Each of the 144 attached lines was matched to the take VO-2.1 accepted (every raw attempt re-rendered at 1.0× and matched to a pre-VO-4 `final/` mp3: 144 recovered) and the attached attempt compared. **144 = 141 the same take + 1 a different take + 2 new words.**
+
+| Line | VO-2.1 accepted | Attached now | The guard's reading | Listen |
+|---|---|---|---|---|
+| **Leaf 2 · scenario · Achernar** | attempt 2 at 1.0× — read 27 of 27, exact | attempt 1 at ×1.3 (9.5 s) | attempt 1 at ×1.3: **27 of 27, exact**. *The same attempt at 1.0×: 22 of 27* — not heard: "what is your next move" | Achernar **02:44** |
+| **Leaf 9 · payoff · Achernar** — *new words*, not a take choice | the live clip was made from the older sentence (`13c9a963…`) | new synthesis, attempt 1 at ×1.3 (18.4 s) | exact | Achernar **11:59** |
+| **Leaf 9 · payoff · Sadaltager** — *new words* | same | new synthesis, attempt 1 at ×1.3 (19.2 s) | exact | Sadaltager **12:12** |
+
+The Leaf 2 row is the one take the founder has not approved by ear. **A time-stretch cannot add words to a clip**, so the five words the guard did not hear at 1.0× were in attempt 1's audio all along; the likeliest reading is that VO-2.1 discarded a sound take on a bad reading. Whether attempt 1 *sounds* as good as the attempt 2 the founder approved is the ear's call. The guard is a noisy listener: the same samples read 22 of 27 and 27 of 27.
+
+**B7 — the figures.**
+
+| Node | Before Part B | After | Change |
+|---|---|---|---|
+| `narration` (speech) | $1.2964 | $1.3087 | **+$0.0123** (the two payoff clips) |
+| `narration_guard` | $0.7203 | $0.9235 | **+$0.2032** (B2 $0.1884 + B3 $0.0148; 75 listens, `checks/` 268 → 343) |
+| **narration total** | $2.0167 | **$2.2322** | **+$0.2155** — 81% of the $2.75 ceiling; **headroom $0.5178** |
+| whole run, every node | $6.3600 | $6.5755 | +$0.2155 |
+
+- **Idempotence run (B4): $0** — the spend line reads $2.2322 before and after.
+- **Orphans: 144.** The live versions point at 144 files, all 144 still in the CMS; the pending drafts point at 144 others; **none is in both**. When the founder publishes, **144 old Media documents are referenced by nothing**, and the machine key cannot delete Media.
+- **The review tracks, from the cue sheets' own lines:** `**72 clips, 22:57 in total.**` (Achernar) and `**72 clips, 23:26 in total.**` (Sadaltager); at 1.0× (`review-before-vo4/`) 29:11 and 29:52. The six `review-before-vo4/` files hash identically to the table above after Part B.
+
+## What I got wrong, and what surprised me
+
+- **My listener could not tell one Leaf's clip from another's.** The stock fake voice makes audio from the text's *length* only, so Leaves 1, 2 and 3's payoffs were identical bytes, and my `{sha256 → text}` registry silently kept the last writer. A one-word mishearing is only "minor", so tests passed partly by luck, and the first `StopIteration` is what showed it. Fixed by a fake voice whose audio depends on the text and by a registry that **refuses to be built** if two texts share their bytes (`ContentBackend`, `prime`).
+- **My first A6 scan flagged the new, true sentence** ("only a budget or a speech failure stops the whole run"). The old claim is about a *missing clip*, so the pattern is now "stops the run" within a sentence of "not on disk"/"missing", and a second test proves the scan goes red on the old wording.
+- **I wrote an `assert` for type-narrowing in production code**, then replaced it with an explicit argument: the repo's standard is explicit errors, and `-O` would have stripped it.
+- **A regression script of mine said "144 of 216".** `final/` now holds two generations, the 144 originals and VO-4's 72 at ×1.3, and the script assumed one. Split by age and re-derived each at its own tempo, it reads 144/144 and 72/72.
+- **Cost of the tests:** the hold tests render real clips through the real command, so `test_narrate_hold.py` takes about 30 s of a suite that now takes about 50 s (it was ~22 s). The raw cache is bought once per module and copied per test, which took it from 51 s to 30 s.
+- **Part B — my "no other `narrate` is running" check before B3 was malformed, and I did not gate on it.** I counted processes by matching the text `zoomout-pipeline narrate`; it printed `2` beside "(must be 0)" and the paid run started in the same command anyway. The 2 were the harness's own shell wrappers, whose command lines contain that text: a read-only command with no `narrate` in it prints 2 the same way. No second `narrate` was running. B2's exit code was recorded and B3's header read B2's final $2.2051; the ledger moved by exactly B3's own printed delta ($2.2322 − $2.2051 = $0.0271 = $0.0123 + $0.0148); `raw/` gained the four files and `checks/` the six that B3 reports. B4's check was a real gate (processes whose command is not a `zsh -c` wrapper; abort unless there are none) and found none. The "one `narrate` at a time" rule held, but I had not verified it when I spent, and a check that is not a gate is not a check.
+- **Part B — B2 cost more than the figure I gave the founder, and the miss is mine:** **$0.1884** against the **$0.161–$0.174** I quoted before the yes. The 69-listen bound was exact (the run bought exactly 69); the dollar figure priced them at VO-4's $0.00252 a listen, and B2's came to $0.00273. Leaves 10–17's clips run about 4.5% longer than Leaves 0–8's (a mean of 18.6 s against 17.8 s), which explains about half of the 8.5% rise; I did not trace the rest. Part B still came in under the handoff's ≈ $0.24 ($0.2155) and the ceiling was never near, but the range I gave should have allowed for a dearer listen.
+- **Part B — my first B6 pass called 12 lines "new words", and ten were my script's error.** I compared a raw sidecar's text, which is the *spoken* text, with `textDigest`, which hashes the *field* text. The two are not byte-identical for some slides (Leaves 2, 4, 7, 11 and 14, both voices; I did not trace which characters), so ten correct lines read as changed. The live clip's `textDigest` equals the attached one for all ten, checked line by line, so the words never changed. Compared digest to digest (live against attached), exactly two lines differ: Leaf 9's payoffs. The B6 figures are from the corrected script, and anyone who matches a sidecar's text to a stored digest will meet the same trap.
+- **Part B — B4 is not idempotent for `snapshots/`** (73 → 91; explained under B7). I saw it because I measured the four trees after B4 instead of assuming a run that uploads nothing writes nothing. It is VO-4's behaviour and writes nothing to the CMS, but "idempotent" is true of the ledger, `raw/`, `final/` and `checks/`, not of that folder.
+- **Part B — in the good direction:** both payoff clips passed the guard on the first attempt, so B3 used none of its retry budget; speech cost **$0.0123** against the $0.0152 I estimated for two clips (worst case $0.0457).
+
+## What I could not verify
+
+- **The sound.** Every "exact" above is a guard reading, a model's transcript of each clip, not a listening. It cannot judge pace, a warble or whether ×1.3 feels rushed, and B6's 22 of 27 against 27 of 27 on the same samples shows it can miss. That is the device gate, and it is the founder's.
+- **Playback in the app.** B5 proves what the backend's drop rule needs: every draft row's `textDigest` equals the sha256 of its slide's current text, compared as the backend compares it, and the CMS serves the exact clip bytes. I did not run the backend or the mobile app against the drafts, and nothing can play until the founder publishes.
+- **Part A against the real CMS: now done.** The hold and `narration-stale` were first exercised against a fake Payload; B1, B2 and B3a ran them against the real one and each did what the fake said. What the check relies on, that a pending draft is the newest version with `_status == "draft"` and a Leaf with none reports `published`, was seen on the real Payload in VO-4 and is what B1 and B5 read.
+
+## Files touched
+
+All under `apps/pipeline`; the one path outside it is this entry.
+
+- **Source:** `src/zoomout_pipeline/graph/narration_nodes.py` (`clip_key`, `MissingClip`, `missing_first_attempts`, `leaves_label`, `existing_review_clips`, `ReviewTarget`, `review_target`; `_render_attempt` builds its key through `clip_key`) · `src/zoomout_pipeline/graph/narration_stale.py` **(new)** · `src/zoomout_pipeline/cli.py` (`narrate`: `--leaf`, the pre-flight, the hold, the will-buy line, the review rule; `narration-stale`; `_checked_cms`; `_select_leaves`, `_planned_purchases`, `_will_buy`) · `README.md`.
+- **Tests, new:** `tests/test_narrate_hold.py` (39) · `tests/test_narration_stale.py` (21). **Changed, named above:** `tests/test_narrate_cli.py`, `tests/test_no_synthesis.py`, `tests/narration_fakes.py`.
+- **Deliberately untouched:** `assets/speech.py`, `graph/greeting_nodes.py`, `assets/greeting.py`, `assets/audio.py`, `prompts/`, `packages/shared`, every other app. **No Leaf's text was edited, Leaf 9's included.**
+- **Part B touched no tracked file except this entry.** What it wrote is under `runs/` (gitignored) and in the CMS: `raw/` +4, `final/` +72 (64 + 8), `checks/` +75, `snapshots/` +36 (17 + 1 + 18), the reviews under `review/`; and in Payload nine pending drafts (Leaves 9–17) and 72 Media documents. No published version was written.
+
+---
+
 ### Completed: ONBOARD-3.1 — the narrator beat fails open, Profile plays the hello, pick-book stops racing itself, and the copy pass — 2026-10-01
 
 *Manager. Branch `onboard-3-1-narrator-hardening`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `265fa99`. PR: opened below — the founder merges.*
