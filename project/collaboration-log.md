@@ -38,9 +38,9 @@ list anyone reads.
 <!-- ### Handoff: YYYY-MM-DD — <title>
 (paste the full handoff prompt here) -->
 
-### Handoff: 2026-10-04 — LEDGER-1.1: `run` cannot overwrite a run — and the lock's test gaps *(PROPOSED — issued when the founder pastes it)*
+### Handoff: 2026-10-04 — LEDGER-1.1: `run` cannot overwrite a run — and the lock's test gaps
 
-*Pipeline Manager. Proposed by the Architect 2026-10-04 at LEDGER-1's sign-off — **not issued until the founder pastes it; the paste is the go.** **$0: no model, speech or listen, no cloud spend.** One real fix and a set of test closures; two commits — the fix (R1–R3), then the tests (T1–T6).*
+*Pipeline Manager. Written by the Architect 2026-10-04 at LEDGER-1's sign-off — **issued the same day: the founder pasted it into the Pipeline Manager session (the paste is the go).** **$0: no model, speech or listen, no cloud spend.** One real fix and a set of test closures; two commits — the fix (R1–R3), then the tests (T1–T6).*
 
 > **Where you work:** `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`. **Check your branch first** — the worktree is on `ledger-1-run-lock` (PR #66, merged). `git fetch origin && git checkout -b ledger-1-1-run-never-overwrites origin/main`. **Never `git checkout main` in a linked worktree.** `runs/` is gitignored and holds everything paid for: never clean, prune, move or overwrite anything under it. Commit, push and open the PR yourself.
 > **Read:** this handoff · your own LEDGER-1 entry — **"Needs a ruling" 3 and 4, and "Mutation table"** · `agents/pipeline-manager.md` · `cli.py` (`run`, `resume`, `hold_run`, `read_run_state`) · `graph/state.py` (`PipelineState` and the defaults of its fields) · `db/run_lock.py` (`_STILL_HELD`, `lock_key`, `_lock_row_ids`, `acquire`) · `tests/test_durability.py` and `tests/_durability_child.py` (**how to run a real checkpointed graph on fakes**) · `tests/test_run_lock.py`, `tests/test_run_lock_commands.py` (`LOCK_AND_WRITE_NAMES`, the one-door pin) · `tests/conftest.py` (`hermetic_run_locks`).
@@ -178,6 +178,8 @@ list anyone reads.
 - [ ] The completion entry sits at the top of Completions and every number in it was re-derived from the disk
 
 **Testing expectations:** **Tier A** for A1 (an off-host URL accepted as a cover is the shape of bug that ships quietly), B1 (false positives teach the founder to ignore the banner; a false negative is Leaf 9) and D3 (a green job that ran nothing). Tier B for C and the wording. Say which evidence is a unit test, which is a mutation, which is a read-back of the real Leaves, which is a browser and which is a GitHub run.
+
+**Update 2026-10-04 (Architect) — a usage limit stopped this package after Parts A and B; resume on the existing branch.** (1) A and B are committed locally on `guard-1-four-guards` in `ZO-vo3` (`28d84b7`, `d9c89c1`) and nothing is pushed: the `checkout -b` step above is moot, never `-B`, and the push is `git push -u origin guard-1-four-guards`. (2) **LEDGER-1 has merged since (PR #66; signed off in `85cfe72`) and changed `apps/pipeline`:** merge `origin/main` into your branch before Part D and run D2 against the merged tree. The pipeline gate is now **ruff format 144 / mypy 126 / pytest 894 passed, 6 deselected** (not 750), and about 80 of the new tests are the run-lock tests: they need Postgres reachable as a superuser (they use the server's maintenance database `postgres` and create none of their own) and they start real child processes. D3 — a skipped test is red — is what keeps them honest in CI: show it red against them too, with the service on a dead port. (3) `project/collaboration-log.md` will conflict at the top of Completions with the Pipeline Manager's LEDGER-1 entry: **keep both, yours first.** (4) LEDGER-1.1 is running in the Pipeline Manager session (a small `run` guard and tests): no file in common with this package.
 
 ---
 
