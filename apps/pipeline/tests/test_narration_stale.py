@@ -271,6 +271,17 @@ class ExplodingGraph:
         raise AssertionError("the stale check wrote to the run's state")
 
 
+class ExplodingClient:
+    """The Gemini client `run_context()` builds for every command, this one included. Nothing here
+    calls it, and (VO-4.1 leftover f) the pins did not say so: any use of it is a failure."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __getattr__(self, attribute: str) -> Any:
+        raise AssertionError(f"the stale check used the Gemini client ({self.name}.{attribute})")
+
+
 def run_stale(
     monkeypatch: pytest.MonkeyPatch,
     cms: Cms,
@@ -289,7 +300,15 @@ def run_stale(
 
     @contextmanager
     def fake_run_context() -> Iterator[tuple[ExplodingGraph, Any]]:
-        yield ExplodingGraph(), SimpleNamespace(settings=None, payload_client=cms)
+        yield (
+            ExplodingGraph(),
+            SimpleNamespace(
+                settings=None,
+                payload_client=cms,
+                llm=ExplodingClient("llm"),
+                embedder=ExplodingClient("embedder"),
+            ),
+        )
 
     monkeypatch.setattr(cli, "run_context", fake_run_context)
     monkeypatch.setattr(cli, "read_run_state", lambda _graph, _run_id: state)
@@ -379,6 +398,8 @@ def test_it_cannot_construct_anything_that_spends_or_write_anything(
     monkeypatch.setattr("zoomout_pipeline.graph.narration_nodes.Guard", boom("Guard"))
     monkeypatch.setattr("zoomout_pipeline.assets.budget.NarrationBudget", boom("NarrationBudget"))
     monkeypatch.setattr(cli, "_Narration", boom("_Narration"))
+    monkeypatch.setattr("zoomout_pipeline.llm.client.GeminiClient", boom("GeminiClient"))
+    monkeypatch.setattr("zoomout_pipeline.runner.build_dependencies", boom("build_dependencies"))
     cms = Cms(*a_book())
 
     result = run_stale(monkeypatch, cms)
@@ -412,6 +433,13 @@ def test_the_command_never_names_a_paid_client_a_write_or_the_narration_session(
         "open_run_for_models",
         "record_narration_transport",
         "RunLedger",
+        # The Gemini client `run_context()` builds for every command (VO-4.1 leftover f).
+        "GeminiClient",
+        "build_dependencies",
+        "llm",
+        "embedder",
+        "generate_structured",
+        "embed",
     }
     names = {n.id for n in ast.walk(command) if isinstance(n, ast.Name)} | {
         n.attr for n in ast.walk(command) if isinstance(n, ast.Attribute)
@@ -419,6 +447,46 @@ def test_the_command_never_names_a_paid_client_a_write_or_the_narration_session(
 
     assert names & forbidden == set()
     assert "read_run_state" in names and "_checked_cms" in names, "and it does use the safe doors"
+
+
+def test_the_gemini_client_the_real_context_builds_is_built_and_never_called(
+    monkeypatch: pytest.MonkeyPatch, settings: Any
+) -> None:
+    """**(f) Through the real `run_context()`**, not a stand-in for it: it builds a Gemini client
+    for every command, the stale check included, and nothing here calls it. The client it builds is
+    one that fails on any use, so "built, never called" is what is asserted, and a change that made
+    this command reach for a model would be a red test and not a cent."""
+    from zoomout_pipeline import runner
+    from zoomout_pipeline.llm.client import GeminiClient
+
+    built: list[str] = []
+
+    def build_gemini(_settings: Any) -> ExplodingClient:
+        built.append("gemini")
+        return ExplodingClient("gemini")
+
+    @contextmanager
+    def fake_durable_graph(_deps: Any) -> Iterator[ExplodingGraph]:
+        yield ExplodingGraph()
+
+    cms = Cms(*a_book())
+    monkeypatch.setattr(runner, "get_settings", lambda: settings)
+    monkeypatch.setattr(GeminiClient, "from_settings", staticmethod(build_gemini))
+    monkeypatch.setattr(runner, "durable_graph", fake_durable_graph)
+    monkeypatch.setattr("zoomout_pipeline.cms.client.PayloadClient", lambda **_kwargs: cms)
+    state = SimpleNamespace(cms_track_id=50, cms_leaf_ids=cms_leaf_ids(cms))
+    monkeypatch.setattr(cli, "read_run_state", lambda _graph, _run_id: state)
+
+    result = CliRunner().invoke(cli.app, ["narration-stale", "--run-id", "ikigai"])
+
+    assert result.exit_code == 1, result.output
+    assert built == ["gemini"], "the real context built the client"
+    assert "AssertionError" not in result.output and isinstance(result.exception, SystemExit)
+    assert cms.patches == [] and cms.uploads == []
+
+
+def cms_leaf_ids(cms: Cms) -> dict[str, int]:
+    return {str(doc["orderIndex"]): int(doc["id"]) for doc in cms.live.values()}
 
 
 def test_an_anonymous_key_is_refused_before_a_single_leaf_is_read(

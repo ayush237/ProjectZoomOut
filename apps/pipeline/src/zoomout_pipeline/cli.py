@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import sys
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from uuid import UUID
 
 import typer
@@ -24,6 +25,7 @@ from zoomout_pipeline.config import (
     require_cloud_tts,
     require_paid_tier,
 )
+from zoomout_pipeline.db import run_lock
 from zoomout_pipeline.db.engine import ForeignDatabaseError, connect, describe_database
 from zoomout_pipeline.db.repository import BookRepository
 from zoomout_pipeline.db.schema import apply_schema
@@ -32,6 +34,10 @@ from zoomout_pipeline.logging import configure_logging, get_logger
 from zoomout_pipeline.measure import run_samples, summarise
 from zoomout_pipeline.models import Acquisition, TransportRecord
 from zoomout_pipeline.runner import run_context
+
+if TYPE_CHECKING:
+    # Only for annotations: the narration stack is imported lazily so `--help` stays light.
+    from zoomout_pipeline.cms.client import PayloadClient
 
 app = typer.Typer(
     add_completion=False,
@@ -60,6 +66,116 @@ def read_run_state(graph: Any, run_id: str) -> PipelineState:
     return PipelineState.model_validate(snapshot.values)
 
 
+def hold_run(run_id: str, *, command: str = "") -> None:
+    """Take this run's lock for the life of the process, or refuse the command.
+
+    **One spender per run** (LEDGER-1). A run's cost ledger is written whole by whichever process
+    spends on it last, so two spending processes overwrite each other's entries and each believes it
+    has all of the ceiling's headroom. The lock is a Postgres advisory lock in the database the
+    ledger lives in (`db/run_lock.py`), freed by the server whenever the process ends, however it
+    ends, and a second process that wants the run is refused at once: red, exit code 2, naming who
+    holds it. There is no `--force` and no `--wait`.
+
+    **Every command that opens a run for models, creates a run or writes a run's checkpoint calls
+    this as its first act**, before it builds a client or reads the ledger; `open_run_for_models`
+    calls it again, which is not an error. A command that only reads a run never calls it. A test
+    sorts every registered command into one of those groups and pins the order.
+
+    `command` is only what the holder is called to whoever is refused, so name the command.
+    """
+    try:
+        run_lock.acquire(run_id, command=command)
+    except run_lock.RunLockHeldError as refusal:
+        typer.secho(f"\n{refusal.describe()}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(2) from None
+    except run_lock.RunLockLostError as lost:
+        typer.secho(f"\n{lost.describe()}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1) from None
+    except run_lock.RunLockUnavailableError as unavailable:
+        typer.secho(f"\n{unavailable}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1) from None
+    except ForeignDatabaseError as foreign:
+        # `ZOOMOUT_PIPELINE_DATABASE_URL` points at the backend's or Payload's database: the same
+        # refusal `doctor` makes, in the same words, and not a traceback. Exit 1 like `doctor` and
+        # like a lock that could not be taken: this is the environment being wrong, where 2 is a
+        # refusal about the run or the arguments (held, in use, an unknown Leaf, the paid tier).
+        typer.secho(f"\nREFUSING TO USE THIS DATABASE\n{foreign}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1) from None
+
+
+def refuse_a_run_in_use(graph: Any, run_id: str) -> None:
+    """`run` starts a **new** run, so an id that already has a checkpoint is refused, before
+    anything is invoked (LEDGER-1.1).
+
+    `graph.invoke(PipelineState(...), config)` on a thread that exists does not start a second run:
+    it feeds a fresh state into the first. LangGraph applies a Pydantic input field when its value
+    is not `None`, when its default is not `None`, or when the constructor was *given* it
+    (`model_fields_set`), so a run's `cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration`
+    and `cms_assets` (empty dicts) are **reset**, and **so is `cms_track_id`**: this command passes
+    it explicitly, as `None` unless `--cms-track-id` names one. `analysis`, the plan and
+    `chunk_count`, which it does not pass, survive. (The experiment this was written from saw the
+    Track link survive, as it does when the state is built without `cms_track_id`; through the
+    command it does not.) Found by experiment on a scratch database: the ledger went from four
+    entries and $0.755 to one entry and nothing. On the real `ikigai` run that would erase $6.5755
+    of recorded spend, and with it `narration_spent_usd`, so the $2.75 voiceover ceiling would read
+    as unspent, and cut the run's links to its Payload Track and its eighteen Leaves, with no spend
+    and no error: `narrate` would then say the run has no Leaves in Payload, and `write-drafts`,
+    with no Track to look under, would create a second one.
+
+    The run's lock does not stop it. The lock only matters while another process holds the run, and
+    one process and one slip (an up-arrow on an old `run --run-id ikigai ...`) does it alone.
+    `resume` continues a checkpoint and is not affected.
+
+    **A thread with no checkpoint is not refused**: a first `run`, or one that died before its first
+    checkpoint, has nothing to overwrite. The thread is read the way `read_run_state` reads it
+    (`get_state(...).values`), so a run that has finished (nothing `next`) is refused as much as one
+    waiting at a gate. Exit code 2, like every refusal made before anything was done, and there is
+    no `--force`: a flag that overrides it is the reset again.
+    """
+    snapshot = graph.get_state({"configurable": {"thread_id": run_id}})
+    if not snapshot.values:
+        return
+    _log.warning("run.refused", run_id=run_id, reason="the id already has a checkpoint")
+    typer.secho(
+        f"\nRUN {run_id!r} ALREADY EXISTS — `run` starts a NEW run, so it refused before "
+        "anything was invoked or written, and nothing was spent.\n\n"
+        "  That id names a run that already has a checkpoint. Starting a run on it would reset\n"
+        "  its cost ledger (what it has spent, and so how much of the voiceover ceiling it has\n"
+        "  left) and its links to its Payload Track, Leaves, narration and assets, and nothing\n"
+        "  would say so.\n\n"
+        "Two ways on:\n"
+        f"  - to continue that run:  resume --run-id {run_id}\n"
+        "  - to start another:      run again with a new --run-id, or none (one is generated)\n"
+        "There is no --force.\n",
+        fg=typer.colors.RED,
+        bold=True,
+    )
+    raise typer.Exit(2)
+
+
+def write_run_state(
+    graph: Any, run_id: str, values: Mapping[str, Any], *, unrecorded_usd: float = 0.0
+) -> None:
+    """The one door through which this CLI writes a run's checkpoint.
+
+    Every write asks the lock first. A process whose lock connection has gone is no longer the
+    run's only spender, and a write from it could overwrite whoever is, so it stops instead: it says
+    so, writes nothing and exits 1, naming what was left unrecorded (`unrecorded_usd`). The spend
+    that was in flight when the lock went is the only one that can follow the loss, and what it
+    bought is on disk for the next run to reuse. A test asserts that no command calls
+    `update_state` anywhere else, which is what makes "no command writes a ledger unlocked" a
+    property of the code and not a habit.
+    """
+    try:
+        run_lock.require_held(run_id)
+    except run_lock.RunLockLostError as lost:
+        typer.secho(
+            f"\n{lost.describe(unrecorded_usd=unrecorded_usd)}\n", fg=typer.colors.RED, bold=True
+        )
+        raise typer.Exit(1) from None
+    graph.update_state({"configurable": {"thread_id": run_id}}, dict(values))
+
+
 def open_run_for_models(graph: Any, run_id: str) -> PipelineState:
     """A run's checkpoint, for a command that *will* call a model.
 
@@ -73,9 +189,15 @@ def open_run_for_models(graph: Any, run_id: str) -> PipelineState:
     because a run that dies at Leaf 9 with a quota error has already sent eight Leaves' worth
     of somebody else's book somewhere it must not go.
 
+    **The run's lock comes before its checkpoint is read.** A process that read `cost`, then
+    waited for the lock, would write the holder's spend over with its own stale copy. The command
+    has already taken the lock as its first act; taking it again here is a no-op, and it is what
+    makes this helper safe for a caller that forgot.
+
     The decision is written back onto the run, so "which tier did this book go through" is a
     query rather than a memory.
     """
+    hold_run(run_id)
     state = read_run_state(graph, run_id)
     try:
         record = require_paid_tier(state.acquisition, get_settings())
@@ -93,7 +215,7 @@ def open_run_for_models(graph: Any, run_id: str) -> PipelineState:
             fg=typer.colors.YELLOW,
         )
 
-    graph.update_state({"configurable": {"thread_id": run_id}}, {"transport": record})
+    write_run_state(graph, run_id, {"transport": record})
     state.transport = record
     _log.info(
         "run.transport",
@@ -130,7 +252,7 @@ def record_narration_transport(
 ) -> TransportRecord:
     """Write the narration door onto the run, with the endpoint the client really reached."""
     completed = record.model_copy(update={"endpoint": endpoint})
-    graph.update_state({"configurable": {"thread_id": run_id}}, {"narration_transport": completed})
+    write_run_state(graph, run_id, {"narration_transport": completed})
     _log.info(
         "run.narration_transport",
         run_id=run_id,
@@ -216,8 +338,15 @@ def run(
     **It does not empty the Track first.** `write_drafts_to_cms` skips any `orderIndex`
     Payload already holds, so pointing a run at a populated Track writes nothing — delete
     the old Leaves first, deliberately, with a credential that is allowed to.
+
+    **`run` always starts a new run, and refuses a `--run-id` that already has a checkpoint**
+    (LEDGER-1.1): invoking a fresh state on an existing run resets its cost ledger and its Payload
+    links. `resume --run-id <id>` is what continues one.
     """
     resolved_run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
+    # A generated id cannot be anyone else's, but `--run-id` can name a run that is being spent on
+    # right now, and this command writes the graph's own checkpoints under that id.
+    hold_run(resolved_run_id, command="run")
 
     # **Before anything is built, let alone called.** `run` ingests, embeds and analyses, so
     # the first model call is minutes away and the first *chunk of the book* leaves this
@@ -247,6 +376,10 @@ def run(
     )
 
     with run_context() as (graph, _deps):
+        # After the lock, so that no other process can write the thread between this read and the
+        # invoke; after the paid-tier refusal, which is free and needs no database; and as the last
+        # thing before the invoke, because it needs the graph, which only exists in here.
+        refuse_a_run_in_use(graph, resolved_run_id)
         config = {"configurable": {"thread_id": resolved_run_id}}
         result: dict[str, Any] = graph.invoke(state, config)  # type: ignore[attr-defined]
 
@@ -264,6 +397,7 @@ def resume(
     question outstanding and simply picks up from its last checkpoint. Sending a resume
     value to the second does nothing, which looks exactly like a run that will not restart.
     """
+    hold_run(run_id, command="resume")
     with run_context() as (graph, _deps):
         config = {"configurable": {"thread_id": run_id}}
         open_run_for_models(graph, run_id)
@@ -344,6 +478,7 @@ def measure_breakdown(
     Live-model, deliberately outside the normal test gate. One analysis is reused across
     every sample so `analyze` cannot confound the comparison.
     """
+    hold_run(run_id, command="measure-breakdown")
     with run_context() as (graph, deps):
         state = open_run_for_models(graph, run_id)
 
@@ -402,8 +537,10 @@ def write_drafts(
     """
     from zoomout_pipeline.graph.cms_node import make_write_drafts_node
 
+    # Locked although it spends nothing: it reads the run, creates the Track in Payload when the
+    # run has none yet and writes the ids back, so two at once would each create a Track.
+    hold_run(run_id, command="write-drafts")
     with run_context() as (graph, deps):
-        config = {"configurable": {"thread_id": run_id}}
         # `read_run_state`, not `open_run_for_models`: this maps already-generated Leaves into
         # Payload and calls no model, so there is no transport to refuse. Writing drafts for a
         # copyrighted book must not require Vertex to be configured.
@@ -413,7 +550,7 @@ def write_drafts(
             raise typer.Exit(1)
 
         result = make_write_drafts_node(deps)(state)
-        graph.update_state(config, result)  # type: ignore[attr-defined]
+        write_run_state(graph, run_id, result)
 
     typer.secho(
         f"wrote Track {result['cms_track_id']} with {len(result['cms_leaf_ids'])} draft Leaves",
@@ -448,6 +585,7 @@ def generate_assets(
     )
     from zoomout_pipeline.graph.scene_settings import derive_scene_plan
 
+    hold_run(run_id, command="generate-assets")
     settings = get_settings()
     anchors = AnchorSet.load(settings.anchors_dir)
     if len(anchors) == 0:
@@ -459,7 +597,6 @@ def generate_assets(
         raise typer.Exit(1)
 
     with run_context() as (graph, deps):
-        config = {"configurable": {"thread_id": run_id}}
         state = open_run_for_models(graph, run_id)
         if not state.cms_leaf_ids:
             typer.secho(
@@ -509,9 +646,7 @@ def generate_assets(
             )
             for spend in scene_spends:
                 state.cost.record(spend)
-            graph.update_state(  # type: ignore[attr-defined]
-                config, {"scene_plan": scene_plan, "cost": state.cost}
-            )
+            write_run_state(graph, run_id, {"scene_plan": scene_plan, "cost": state.cost})
             typer.echo(f"scene plan: derived {len(scene_plan.settings)} settings")
         by_order = scene_plan.by_order()
 
@@ -556,7 +691,7 @@ def generate_assets(
             if existing.get("imageCandidates") or chosen:
                 typer.echo(f"  leaf {key}: already illustrated in the CMS, skipped")
                 assets[key] = {"recovered": True}
-                graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+                write_run_state(graph, run_id, {"cms_assets": assets})
                 continue
 
             record = state.generated[key]
@@ -608,7 +743,7 @@ def generate_assets(
             # Checkpointed per Leaf, not once at the end. Images are the most expensive
             # thing this pipeline buys, and bookkeeping written only on a clean exit is
             # bookkeeping that is missing exactly when a retry needs it most.
-            graph.update_state(config, {"cms_assets": assets})  # type: ignore[attr-defined]
+            write_run_state(graph, run_id, {"cms_assets": assets})
 
     typer.secho(f"\n{budget.report()}", fg=typer.colors.GREEN, bold=True)
     if guard_spend:
@@ -672,8 +807,8 @@ def review_track(
     from zoomout_pipeline.graph.leaf_nodes import reload_passages
     from zoomout_pipeline.graph.review import review_and_revise
 
+    hold_run(run_id, command="review-track")
     with run_context() as (graph, deps):
-        config = {"configurable": {"thread_id": run_id}}
         state = open_run_for_models(graph, run_id)
         if not state.generated:
             typer.secho(f"run {run_id} has no generated Leaves to review", fg=typer.colors.RED)
@@ -751,9 +886,7 @@ def review_track(
                 f"{', ' + ', '.join(wrote) + ' written to CMS' if wrote else ''}"
             )
 
-        graph.update_state(  # type: ignore[attr-defined]
-            config, {"generated": generated, "cms_reviews": reviews}
-        )
+        write_run_state(graph, run_id, {"generated": generated, "cms_reviews": reviews})
 
     total_usd = sum(r["usd"] for r in reviews.values())
     typer.secho(
@@ -792,12 +925,12 @@ def rewrite_leaf_command(
     from zoomout_pipeline.graph.leaf_nodes import reload_passages
     from zoomout_pipeline.graph.rewrite import brief_summary, load_brief, rewrite_leaf
 
+    hold_run(run_id, command="rewrite-leaf")
     brief_path = Path(brief)
     loaded = load_brief(brief_path)
     typer.echo(f"brief: {brief_path} — {json.dumps(brief_summary(loaded))}\n")
 
     with run_context() as (graph, deps):
-        config = {"configurable": {"thread_id": run_id}}
         state = open_run_for_models(graph, run_id)
         key = str(order)
         record = state.generated.get(key)
@@ -867,7 +1000,7 @@ def rewrite_leaf_command(
             # is the difference between a run ledger and a guess: the first version of this
             # command exited here without writing the spend, so the money it had just spent
             # existed only in a terminal scrollback.
-            _record_rewrite_cost(graph, config, state, outcome)
+            _record_rewrite_cost(graph, run_id, state, outcome)
             typer.secho(
                 "\nthe rewrite was discarded for failing grounding; the original Leaf "
                 "stands and nothing was written",
@@ -908,8 +1041,9 @@ def rewrite_leaf_command(
         reviews = {k: v for k, v in state.cms_reviews.items() if k != key}
         for spend in outcome.spend:
             state.cost.record(spend)
-        graph.update_state(  # type: ignore[attr-defined]
-            config,
+        write_run_state(
+            graph,
+            run_id,
             {"generated": generated, "cms_reviews": reviews, "cost": state.cost},
         )
 
@@ -921,7 +1055,7 @@ def rewrite_leaf_command(
     )
 
 
-def _record_rewrite_cost(graph: Any, config: Any, state: Any, outcome: Any) -> None:
+def _record_rewrite_cost(graph: Any, run_id: str, state: Any, outcome: Any) -> None:
     """Write a rewrite's spend into the run ledger, whether or not it produced anything.
 
     A rejected attempt is not a free attempt. Cost is recorded per node, per Leaf, per run
@@ -930,7 +1064,7 @@ def _record_rewrite_cost(graph: Any, config: Any, state: Any, outcome: Any) -> N
     """
     for spend in outcome.spend:
         state.cost.record(spend)
-    graph.update_state(config, {"cost": state.cost})
+    write_run_state(graph, run_id, {"cost": state.cost})
 
 
 def _echo_leaf(record: Any) -> None:
@@ -987,8 +1121,8 @@ def balance_distractors(
     )
     from zoomout_pipeline.graph.distractors import correct_is_longest, rebalance_options
 
+    hold_run(run_id, command="balance-distractors")
     with run_context() as (graph, deps):
-        config = {"configurable": {"thread_id": run_id}}
         state = open_run_for_models(graph, run_id)
         if not state.generated:
             typer.secho(f"run {run_id} has no generated Leaves", fg=typer.colors.RED)
@@ -1070,9 +1204,7 @@ def balance_distractors(
         #
         # This is a fresh measurement of the current Leaves, not an edit of the old verdict.
         # The run did fail at that point, and the commit history says so.
-        graph.update_state(  # type: ignore[attr-defined]
-            config, {"generated": generated, "answer_length": after}
-        )
+        write_run_state(graph, run_id, {"generated": generated, "answer_length": after})
 
         typer.echo(
             f"\nafter : {after.leaves_with_longest_correct} of {after.leaves_checked} "
@@ -1518,21 +1650,41 @@ class RunLedger:
     **Per call, not per Leaf.** The first Sadaltager run lost its network mid-Leaf; spend was
     only written back after a whole Leaf, so a clip that was paid for and saved to disk never
     reached the ledger, and had to be found by reconciling the two afterwards.
+
+    **Every write asks the run's lock first** (`write_run_state`), so a process that has lost it
+    stops instead of writing over whoever holds the run now. `unrecorded_usd` is what it would
+    have been left holding: the entries added since the last write that reached the checkpoint.
     """
 
     def __init__(self, graph: Any, run_id: str, cost: Any) -> None:
         self._graph = graph
-        self._config = {"configurable": {"thread_id": run_id}}
+        self._run_id = run_id
         self.cost = cost
+        # What the loaded checkpoint already holds. Entries past this count are not written yet.
+        self._written = len(cost.entries)
+
+    @property
+    def unrecorded_usd(self) -> float:
+        return float(sum(entry.usd for entry in self.cost.entries[self._written :]))
 
     def record(self, spend: Any) -> None:
         self.cost.record(spend)
-        self._graph.update_state(self._config, {"cost": self.cost})
+        self.write()
+
+    def write(self, **values: Any) -> None:
+        """The ledger, and whatever else the caller is checkpointing with it, to the run."""
+        write_run_state(
+            self._graph,
+            self._run_id,
+            {"cost": self.cost, **values},
+            unrecorded_usd=self.unrecorded_usd,
+        )
+        self._written = len(self.cost.entries)
 
 
 def _checked_cms(
     deps: Any, state: PipelineState, track_id: int, *, purpose: str
-) -> tuple[Any, dict[str, Any], list[dict[str, Any]]]:
+) -> tuple[PayloadClient, dict[str, Any], list[dict[str, Any]]]:
     """The CMS client, who it is, and the run's Leaves in order — before anything is read or
     written through it.
 
@@ -1545,7 +1697,7 @@ def _checked_cms(
     from zoomout_pipeline.cms.client import PayloadClient
 
     settings = deps.settings
-    client: Any = deps.payload_client or PayloadClient(
+    client: PayloadClient = deps.payload_client or PayloadClient(
         base_url=settings.payload_url, api_key=settings.payload_api_key.get_secret_value()
     )
     identity = client.whoami()
@@ -1591,7 +1743,6 @@ class _Narration:
 
         self.graph = graph
         self.run_id = run_id
-        self.config = {"configurable": {"thread_id": run_id}}
         self.state, transport = open_run_for_narration(graph, run_id)
         state = self.state
         if state.cms_track_id is None or not state.cms_leaf_ids or state.provenance is None:
@@ -1644,8 +1795,9 @@ class _Narration:
         self.ledger.record(spend)
 
     def checkpoint(self, **values: Any) -> None:
-        """Spend is written back after every Leaf, so an interrupted run keeps its ledger."""
-        self.graph.update_state(self.config, {"cost": self.state.cost, **values})
+        """Spend is written back after every Leaf, so an interrupted run keeps its ledger. Through
+        the ledger, so it asks the run's lock first like every other write."""
+        self.ledger.write(**values)
 
 
 def _clip_line(clip: Any) -> str:
@@ -1664,8 +1816,10 @@ def _select_leaves(
 
     `--leaf N` names them (repeatable, by orderIndex; the order they are given in does not
     matter and a repeat is the same Leaf); `--limit N` takes the first N. **An index the run has
-    no Leaf for is refused here, before anything is rendered, listened to or written** — a typo
-    that quietly selected nothing would read as "nothing to do".
+    no Leaf for is refused here, before anything is rendered, listened to, spent or written to the
+    CMS** — a typo that quietly selected nothing would read as "nothing to do". The run's
+    checkpoint has been written to twice by then (which door the run used: `transport` and
+    `narration_transport`), so "nothing written" would be untrue and is not said.
     """
     if not only:
         return list(leaves[:limit] if limit else leaves)
@@ -1675,7 +1829,9 @@ def _select_leaves(
     if unknown:
         typer.secho(
             f"no Leaf at orderIndex {', '.join(str(order) for order in unknown)}; this run has "
-            f"Leaves {', '.join(str(order) for order in sorted(have))}. Nothing was done.",
+            f"Leaves {', '.join(str(order) for order in sorted(have))}. Nothing was done beyond "
+            "recording the run's transport: nothing was rendered, listened to, spent or written "
+            "to the CMS.",
             fg=typer.colors.RED,
             bold=True,
         )
@@ -1709,17 +1865,20 @@ def _planned_purchases(leaves: list[dict[str, Any]], session: Any) -> list[tuple
     return planned
 
 
-def _will_buy(planned: list[tuple[int, Any]]) -> str:
+def _will_buy(planned: list[tuple[int, Any]], *, guard: bool = True) -> str:
     """One line, before the first call: how many clips, and which — by slide and narrator, never
-    by their words."""
+    by their words. **The retry it promises is one the run can make**: with the guard off nothing
+    listens, so only a clip whose measured pace is unnatural is bought again."""
     if not planned:
         return "will buy   : no clip — every first attempt is already on disk"
     named = ", ".join(f"leaf {order} {clip.describe()}" for order, clip in planned)
     count = len(planned)
-    return (
-        f"will buy   : {count} {'clip' if count == 1 else 'clips'} — {named}; "
+    retry = (
         "and a retry for any clip the guard fails"
+        if guard
+        else "and a retry for any clip whose pace is not natural (the guard is off)"
     )
+    return f"will buy   : {count} {'clip' if count == 1 else 'clips'} — {named}; {retry}"
 
 
 @app.command("audition-voices")
@@ -1774,6 +1933,7 @@ def audition_voices(
             typer.secho(f"--line {spec!r} is not ORDER:SLIDE", fg=typer.colors.RED)
             raise typer.Exit(2) from None
 
+    hold_run(run_id, command="audition-voices")
     with run_context() as (graph, deps):
         session = _Narration(graph, deps, run_id, guard=guard)
         chosen = []
@@ -1920,7 +2080,7 @@ def narrate(
             "--leaf",
             help="Only this Leaf, by orderIndex. Repeatable. Leaves are done in order whatever "
             "order they are named in; an index the run has no Leaf for is refused before "
-            "anything runs. Not with --limit.",
+            "anything is rendered, listened to, spent or written to the CMS. Not with --limit.",
         ),
     ] = None,
     render_only: Annotated[
@@ -2026,6 +2186,7 @@ def narrate(
         )
         raise typer.Exit(2)
 
+    hold_run(run_id, command="narrate")
     rendered: list[Any] = []
     halted = ""
     failed: list[str] = []
@@ -2036,6 +2197,8 @@ def narrate(
     # The ones of those that the render itself met half way through a Leaf, after the pre-flight
     # had passed it: their earlier clips were already listened to, and that is on the ledger.
     found_midway: set[str] = set()
+    # The Leaves whose audio this run put in a pending draft, or found already there.
+    attached_keys: list[str] = []
     with run_context() as (graph, deps):
         session = _Narration(graph, deps, run_id, guard=guard)
         leaves = _select_leaves(session.leaves, only=only_leaves, limit=limit)
@@ -2055,7 +2218,7 @@ def narrate(
         if not no_synthesis:
             # A run that may buy says what, before the first call. Nothing is held for a
             # missing clip here: it is bought.
-            typer.echo(_will_buy(_planned_purchases(leaves, session)) + "\n")
+            typer.echo(_will_buy(_planned_purchases(leaves, session), guard=guard) + "\n")
         narration = dict(session.state.cms_narration)
 
         for leaf in leaves:
@@ -2088,6 +2251,14 @@ def narrate(
                     if absent:
                         names = [clip.describe() for clip in absent]
                         not_on_disk[key] = names
+                        _log.info(
+                            "narration.leaf_held",
+                            run_id=run_id,
+                            leaf=order,
+                            reason="not_on_disk",
+                            found="pre_flight",
+                            clips=names,
+                        )
                         typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
                         typer.secho(
                             f"           HELD — NOT ON DISK: {', '.join(names)}; nothing "
@@ -2118,6 +2289,13 @@ def narrate(
                 # are discarded, never attached, and the run carries on.
                 not_on_disk[key] = [str(missing)]
                 found_midway.add(key)
+                _log.info(
+                    "narration.leaf_held",
+                    run_id=run_id,
+                    leaf=order,
+                    reason="not_on_disk",
+                    found="while_rendering",
+                )
                 session.checkpoint()
                 typer.echo(f"  leaf {order:>2}  {leaf.get('title', '')[:60]}")
                 typer.secho(f"           HELD — NOT ON DISK: {missing}", fg=typer.colors.RED)
@@ -2148,6 +2326,7 @@ def narrate(
             except NarrationHeldError as held_back:
                 # A clip that is not the approved text: this Leaf waits, the rest carry on.
                 held.append(key)
+                _log.warning("narration.leaf_held", run_id=run_id, leaf=order, reason="guard")
                 typer.secho(f"           HELD — {held_back}", fg=typer.colors.RED)
                 continue
             except NarrationWriteError as error:
@@ -2163,6 +2342,7 @@ def narrate(
                 "verified": attached.passed,
             }
             session.checkpoint(cms_narration=narration)
+            attached_keys.append(key)
             state_word = "draft written" if attached.wrote else "draft already held this audio"
             typer.echo(
                 f"           {state_word}; {attached.uploads} uploaded; "
@@ -2202,7 +2382,7 @@ def narrate(
                     *(
                         [
                             f"**Partial: Leaves {target.covered} only.** The review this would "
-                            "have replaced covers more, and was left as it was."
+                            "have replaced was left as it was."
                         ]
                         if target.beside
                         else []
@@ -2269,14 +2449,26 @@ def narrate(
             bold=True,
         )
         for leaf_key, names in not_on_disk.items():
-            midway = (
-                " (found while rendering: its earlier clips were already listened to, and "
-                "that is on the ledger)"
-                if leaf_key in found_midway
-                else ""
-            )
+            midway = ""
+            if leaf_key in found_midway:
+                midway = (
+                    " (found while rendering: its earlier clips were already listened to, and "
+                    "that is on the ledger)"
+                    if guard
+                    else " (found while rendering: its earlier clips were rendered, and nothing "
+                    "was listened to, the guard being off)"
+                )
             typer.secho(f"  leaf {leaf_key}: {', '.join(names)}{midway}", fg=typer.colors.RED)
-        again = " ".join(f"--leaf {leaf_key}" for leaf_key in not_on_disk)
+        # The options this run was given and the suggestion must agree: a bare `--leaf 9` would
+        # re-narrate at the defaults, and with the guard back on if this run had switched it off.
+        again = " ".join(
+            [
+                *(f"--leaf {leaf_key}" for leaf_key in not_on_disk),
+                f"--tempo {tempo:g}",
+                f"--max-attempts {max_attempts}",
+                *([] if guard else ["--no-guard"]),
+            ]
+        )
         typer.secho(
             "The usual cause is that the Leaf's text changed after it was narrated, so the audio "
             "on disk is for words it no longer says. Two ways out: narrate it — "
@@ -2285,11 +2477,23 @@ def narrate(
             fg=typer.colors.RED,
         )
     if not render_only:
-        typer.secho(
-            "\nNothing was published. Each Leaf's audio waits in a pending draft until a human "
-            "publishes it.",
-            fg=typer.colors.YELLOW,
-        )
+        if attached_keys:
+            typer.secho(
+                "\nNothing was published. Each Leaf's audio waits in a pending draft until a human "
+                "publishes it"
+                + (
+                    "."
+                    if len(attached_keys) == len(leaves)
+                    else f" (Leaves {', '.join(attached_keys)}; the others were not attached)."
+                ),
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            typer.secho(
+                "\nNothing was published, and nothing was attached: no Leaf's audio was put in a "
+                "draft by this run.",
+                fg=typer.colors.YELLOW,
+            )
     if halted or failed or held or not_on_disk:
         raise typer.Exit(1)
 
@@ -2304,16 +2508,32 @@ def narration_stale(
     an audio entry whose digest no longer matches the slide's current text: an edit to a
     narrated field silences that slide, in both voices, and nothing else says so. This reads
     every Leaf of the run's Track — the published version and any pending draft — and prints
-    each entry that would be dropped: Leaf, slide, narrator, which version, and the stored and
-    current digest (eight hex digits). The last line counts the slides; the exit code is 1 if
-    there are any, 0 if there are none.
+    each entry whose stored digest no longer matches: Leaf, slide, narrator, which version, and
+    the stored and current digest (eight hex digits). The last line counts the slides.
+
+    **A digest check, and only that: not every entry the backend would drop.** It does not see an
+    unknown narrator, an empty url, a zero duration, a duplicated narrator (the backend drops both
+    rows) or a `stickyNotes.audio` entry, none of which is reachable through the pipeline's own
+    attach.
+
+    Exit code **0**: it compared at least one audio entry and none is stale. **1**: at least one
+    is stale. **3**: it compared nothing, because no Leaf carries an audio entry, which is not a
+    clean bill and is never printed as one. (2 is what every command says when it was refused
+    before it did anything.)
 
     **It cannot spend or write.** It is a command of its own, not a flag on `narrate`, so the
     code that can buy a clip is never even constructed here: no speech client, no listening
     model, no budget. It reads the run's state and two documents per Leaf, and checks who the
     key is first — an anonymous 200 shows no drafts and would report "clean".
     """
-    from zoomout_pipeline.graph.narration_stale import LIVE, check_leaf, summary
+    from zoomout_pipeline.graph.narration_stale import (
+        EXIT_NOTHING_COMPARED,
+        LIVE,
+        check_leaf,
+        compared,
+        exit_code,
+        summary,
+    )
 
     with run_context() as (graph, deps):
         state = read_run_state(graph, run_id)
@@ -2350,7 +2570,30 @@ def narration_stale(
         "the text it sits beside"
     )
     stale = [entry for check in checks for entry in check.stale]
-    typer.secho(summary(checks), fg=typer.colors.RED if stale else typer.colors.GREEN, bold=True)
+    code = exit_code(checks)
+    colour = (
+        typer.colors.RED
+        if stale
+        else typer.colors.YELLOW
+        if code == EXIT_NOTHING_COMPARED
+        else typer.colors.GREEN
+    )
+    typer.secho(summary(checks), fg=colour, bold=True)
+    _log.info(
+        "narration.stale_checked",
+        run_id=run_id,
+        leaves=len(checks),
+        compared=compared(checks),
+        stale_entries=len(stale),
+        stale_slides=len({(entry.order, entry.slide) for entry in stale}),
+        exit_code=code,
+    )
+    if code == EXIT_NOTHING_COMPARED:
+        typer.echo(
+            "No Leaf of this Track carries an audio entry, in the published version or in a "
+            "draft, so there was nothing to compare and this says nothing about the audio. "
+            "Narrate the run first, or check that it is the Track the narration went to."
+        )
     if stale:
         in_live = any(entry.version == LIVE for entry in stale)
         typer.echo(
@@ -2364,7 +2607,8 @@ def narration_stale(
                 else ""
             )
         )
-        raise typer.Exit(1)
+    if code:
+        raise typer.Exit(code)
 
 
 # ------------------------------------------------------------------------------ ONBOARD-2

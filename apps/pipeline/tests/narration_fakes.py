@@ -293,8 +293,17 @@ def leaked_window(text: str, haystack: str, *, width: int = 12) -> str | None:
     prefix-leak mutant was the one of twenty that survived). What an error message, a log line or
     a command's output must never do is quote a Leaf's words, in whole or in part; twelve
     characters is long enough that two unrelated sentences do not share one by chance.
+
+    **A line shorter than the window is checked whole** (VO-4.1's version passed any text under
+    `width` characters, because no window of that size exists in it, so a short line quoted in full
+    was never found). A short line is the whole of what could leak, so it leaks if all of it is in
+    the haystack. A blank line has nothing to leak.
     """
-    for start in range(max(0, len(text) - width + 1)):
+    if not text.strip():
+        return None
+    if len(text) < width:
+        return text if text in haystack else None
+    for start in range(len(text) - width + 1):
         window = text[start : start + width]
         if window in haystack:
             return window
