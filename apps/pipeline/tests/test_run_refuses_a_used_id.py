@@ -2,13 +2,14 @@
 
 **The defect, found by experiment at LEDGER-1's sign-off.** `run` builds a fresh `PipelineState`
 and calls `graph.invoke(state, config)` on whatever thread `--run-id` names. On a thread that
-exists that does not start a second run; it feeds the fresh state into the first. LangGraph skips
-an input field whose fresh value is `None` and applies one whose default is not, so the run's
-`cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration` and `cms_assets` (empty dicts) are
-**reset**. On `ikigai` that is $6.5755 of recorded spend gone, `narration_spent_usd` back to zero
-so the $2.75 ceiling reads as unspent, and the links to eighteen Payload Leaves cut, with no spend
-and no error. The lock does not help: one process and one slip (an up-arrow on an old
-`run --run-id ikigai ...`) does it alone.
+exists that does not start a second run; it feeds the fresh state into the first. LangGraph applies
+an input field whose value is not `None`, whose default is not, or that the constructor was given
+(`model_fields_set`), so the run's `cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration`
+and `cms_assets` (empty dicts) are **reset**, and so is `cms_track_id`, which the command passes
+explicitly (as `None`). On `ikigai` that is $6.5755 of recorded spend gone, `narration_spent_usd`
+back to zero so the $2.75 ceiling reads as unspent, and the links to its Payload Track and eighteen
+Leaves cut, with no spend and no error. The lock does not help: one process and one slip (an
+up-arrow on an old `run --run-id ikigai ...`) does it alone.
 
 So these are not fakes of the checkpointer: a **real `PostgresSaver`** on the test database,
 through the real `durable_graph`, with the repo's fakes (a scripted LLM, a fake embedder, a
@@ -21,8 +22,8 @@ same id.
   written at all;
 * a **new** id (and no id at all) still runs to the gate: the risk of a guard like this is one
   that refuses a legitimate first `run`;
-* and, separately, the reset itself is pinned as what happens without the guard, so the test
-  names the damage and not only the refusal.
+* and, separately, the reset itself is pinned as what the command does with its check taken out,
+  so the test names the damage and not only the refusal.
 """
 
 from __future__ import annotations
@@ -94,10 +95,11 @@ class Checkpoint:
             f"cost {len(earlier.cost_entries)} entries ${earlier.cost_usd:.4f} -> "
             f"{len(self.cost_entries)} entries ${self.cost_usd:.4f}; voiceover spent "
             f"${earlier.voiceover_usd:.4f} -> ${self.voiceover_usd:.4f}; cms_leaf_ids "
-            f"{earlier.cms_leaf_ids} -> {self.cms_leaf_ids}; cms_narration "
+            f"{earlier.cms_leaf_ids} -> {self.cms_leaf_ids}; cms_track_id "
+            f"{earlier.cms_track_id} -> {self.cms_track_id}; cms_narration "
             f"{sorted(earlier.cms_narration)} -> {sorted(self.cms_narration)}; cms_assets "
-            f"{sorted(earlier.cms_assets)} -> {sorted(self.cms_assets)}; checkpoint "
-            f"...{earlier.checkpoint_id[-8:]} -> ...{self.checkpoint_id[-8:]}"
+            f"{sorted(earlier.cms_assets)} -> {sorted(self.cms_assets)}; latest checkpoint "
+            f"{earlier.checkpoint_id} -> {self.checkpoint_id}"
         )
 
 
@@ -234,7 +236,8 @@ def test_run_refuses_an_id_that_already_has_a_checkpoint(harness: Harness) -> No
     assert (
         "`run` starts a NEW run" in out and "refused before anything was invoked or written" in out
     )
-    assert "would reset its cost ledger" in out and "Payload Leaves" in out
+    assert "would reset its cost ledger" in out
+    assert "links to its Payload Track, Leaves, narration and assets" in out
     assert "resume --run-id an-existing-run" in out, "the way to continue it"
     assert "run again with a new --run-id, or none" in out, "the way to start another"
     assert "There is no --force" in out
@@ -273,14 +276,39 @@ def test_a_new_id_still_runs_to_the_gate_after_a_refusal(harness: Harness) -> No
 
 
 def test_without_the_guard_a_second_run_resets_the_ledger_and_cuts_the_payload_links(
-    harness: Harness,
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """**Evidence that the guard is for something.** What the command did before: `graph.invoke`
-    of a fresh state on the existing thread, called directly so this holds whether or not the guard
-    is there. Four ledger entries become the new run's own, the voiceover spend reads zero, and the
-    three Payload-linked fields are empty; `cms_track_id`, which the fresh state leaves as `None`,
-    survives (LangGraph skips a `None` input and applies a default that is not `None`)."""
+    """**Evidence that the guard is for something.** The command with its check taken out, which is
+    what `run` did before, and which holds whether or not the guard is in the source: a fresh state
+    is invoked on the existing thread. The four ledger entries (two of narration, two of its guard)
+    are replaced by the new run's own, the voiceover spend reads zero so the ceiling would read as
+    unspent, the three Payload-linked fields are empty, **and so is the Track link**.
+
+    That last one corrects the experiment this was written from, which kept it. LangGraph applies a
+    `None` input when the constructor was given it, and the command gives `cms_track_id` (and
+    `book_title`, `book_author`) explicitly, as `None`; a state built without that argument leaves
+    the field alone, which is the next test."""
     before = _a_run_that_has_been_spent_on(harness, "an-existing-run")
+    monkeypatch.setattr(cli, "refuse_a_run_in_use", lambda _graph, _run_id: None)
+
+    again = harness.run("--run-id", "an-existing-run")
+    after = harness.checkpoint("an-existing-run")
+
+    assert again.exit_code == 0 and "PAUSED AT HUMAN GATE 1" in again.output, again.output
+    assert before.voiceover_usd > 0 and len(before.cost_entries) == 4
+    assert after.voiceover_usd == 0.0, "the voiceover ceiling would read as unspent"
+    assert not any(node.startswith("narration") for node, *_ in after.cost_entries)
+    assert len(after.cost_entries) < len(before.cost_entries), after.damage_since(before)
+    assert after.cms_leaf_ids == {} and after.cms_narration == {} and after.cms_assets == {}
+    assert after.cms_track_id is None, "the command passes cms_track_id explicitly, as None"
+
+
+def test_a_state_built_without_the_track_id_leaves_that_link_alone(harness: Harness) -> None:
+    """The variant the handoff's experiment ran: `graph.invoke` of a state that was not given
+    `cms_track_id` keeps the Track link and resets the rest, which is why the experiment found it
+    surviving and the command does not. It pins the LangGraph rule the guard rests on (a field the
+    constructor was given is applied even as `None`), so an upgrade that changes it is noticed."""
+    _a_run_that_has_been_spent_on(harness, "an-existing-run")
     fresh = PipelineState(
         run_id="an-existing-run",
         source_path=str(harness.epub),
@@ -291,11 +319,8 @@ def test_without_the_guard_a_second_run_resets_the_ledger_and_cuts_the_payload_l
         graph.invoke(fresh, {"configurable": {"thread_id": "an-existing-run"}})
     after = harness.checkpoint("an-existing-run")
 
-    assert before.voiceover_usd > 0 and len(before.cost_entries) == 4
-    assert after.voiceover_usd == 0.0, "the voiceover ceiling would read as unspent"
-    assert not any(node.startswith("narration") for node, *_ in after.cost_entries)
-    assert after.cms_leaf_ids == {} and after.cms_narration == {} and after.cms_assets == {}
-    assert after.cms_track_id == 50, "a None input is skipped, so this one survives"
+    assert after.cms_track_id == 50, "not given, so not applied"
+    assert after.voiceover_usd == 0.0 and after.cms_leaf_ids == {}, "everything else is reset"
 
 
 # ============================================================ the guard itself, without a database

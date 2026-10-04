@@ -108,14 +108,18 @@ def refuse_a_run_in_use(graph: Any, run_id: str) -> None:
     anything is invoked (LEDGER-1.1).
 
     `graph.invoke(PipelineState(...), config)` on a thread that exists does not start a second run:
-    it feeds a fresh state into the first. LangGraph skips an input field whose fresh value is
-    `None` and applies one whose default is not, so a run's `cost` (a `RunCost()`) and its
-    `cms_leaf_ids`, `cms_narration` and `cms_assets` (empty dicts) are **reset**, while
-    `cms_track_id`, `analysis`, the plan and `chunk_count` survive. Found by experiment on a scratch
-    database: the ledger went from four entries and $0.755 to one entry and nothing. On the real
-    `ikigai` run that would erase $6.5755 of recorded spend, and with it `narration_spent_usd`, so
-    the $2.75 voiceover ceiling would read as unspent, and cut the run's links to its eighteen
-    Payload Leaves, with no spend and no error.
+    it feeds a fresh state into the first. LangGraph applies a Pydantic input field when its value
+    is not `None`, when its default is not `None`, or when the constructor was *given* it
+    (`model_fields_set`), so a run's `cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration`
+    and `cms_assets` (empty dicts) are **reset**, and **so is `cms_track_id`**: this command passes
+    it explicitly, as `None` unless `--cms-track-id` names one. `analysis`, the plan and
+    `chunk_count`, which it does not pass, survive. (The experiment this was written from built its
+    state without `cms_track_id` and saw that link survive; through the command it does not.)
+    Found by experiment on a scratch database: the ledger went from four entries and $0.755 to one
+    entry and nothing. On the real `ikigai` run that would erase $6.5755 of recorded spend, and with
+    it `narration_spent_usd`, so the $2.75 voiceover ceiling would read as unspent, and cut the
+    run's links to its Payload Track and its eighteen Leaves, with no spend and no error: `narrate`
+    would then say the run has no Leaves in Payload, and `write-drafts` would create a second Track.
 
     The run's lock does not stop it. The lock only matters while another process holds the run, and
     one process and one slip (an up-arrow on an old `run --run-id ikigai ...`) does it alone.
@@ -136,8 +140,8 @@ def refuse_a_run_in_use(graph: Any, run_id: str) -> None:
         "anything was invoked or written, and nothing was spent.\n\n"
         "  That id names a run that already has a checkpoint. Starting a run on it would reset\n"
         "  its cost ledger (what it has spent, and so how much of the voiceover ceiling it has\n"
-        "  left) and its links to the Payload Leaves, narration and assets, and nothing would\n"
-        "  say so.\n\n"
+        "  left) and its links to its Payload Track, Leaves, narration and assets, and nothing\n"
+        "  would say so.\n\n"
         "Two ways on:\n"
         f"  - to continue that run:  resume --run-id {run_id}\n"
         "  - to start another:      run again with a new --run-id, or none (one is generated)\n"
