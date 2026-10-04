@@ -194,6 +194,10 @@ uv run zoomout-pipeline purge-raw-text --run-id <run-id>
 reconstruct, so it is recorded at ingest or not at all. `undocumented` is an honest answer;
 silence is not.
 
+**`run` always starts a new run, and refuses a `--run-id` that already has a checkpoint** (invoking a
+fresh state on an existing run resets its cost ledger and its Payload links, with no spend and no
+error); `resume --run-id <id>` continues one.
+
 ## One spender per run (LEDGER-1)
 
 A run's cost ledger lives in its checkpoint, and a command that spends loads the whole ledger when
