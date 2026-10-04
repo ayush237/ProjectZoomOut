@@ -94,6 +94,63 @@ def hold_run(run_id: str, *, command: str = "") -> None:
     except run_lock.RunLockUnavailableError as unavailable:
         typer.secho(f"\n{unavailable}\n", fg=typer.colors.RED, bold=True)
         raise typer.Exit(1) from None
+    except ForeignDatabaseError as foreign:
+        # `ZOOMOUT_PIPELINE_DATABASE_URL` points at the backend's or Payload's database: the same
+        # refusal `doctor` makes, in the same words, and not a traceback. Exit 1 like `doctor` and
+        # like a lock that could not be taken: this is the environment being wrong, where 2 is a
+        # refusal about the run or the arguments (held, in use, an unknown Leaf, the paid tier).
+        typer.secho(f"\nREFUSING TO USE THIS DATABASE\n{foreign}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1) from None
+
+
+def refuse_a_run_in_use(graph: Any, run_id: str) -> None:
+    """`run` starts a **new** run, so an id that already has a checkpoint is refused, before
+    anything is invoked (LEDGER-1.1).
+
+    `graph.invoke(PipelineState(...), config)` on a thread that exists does not start a second run:
+    it feeds a fresh state into the first. LangGraph applies a Pydantic input field when its value
+    is not `None`, when its default is not `None`, or when the constructor was *given* it
+    (`model_fields_set`), so a run's `cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration`
+    and `cms_assets` (empty dicts) are **reset**, and **so is `cms_track_id`**: this command passes
+    it explicitly, as `None` unless `--cms-track-id` names one. `analysis`, the plan and
+    `chunk_count`, which it does not pass, survive. (The experiment this was written from saw the
+    Track link survive, as it does when the state is built without `cms_track_id`; through the
+    command it does not.) Found by experiment on a scratch database: the ledger went from four
+    entries and $0.755 to one entry and nothing. On the real `ikigai` run that would erase $6.5755
+    of recorded spend, and with it `narration_spent_usd`, so the $2.75 voiceover ceiling would read
+    as unspent, and cut the run's links to its Payload Track and its eighteen Leaves, with no spend
+    and no error: `narrate` would then say the run has no Leaves in Payload, and `write-drafts`,
+    with no Track to look under, would create a second one.
+
+    The run's lock does not stop it. The lock only matters while another process holds the run, and
+    one process and one slip (an up-arrow on an old `run --run-id ikigai ...`) does it alone.
+    `resume` continues a checkpoint and is not affected.
+
+    **A thread with no checkpoint is not refused**: a first `run`, or one that died before its first
+    checkpoint, has nothing to overwrite. The thread is read the way `read_run_state` reads it
+    (`get_state(...).values`), so a run that has finished (nothing `next`) is refused as much as one
+    waiting at a gate. Exit code 2, like every refusal made before anything was done, and there is
+    no `--force`: a flag that overrides it is the reset again.
+    """
+    snapshot = graph.get_state({"configurable": {"thread_id": run_id}})
+    if not snapshot.values:
+        return
+    _log.warning("run.refused", run_id=run_id, reason="the id already has a checkpoint")
+    typer.secho(
+        f"\nRUN {run_id!r} ALREADY EXISTS — `run` starts a NEW run, so it refused before "
+        "anything was invoked or written, and nothing was spent.\n\n"
+        "  That id names a run that already has a checkpoint. Starting a run on it would reset\n"
+        "  its cost ledger (what it has spent, and so how much of the voiceover ceiling it has\n"
+        "  left) and its links to its Payload Track, Leaves, narration and assets, and nothing\n"
+        "  would say so.\n\n"
+        "Two ways on:\n"
+        f"  - to continue that run:  resume --run-id {run_id}\n"
+        "  - to start another:      run again with a new --run-id, or none (one is generated)\n"
+        "There is no --force.\n",
+        fg=typer.colors.RED,
+        bold=True,
+    )
+    raise typer.Exit(2)
 
 
 def write_run_state(
@@ -281,6 +338,10 @@ def run(
     **It does not empty the Track first.** `write_drafts_to_cms` skips any `orderIndex`
     Payload already holds, so pointing a run at a populated Track writes nothing — delete
     the old Leaves first, deliberately, with a credential that is allowed to.
+
+    **`run` always starts a new run, and refuses a `--run-id` that already has a checkpoint**
+    (LEDGER-1.1): invoking a fresh state on an existing run resets its cost ledger and its Payload
+    links. `resume --run-id <id>` is what continues one.
     """
     resolved_run_id = run_id or f"run-{uuid.uuid4().hex[:12]}"
     # A generated id cannot be anyone else's, but `--run-id` can name a run that is being spent on
@@ -315,6 +376,10 @@ def run(
     )
 
     with run_context() as (graph, _deps):
+        # After the lock, so that no other process can write the thread between this read and the
+        # invoke; after the paid-tier refusal, which is free and needs no database; and as the last
+        # thing before the invoke, because it needs the graph, which only exists in here.
+        refuse_a_run_in_use(graph, resolved_run_id)
         config = {"configurable": {"thread_id": resolved_run_id}}
         result: dict[str, Any] = graph.invoke(state, config)  # type: ignore[attr-defined]
 
