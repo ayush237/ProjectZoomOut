@@ -29,6 +29,7 @@ from types import SimpleNamespace
 from typing import NoReturn
 from uuid import uuid4
 
+import psycopg
 import pytest
 import typer
 from typer.testing import CliRunner
@@ -42,6 +43,7 @@ from zoomout_pipeline.graph.narration_nodes import NARRATION_NODE
 from zoomout_pipeline.graph.state import PipelineState
 from zoomout_pipeline.models import Acquisition
 
+from .conftest import TEST_DATABASE_URL
 from .run_lock_fakes import InProcessRunLocker
 from .run_lock_support import ForeignHolders, advisory_locks, new_run_id, until_lost
 from .test_narration_stale import Cms, a_book, run_stale
@@ -102,7 +104,18 @@ BEHIND_THE_LOCK = frozenset(
     }
 )
 
-# What a command that does not spend on a run must never name.
+# The graph's own way to write a run's checkpoint: `invoke` and `stream` run its nodes, and the
+# nodes' updates are written by the checkpointer, not through `write_run_state`.
+GRAPH_DOOR = frozenset({"invoke", "stream", "ainvoke", "astream"})
+
+# The two commands that run the graph. They take the lock first and hold it, and they would not
+# notice losing it, because nothing between them and the checkpointer asks (LEDGER-1 ruling 2: a
+# saver that checks on every write, for the first package that runs `resume` for real).
+GRAPH_WRITERS = frozenset({"run", "resume"})
+
+# What a command that does not spend on a run must never name. **The graph's door is on it**
+# (LEDGER-1.1 T3): a command filed as a reader that called `graph.invoke(...)` passed every other
+# pin here, because the one-door pin counts only `update_state`.
 LOCK_AND_WRITE_NAMES = frozenset(
     {
         "hold_run",
@@ -112,6 +125,7 @@ LOCK_AND_WRITE_NAMES = frozenset(
         "write_run_state",
         "RunLedger",
         "update_state",
+        *GRAPH_DOOR,
     }
 )
 
@@ -250,6 +264,24 @@ def test_no_command_writes_a_checkpoint_outside_the_one_door() -> None:
     }
     assert owners == {"write_run_state"}, owners
     assert len(sites) == 1
+
+
+def test_the_only_commands_that_write_through_the_graph_are_run_and_resume() -> None:
+    """**T3 — the other door, said out loud.** `update_state` is the one door for what a command
+    writes, and the test above pins it. The graph is a second: `graph.invoke` runs its nodes and
+    the checkpointer writes what they return, which `write_run_state` never sees, so its lock check
+    does not apply. `run` and `resume` are the two commands that do it. They are spenders, they
+    take the lock as their first act and hold it for the whole run, and they would not notice
+    losing it (LEDGER-1's ruling 2). A third command that calls `invoke`, `stream`, `ainvoke` or
+    `astream` shows up here as a failure that makes its author decide, not as a silence."""
+    found = {
+        name
+        for name, callback in _commands().items()
+        if _names(_function(callback.__name__)) & GRAPH_DOOR
+    }
+
+    assert found == GRAPH_WRITERS, found
+    assert GRAPH_WRITERS <= RUN_SPENDERS
 
 
 def test_the_one_door_asks_the_lock_before_it_writes() -> None:
@@ -699,6 +731,64 @@ def test_a_run_that_cannot_be_locked_because_the_database_is_down_stops_cleanly(
 
     assert stopped.value.exit_code == 1
     assert "could not be taken" in capsys.readouterr().out
+
+
+# ========================================================= T5: a foreign database is a refusal
+
+
+def _foreign(db_connection: psycopg.Connection[dict[str, object]], table: str) -> None:
+    """The scratch database made to look like the backend's or Payload's, as `engine.py` tells."""
+    with db_connection.cursor() as cur:
+        cur.execute(f"CREATE TABLE {table} (id INT)")
+    db_connection.commit()
+
+
+@pytest.mark.parametrize(
+    ("table", "owner"), [("payload_migrations", "Payload"), ("leaf_progress", "the backend")]
+)
+def test_a_database_that_is_not_the_pipelines_is_a_refusal_and_not_a_traceback(
+    table: str,
+    owner: str,
+    db_connection: psycopg.Connection[dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """**T5.** `acquire` checks the database it connects to is the pipeline's own, and raises
+    `ForeignDatabaseError` if it is not. `hold_run` did not catch it, so a
+    `ZOOMOUT_PIPELINE_DATABASE_URL` that named the backend's or Payload's database ended a spending
+    command in a traceback. It is the refusal `doctor` makes, in the same words, with exit code 1:
+    the environment is wrong, which is `doctor`'s 1 and the unreachable database's 1; 2 is for a
+    refusal about the run or the arguments."""
+    _foreign(db_connection, table)
+    monkeypatch.setattr(run_lock, "_active", PostgresRunLocker(TEST_DATABASE_URL))
+
+    with pytest.raises(typer.Exit) as stopped:
+        cli.hold_run("ikigai", command="narrate")
+
+    assert stopped.value.exit_code == 1
+    out = " ".join(capsys.readouterr().out.split())
+    assert "REFUSING TO USE THIS DATABASE" in out
+    assert f"contains {owner}'s tables" in out and table in out
+    assert "ZOOMOUT_PIPELINE_DATABASE_URL" in out, "the error's own words: what to change"
+    assert "Traceback" not in out
+    assert advisory_locks(TEST_DATABASE_URL) == [], "and no lock was taken there"
+
+
+def test_a_spending_command_on_a_foreign_database_ends_in_that_refusal(
+    db_connection: psycopg.Connection[dict[str, object]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through the command: refused with exit 1 and no traceback, having built, read and written
+    nothing (every client, graph and write is an exploder)."""
+    _foreign(db_connection, "payload_migrations")
+    monkeypatch.setattr(run_lock, "_active", PostgresRunLocker(TEST_DATABASE_URL))
+    reached = _explode_everything(monkeypatch)
+
+    result = CliRunner().invoke(cli.app, ["narrate", "--run-id", "ikigai"])
+
+    assert result.exit_code == 1, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.exception
+    assert "REFUSING TO USE THIS DATABASE" in result.output and "Payload" in result.output
+    assert reached == []
 
 
 # ================================================================================== L9: the README

@@ -1330,3 +1330,109 @@ def test_a_hold_by_the_guard_leaves_a_structured_event_too(
     assert result.exit_code == 1, result.output
     ((level, fields),) = log.named("narration.leaf_held")
     assert (level, fields) == ("warning", {"run_id": "ikigai", "leaf": 1, "reason": "guard"})
+
+
+# ================================================== LEDGER-1.1 T6 — the review guard, past Leaf 9
+#
+# The guard that stops a partial run replacing the 72-clip full-book track (VO-4's near-miss) reads
+# which Leaves a review covers out of its cue sheet. Two things about it were never tested: a sheet
+# with a two-digit Leaf in it (every Leaf the earlier tests used was 1, 2 or 3), and a review that
+# exists as only some of its three files.
+
+FULL_BOOK = list(range(18))
+REVIEW_NAME = "book-narration-achernar"
+
+
+def _write_review_as(
+    folder: Path, name: str, *, files: Sequence[str], clips: int, leaves: Sequence[int]
+) -> None:
+    """A review of which only the files with these suffixes exist: its sheet alone, its page
+    alone, its audio alone."""
+    _write_review(folder, name, clips=clips, leaves=leaves)
+    for suffix in (".mp3", ".md", ".html"):
+        if suffix not in files:
+            (folder / f"{name}{suffix}").unlink()
+
+
+def test_a_cue_sheet_of_leaves_zero_to_seventeen_reads_back_as_exactly_those(
+    tmp_path: Path,
+) -> None:
+    """What the real full-book reviews carry. A reader that took one digit of a Leaf's number read
+    Leaves 10-17 as Leaf 1, and a review of the whole book as a review of Leaves 0-9."""
+    _write_review(tmp_path, REVIEW_NAME, clips=72, leaves=FULL_BOOK)
+
+    assert existing_review_leaves(tmp_path / REVIEW_NAME) == frozenset(FULL_BOOK)
+    assert existing_review_clips(tmp_path / REVIEW_NAME) == 72
+
+
+def test_a_run_over_leaves_zero_to_nine_does_not_overwrite_a_review_of_the_whole_book(
+    tmp_path: Path,
+) -> None:
+    """VO-4's near-miss, with the Leaves a real review has: it writes beside, under a name that says
+    what it covers, and says what it left alone. (A run over ten Leaves has forty clips against
+    seventy-two, so the count refuses too: the test below is the one where only the Leaves can.)"""
+    _write_review(tmp_path, REVIEW_NAME, clips=72, leaves=FULL_BOOK)
+    ten = list(range(10))
+
+    target = review_target(folder=tmp_path, name=REVIEW_NAME, asked=ten, covered=ten, clips=40)
+
+    assert target.beside and target.existing_clips == 72
+    assert target.destination.name == f"{REVIEW_NAME}-leaves-0-9"
+    whole = review_target(
+        folder=tmp_path, name=REVIEW_NAME, asked=FULL_BOOK, covered=FULL_BOOK, clips=72
+    )
+    assert not whole.beside, "a run over the whole book still replaces it"
+
+
+def test_a_review_of_leaves_ten_and_eleven_is_not_replaced_by_a_run_over_one_to_three(
+    tmp_path: Path,
+) -> None:
+    """**Where only the Leaves can say no.** The run has more clips than the review (12 against 8)
+    and covers everything it was asked for, so by count it shrinks nothing; but the review is of
+    Leaves 10 and 11, which it does not cover. A reader that took one digit saw that review as
+    Leaf 1, and let it go."""
+    _write_review(tmp_path, REVIEW_NAME, clips=8, leaves=[10, 11])
+
+    target = review_target(
+        folder=tmp_path, name=REVIEW_NAME, asked=[1, 2, 3], covered=[1, 2, 3], clips=12
+    )
+
+    assert target.beside and target.destination.name == f"{REVIEW_NAME}-leaves-1-3"
+
+
+def test_a_review_that_exists_only_as_its_sheet_counts_as_existing(tmp_path: Path) -> None:
+    """Not "nothing there": its count and its Leaves can be read, and it is not overwritten by a
+    run that does not cover them. Read as absent, the standard name would be taken."""
+    _write_review_as(tmp_path, REVIEW_NAME, files=[".md"], clips=72, leaves=FULL_BOOK)
+
+    assert existing_review_clips(tmp_path / REVIEW_NAME) == 72
+    assert existing_review_leaves(tmp_path / REVIEW_NAME) == frozenset(FULL_BOOK)
+    target = review_target(folder=tmp_path, name=REVIEW_NAME, asked=[0, 1], covered=[0, 1], clips=8)
+    assert target.beside and target.existing_clips == 72
+
+
+def test_a_review_that_exists_only_as_its_page_counts_as_existing_and_is_never_overwritten(
+    tmp_path: Path,
+) -> None:
+    """Its sheet is gone, so neither its size nor its Leaves can be read: exactly the review that
+    "cannot be shown to be smaller than anything", and not an absent one."""
+    _write_review_as(tmp_path, REVIEW_NAME, files=[".html"], clips=72, leaves=FULL_BOOK)
+
+    assert existing_review_clips(tmp_path / REVIEW_NAME) is None
+    assert existing_review_leaves(tmp_path / REVIEW_NAME) is None
+    target = review_target(folder=tmp_path, name=REVIEW_NAME, asked=[0], covered=[0], clips=999)
+    assert target.beside and target.existing_clips is None
+
+
+@pytest.mark.parametrize("suffix", [".md", ".html", ".mp3"])
+def test_a_beside_review_that_exists_in_part_still_has_its_name_taken(
+    tmp_path: Path, suffix: str
+) -> None:
+    """The first free beside name is the first that none of the three files is using, whichever
+    one it is that is there."""
+    _write_review(tmp_path, REVIEW_NAME, clips=12, leaves=[0, 1, 2])
+    _write_review_as(tmp_path, f"{REVIEW_NAME}-leaves-1", files=[suffix], clips=4, leaves=[1])
+
+    target = review_target(folder=tmp_path, name=REVIEW_NAME, asked=[1], covered=[1], clips=4)
+
+    assert target.beside and target.destination.name == f"{REVIEW_NAME}-leaves-1-2"

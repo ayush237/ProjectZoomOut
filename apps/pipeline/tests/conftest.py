@@ -38,7 +38,7 @@ from zoomout_pipeline.models import (
     ScenarioOptionDraft,
 )
 
-from .run_lock_fakes import InProcessRunLocker
+from .run_lock_fakes import ForbiddenRunLocker, InProcessRunLocker, forbidden_real_locker
 from .run_lock_support import ForeignHolders, wait_until_no_locks
 
 T = TypeVar("T", bound=BaseModel)
@@ -182,6 +182,28 @@ class RefusingPayloadClient:
 
     def find_leaf(self, *, track_id: int, order_index: int) -> int | None:
         return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _run_lock_tripwire() -> Iterator[None]:
+    """**What is under the hermetic locker** (LEDGER-1.1): a tripwire, and a real locker that cannot
+    be built by accident.
+
+    `hermetic_run_locks` below is one function-scoped `monkeypatch.setattr`, so a test that calls
+    `monkeypatch.undo()` puts `run_lock._active` back to what it was, and what it was is `None`,
+    which makes the next `acquire` build the real locker from the environment's database URL and
+    take a session lock there. So the session starts with `_active` set to a locker that fails
+    loudly when asked for anything, and `PostgresRunLocker` (the name `run_lock._locker()` looks
+    up) replaced by a function that refuses to construct one. The tests that are about the lock
+    import the real class by name before this runs and construct it on purpose, with a database
+    of their own.
+
+    Its own `MonkeyPatch`, not the test's: no test's `monkeypatch.undo()` can reach it.
+    """
+    with pytest.MonkeyPatch.context() as seam:
+        seam.setattr(run_lock, "_active", ForbiddenRunLocker())
+        seam.setattr(run_lock, "PostgresRunLocker", forbidden_real_locker)
+        yield
 
 
 @pytest.fixture(autouse=True)

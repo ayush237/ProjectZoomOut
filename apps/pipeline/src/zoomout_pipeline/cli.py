@@ -94,6 +94,13 @@ def hold_run(run_id: str, *, command: str = "") -> None:
     except run_lock.RunLockUnavailableError as unavailable:
         typer.secho(f"\n{unavailable}\n", fg=typer.colors.RED, bold=True)
         raise typer.Exit(1) from None
+    except ForeignDatabaseError as foreign:
+        # `ZOOMOUT_PIPELINE_DATABASE_URL` points at the backend's or Payload's database: the same
+        # refusal `doctor` makes, in the same words, and not a traceback. Exit 1 like `doctor` and
+        # like a lock that could not be taken: this is the environment being wrong, where 2 is a
+        # refusal about the run or the arguments (held, in use, an unknown Leaf, the paid tier).
+        typer.secho(f"\nREFUSING TO USE THIS DATABASE\n{foreign}\n", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1) from None
 
 
 def refuse_a_run_in_use(graph: Any, run_id: str) -> None:

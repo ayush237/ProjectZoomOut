@@ -241,6 +241,64 @@ def test_a_refused_process_leaves_no_connection_behind(
         real_run_locker.require_held(run_id)
 
 
+# ======================================================================== the key, by literal
+
+# **Derived without `lock_key`**, so that nothing here can agree with a change to it. Postgres's own
+# sha256 over the namespaced id, its first eight bytes as a signed bigint:
+#
+#   select ('x' || substr(encode(
+#          sha256('zoomout-pipeline/run-lock/v1:ikigai'::bytea), 'hex'), 1, 16))::bit(64)::bigint
+#
+# and again with `openssl dgst -sha256 -binary | xxd -p -l 8` and bash's signed 64-bit arithmetic
+# (`$((16#e6d657899d6262b0))`; zsh truncates it). `ikigai` is positive, which is the only key the
+# live proof ever took; `a` is negative, which is the branch a uuid-random test id reaches by luck.
+IKIGAI_KEY = 4323921442082563206
+NEGATIVE_ID, NEGATIVE_KEY = "a", -1813165551407439184
+
+
+def test_the_key_is_pinned_by_literal_so_a_change_to_it_cannot_pass_unseen() -> None:
+    """**T2.** A key is what two checkouts on different code must agree on, and what the README's
+    `psql` recipe quotes. Every other test compares a key with the same function's key."""
+    assert lock_key("ikigai") == IKIGAI_KEY
+    assert lock_key(NEGATIVE_ID) == NEGATIVE_KEY and NEGATIVE_KEY < 0
+
+
+@pytest.mark.parametrize(("run_id", "key"), [("ikigai", IKIGAI_KEY), (NEGATIVE_ID, NEGATIVE_KEY)])
+def test_the_literals_are_what_postgres_itself_computes(
+    lock_database: str, run_id: str, key: int
+) -> None:
+    """The derivation above, run: if a literal here were ever wrong the test would say so, and not
+    only the function."""
+    with psycopg.connect(lock_database, autocommit=True) as conn:
+        row = conn.execute(
+            "select ('x' || substr(encode(sha256(%s::bytea), 'hex'), 1, 16))::bit(64)::bigint",
+            (f"zoomout-pipeline/run-lock/v1:{run_id}".encode(),),
+        ).fetchone()
+
+    assert row is not None and row[0] == key
+
+
+def test_the_holder_of_a_negative_key_is_found(
+    real_run_locker: PostgresRunLocker, hold_elsewhere: ForeignHolders
+) -> None:
+    """`pg_locks` shows a bigint key as two unsigned halves; a negative key is the case where that
+    arithmetic matters, and where `abs(key)` would send the lookup to a row that is not there."""
+    hold_elsewhere.hold(NEGATIVE_ID, name="psql window")
+
+    refused = acquire_within(real_run_locker, NEGATIVE_ID)
+
+    assert isinstance(refused, RunLockHeldError), refused
+    assert refused.holder is not None, "the holder of a negative key was not found"
+    assert refused.holder.application_name == "psql window"
+
+
+def test_a_negative_key_is_held_and_noticed_as_held(real_run_locker: PostgresRunLocker) -> None:
+    """The same arithmetic on the other query: `require_held` finds the lock by its two halves."""
+    real_run_locker.acquire(NEGATIVE_ID, command="narrate")
+
+    real_run_locker.require_held(NEGATIVE_ID)
+
+
 # ================================================================================== a lost lock
 
 
@@ -336,6 +394,22 @@ def test_a_connection_that_is_alive_but_no_longer_holds_the_lock_is_noticed(
     run_id = new_run_id()
     real_run_locker.acquire(run_id, command="narrate")
     real_run_locker._held[run_id].connection.execute("SELECT pg_advisory_unlock_all()")
+
+    with pytest.raises(RunLockLostError, match="no longer lists this lock"):
+        real_run_locker.require_held(run_id)
+
+
+def test_a_lock_lost_and_now_held_by_another_session_is_noticed(
+    real_run_locker: PostgresRunLocker, hold_elsewhere: ForeignHolders
+) -> None:
+    """**T1 — the one case the `pid = pg_backend_pid()` filter exists for.** The connection lets
+    go of its lock (on its own session, as `…alive_but_no_longer_holds…` does) and *another session
+    takes the same key*. Asked "does the server list this lock?", the answer without the filter is
+    yes: there is a row for it, and it is somebody else's. `require_held` has to ask whose."""
+    run_id = new_run_id()
+    real_run_locker.acquire(run_id, command="narrate")
+    real_run_locker._held[run_id].connection.execute("SELECT pg_advisory_unlock_all()")
+    hold_elsewhere.hold(run_id)  # it got the key: the connection no longer holds it
 
     with pytest.raises(RunLockLostError, match="no longer lists this lock"):
         real_run_locker.require_held(run_id)
