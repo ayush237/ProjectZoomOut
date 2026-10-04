@@ -304,10 +304,11 @@ def test_without_the_guard_a_second_run_resets_the_ledger_and_cuts_the_payload_l
 
 
 def test_a_state_built_without_the_track_id_leaves_that_link_alone(harness: Harness) -> None:
-    """The variant the handoff's experiment ran: `graph.invoke` of a state that was not given
-    `cms_track_id` keeps the Track link and resets the rest, which is why the experiment found it
-    surviving and the command does not. It pins the LangGraph rule the guard rests on (a field the
-    constructor was given is applied even as `None`), so an upgrade that changes it is noticed."""
+    """The variant that explains why the handoff's experiment saw the Track link survive:
+    `graph.invoke` of a state that was not given `cms_track_id` keeps that link and resets the
+    rest, where the command, which gives it, does not. It pins the LangGraph rule the guard rests
+    on (a field the constructor was given is applied even as `None`), so an upgrade that changes it
+    is noticed."""
     _a_run_that_has_been_spent_on(harness, "an-existing-run")
     fresh = PipelineState(
         run_id="an-existing-run",

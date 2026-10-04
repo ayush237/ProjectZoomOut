@@ -113,13 +113,14 @@ def refuse_a_run_in_use(graph: Any, run_id: str) -> None:
     (`model_fields_set`), so a run's `cost` (a `RunCost()`) and its `cms_leaf_ids`, `cms_narration`
     and `cms_assets` (empty dicts) are **reset**, and **so is `cms_track_id`**: this command passes
     it explicitly, as `None` unless `--cms-track-id` names one. `analysis`, the plan and
-    `chunk_count`, which it does not pass, survive. (The experiment this was written from built its
-    state without `cms_track_id` and saw that link survive; through the command it does not.)
-    Found by experiment on a scratch database: the ledger went from four entries and $0.755 to one
-    entry and nothing. On the real `ikigai` run that would erase $6.5755 of recorded spend, and with
-    it `narration_spent_usd`, so the $2.75 voiceover ceiling would read as unspent, and cut the
-    run's links to its Payload Track and its eighteen Leaves, with no spend and no error: `narrate`
-    would then say the run has no Leaves in Payload, and `write-drafts` would create a second Track.
+    `chunk_count`, which it does not pass, survive. (The experiment this was written from saw the
+    Track link survive, as it does when the state is built without `cms_track_id`; through the
+    command it does not.) Found by experiment on a scratch database: the ledger went from four
+    entries and $0.755 to one entry and nothing. On the real `ikigai` run that would erase $6.5755
+    of recorded spend, and with it `narration_spent_usd`, so the $2.75 voiceover ceiling would read
+    as unspent, and cut the run's links to its Payload Track and its eighteen Leaves, with no spend
+    and no error: `narrate` would then say the run has no Leaves in Payload, and `write-drafts`,
+    with no Track to look under, would create a second one.
 
     The run's lock does not stop it. The lock only matters while another process holds the run, and
     one process and one slip (an up-arrow on an old `run --run-id ikigai ...`) does it alone.
