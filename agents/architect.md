@@ -175,9 +175,9 @@ log, with the reason, and I owned it.
 the ceiling set inline, the expected cost, the worst case and the real headroom (the budget reserves a call's worst case
 first, so headroom is smaller than the cap). Google Cloud is not the Claude plan; say which.
 
-## Two rules promoted — 2026-10-04
+## Three rules promoted — 2026-10-04 and 2026-10-05
 
-From LEDGER-1's sign-off (the cost-ledger lock).
+From LEDGER-1's and LEDGER-1.1's sign-offs (the cost-ledger lock and the `run` guard).
 
 **A pin on a derived value states the expected value independently of the function it pins.** `clip_key` was "pinned" by
 tests that primed the cache through `clip_key` and asked a pre-flight that also goes through `clip_key`, so a mutant that
@@ -192,6 +192,8 @@ cheap and free.** The Pipeline Manager left `run --run-id <an existing run>` unv
 the repo's own fakes against a scratch database, and the second call **reset the run's cost ledger and its Payload links**
 — a data-loss path no lock prevents, and not a question to rule on by instinct. The experiment took twenty minutes and
 turned a register row into a package.
+
+**An experiment that stands in for a command builds its input from the command's own code — or drives the command.** My LEDGER-1.1 experiment built its input state the way a test helper does, without three arguments `run` passes explicitly; LangGraph applies a field that is given even as `None`, so the experiment saw the Track link survive and I wrote "through the command". The Pipeline Manager's test drove the command and found the link cut, and asking LangGraph's own rule about the real checkpoint then showed fifteen of thirty-seven fields change, not four. Say what an experiment's input was, and build it from the production constructor; a handoff that quotes the result inherits every blind spot of its stand-in.
 
 ## Sub-agents
 You have access to two project subagents for work that would otherwise bloat your own context — invoke them by name ("use the researcher subagent to...") or let Claude delegate automatically:
