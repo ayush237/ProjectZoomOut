@@ -162,7 +162,8 @@ jobs:
           passed=$((tests - failures - errors - skipped))
           summary="$passed passed, $skipped skipped, $failures failed, $errors errors of $tests tests"
           if [ "$tests" -eq 0 ] || [ "$skipped" -ne 0 ]; then
-            echo "::error title=Pipeline tests were skipped or none ran::$summary. The gate has no skips, so a fixture could not do its job (usually Postgres was unreachable; see the SKIPPED lines in the Pytest step)."
+            by_module=$(python3 -c "import sys, collections, xml.etree.ElementTree as ET; c = collections.Counter(t.get('classname', '?') for t in ET.parse(sys.argv[1]).getroot().iter('testcase') if t.find('skipped') is not None); print('%0A'.join(f'{n} in {k}' for k, n in c.most_common(15)))" pytest-junit.xml)
+            echo "::error title=Pipeline tests were skipped or none ran::$summary. The gate has no skips, so a fixture could not do its job (usually Postgres was unreachable; see the SKIPPED lines in the Pytest step).%0ASkipped, by module:%0A$by_module"
             exit 1
           fi
           final=$(grep -E '[0-9]+ passed.* in [0-9.]+s' pytest.log | tail -1)
