@@ -111,8 +111,36 @@ jobs:
       # Vertex, and it fails if they are present. Nothing else is set — see the note above on the
       # port. `-rs` prints why anything was skipped.
       - name: Pytest
+        id: pytest
         shell: bash
         run: uv run pytest -rs --junitxml=pytest-junit.xml 2>&1 | tee pytest.log
+
+      # A failing test shows up as an annotation on the run, not only in the log (which needs a
+      # login to read, even on a public repository).
+      - name: Report the failed tests
+        if: ${{ !cancelled() && steps.pytest.outcome == 'failure' }}
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          def escape(text):
+              return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+          try:
+              root = ET.parse('pytest-junit.xml').getroot()
+          except (OSError, ET.ParseError) as error:
+              print(f"::warning title=No junit file::pytest wrote no readable pytest-junit.xml ({error})")
+          else:
+              bad = []
+              for case in root.iter('testcase'):
+                  for kind in ('failure', 'error'):
+                      node = case.find(kind)
+                      if node is not None:
+                          text = (node.get('message') or node.text or '').strip()
+                          first = text.splitlines()[0][:240] if text else ''
+                          bad.append(f"{kind.upper()} {case.get('classname')}::{case.get('name')} - {first}")
+              print("::error title=Failed pytest tests::" + escape(f"{len(bad)} failing" + "\n" + "\n".join(bad[:60])))
+          PY
 
       # pytest exits 0 when tests are skipped, and the database fixtures SKIP — loudly, but green
       # — when Postgres is unreachable. A job whose service never came up would pass with a third
