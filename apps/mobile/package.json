@@ -6,6 +6,7 @@
   "license": "UNLICENSED",
   "main": "index.ts",
   "scripts": {
+    "predev": "node ../../scripts/ensure-shared-build.mjs",
     "dev": "expo start",
     "start": "expo start",
     "android": "expo run:android",
