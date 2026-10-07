@@ -108,11 +108,20 @@ jobs:
         run: uv run mypy
 
       # No secrets, and no Vertex variable: a test asserts that a command refuses to run off
-      # Vertex, and it fails if they are present. Nothing else is set — see the note above on the
-      # port. `-rs` prints why anything was skipped.
+      # Vertex, and it fails if they are present. `-rs` prints why anything was skipped.
+      #
+      # The one variable the suite needs is Typer's own off switch for terminal colour. GitHub
+      # sets GITHUB_ACTIONS, and Typer then forces a terminal for its help and error panels even
+      # when the output is captured, so five tests that look for plain text in it (`--tempo`,
+      # `--render-only`) found escape codes in the middle of the word and failed on the runner
+      # while passing everywhere else. Reproduced locally with GITHUB_ACTIONS=true; this variable
+      # alone clears it. (The database needs nothing: the service is published where the suite
+      # looks.)
       - name: Pytest
         id: pytest
         shell: bash
+        env:
+          _TYPER_FORCE_DISABLE_TERMINAL: '1'
         run: uv run pytest -rs --junitxml=pytest-junit.xml 2>&1 | tee pytest.log
 
       # A failing test shows up as an annotation on the run, not only in the log (which needs a
