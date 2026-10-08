@@ -159,6 +159,25 @@ const audioField: Field = {
   ],
 };
 
+/**
+ * A text field whose words are read aloud (GUARD-1 B).
+ *
+ * The one thing it adds to a plain textarea is `NarrationStaleBanner` after the input,
+ * which warns while the slide's `audio` rows were made from different words than the
+ * field now holds. Which fields are narrated is `NARRATED_FIELDS` in `packages/shared`;
+ * `Leaves.test.ts` checks that this config and that list agree, so a field cannot gain or
+ * lose the banner without the list changing too. The banner only reads, and blocks nothing.
+ */
+const narratedTextarea = (name: string): Field => ({
+  name,
+  type: 'textarea',
+  admin: {
+    components: {
+      afterInput: ['/components/NarrationStaleBanner#NarrationStaleBanner'],
+    },
+  },
+});
+
 export const Leaves: CollectionConfig = {
   slug: 'leaves',
 
@@ -223,7 +242,7 @@ export const Leaves: CollectionConfig = {
       type: 'group',
       label: '1 · Summary',
       admin: { description: 'Short, fast-to-read framing of the concept.' },
-      fields: [{ name: 'body', type: 'textarea' }, audioField],
+      fields: [narratedTextarea('body'), audioField],
     },
 
     {
@@ -235,7 +254,7 @@ export const Leaves: CollectionConfig = {
           'A relatable situation with three answer options. Exactly one must be correct — that is the gate that unlocks the Payoff slide.',
       },
       fields: [
-        { name: 'prompt', type: 'textarea' },
+        narratedTextarea('prompt'),
         {
           name: 'options',
           type: 'array',
@@ -272,7 +291,7 @@ export const Leaves: CollectionConfig = {
       admin: {
         description: 'The deeper explanation, unlocked only after a correct answer.',
       },
-      fields: [{ name: 'body', type: 'textarea' }, audioField],
+      fields: [narratedTextarea('body'), audioField],
     },
 
     {
@@ -303,7 +322,7 @@ export const Leaves: CollectionConfig = {
       label: '5 · Takeaway',
       admin: { description: 'The one thing to remember, plus an optional deep-cut fact.' },
       fields: [
-        { name: 'body', type: 'textarea' },
+        narratedTextarea('body'),
         {
           name: 'dinnerTableKnowledge',
           type: 'textarea',

@@ -431,6 +431,189 @@ list anyone reads.
 
 ## Completions (Manager → Architect)
 
+### Completed: GUARD-1 — four guards: a cover stored as a media path, a warning when narration no longer matches its text, a current `shared` build at every dev start, and the pipeline's gate in CI — 2026-10-08
+
+*Manager. Branch `guard-1-four-guards`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-vo3`, off `origin/main` at `facb2d8`; `origin/main` was merged in at `310678c` (it had moved to `c49adc0`: LEDGER-1 and LEDGER-1.1 changed `apps/pipeline`, which Part D's job must run). Commits: A `28d84b7` · B `d9c89c1` · C `ada3ed9` · D `b7e5813`, `6db7606`, `e3be94a`, `1706c85` · the D4 evidence `693a251` (red 1) → `bbe0e13` (its revert) and `8d67b3c` (red 2) → `f4f0f96` (its revert). Worked across three sittings on the same branch — 2026-10-03 (A and B), 2026-10-05 (resumed; `origin/main` merged in), 2026-10-08 (C, D and the evidence). A reboot between the last two cleared my scratch evidence, so every A and B table below was regenerated from the committed code on 2026-10-08.*
+
+**All nine acceptance criteria are met, with four qualifications that the Mac's Docker being down for the last sitting forced — each is under "What I could not verify".** (1) The backend suite (533) and the admin integration file (36) were *collected* locally but not *run*; both ran green on GitHub's runner inside `verify`, seven times. (2) D2's local run against a throwaway pgvector container was not done; the environment list was proven on the runner and by local scrubbed runs that reproduce the runner's environment. (3) B4's measurement on the real Leaves is from 2026-10-03 and was not re-derived (Payload was down). (4) The admin's start from a deleted `dist` was shown to reach its database, not to a rendered login page.
+
+| | |
+|---|---|
+| Part A — covers | `trackRules.ts`: a value starting `/` is accepted only as `/api/media/file/<name>` ending in an image extension; protocol-relative (`//host`, `/\host`, a tab-smuggled `//host`), `..` and `%2e%2e` escapes, other relative values and a missing extension are rejected; absolute behaviour unchanged. Messages and the `coverUrl` field description say what is accepted. 42 unit + 2 integration tests. |
+| Part B — the warning | `packages/shared`: `NARRATED_FIELDS`, pinned exactly. `apps/admin/src/narration/`: `findStaleNarrators` (a digest check), `checkNarration`, the form-state reader, a plain-JS `sha256`, the banner's wording. `NarrationStaleBanner.tsx` under the four narrated fields, plus the regenerated import map. No new dependency. |
+| Part C — the build | `scripts/ensure-shared-build.mjs` as each app's `predev`: build only if stale, by the pre-flight's own test. The mobile start becomes `npm run dev --workspace=apps/mobile -- --clear`. 16 tests in `apps/admin/test/ensureSharedBuild.test.ts`. |
+| Part D — CI | A second job `pipeline` beside an unchanged `verify`: ruff format, ruff check, mypy, pytest against a pgvector service container; any skipped test fails the job. Shown red twice on GitHub and green at the end. |
+| Gate | Local, at `f4f0f96`: `npm run lint` and `typecheck` clean · shared **84** (baseline 80) · mobile **817** (817) · admin **332 run + 36 collected = 368** (204) · backend **533 collected** (533, not run). GitHub `verify`: green on all 7 pushes. Pipeline gate, in CI and in a scrubbed local environment: ruff format **146** files (147 with the deliberate test) · ruff check clean · mypy **128** source files · pytest **927 passed, 6 deselected, 0 skipped**. |
+| Spend | **$0.** No model, speech or cloud call. GitHub Actions on a public repository is free. |
+| Left alone | `apps/pipeline` (net diff against `origin/main`: **none** — the one deliberate failing test was added and reverted), `apps/backend` and `apps/mobile` source, the mapper, the founder's servers, databases and `apps/admin/media`. What I read from them: anonymous GETs on `:3001` and `SELECT`s on `zoomout_cms`, both on 2026-10-03. |
+| Mutation-checked | **A 7 · B 43 (comparison 17, hash 15, wiring 7, constant 4) · C 10 · D3 5 — 65 breakages**; A's one survivor is a doubly-guarded shape, explained below. Each restored and verified by sha256. Plus the `satisfies` compile-time guard and A's two integration tests (the latter on 2026-10-03). |
+| Existing tests | **None modified.** One import line in `Leaves.test.ts` gained `Leaves`; everything else in 8 test files is an addition (1,264 added, 1 deleted). |
+
+## What the founder would notice
+
+- **A cover can be stored as `/api/media/file/track-50-cover-01.png`** and publishes; after the device-gate step the IP never needs hand-editing in the covers again. A protocol-relative or `..` value is refused with a message that says what to use.
+- **A banner under Summary, Scenario, Payoff and Takeaway** appears while that slide's audio was made from different words — on load and while typing — naming the slide, the narrators who go quiet (`Lara (female)`, `Druv (male)`), that the clips are kept and the slide plays again once the Leaf is re-narrated, and the step (`narrate --leaf <orderIndex>`). It never blocks saving or publishing. **On the real book it shows on none of the 18 Leaves.**
+- **The app's start command changes** to `npm run dev --workspace=apps/mobile -- --clear`; the admin's and the backend's do not.
+- **The PR gets two checks**, and the second will go red if the pipeline's tests did not really run.
+- **The Mac's LAN address is now `192.168.1.103`** (it was `.9` on 2026-10-03): the app's `.env`, the backend's `MEDIA_BASE_URL` start line and — until the device-gate step — both Tracks' absolute covers name the old one.
+
+**The three final start commands (C2) — the Architect rewrites `GETTING_STARTED.md` from these:**
+
+1. Admin: `cd /Users/ayushgupta/Documents/ZoomOut/ZO && npm run dev --workspace=apps/admin` *(unchanged)*
+2. Backend: `cd /Users/ayushgupta/Documents/ZoomOut/ZO && MEDIA_BASE_URL=http://$(ipconfig getifaddr en0):3001/api HIDE_PLACEHOLDER_CONTENT=true npm run dev --workspace=apps/backend` *(unchanged)*
+3. App: `cd /Users/ayushgupta/Documents/ZoomOut/ZO && npm run dev --workspace=apps/mobile -- --clear` *(was `cd …/ZO/apps/mobile && npx expo start --clear`; from the app directory `npm run dev -- --clear` is equivalent)*
+
+## Needs a ruling — and findings the register may want
+
+**No ruling is blocking.** Most consequential first.
+
+1. **`gh`'s token on this Mac is invalid** (`gh auth status`: "The token in default is invalid"), so I could not open the PR with `gh`. The branch is pushed and this entry is the PR body. *Fix:* `gh auth login -h github.com`, or open `https://github.com/ayush237/ProjectZoomOut/pull/new/guard-1-four-guards`.
+2. **Five pipeline tests fail on GitHub's runner and nowhere else.** GitHub sets `GITHUB_ACTIONS`; Typer (0.27.1, `rich_utils.py`) then forces a terminal for help and error panels even when output is captured, so tests that look for plain text (`--tempo`, `--render-only`) find escape codes inside the word: `test_greetings::test_the_command_is_registered_and_refuses_to_run_off_vertex`, `test_narrate_cli::test_a_tempo_outside_the_range_is_refused_by_the_command_itself[0.9 / 1.51 / 2]`, `test_tempo_defaults::test_the_help_shows_the_default_a_bare_run_will_use`. Reproduced locally with `GITHUB_ACTIONS=true` in a scrubbed environment; `_TYPER_FORCE_DISABLE_TERMINAL=1` alone clears them (74 passed in those three files). **Set on the pytest step in `ci.yml`, with a comment; `apps/pipeline` is untouched as instructed.** *For the pipeline's owner:* a `conftest.py` that sets the variable would fix it at source, and until then, by Typer's own condition (`GITHUB_ACTIONS`, `FORCE_COLOR` or `PY_COLORS`), anyone with `FORCE_COLOR` or `PY_COLORS` set should expect the same five.
+3. **`astral-sh/setup-uv` no longer publishes floating major tags** (floating `v3`–`v7` exist; `v8`, `v9`, `v10` are exact versions only, checked with `git ls-remote --tags` on 2026-10-08), so the handoff's "current major, pinned like the others" cannot be `@v10` — it would not resolve. Pinned `@v10.2.0` (the latest release, 2026-09-21); uv itself to `0.12.5`, the version that wrote `uv.lock`.
+4. **`verify` carries two deprecations I did not touch** (its annotations on every run): `actions/checkout@v4` and `actions/setup-node@v4` "target Node.js 20 but are being forced to run on Node.js 24" (their latest majors are v7), and **`ubuntu-latest` migrates to Ubuntu 26 on 2026-10-19** — the new job moves with it, so a red on or after that date may be the runner, not the code.
+5. **`tsx --watch` restarts a running backend on any rewrite of `dist`, even to identical bytes** — which is why Part C builds only when stale (shown in C below). In my runs the restart was clean (SIGTERM → "Shutdown complete" → listening again); WP15.8's "took it down" is not reproduced, and I did not try to catch a restart that lands mid-write.
+6. **None of the 72 published narrated texts contains a line break**, so the handoff's "one multi-line payoff" does not exist in the real book; that shape is covered by synthetic fixtures (unit tests and the browser fixtures), not by real data.
+7. **`NARRATED_FIELDS` is new and unshared**: the backend mapper's four `mapAudioEntries` calls and the pipeline's `assets/narration.py:NARRATED_FIELDS` (whose values are `(group, field)` tuples, not field names) could adopt it. Neither was touched.
+8. **A hand-written SHA-256 instead of a dependency**, because `crypto.subtle` exists only in secure contexts (the admin over plain `http` on a LAN address has none). If a vetted library is preferred (`@noble/hashes`), it is a swap behind one function. Nothing about it is a security control: the backend decides what is served.
+9. **A script that belongs to no workspace has nowhere to be tested**, so `scripts/ensure-shared-build.mjs` is tested from `apps/admin/test/` (admin allows JS imports and the gate runs it there), with no config edits to the fenced `packages/shared` or the root `package.json`. The alternative is `packages/shared/scripts/` plus a one-line vitest `include`.
+10. **`npx expo start --clear` still bypasses the hook** (it does not run npm scripts); the pre-flight's `shared build STALE` line remains the backstop for anyone who uses it.
+11. **Payload regenerates `packages/shared/src/cms-generated.ts` on boot whenever a field description changes** (it writes only when the text differs), so A's one-line description change reached a tracked generated file; it is committed with A. Booting the admin does not otherwise make `dist` look stale.
+
+## Part A — item by item
+
+**A1 — the rule.** `checkCoverUrlIsImage` branches on the first character, the same test the backend's `resolveMediaUrl` uses. A leading slash goes to `checkMediaPathCover`: **the literal prefix `/api/media/file/`** (G1, the only thing that sees a protocol-relative value that repeats the folder, `//evil.test/api/media/file/x.png`, whose normalised path looks fine), then **the folder again on the parser-normalised path** (G2, the only thing that sees `/api/media/file/../../x.png`, `%2e%2e`, `.%2e` and `..\` — they begin with the prefix but resolve to `/x.png`), then the **extension on that normalised path** (G3, query string and fragment ignored). Neither G1 nor G2 can stand in for the other. Everything else is unchanged.
+
+**A2 — messages.** Five are new or rewritten and name what is accepted (not a usable address; not http or https; a slash path outside the folder; a path that leaves the folder; a media path with no image extension); the product-page message ("right-click the cover…") is unchanged. The "left the folder" message does not say "has to start with", because such a value already does. The field description names the media path as the form for an upload and says an absolute URL "has to be edited whenever the host changes".
+
+**A3 — tests.** 42 unit tests: 8 accepted shapes plus a query string; 5 other-relative; 4 protocol-relative; 6 escapes; 6 extension shapes; a table of messages; and two "premise" tests that run the URL parser to prove the rejected shapes really do resolve off-host or out of the folder, so the table cannot assert something false. 2 integration tests on real Payload: a media-path cover publishes **and reads back exactly as written**; `//evil.test/api/media/file/cover.png` is refused with a single error on `coverUrl`. **The two Tracks were not edited.**
+
+**Agreement with the backend, re-derived 2026-10-08:** 26 shapes through the admin rule and the backend's own `resolveMediaUrl` — 8 accepted, 18 rejected, **0 dangerous** (accepted but resolving elsewhere), **0 over-rejected**. Not committed (it imports across workspaces).
+
+## Part B — item by item
+
+**B1 — the comparison.** `findStaleNarrators(text, rows)` trims the text (as the save does), hashes UTF-8, and compares `digest.trim().toLowerCase()`, as `mapAudioEntries` does. **Its doc comment says it is a digest check, not "everything the backend would drop"** (an unknown narrator, an empty url, a zero duration and duplicate narrators are other drops; a row with no narrator is skipped, since it cannot be named). Two corners are decisions, not accidents: a narrator is stale only when **none** of its rows matches (the backend drops a stale row and keeps a good one), and absent or empty text with rows present is stale even if a row's digest equals `sha256("")`. `NARRATED_FIELDS` is in `packages/shared/src/content.ts`, typed with `satisfies` against the slide shapes (renaming `prompt` in the scenario schema fails the build: TS2322, shown), and pinned by exact contents and order.
+
+**B2 — the banner.** `afterInput` on `summary.body`, `scenario.prompt`, `payoff.body`, `takeaway.body`, built by one helper in `Leaves.ts`; `Leaves.test.ts` checks the CMS config against `NARRATED_FIELDS` in both directions (exactly those four fields carry it, each a textarea beside an `audio` array). **It only reads**: no `setValue`, no dirtying (Save Draft stayed disabled), the audio rows untouched. The status region is always mounted so a screen reader announces the warning. Colours are Payload's `--theme-warning-*` variables, which invert in the dark theme.
+
+**B3 — never silent.** The hash is plain JavaScript, so there is one code path in every context; `checkNarration` turns "the form has no audio list for this slide" and "the hash threw" into a visible *"Narration check unavailable here"* line. Shown in a real browser by breaking the list lookup in the source (restored by hash): every narrated field said so.
+
+**B4 — measured on real data, 2026-10-03** (not re-derived: see below). 18 published Ikigai Leaves (ids 262–279), anonymous GETs only: **144 audio rows compared, 0 stale**; the backend's own `mapLeaf` served all 144 with 0 stale-digest drops and 0 other warnings, and agreed with the check on every Leaf. One word changed in memory in Leaf 271's payoff (orderIndex 9): **exactly the two payoff rows** flagged, and the backend dropped the same two. Closed-up em dashes are in Leaves 2 (payoff), 4 (scenario), 7 (payoff), 11 and 14 (summary): baseline clean; turning the dash into an en dash, or adding spaces around it, flags exactly that slide. **All 72 per-slide edits (one word, every narrated slide of every Leaf) flagged exactly that slide's rows and agreed with the backend.** A third, independent computation — Postgres's own `sha256` over each Leaf's *latest version* — found all 18 latest versions `published` (no pending draft) and 0 of 144 rows stale, so the device gate's "no banner on another Leaf" holds against what the editor loads. No lesson text was committed or printed.
+
+**B5 — tests and the browser.** 108 new tests: `sha256` 18 (the NIST vectors, every padding boundary 0–200, 400 seeded random mixed-script strings, lone surrogates, a run with `crypto` deleted, and the length arithmetic pinned at 512 MiB, which no test can allocate), `staleNarration` 65, the wording 17, the wiring 4 in `Leaves.test.ts` (its other 6 are the older `noDuplicateNarrators` tests), and the shared constant's 4 in `content.test.ts`. **The browser** (a throwaway Postgres on `127.0.0.1:55432` and a throwaway admin on `:3101`, torn down afterwards; nothing near `:3000`, `:3001`, `:8081` or `zoomout_cms`): a matching Leaf shows no banner on any slide; a stale Leaf names both narrators on the payoff and only Druv on the takeaway, with `narrate --leaf 1`; a cleared payoff flags both; typing one character flags the slide live and Backspace clears it; two trailing spaces and a newline do not; **dark and light themes** (computed colours read: pale on dark, dark on pale); **and `http://192.168.1.9:3101`, a plain-http LAN origin where `isSecureContext` is false and `crypto.subtle` is undefined**, on a production build (`next build` + `next start`, since `next dev` refuses any origin but localhost): the same results, on load and live. No edit was ever saved.
+
+## Part C — item by item
+
+**C1 — the hook.** `scripts/ensure-shared-build.mjs` is each app's `predev`. Stale means the pre-flight's test exactly: `dist` missing or empty, or any non-test file under `packages/shared/src` newer than the newest file in `dist` (ties count as current). Only then does it run `npm run build --workspace=@zoomout/shared`, the one definition of how shared is built, and it exits with that build's status so a broken shared package stops the start. The root `pre*` hooks are unchanged and unconditional.
+
+**C3 — seen red first, in an APFS clone of the tree** (`cp -cR`, its `.git` removed, ports moved in the clone only: admin 3102, app 8082, backend `PORT=3200`), each started the documented way with `packages/shared/dist` deleted:
+
+| Start | Before the change | After the change |
+|---|---|---|
+| `npm run dev --workspace=apps/backend` | `ERR_MODULE_NOT_FOUND: Cannot find module '<clone>/node_modules/@zoomout/shared/dist/index.js' imported from <clone>/apps/backend/src/content/content.service.ts`, then *"Failed running 'src/index.ts'. Waiting for file changes before restarting…"* — idle, no sign it is broken | `shared build: STALE (packages/shared/dist is missing or empty) — rebuilding`, `tsc`, `shared build: rebuilt`, then `Backend listening` (port 3200; `/health` is 503 only because the scratch database URL is deliberately bogus) |
+| `npm run dev --workspace=apps/mobile` | Metro, on the real bundle URL (taken from its manifest): **HTTP 500**, *"While trying to resolve module `@zoomout/shared` from file `…/OnboardingNarratorScreen.tsx`, the package … was successfully found. However, this package itself specifies a `main` module field that could not be resolved (`…/dist/index.js`)"* | same hook output, Metro up, **HTTP 200, 9,183,536 bytes**; the bundle contains `NARRATOR_LABELS` (6 matches) and the new `NARRATED_FIELDS` (4), so it is the *current* shared build |
+| `npm run dev --workspace=apps/admin` | **HTTP 500**: Turbopack `Module not found: Can't resolve '@zoomout/shared'` at `./apps/admin/src/collections/Leaves.ts:1:1` | same hook output; `next dev` ready; the error is now `cannot connect to Postgres … ECONNREFUSED 127.0.0.1:55432` (the database was down) and **"Module not found" occurs 0 times** — the import resolves; a rendered login page was not reached |
+
+**A fresh `dist` is left alone**, shown against the running scratch backend: a second terminal's `predev` printed `shared build: current — left alone`; a fingerprint of every `dist` file's mtime was identical before and after (`0637ac4d582e`), and the backend log gained no line. **A genuine source change** (`touch packages/shared/src/index.ts`) made the hook rebuild, and the backend logged `Restarting 'src/index.ts'` → `Shutting down` → `Shutdown complete` → `Backend listening`. **The root scripts' unconditional rebuild on the same fresh `dist`** (`npm run build:shared`) changed the fingerprint (`3d2b4f715406` → `88fb5aa751a4`) with no source change, and restarted the backend the same way.
+
+**C2 — the mobile start.** `npx expo start --clear` does not run npm scripts, so a `predev` would never run for it. The npm form does, and **`--clear` reaches the command through both forms** — shown with a stand-in script that prints its arguments: `["--clear"]` from `npm run dev --workspace=apps/mobile -- --clear` and from `cd apps/mobile && npm run dev -- --clear`, with `predev` printing first each time. **A real `--clear` was not run**: Expo keeps its Metro cache in `os.tmpdir()/metro-cache` (`@expo/metro-config`, `ExpoMetroConfig.js:206`), which every Expo project on the Mac shares, so it would empty the founder's.
+
+## Part D — item by item
+
+**D1 — the job.** `pipeline` in `ci.yml`, beside `verify` (whose text is byte-identical: the old file is an exact prefix of the new one). `defaults.run.working-directory: apps/pipeline`; `pgvector/pgvector:pg16` as a `services:` container with `pg_isready` health checks, user `postgres` (the tests create and drop a scratch database and take advisory locks in the maintenance database, so superuser), **published on 5433, which is where the suite looks by default**; `astral-sh/setup-uv@v10.2.0` with uv `0.12.5`, the uv cache keyed on `uv.lock`, Python from `.python-version`; `uv sync --locked --all-groups`, then the README's four commands as separate steps; `timeout-minutes: 20`. No secrets, no Vertex variable, no token anywhere in the job.
+
+**D2 — the environment is what the runner proved.** **One variable: `_TYPER_FORCE_DISABLE_TERMINAL=1` on the pytest step** (finding 2). **Nothing for the database**: the service is published on 5433. **`ZOOMOUT_PIPELINE_DATABASE_URL` is not needed** — it is unset in every run, and 927 pass. The workflow-level `env` (`DATABASE_URL`, `NODE_ENV: test`, `PAYLOAD_*`) is inherited by every job; the green runs are with it present. *Done locally, in an `env -i` environment with a venv built outside `apps/pipeline` (`UV_PROJECT_ENVIRONMENT`):* `uv sync --locked --all-groups`, `ruff format --check` (146 files), `ruff check`, `mypy` (128) — all pass with no pipeline variable at all; pytest with the database absent gives `843 passed, 84 skipped, 6 deselected` and **exit 0**, with no failures and no variable set; the five colour failures reproduced with `GITHUB_ACTIONS=true`. *Not done: the run against a throwaway pgvector container on a port other than 5433 (Docker down).*
+
+**D3 — a skipped test is red.** pytest exits 0 when tests are skipped, and both database fixtures (`db_connection`, `lock_database`) skip — loudly, but green. The step after pytest reads `pytest-junit.xml` and fails on any skip and on a run with no tests, and **names the skipped modules in its annotation**. Against the real junit file from a local run with the database on a dead port, and three synthetic ones (clean, empty, a single skip among 927), the extracted step body gives exit 1, 0, 1, 1 as it should, and **5 breakages, 5 caught** (the check removed; "more than one skip counts" — which only a one-skip file catches; the no-tests clause removed; the wrong attribute read; the failure not exiting non-zero).
+
+**D4 — on GitHub; every run's `verify` was green** (7 of 7: 202–313 s).
+
+| Commit | Run | What it was | Result |
+|---|---|---|---|
+| `b7e5813` | 37696934142 | first push of the job | pipeline red at pytest after 133 s; the log needs a login, so only "exit code 1" was visible |
+| `6db7606` | 37697479238 | + a step that reports failed tests as an annotation | red; the annotation names **5 failing tests** (finding 2) |
+| `e3be94a` | 37698241123 | + `_TYPER_FORCE_DISABLE_TERMINAL=1` | **green: `927 passed, 6 deselected, 56 warnings in 105.64s`**; job 151 s |
+| `1706c85` | 37698737330 | + the skipped-module breakdown | green: `927 passed, 6 deselected, 56 warnings in 108.95s`; job 162 s |
+| `693a251` | 37699312119 | **red 1** — a deliberately failing pipeline test (format, lint and type clean, so only pytest could be the cause) | pipeline red **at pytest**; annotation `FAILURE tests.test_guard1_deliberate_failure::test_deliberately_failing - AssertionError: GUARD-1 D4: this failure is deliberate`; the skip step skipped |
+| `bbe0e13` | — | revert of red 1 (pushed with red 2: no run of its own) | `apps/pipeline` back to `origin/main`'s |
+| `8d67b3c` | 37699995039 | **red 2** — the service published on 5444 while the suite looks at 5433 | **pytest passed (exit 0)** with `843 passed, 84 skipped`; **the skip step failed the job**; annotation: *"Skipped, by module: 24 in tests.test_run_lock · 20 in tests.test_run_lock_commands · 13 in tests.test_graph · 8 in tests.test_leaf_generation · 5 in tests.test_run_refuses_a_used_id · 4 in tests.test_ingest · 4 in tests.test_retention · 3 in tests.test_boundaries · 2 in tests.test_cms_never_publishes · 1 in tests.test_durability"* — **49 of the 84 are the run-lock family** |
+| `f4f0f96` | 37701119678 | revert of red 2 — **the final state** | **green: `927 passed, 6 deselected, 56 warnings in 131.88s`**; pipeline job **182 s** (pytest 135 s), `verify` 291 s |
+
+## Evidence, by kind
+
+| Item | Tier | Evidence |
+|---|---|---|
+| A1 | A | unit tests per shape · 2 integration tests on real Payload · 26-shape agreement probe against the backend's resolver · mutations A1–A7 (2026-10-08) and the two integration mutants (2026-10-03) |
+| B1 | A | unit tests, including known vectors typed in rather than computed · 17 mutations · the 144-row read-back of the real Leaves and Postgres's own `sha256` over the latest versions (2026-10-03) |
+| B2, B3 | B | browser: matching, stale, cleared, live, both themes, plain-http LAN origin, the unavailable line · the wiring test, 7 mutations · 15 hash mutations · the `satisfies` guard |
+| C1–C3 | B | 16 unit tests, 10 mutations · runs in a scratch copy: three red/green start paths, the untouched-`dist` fingerprint, `tsx --watch` on a rewrite, the `--clear` pass-through |
+| D1, D2 | — | seven GitHub runs · local scrubbed-environment runs without a database |
+| D3 | A | the step against a real and three synthetic junit files, 5 mutations · both reds on GitHub |
+
+## The existing tests that changed (each named)
+
+None was modified. **`apps/admin/src/collections/Leaves.test.ts`** — one import line (`import { noDuplicateNarrators } from './Leaves'` became `import { Leaves, noDuplicateNarrators } from './Leaves'`, plus `NARRATED_FIELDS`) and a new `describe`. Every other changed test file takes additions only: `trackRules.test.ts` (+201), `cms.integration.test.ts` (+35, two tests in an existing `describe`), `content.test.ts` (+45).
+
+## Mutation table — 65 breakages, regenerated 2026-10-08 from the committed code
+
+Method: exact-match edits applied in place by a scratch harness (not kept in the repo): each `old` must occur exactly once, the file must differ, the named test file runs, the failing test names are recorded, and the source is restored in a `finally` and verified by sha256. Counts are failing tests of those run.
+
+**A — `trackRules.ts`** (80 tests; restored `f61442fcaff8a966…`)
+
+| # | Breakage | Red |
+|---|---|---|
+| A1 | G1 weakened to a bare slash check | 4 (the protocol-relative shapes that repeat the folder, the backslash and tab forms, and the publish block) |
+| A2 | G2 reads the raw text, not the normalised path | 7 (all six escapes + the "left the folder" message) |
+| A3 | G3 removed from the media-path branch | 7 |
+| A4 | G3 reads the whole stored text, not the path | 3 (query string, fragment) |
+| A5 | G1 prefix compared case-insensitively, G2 left as is | **0 — survives, by design**: `/API/MEDIA/FILE/…` is rejected by both guards, so neither alone is a single point of failure |
+| A6 | G1 **and** G2 compared case-insensitively | 1 (`rejects the media folder in the wrong case`) — the shape is load-bearing for the pair |
+| A7 | slash-prefixed values go to the absolute-URL path (the old rule) | 12 |
+
+**B1 — `staleNarration.ts`** (65 tests; `95d7ea3b805e342a…`) — **17 breakages, 17 red**: skip the text trim 1 · skip digest lower-casing 2 · skip digest trim 2 · **compare only the first row 4** · flag if *any* row mismatches 1 · empty text not special-cased 1 · null text unguarded 2 · narrator-less row named 1 · no de-duplication 2 · a missing audio list reported as current 1 · a throwing hash swallowed 2 · narrated field name not checked 4 · deeper paths accepted 1 · every row reads row 0 1 · missing list read as empty 1 · numeric-count fallback dropped 1 · non-string value passed through 1.
+
+**B3 — `sha256.ts`** (18 tests; `7557649908b321e9…`) — **15 breakages, 15 red** (3–15 each): a round constant, an initial word, the padding length, the `0x80` marker, the bit-length shift (15), the high length word (5), both sigma functions, the choose and majority formulas, the schedule index, the last state word, little-endian reads, hex zero-padding.
+
+**B2 — `Leaves.ts`** (10 tests; `015bdfdd3729c02e…`) — **7 breakages, 7 red**: a banner lost from `scenario.prompt`, from `payoff.body`; one gained by a sticky-notes field (2); a wrong component path; the helper adding nothing; the field no longer a textarea; the `audio` list renamed.
+
+**B — `content.ts`** (65 tests; `ee5013822bb897eb…`) — **4 breakages, 4 red**: a wrong field name (2) · `stickyNotes` added (3) · a slide dropped · reading order broken — and a renamed field fails `tsc` on the `satisfies`.
+
+**C — `ensure-shared-build.mjs`** (16 tests; `6c9a86f29e48ce3b…`) — **10 breakages, 10 red**: ties counted as stale 1 · test files not excluded 1 · exclusion too broad 1 · the last file wins instead of the newest 3 · directories not walked 2 · the missing-dist check removed 1 · a missing directory throws 5 · always builds 1 · never builds 3 · a failed build swallowed 1.
+
+**D3 — the skip step**: 5 breakages, 5 caught (above).
+
+## What I got wrong, and what surprised me
+
+- **I did not know GitHub Actions changes how Typer renders.** The job's first run failed in pytest and I could not see why: logs need a login on a public repository. A step that turns junit failures into an annotation made the cause readable without a token, and it stays because the next red will need it.
+- **A summary count from pytest does not mean the tests ran.** With the database on a dead port the suite reported `843 passed, 84 skipped` and exited 0. The handoff said so; seeing it is what made the rule's boundary clear — a file with 84 skips cannot tell "any skip" from "more than one", so a single-skip input is in the table.
+- **`@v10` would not have resolved** (finding 3). I checked the tags before writing the YAML.
+- **My local harnesses tripped twice on zsh not word-splitting unquoted variables** (a `for step in "ruff format --check ."` loop ran a program of that name; a `$FILES` list became one path). Each time the symptom was "No such file or directory", which looks like a missing tool, not a quoting slip.
+- **My first stand-in for the `--clear` check was a `node -e` one-liner**, which makes Node reject `--clear` itself; npm's echoed command line already showed the flag appended. Redone with a script file.
+- **The reboot cleared my scratch evidence** (`/private/tmp` under the session scratchpad), including `mutate.py` and every table from the first session. They were rebuilt and re-run, and the restored files hash to the same values as in the first session (so what is committed is what I tested then). *Lesson for the next session:* evidence that a report will quote belongs in the report or in a tracked file, not in `/tmp`.
+- **Payload mounts fields below the fold only after a paint**, and a hidden Browser pane reports a 0×0 viewport, so DOM queries right after a navigation came back empty until I emulated a viewport and scrolled. The recipe is in the memory notes.
+- **Expo's Metro cache is shared by every Expo project on the Mac**, so `--clear` was not safe to run for real in a scratch copy.
+
+## What I could not verify
+
+- **The backend suite (533) and the admin integration file (36) were not run locally on 2026-10-08** — Docker Desktop was not running after the reboot and neither was the founder's Payload. Their counts were *collected* (`vitest list`: 533 and 36, equal to the baseline for the backend; the integration file's 34 plus my 2) and both suites passed on GitHub's runner inside `verify`, seven times; the logs are not readable without a login, so those runs prove "passed", not the counts. **If the Architect wants the local counts, run `npm test` once with Docker up.**
+- **D2's run against a throwaway pgvector container on a port other than 5433.** The database-dependent part was proven on GitHub's runner instead (three greens, and both reds).
+- **The admin's start from a deleted `dist` to a rendered login page** — it reached the database, which was down. The start paths were not re-run with a live database.
+- **B4 on 2026-10-08.** The numbers are from 2026-10-03, when Payload was up on `:3001`; neither it nor `zoomout_cms` was available to re-measure. The script is not in the repo.
+- **A real `--clear`** (above), and **two terminals starting with a stale `dist` at the same moment**: both would run `tsc` over the same files; I added no lock.
+- **The device gate** — the founder's, after the merge.
+- **Anything about the real Leaf 9 in the admin**: the banner was never opened against the founder's CMS (no login, as the handoff said); what was checked is the data it reads.
+
+## Files touched
+
+- **A:** `apps/admin/src/validation/trackRules.ts`, `trackRules.test.ts`; `apps/admin/src/collections/Tracks.ts`; `apps/admin/test/cms.integration.test.ts`; `packages/shared/src/cms-generated.ts` (Payload's regenerated mirror of the description).
+- **B:** `packages/shared/src/content.ts`, `content.test.ts`; `apps/admin/src/collections/Leaves.ts`, `Leaves.test.ts`; `apps/admin/src/components/NarrationStaleBanner.tsx`; `apps/admin/src/narration/` (`sha256.ts`, `staleNarration.ts`, `narrationWarning.ts` and a test beside each); `apps/admin/src/app/(payload)/admin/importMap.js` (regenerated).
+- **C:** `scripts/ensure-shared-build.mjs`; `apps/admin/test/ensureSharedBuild.test.ts`; `apps/admin/package.json`, `apps/backend/package.json`, `apps/mobile/package.json` (one `predev` line each).
+- **D:** `.github/workflows/ci.yml` (+118 lines, additions only). The temporary `apps/pipeline/tests/test_guard1_deliberate_failure.py` was added in `693a251` and removed in `bbe0e13`.
+- **Not touched:** `apps/pipeline` (net), `apps/backend` and `apps/mobile` source, the mapper, `project/` other than this entry, and `GETTING_STARTED.md` (the Architect rewrites it from the three command strings).
+
+**Where the time went (approximate; the work spanned three sittings).** Reading and the baseline ~10% · Part A ~10% · Part B ~35% (the implementation, the mutation tables, the throwaway stack, the browser, B4) · Part C ~15% (the scratch-copy runs) · Part D ~20%, of which about 35 minutes was waiting on seven GitHub runs · regenerating evidence after the reboot and this write-up ~10%. Not measured.
+
+**Follow-ups / tech debt for the Architect:** rewrite `GETTING_STARTED.md` from the three command strings; the register items above (findings 2, 4, 7 and 10); a decision on whether the backend mapper and the pipeline should adopt `NARRATED_FIELDS`; and, for the pipeline's owner, a `conftest.py` that disables Typer's forced colour at source.
+
 ### Completed: LEDGER-1.1 — `run` refuses a run id that already has a checkpoint, the lock's six test gaps closed, and the reset turns out to cut the Track link too — 2026-10-04
 
 *Pipeline Manager. Branch `ledger-1-1-run-never-overwrites`, worked in `/Users/ayushgupta/Documents/ZoomOut/ZO-pipeline`, off `origin/main` at `d5ba0e6`. Four commits — `7b0164e` (the fix, R1–R3), `ce8f9e6` (the tests, T1–T6, and the one source change T5 needs), `bc4d50f` (a correction found while writing the evidence, below) and `aa9c181` (two comments tightened); the handoff said two — then this entry. PR: [#67](https://github.com/ayush237/ProjectZoomOut/pull/67) — the founder merges. **$0: no model, speech or listen was called, and nothing under `runs/` was written.***

@@ -6,6 +6,7 @@
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
+    "predev": "node ../../scripts/ensure-shared-build.mjs",
     "dev": "next dev --port 3001",
     "start": "next start --port 3001",
     "build": "next build",

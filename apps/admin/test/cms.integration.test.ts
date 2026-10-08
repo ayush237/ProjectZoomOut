@@ -587,6 +587,41 @@ describe('publisher and coverUrl are required to publish a Track', () => {
 
     expect(published['_status']).toBe('published');
   });
+
+  // GUARD-1 A. The media path is what Payload stores for an upload, and the backend
+  // resolves it against its own host when it serves the Track — so it has to publish,
+  // and it has to come back exactly as written: a store that rewrote it to an absolute
+  // address would put the host back into the document.
+  it('publishes a cover stored as a Payload media path, and stores it as written', async () => {
+    const id = await draftTrack({
+      publisher: 'Example Press',
+      coverUrl: '/api/media/file/track-50-cover-01.png',
+    });
+
+    const published = await payload.update({
+      collection: 'tracks',
+      id,
+      data: { _status: 'published' },
+    });
+    const readBack = await payload.findByID({ collection: 'tracks', id, depth: 0 });
+
+    expect(published['_status']).toBe('published');
+    expect(readBack['coverUrl']).toBe('/api/media/file/track-50-cover-01.png');
+  });
+
+  it('refuses to publish a cover that would resolve onto another host', async () => {
+    const id = await draftTrack({
+      publisher: 'Example Press',
+      coverUrl: '//evil.test/api/media/file/cover.png',
+    });
+
+    const errors = await captureFieldErrors(() =>
+      payload.update({ collection: 'tracks', id, data: { _status: 'published' } }),
+    );
+
+    expect(errors.map((e) => e.path)).toEqual(['coverUrl']);
+    expect(messagesFrom(errors)).toMatch(/\/api\/media\/file\//u);
+  });
 });
 
 /* -------------------------------------------------------------------------- */

@@ -51,3 +51,121 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  pipeline:
+    name: pipeline — ruff → mypy → pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The Python content pipeline (apps/pipeline) has its own gate, run by hand at each
+    # sign-off until now, so a pipeline regression could merge on a green `verify`. This is
+    # that gate, from the README: `ruff format --check`, `ruff check`, `mypy`, `pytest`.
+    defaults:
+      run:
+        working-directory: apps/pipeline
+
+    # The tests create and drop their own scratch database and take advisory locks in the
+    # server's maintenance database, so the user has to be a superuser (the image's `postgres`
+    # is). pgvector is the README's image: the schema runs `CREATE EXTENSION vector`. The suite
+    # looks for the server at 127.0.0.1:5433 by default (tests/conftest.py), so that is the
+    # port it is published on.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to an exact release, not `@v10`: astral-sh/setup-uv stopped publishing floating
+      # major tags after v7, so `@v10` would not resolve. uv itself is pinned to the version
+      # that wrote `uv.lock`. Python comes from apps/pipeline/.python-version (3.12).
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.12.5'
+          working-directory: apps/pipeline
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install
+        run: uv sync --locked --all-groups
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Mypy
+        run: uv run mypy
+
+      # No secrets, and no Vertex variable: a test asserts that a command refuses to run off
+      # Vertex, and it fails if they are present. `-rs` prints why anything was skipped.
+      #
+      # The one variable the suite needs is Typer's own off switch for terminal colour. GitHub
+      # sets GITHUB_ACTIONS, and Typer then forces a terminal for its help and error panels even
+      # when the output is captured, so five tests that look for plain text in it (`--tempo`,
+      # `--render-only`) found escape codes in the middle of the word and failed on the runner
+      # while passing everywhere else. Reproduced locally with GITHUB_ACTIONS=true; this variable
+      # alone clears it. (The database needs nothing: the service is published where the suite
+      # looks.)
+      - name: Pytest
+        id: pytest
+        shell: bash
+        env:
+          _TYPER_FORCE_DISABLE_TERMINAL: '1'
+        run: uv run pytest -rs --junitxml=pytest-junit.xml 2>&1 | tee pytest.log
+
+      # A failing test shows up as an annotation on the run, not only in the log (which needs a
+      # login to read, even on a public repository).
+      - name: Report the failed tests
+        if: ${{ !cancelled() && steps.pytest.outcome == 'failure' }}
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          def escape(text):
+              return text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+
+          try:
+              root = ET.parse('pytest-junit.xml').getroot()
+          except (OSError, ET.ParseError) as error:
+              print(f"::warning title=No junit file::pytest wrote no readable pytest-junit.xml ({error})")
+          else:
+              bad = []
+              for case in root.iter('testcase'):
+                  for kind in ('failure', 'error'):
+                      node = case.find(kind)
+                      if node is not None:
+                          text = (node.get('message') or node.text or '').strip()
+                          first = text.splitlines()[0][:240] if text else ''
+                          bad.append(f"{kind.upper()} {case.get('classname')}::{case.get('name')} - {first}")
+              print("::error title=Failed pytest tests::" + escape(f"{len(bad)} failing" + "\n" + "\n".join(bad[:60])))
+          PY
+
+      # pytest exits 0 when tests are skipped, and the database fixtures SKIP — loudly, but green
+      # — when Postgres is unreachable. A job whose service never came up would pass with a third
+      # of the suite not run. The gate has no skips (the tests that need Payload are `live`-marked
+      # and deselected), so any skip is a failure.
+      - name: A skipped test is a failure
+        run: |
+          counts=$(python3 -c "import sys, xml.etree.ElementTree as ET; s = list(ET.parse(sys.argv[1]).getroot().iter('testsuite')); print(*(sum(int(x.get(k, 0)) for x in s) for k in ('tests', 'failures', 'errors', 'skipped')))" pytest-junit.xml)
+          read -r tests failures errors skipped <<< "$counts"
+          passed=$((tests - failures - errors - skipped))
+          summary="$passed passed, $skipped skipped, $failures failed, $errors errors of $tests tests"
+          if [ "$tests" -eq 0 ] || [ "$skipped" -ne 0 ]; then
+            by_module=$(python3 -c "import sys, collections, xml.etree.ElementTree as ET; c = collections.Counter(t.get('classname', '?') for t in ET.parse(sys.argv[1]).getroot().iter('testcase') if t.find('skipped') is not None); print('%0A'.join(f'{n} in {k}' for k, n in c.most_common(15)))" pytest-junit.xml)
+            echo "::error title=Pipeline tests were skipped or none ran::$summary. The gate has no skips, so a fixture could not do its job (usually Postgres was unreachable; see the SKIPPED lines in the Pytest step).%0ASkipped, by module:%0A$by_module"
+            exit 1
+          fi
+          final=$(grep -E '[0-9]+ passed.* in [0-9.]+s' pytest.log | tail -1)
+          echo "::notice title=Pipeline gate::$final"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
