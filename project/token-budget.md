@@ -192,3 +192,21 @@ Bytes ÷ 4, as before.
 **The register is the constant: 145 rows by the `| **` count, 110KB, ~27.5k tokens — about three-quarters of the roadmap.** It is still a ruling about what to stop tracking, not a script. **A reasonable moment for it is soon:** with book #3 deferred and the enhancement work not yet specified, little new is being added to the register's most crowded areas (narration, onboarding) for a while.
 
 **What worked this time.** The pass ran at a clean boundary (both peers idle, every PR merged) and **promoted seven rules into `agents/architect.md` before moving the rows that taught them** — the constraint the decisions log states ("do not archive a ruling until its rule has a home"). **What did not:** the two handoffs were issued after the pass, as the founder's last act of the session, so the log grew by 40KB within an hour of shrinking. That is the "open handoff is never pruned" rule doing its job, not a failure of it — but it does mean the cheapest moment to archive is *before* a handoff goes out, and the second-cheapest is at its sign-off.
+
+---
+
+## Measured again — 2026-10-09, after the third archive pass
+
+Bytes ÷ 4, as before.
+
+| | 2026-09-25 (after pass 1) | 2026-10-03 (after pass 2, then two handoffs) | 2026-10-09 before pass 3 | 2026-10-09 after pass 3 |
+|---|---|---|---|---|
+| `collaboration-log.md` | 103KB / ~26k | 131KB → 172KB | 324KB / ~81k | **117KB / ~29k** |
+| `projectRoadmap.md` | 141KB / ~35k | 140KB → 145KB | 163KB / ~41k | **154KB / ~38k** |
+| **Active pair** | ~61k | ~68k → ~79k | ~122k | **~67k** |
+
+**One pass took the pair from ~122k to ~67k:** six log entries (940 lines) and eleven table rows — two board rows, three decisions rows, six closed register rows — moved verbatim, with a line-by-line check that nothing was lost or altered (only the log's header note was rewritten, and two register rows had their closing status written before they moved). The two archives that grew are `archive/collaboration-log-voiceover.md` (VO-4, VO-4.1) and a new `archive/collaboration-log-hardening.md` (LEDGER-1; LEDGER-1.1 and GUARD-1 join it when they leave).
+
+**Why the log reached 324KB:** four packages (LEDGER-1, LEDGER-1.1, GUARD-1, and the VO-4 pair still there from before) were issued and closed in six days, each a full handoff and a 60KB completion report, and "never archive mid-package" held the pass back because GUARD-1's branch was open and stopped for a usage limit. **The deferral was right** — an archive pass during GUARD-1 would have changed what "keep both entries" meant for the Manager's merge — **and it cost ~40k tokens of log nobody was reading for five days.** The 2026-09-25 lesson stands and is now a practice: when packages overlap, make the boundary on purpose (merge, let both sessions go idle, archive, then hand off the next).
+
+**What is left is the register: 142 rows, ~113KB, ~28k tokens — 73% of the roadmap.** Open debt is still deliberately not archived, so closing the last ~27k of the 40k target is a ruling about what to stop tracking. **A reasonable moment is when the enhancement work has been specified**: little is being added to the register's most crowded areas (narration, onboarding, the pipeline's lock) until then.

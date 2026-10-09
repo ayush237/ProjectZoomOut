@@ -4,7 +4,7 @@ Owned by Architect. Represents the single feature currently being planned or imp
 
 ## Active: onboarding refinement — approved 2026-09-24
 
-**Status 2026-10-03: complete.** ONBOARD-2, 2.1, 3 and 3.1 and VO-4 and VO-4.1 are signed off, merged and device-gated; the founder's phone pass said everything looks good, and the book's narration is published at ×1.3. **LEDGER-1 (PR #66) and LEDGER-1.1 (PR #67, `run` refuses an id in use) are signed off; GUARD-1 (Manager) is stopped at a usage limit with Parts A and B committed locally and waits for the founder to resume it. Handoffs and completions are in `collaboration-log.md`; the roadmap's board holds the rows.** **Book #3 is deferred** (founder, 2026-10-03): enhancement changes are coming, and they become the next plan. This file is overwritten when they start.
+**Status 2026-10-03: complete.** ONBOARD-2, 2.1, 3 and 3.1 and VO-4 and VO-4.1 are signed off, merged and device-gated; the founder's phone pass said everything looks good, and the book's narration is published at ×1.3. **LEDGER-1 (PR #66), LEDGER-1.1 (PR #67) and GUARD-1 (PR #68) are signed off and merged (2026-10-04, 10-05, 10-09); nothing is in flight. The one open item is the founder's three-step device gate for GUARD-1 (covers to the media path and Publish; a look at Leaf 9; the pre-flight) — commands in `GETTING_STARTED.md`, the state in the roadmap's "What is true today".** **Book #3 is deferred** (founder, 2026-10-03): enhancement changes are coming, and they become the next plan. This file is overwritten when they start.
 
 **ONBOARD-1 shipped and the founder walked the real device gate for the first time** (2026-09-23/24, after
 a long infrastructure detour — stale `node_modules`, a duplicated env line, `MEDIA_BASE_URL`/
